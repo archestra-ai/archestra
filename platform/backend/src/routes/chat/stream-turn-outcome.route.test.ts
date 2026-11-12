@@ -24,7 +24,7 @@ import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import logger from "@/logging";
 import { createLogger } from "@/logging/create-logger";
-import { createLogObserverStream } from "@/logging/observer-stream";
+import { toOtelLogRecord } from "@/logging/otel-log-record";
 import { ModelModel } from "@/models";
 import MessageModel from "@/models/message";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -35,6 +35,9 @@ const mockCreateLLMModelForAgent = vi.hoisted(() =>
 );
 const mockGetChatMcpTools = vi.hoisted(() => vi.fn());
 const mockGetChatMcpToolUiResourceUris = vi.hoisted(() => vi.fn());
+
+// The real logger is a Proxy that vi.spyOn cannot intercept on this branch.
+vi.mock("@/logging");
 
 vi.mock("@/clients/llm-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/clients/llm-client")>();
@@ -262,21 +265,27 @@ describe("POST /api/chat turn outcome", () => {
         }),
       ],
     });
+    const otelLogger = provider.getLogger("pino");
     const capturingLogger = createLogger({
       contentMode,
       level: "error",
       streams: [
         { stream: { write: (record) => stdout.push(record) } },
         {
-          stream: createLogObserverStream({
-            logger: provider.getLogger("pino"),
-            retain: (record) => retained.push(record),
-          }),
+          // The production OTLP and retention streams each parse the same
+          // already-redacted record; capture it once for both here.
+          stream: {
+            write: (chunk) => {
+              const record = JSON.parse(String(chunk));
+              retained.push(record);
+              otelLogger.emit(toOtelLogRecord(record));
+            },
+          },
         },
       ],
     });
     const log = vi
-      .spyOn(logger, "error")
+      .mocked(logger.error)
       .mockImplementation(capturingLogger.error.bind(capturingLogger));
     // Real PostgreSQL constraint rejection in this test's disposable PGlite.
     // The user write succeeds; only the streamed assistant's final insert fails.
@@ -336,7 +345,7 @@ describe("POST /api/chat turn outcome", () => {
         expect(exported.join("")).toContain(marker);
       }
     } finally {
-      log.mockRestore();
+      log.mockReset();
       try {
         await db.execute(
           sql`ALTER TABLE messages DROP CONSTRAINT IF EXISTS synthetic_assistant_insert_failure`,

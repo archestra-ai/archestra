@@ -19,7 +19,10 @@ import { toast } from "sonner";
 import { awaitBootstrapSeed, useSession } from "@/lib/auth/auth.query";
 import { usePermissionSources } from "@/lib/auth/permission-sources.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
+import {
+  flushPersistedQueryCache,
+  PERSISTED_QUERY_META,
+} from "@/lib/query-persistence";
 import { isDocumentSeedFresh } from "@/lib/shell-deferral";
 import { environmentKeys } from "./environment.query";
 import { parseRoleAssignmentBlocked } from "./role-assignment-blocked";
@@ -727,6 +730,8 @@ export function useUpdateConnectionSettings(
     onSuccess: (updatedOrganization) => {
       if (!updatedOrganization) return;
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      // A refresh immediately after Save must not restore the old visibility.
+      flushPersistedQueryCache(queryClient);
       toast.success(onSuccessMessage);
     },
   });

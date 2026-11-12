@@ -3,7 +3,8 @@
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { usePathname } from "next/navigation";
 import React from "react";
-import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
+import { usePermissionMap } from "@/lib/auth/auth.query";
+import { useConnectNavigation } from "@/lib/hooks/use-connect-navigation";
 import {
   DOTTED_NAV_ITEMS,
   type NavDotKey,
@@ -22,8 +23,8 @@ import { useShellReady } from "@/lib/shell-deferral";
  * Studio segment and the collapsed-sidebar toggle. Also clears a dot when the
  * user lands on its route (deep links included).
  *
- * `unseenKeys` stays empty until every gating query has resolved, so dots only
- * ever appear (or get dismissed) — they never flash and vanish on load.
+ * Dots wait for seen items and page permissions. Connect additionally waits
+ * for its own visibility settings without holding up unrelated items.
  */
 export function useNavOnboarding() {
   const pathname = usePathname();
@@ -33,18 +34,10 @@ export function useNavOnboarding() {
     enabled: shellReady,
   });
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
-  // Connect is gated the same way as the sidebar: either half is enough.
-  const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
-  const { data: canReadMcpGateway } = useHasPermissions({
-    mcpGateway: ["read"],
-  });
+  const { visible: showConnect } = useConnectNavigation();
   const { mutate: markItemsSeen } = useMarkNavItemsSeen();
 
-  const ready =
-    seenLoaded &&
-    permissionMap !== null &&
-    canReadLlmProxy !== undefined &&
-    canReadMcpGateway !== undefined;
+  const ready = seenLoaded && permissionMap !== null;
 
   const unseenKeys = React.useMemo(() => {
     if (!ready) return new Set<NavDotKey>();
@@ -56,7 +49,7 @@ export function useNavOnboarding() {
         case "nav:apps":
           return permissionMap["/apps"] ?? true;
         case "nav:connect":
-          return canReadLlmProxy === true || canReadMcpGateway === true;
+          return showConnect;
         case "nav:model-providers":
           return permissionMap["/llm/model-providers"] ?? true;
         case "nav:mcp-registry":
@@ -74,7 +67,7 @@ export function useNavOnboarding() {
         (item) => visible(item.key) && !seen.has(item.key),
       ).map((item) => item.key),
     );
-  }, [ready, seenData, permissionMap, canReadLlmProxy, canReadMcpGateway]);
+  }, [ready, seenData, permissionMap, showConnect]);
 
   const markSeen = React.useCallback(
     (key: NavDotKey) => {

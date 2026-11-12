@@ -354,7 +354,7 @@ export function noDevicePromptCopy(params: { linked: boolean }): {
     : {
         title: "No device is linked",
         description:
-          "This tool runs on your own device. Set up the MCP bridge on it to use the tool.",
+          "This tool runs on your device. Set up the MCP bridge there to use it.",
         buttonText: "Set up the MCP bridge",
       };
 }
@@ -375,8 +375,8 @@ export function desktopAddPromptCopy(params: {
       }
     : {
         title: DESKTOP_MCP_COPY.notAdded,
-        description: `\u201c${catalogName}\u201d runs on your own device. Link it to your device to use this tool.`,
-        buttonText: DESKTOP_MCP_COPY.add,
+        description: `\u201c${catalogName}\u201d runs on your connected device. Link it to use this tool.`,
+        buttonText: "Link to my device",
       };
 }
 

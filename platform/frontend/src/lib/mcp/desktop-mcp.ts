@@ -16,13 +16,14 @@ export type DesktopMcpTargetKind = "command" | "url";
  * computer, not installed in the app.
  */
 export const DESKTOP_MCP_COPY = {
-  add: "Link to my device",
+  add: "Link",
   adding: "Linking...",
-  remove: "Unlink from my device",
+  remove: "Unlink",
   removeTheirs: "Unlink from their device",
   removing: "Unlinking...",
-  added: "Linked to your device",
+  added: "Linked",
   waiting: "Waiting for your device",
+  noDevice: "Device not linked",
   notAdded: "Not linked to your device",
   section: "Devices",
 } as const;

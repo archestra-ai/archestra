@@ -669,7 +669,7 @@ describe("a desktop MCP server that is not on the caller's computer", () => {
     expect(prompt).toEqual({
       title: "Not linked to your device",
       description:
-        "\u201cMATLAB\u201d runs on your own device. Link it to your device to use this tool.",
+        "\u201cMATLAB\u201d runs on your connected device. Link it to use this tool.",
       buttonText: "Link to my device",
     });
     const added = desktopAddPromptCopy({

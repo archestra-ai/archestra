@@ -12,7 +12,7 @@ type Servers = Parameters<typeof desktopInstallStateOfRow>[0]["servers"];
  * The viewer's state with each of the catalog items a list, a card or the
  * server page shows: see {@link desktopInstallStateOfRow}. The viewer's
  * devices are read only when a state depends on them, which is when the
- * viewer's own installation of one of the items has its tools.
+ * viewer linked one of the items.
  */
 export function useDesktopInstallState(params: {
   items: Item[];
@@ -25,7 +25,10 @@ export function useDesktopInstallState(params: {
   const stateOf = (item: Item, hasComputer?: boolean) =>
     desktopInstallStateOfRow({ item, servers, viewerId, hasComputer });
   const { hasComputer } = useDesktopComputer({
-    enabled: items.some((item) => stateOf(item) === "installed"),
+    enabled: items.some((item) => {
+      const state = stateOf(item);
+      return state === "installed" || state === "waiting";
+    }),
   });
   return (item) => stateOf(item, hasComputer);
 }

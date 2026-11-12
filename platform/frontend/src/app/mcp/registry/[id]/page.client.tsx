@@ -98,6 +98,7 @@ import {
 import type { DesktopMcpInstallState } from "../_parts/desktop-mcp-install";
 import {
   DesktopMcpAddedStatus,
+  DesktopMcpNoDeviceStatus,
   DesktopMcpWaitingStatus,
 } from "../_parts/desktop-mcp-install-status";
 import { buildDetailTabHref } from "../_parts/detail-tab-href";
@@ -783,7 +784,7 @@ function CatalogItemDetails({
                         ? getLocalInstallationCopy(item.multitenant === true)
                             .section
                         : variant === "desktop"
-                          ? "Each person links it to their own device."
+                          ? "Each person links it to their connected device."
                           : "The credentials this server is used with."
                   }
                 >
@@ -1128,6 +1129,9 @@ function ServerStatus({
   }
   if (desktopState === "waiting") {
     return <DesktopMcpWaitingStatus className={typeRole({ role: "body" })} />;
+  }
+  if (desktopState === "no-device") {
+    return <DesktopMcpNoDeviceStatus className={typeRole({ role: "body" })} />;
   }
   if (desktopState === "installed") {
     return <DesktopMcpAddedStatus className={typeRole({ role: "body" })} />;

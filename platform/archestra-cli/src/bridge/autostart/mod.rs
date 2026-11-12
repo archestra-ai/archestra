@@ -128,7 +128,7 @@ pub fn start(config_path: &Path, add_to_login: bool) -> bool {
     };
     match os::start(&options(&home, &current_program, config_path), add_to_login) {
         Ok(started) => {
-            println!("{}", started_message(&home, config_path, started));
+            println!("{}", started_message(started));
             true
         }
         Err(error) => {
@@ -411,28 +411,20 @@ fn remove_if_present(path: &Path) -> io::Result<bool> {
     }
 }
 
-/// What the terminal shows when the MCP bridge runs in the background.
-fn started_message(home: &Path, config_path: &Path, started: Started) -> String {
-    let program = layout::program_path(home);
-    let program = program.display();
+/// What the terminal shows when the MCP bridge runs in the background: a
+/// short line for each fact, in plain words, with no paths and no commands.
+fn started_message(started: Started) -> String {
     let at_login = if started.at_login {
-        format!(
-            "Auto-start is on: it starts again at each login. To turn that off: {program} bridge disable-auto-start"
-        )
+        ""
     } else {
-        format!(
-            "Auto-start is off: it does not start at login. To turn that on: {program} bridge enable-auto-start"
-        )
+        "It does not start again when you log in.\n"
     };
     format!(
-        "The MCP bridge now runs in the background. {}\n\
-         {at_login}\n\
-         To stop it: {program} bridge stop\n\
-         Config file: {}\n\
-         Log file:    {}",
+        "Setup is done. The MCP bridge runs in the background.\n\
+         {}\n\
+         {at_login}\
+         You can go back to Archestra.",
         started.where_it_runs,
-        config_path.display(),
-        layout::bridge_log_path(home).display(),
     )
 }
 
@@ -497,35 +489,23 @@ mod tests {
     }
 
     #[test]
-    fn the_message_names_the_commands_and_the_files() {
-        let home = Path::new("/h");
-        let program = layout::program_path(home);
-        let program = program.display();
-        let message = started_message(
-            home,
-            Path::new("/h/c.yaml"),
-            Started {
-                where_it_runs: "No tray icon.",
-                at_login: true,
-            },
+    fn the_message_is_short_and_names_no_path_or_command() {
+        let message = started_message(Started {
+            where_it_runs: "Its icon in the menu bar shows its status.",
+            at_login: true,
+        });
+        assert_eq!(
+            message,
+            "Setup is done. The MCP bridge runs in the background.\n\
+             Its icon in the menu bar shows its status.\n\
+             You can go back to Archestra."
         );
-        assert!(message.starts_with("The MCP bridge now runs in the background. No tray icon.\n"));
-        assert!(message.contains(&format!(
-            "Auto-start is on: it starts again at each login. To turn that off: {program} bridge disable-auto-start"
-        )));
-        assert!(message.contains(&format!("To stop it: {program} bridge stop")));
-        assert!(message.contains("Config file: /h/c.yaml"));
+        assert!(!message.contains(".archestra"));
 
-        let message = started_message(
-            home,
-            Path::new("/h/c.yaml"),
-            Started {
-                where_it_runs: "No tray icon.",
-                at_login: false,
-            },
-        );
-        assert!(message.contains(&format!(
-            "Auto-start is off: it does not start at login. To turn that on: {program} bridge enable-auto-start"
-        )));
+        let message = started_message(Started {
+            where_it_runs: "Its icon in the menu bar shows its status.",
+            at_login: false,
+        });
+        assert!(message.contains("\nIt does not start again when you log in.\n"));
     }
 }

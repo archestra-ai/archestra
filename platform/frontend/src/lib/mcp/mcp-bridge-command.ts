@@ -19,27 +19,33 @@
  *   cannot overwrite the program of a running MCP bridge, and `bridge start`
  *   stops it before it copies itself there. No progress bar: it makes the
  *   download of PowerShell 5.1 many times slower.
+ * - Each line is short, so the command reads well where it wraps in a dialog.
  */
 export function bridgeCommand(baseUrl: string, windows: boolean): string {
   const origin = baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
   const download = `${origin}/api/archestra-cli`;
   if (windows) {
     return (
-      `$ProgressPreference = 'SilentlyContinue'; irm "${download}/windows-$env:PROCESSOR_ARCHITECTURE" -OutFile archestra.exe; \`\n` +
+      `$ProgressPreference = 'SilentlyContinue'; \`\n` +
+      `  $arch = $env:PROCESSOR_ARCHITECTURE; \`\n` +
+      `  irm "${download}/windows-$arch" \`\n` +
+      `    -OutFile archestra.exe; \`\n` +
       `  if ($?) { .\\archestra.exe bridge start --url ${origin} }`
     );
   }
-  return `curl -fsSL "${download}/$(uname -s)-$(uname -m)" -o archestra \\\n  && chmod +x archestra && ./archestra bridge start --url ${origin}`;
+  return (
+    `curl -fsSL -o archestra \\\n` +
+    `  "${download}/$(uname -s)-$(uname -m)" \\\n` +
+    `  && chmod +x archestra \\\n` +
+    `  && ./archestra bridge start --url ${origin}`
+  );
 }
 
 /**
- * Removes the `archestra` program from the computer: it stops the MCP bridge,
+ * Removes the `archestra` program from the device: it stops the MCP bridge,
  * takes it out of the start at login, asks Archestra to remove the device,
- * and deletes its files. `archestra bridge start` copies the program to this
- * path, so the command works from any folder.
+ * and deletes its files. `archestra bridge start` puts the program on the
+ * PATH on every system, so the bare name works in any new terminal or
+ * PowerShell window.
  */
-export function uninstallCommand(windows: boolean): string {
-  return windows
-    ? '& "$env:USERPROFILE\\.archestra\\bin\\archestra.exe" uninstall'
-    : "~/.archestra/bin/archestra uninstall";
-}
+export const UNINSTALL_COMMAND = "archestra uninstall";

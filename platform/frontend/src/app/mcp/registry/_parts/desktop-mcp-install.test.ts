@@ -138,9 +138,14 @@ describe("desktopInstallStateOfRow with no computer connected", () => {
       hasComputer,
     });
 
-  it("waits for the computer, even when the tools were read from one before", () => {
-    expect(stateWith("success", false)).toBe("waiting");
-    expect(stateWith("pending", false)).toBe("waiting");
+  it("has no device, even when the tools were read from one before", () => {
+    expect(stateWith("success", false)).toBe("no-device");
+    expect(stateWith("pending", false)).toBe("no-device");
+  });
+
+  it("waits for a device that is linked but has not run it yet", () => {
+    expect(stateWith("pending", true)).toBe("waiting");
+    expect(stateWith("pending", undefined)).toBe("waiting");
   });
 
   it("reads as the installation says with a computer, and while that is not known", () => {
@@ -215,12 +220,12 @@ describe("bulkRemoveCopy", () => {
 
   it("speaks of the viewer's computer when every server is on it", () => {
     const copy = bulkRemoveCopy(["mine", "mine"]);
-    expect(copy.action).toBe("Unlink from my device");
+    expect(copy.action).toBe("Unlink");
     expect(copy.title).toBe("Unlink 2 servers from your device?");
     expect(copy.description).toBe(
       "The MCP bridge stops them on your device, and agents lose their tools.",
     );
-    expect(copy.confirm).toBe("Unlink from my device");
+    expect(copy.confirm).toBe("Unlink");
     expect(copy.verb).toBe("Removed");
     expect(bulkRemoveCopy(["mine"]).description).toBe(
       "The MCP bridge stops it on your device, and agents lose its tools.",
@@ -543,7 +548,7 @@ describe("desktopRemoveCopy", () => {
       title: "Unlink MATLAB from your device?",
       description:
         "The MCP bridge stops MATLAB on your device, and agents lose its tools.",
-      confirm: "Unlink from my device",
+      confirm: "Unlink",
       confirming: "Unlinking...",
     });
     expect(JSON.stringify(copy)).not.toMatch(/team|organization|install/i);

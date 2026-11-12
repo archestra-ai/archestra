@@ -273,7 +273,7 @@ export function isCatalogInAppEnvironment(
  * computer of the person who makes it.
  */
 export function desktopToolsRunNote(name: string): string {
-  return `Runs on the device of the person who uses the agent. Each person links ${name} to their own device.`;
+  return `Runs on the device of the person who uses the agent. Each person links ${name} to their connected device.`;
 }
 
 /**

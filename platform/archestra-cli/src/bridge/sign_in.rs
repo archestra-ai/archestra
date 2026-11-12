@@ -38,9 +38,12 @@ pub(crate) async fn sign_in(
         control_plane::start_sign_in(http, base_url, &device_name(), std::env::consts::OS).await?;
     let approval_url = format!("{base_url}{}", start.verification_path);
 
-    println!("Approve this device in the browser:");
+    println!("This device is not authorized. Approve it in the browser:");
     println!("  {approval_url}");
-    println!("Code: {}", start.user_code);
+    println!(
+        "Make sure the code {} matches the code in the browser.",
+        start.user_code
+    );
     if open_browser && !open_url(&approval_url) {
         warn!("could not open the browser; open the URL by hand");
     }

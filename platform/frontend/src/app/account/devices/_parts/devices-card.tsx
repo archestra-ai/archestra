@@ -28,7 +28,7 @@ import {
   useDesktopDevices,
 } from "@/lib/desktop-device.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { uninstallCommand } from "@/lib/mcp/mcp-bridge-command";
+import { UNINSTALL_COMMAND } from "@/lib/mcp/mcp-bridge-command";
 import { formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import {
@@ -84,7 +84,7 @@ function DevicesTable({ onSetUp }: { onSetUp: () => void }) {
           </EmptyMedia>
           <EmptyTitle>No device is linked</EmptyTitle>
           <EmptyDescription>
-            {`Set up the MCP bridge so ${appName} can use MCP servers running on your device.`}
+            {`Connect your device to ${appName}, so it can use MCP servers running there.`}
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
@@ -211,7 +211,7 @@ function DevicesTable({ onSetUp }: { onSetUp: () => void }) {
           if (!open) setDeviceToRemove(null);
         }}
         title="Unlink device"
-        description={`"${deviceToRemove?.name ?? ""}" will be unlinked from your account. ${appName} will no longer be able to use the MCP servers running on it. To also remove the MCP bridge from that device, run ${uninstallCommand(deviceToRemove?.platform === "windows")} there.`}
+        description={`"${deviceToRemove?.name ?? ""}" will be unlinked from your account. ${appName} will no longer be able to use the MCP servers running on it. To also remove the MCP bridge from that device, run ${UNINSTALL_COMMAND} there.`}
         isPending={deleteDevice.isPending}
         confirmLabel="Unlink"
         pendingLabel="Unlinking..."

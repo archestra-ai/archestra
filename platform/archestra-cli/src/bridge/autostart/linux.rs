@@ -71,8 +71,10 @@ pub(super) fn start(
         install_and_start(options, add_to_login, &mut SystemSystemctl, &mut background)?;
     Ok(super::Started {
         where_it_runs: match entry {
-            Entry::SystemdUnit => "systemd runs it (archestra-mcp-bridge.service).",
-            Entry::XdgAutostart => "It has no tray icon; see it on the Device tab.",
+            Entry::SystemdUnit => {
+                "Check its status with: systemctl --user status archestra-mcp-bridge"
+            }
+            Entry::XdgAutostart => "The Device tab in Archestra shows its status.",
         },
         at_login,
     })

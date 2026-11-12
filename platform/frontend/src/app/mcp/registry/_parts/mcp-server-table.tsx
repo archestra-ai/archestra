@@ -64,7 +64,10 @@ import {
   type DesktopMcpInstallState,
   desktopAddAction,
 } from "./desktop-mcp-install";
-import { DesktopMcpWaitingStatus } from "./desktop-mcp-install-status";
+import {
+  DesktopMcpNoDeviceStatus,
+  DesktopMcpWaitingStatus,
+} from "./desktop-mcp-install-status";
 import type { DismissAlertTarget } from "./dismiss-alert-dialog";
 import { DismissAlertDialog } from "./dismiss-alert-dialog";
 import { McpCapabilityBadges } from "./mcp-capability-badges";
@@ -242,10 +245,14 @@ export function McpServerTable({
         // computer: its state is the viewer's own installation, never a
         // colleague's, and not the install-in-progress spinner.
         const desktopState = desktopStateOf(item);
-        if (desktopState === "waiting") {
+        if (desktopState === "waiting" || desktopState === "no-device") {
           return (
-            <RowClickShield className="py-1.5">
-              <DesktopMcpWaitingStatus className={typeRole({ role: "body" })} />
+            <RowClickShield className="flex min-h-9 items-center">
+              {desktopState === "waiting" ? (
+                <DesktopMcpWaitingStatus badge />
+              ) : (
+                <DesktopMcpNoDeviceStatus badge />
+              )}
             </RowClickShield>
           );
         }

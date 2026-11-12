@@ -33,13 +33,26 @@ fn main() -> ExitCode {
         }
         _ => None,
     };
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .with_writer(std::io::stderr)
-        .init();
+    // In a terminal the user reads plain sentences: only warnings and errors
+    // show there, without a time or a module. The log file of the MCP bridge
+    // in the background keeps everything from info up. RUST_LOG overrides.
+    let background = matches!(&command, Command::BridgeStart(args) if args.background);
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        tracing_subscriber::EnvFilter::new(if background { "info" } else { "warn" })
+    });
+    if background {
+        tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_writer(std::io::stderr)
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_writer(std::io::stderr)
+            .without_time()
+            .with_target(false)
+            .init();
+    }
     #[cfg(any(target_os = "linux", windows))]
     if let Some(error) = log_file {
         tracing::warn!(%error, "cannot write to the log file");

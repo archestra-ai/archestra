@@ -82,7 +82,7 @@ import {
 } from "./deployment-status";
 import { desktopAddAction } from "./desktop-mcp-install";
 import {
-  DesktopMcpAddedStatus,
+  DesktopMcpNoDeviceStatus,
   DesktopMcpWaitingStatus,
 } from "./desktop-mcp-install-status";
 import { CatalogEditNoAccess } from "./edit-catalog-dialog";
@@ -358,13 +358,7 @@ export function McpServerCard({
       permissions={{ mcpServerInstallation: ["delete"] }}
       variant="outline"
       size="sm"
-      // The desktop wording is long: it keeps one line, and takes a row of
-      // its own when the card is too narrow for it beside Chat.
-      className={
-        variant === "desktop"
-          ? "flex-auto px-2.5 whitespace-nowrap"
-          : "flex-1 px-2.5"
-      }
+      className="flex-1 px-2.5"
       onClick={handleUninstallClick}
     >
       {variant === "desktop" ? DESKTOP_MCP_COPY.remove : "Uninstall"}
@@ -971,8 +965,8 @@ export function McpServerCard({
       {desktopState === "waiting" && (
         <DesktopMcpWaitingStatus className="text-xs text-muted-foreground" />
       )}
-      {desktopState === "installed" && (
-        <DesktopMcpAddedStatus className="text-xs text-muted-foreground" />
+      {desktopState === "no-device" && (
+        <DesktopMcpNoDeviceStatus className="text-xs text-muted-foreground" />
       )}
     </div>
   );

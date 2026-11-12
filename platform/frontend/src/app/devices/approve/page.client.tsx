@@ -95,10 +95,6 @@ export default function DeviceApprovalPage() {
                 />
                 <span>This code matches the code in my terminal.</span>
               </label>
-              <p className="text-xs text-muted-foreground">
-                A device you linked before is unlinked: you have one device at a
-                time.
-              </p>
             </div>
             <div className="flex flex-wrap gap-2 border-t bg-muted/20 px-5 py-3">
               <Button

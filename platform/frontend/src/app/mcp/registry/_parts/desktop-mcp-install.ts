@@ -22,6 +22,8 @@ export type DesktopMcpInstallState =
   | "unavailable"
   | "not-installed"
   | "waiting"
+  /** The viewer linked it, but has no device with the MCP bridge. */
+  | "no-device"
   | "installed";
 
 type DesktopTarget = {
@@ -63,7 +65,11 @@ export function desktopInstallStateOfRow(params: {
     servers: servers ?? [],
     viewerId,
   });
-  return state === "installed" && hasComputer === false ? "waiting" : state;
+  // Linked, but no device runs it: the viewer unlinked their device, or
+  // never set the MCP bridge up.
+  return (state === "installed" || state === "waiting") && hasComputer === false
+    ? "no-device"
+    : state;
 }
 
 /**

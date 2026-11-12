@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { bridgeCommand, uninstallCommand } from "./mcp-bridge-command";
+import { bridgeCommand, UNINSTALL_COMMAND } from "./mcp-bridge-command";
 
 describe("bridgeCommand", () => {
   it("uses the connection base URL without its /v1", () => {
     expect(bridgeCommand("https://archestra.example.com/v1", false)).toBe(
-      'curl -fsSL "https://archestra.example.com/api/archestra-cli/$(uname -s)-$(uname -m)" -o archestra \\\n' +
-        "  && chmod +x archestra && ./archestra bridge start --url https://archestra.example.com",
+      "curl -fsSL -o archestra \\\n" +
+        '  "https://archestra.example.com/api/archestra-cli/$(uname -s)-$(uname -m)" \\\n' +
+        "  && chmod +x archestra \\\n" +
+        "  && ./archestra bridge start --url https://archestra.example.com",
     );
   });
 
   it("gives Windows a PowerShell command that works in PowerShell 5.1", () => {
     expect(bridgeCommand("https://archestra.example.com/v1", true)).toBe(
-      `$ProgressPreference = 'SilentlyContinue'; irm "https://archestra.example.com/api/archestra-cli/windows-$env:PROCESSOR_ARCHITECTURE" -OutFile archestra.exe; \`\n` +
+      `$ProgressPreference = 'SilentlyContinue'; \`\n` +
+        `  $arch = $env:PROCESSOR_ARCHITECTURE; \`\n` +
+        `  irm "https://archestra.example.com/api/archestra-cli/windows-$arch" \`\n` +
+        `    -OutFile archestra.exe; \`\n` +
         "  if ($?) { .\\archestra.exe bridge start --url https://archestra.example.com }",
     );
     // No `&&`: Windows PowerShell 5.1 does not have it.
@@ -47,13 +52,8 @@ describe("bridgeCommand", () => {
   });
 });
 
-describe("uninstallCommand", () => {
-  it("runs the copy that bridge start puts in the home folder", () => {
-    expect(uninstallCommand(false)).toBe(
-      "~/.archestra/bin/archestra uninstall",
-    );
-    expect(uninstallCommand(true)).toBe(
-      '& "$env:USERPROFILE\\.archestra\\bin\\archestra.exe" uninstall',
-    );
+describe("UNINSTALL_COMMAND", () => {
+  it("uses the bare program name, which bridge start puts on the PATH", () => {
+    expect(UNINSTALL_COMMAND).toBe("archestra uninstall");
   });
 });

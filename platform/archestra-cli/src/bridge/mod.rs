@@ -205,7 +205,9 @@ pub async fn prepare(options: &StartOptions) -> Result<Prepared, BridgeError> {
 
     let mut synced = sync_at_start(&http, &config.control_plane, path).await?;
     if matches!(synced, StartSync::KeyRejected) {
-        warn!("Archestra rejected the device key; signing in again");
+        // The terminal says it in plain words: the sign-in prints that the
+        // device is not authorized.
+        info!("Archestra rejected the device key; signing in again");
         config.control_plane =
             sign_in::sign_in(&http, &config.control_plane.base_url, options.open_browser).await?;
         config.save(path)?;

@@ -59,18 +59,18 @@ const OPTIONS: Record<
     label: "Command",
     description: (
       <>
-        <span>
-          Starts the MCP server on each user's device. Nothing is installed: the
-          program must already be on the device. Each device replaces{" "}
+        <span className="block">
+          Starts the MCP server on each user's connected device.
         </span>
-        <Variable>$USER</Variable>
-        <span> and </span>
-        <Variable>$HOME</Variable>
-        <span> (or </span>
-        <Variable>%USERNAME%</Variable>
-        <span> and </span>
-        <Variable>%USERPROFILE%</Variable>
-        <span>) with its own user name and home folder.</span>
+        <span className="block">
+          <span>You can template the command with </span>
+          <Variable>$USER</Variable>
+          <span> and </span>
+          <Variable>$HOME</Variable>
+          <span>
+            , which each device fills with its own user name and home folder.
+          </span>
+        </span>
       </>
     ),
     placeholder: "/Users/$USER/bins/mcp",

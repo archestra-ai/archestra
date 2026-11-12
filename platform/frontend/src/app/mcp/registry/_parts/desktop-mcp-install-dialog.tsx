@@ -25,10 +25,7 @@ import {
   useDesktopMcpInstallationStatus,
 } from "@/lib/desktop-device.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import {
-  DESKTOP_MCP_COPY,
-  desktopServerErrorSentence,
-} from "@/lib/mcp/desktop-mcp";
+import { desktopServerErrorSentence } from "@/lib/mcp/desktop-mcp";
 import { cn } from "@/lib/utils/tailwind";
 import {
   DESKTOP_MCP_NO_TARGET_REASON,
@@ -72,9 +69,9 @@ export function DesktopMcpInstallDialog(props: Props) {
 }
 
 /**
- * One dialog through the whole add: the intro, then the steps the computer
- * takes, live, then the server ready. Only its title, body and footer
- * change, so it does not open again. It can be closed at any time; the row
+ * One dialog through the whole link, under one title: the intro, then the
+ * steps the device takes, live, then one line that the server is linked.
+ * Only its body and footer change, so it does not open again. It can be closed at any time; the row
  * keeps "Waiting for your computer" until the tools are read.
  */
 function DesktopMcpAddFlow({
@@ -185,7 +182,7 @@ function DesktopMcpAddFlow({
                 <span>
                   {addCase.kind === "no-bridge"
                     ? "Set up the MCP bridge"
-                    : DESKTOP_MCP_COPY.add}
+                    : "Link to my device"}
                 </span>
               </Button>
             </>
@@ -193,11 +190,15 @@ function DesktopMcpAddFlow({
         }
       : progress.done
         ? {
-            icon: <CheckCircle2 className="h-5 w-5 text-green-600" />,
-            title: `${name} is linked to your device`,
+            icon: <Laptop className="h-5 w-5" />,
+            title: `Link ${name} to your device`,
             body: (
-              <output className="block text-sm text-pretty">
-                {`${name} is ready. Agents in ${appName} can now use it on your device.`}
+              <output className="flex items-center gap-2 text-sm">
+                <CheckCircle2
+                  className="size-4 shrink-0 text-green-600"
+                  aria-hidden
+                />
+                <span>{`${name} is linked to your device`}</span>
               </output>
             ),
             footer: (
@@ -221,7 +222,7 @@ function DesktopMcpAddFlow({
           }
         : {
             icon: <Laptop className="h-5 w-5" />,
-            title: `Linking ${name} to your device`,
+            title: `Link ${name} to your device`,
             body: (
               <>
                 <ProgressSteps name={name} progress={progress} />
@@ -253,9 +254,10 @@ function DesktopMcpAddFlow({
         if (!open) onClose();
       }}
       size="medium"
-      // As tall as the three steps, so the dialog keeps its place from the
-      // first sentence to the last.
-      bodyClassName="min-h-28 space-y-4"
+      // As wide as the MCP bridge setup dialog while it shows the setup, so
+      // the command keeps its lines.
+      className={added?.bridgeSetup ? "max-w-3xl" : undefined}
+      bodyClassName="space-y-4"
       title={
         // Left on a phone too, and clear of the close button.
         <span className="flex items-center gap-2 pr-6 text-left leading-snug">
@@ -294,7 +296,9 @@ function AddIntro({
       </div>
     );
   }
-  return <p className="text-sm text-pretty">{description}</p>;
+  return (
+    <p className="text-sm text-muted-foreground text-pretty">{description}</p>
+  );
 }
 
 /** The intro sentence, or null while the viewer's devices load. */

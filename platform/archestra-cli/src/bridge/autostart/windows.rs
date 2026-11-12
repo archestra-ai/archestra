@@ -58,7 +58,7 @@ pub(super) fn start(
         &mut super::SystemBackground { home: options.home },
     )?;
     Ok(super::Started {
-        where_it_runs: "Its icon is in the notification area of the taskbar.",
+        where_it_runs: "Its icon in the notification area of the taskbar shows its status.",
         at_login,
     })
 }

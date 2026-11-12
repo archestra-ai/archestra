@@ -15,7 +15,7 @@ describe("personalConnectionsCopy", () => {
       personalConnectionsCopy({ ...base, serverType: "desktop_mcp" }),
     ).toMatchObject({
       noun: "device",
-      add: "Link to my device",
+      add: "Link",
       emptyText: "No one has linked it to their device yet.",
     });
   });

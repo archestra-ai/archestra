@@ -2,23 +2,29 @@
 
 import { CheckCircle2, Laptop, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { OneOf, TextButton } from "@/app/connection/connect-page-parts";
+import {
+  OneOf,
+  ScriptBlock,
+  SetupNextSteps,
+  TextButton,
+} from "@/app/connection/connect-page-parts";
 import { useConnectionBaseUrl } from "@/app/connection/connection-flow.utils";
 import { detectPlatform } from "@/app/connection/platform.utils";
-import { CopyableCode } from "@/components/copyable-code";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
+import { copyToClipboard } from "@/lib/clipboard";
 import {
   type DesktopDevice,
   useDesktopDevices,
 } from "@/lib/desktop-device.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { bridgeCommand, uninstallCommand } from "@/lib/mcp/mcp-bridge-command";
+import { bridgeCommand } from "@/lib/mcp/mcp-bridge-command";
 import { useOrganization } from "@/lib/organization.query";
 
 /**
- * Sets up the MCP bridge on the user's device: why, the command to run, then
- * a live line that waits for the device and says when it is linked. The
+ * Sets up the MCP bridge on the user's device, in the look of the Connect
+ * page: one line on why, the command, what happens when it finishes, then a
+ * live line that waits for the device and says when it is linked. The
  * Device page and the chat open it in {@link McpBridgeSetupDialog}; the
  * registry's Link dialog shows it as one of its own steps, so all three look
  * and move the same.
@@ -33,43 +39,50 @@ export function McpBridgeSetup({ device }: { device: DesktopDevice | null }) {
   const [windows, setWindows] = useState(false);
   useEffect(() => setWindows(detectPlatform() === "windows"), []);
   const command = bridgeCommand(baseUrl, windows);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1600);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   return (
-    <div className="space-y-4 text-sm">
-      <p className="text-pretty">
-        {`The MCP bridge lets ${appName} use MCP servers that run on your device. It only starts programs that are already there.`}
+    <div className="text-sm">
+      <p className="text-muted-foreground text-pretty">
+        {`Connect your device to ${appName}, so it can use MCP servers running there. Run this command in ${windows ? "PowerShell" : "a terminal"} on your device.`}
       </p>
-      <div>
-        <p className="font-medium">
-          {windows
-            ? "Run this command in PowerShell on your device"
-            : "Run this command in a terminal on your device"}
-        </p>
-        <CopyableCode
-          value={command}
-          toastMessage="Command copied"
-          className="mt-2 items-start"
-        >
-          <pre className="font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
-            {command}
-          </pre>
-        </CopyableCode>
-        <TextButton
-          onClick={() => setWindows(!windows)}
-          className="mt-2 text-xs text-muted-foreground"
-        >
-          <OneOf inline shown={windows ? 0 : 1}>
-            <span>Use the macOS / Linux command</span>
-            <span>Use the Windows command</span>
-          </OneOf>
-        </TextButton>
-      </div>
-      <p className="text-muted-foreground">
-        It opens a browser page. Approve your device there.
-      </p>
+      <ScriptBlock
+        command={command}
+        copied={copied}
+        disabled={false}
+        onCopy={() => {
+          void copyToClipboard(command).then(() => setCopied(true));
+        }}
+        // The dialog is narrower than the Connect page: the command wraps
+        // instead of scrolling, clear of the Copy button.
+        className="mt-3 [&_pre]:break-all [&_pre]:whitespace-pre-wrap"
+      />
+      <SetupNextSteps
+        platformControl={
+          <TextButton
+            onClick={() => setWindows(!windows)}
+            className="self-start"
+          >
+            <OneOf inline shown={windows ? 0 : 1}>
+              <span>Use the macOS / Linux command</span>
+              <span>Use the Windows command</span>
+            </OneOf>
+          </TextButton>
+        }
+      >
+        <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+          <li>Approve your device on the browser page it opens.</li>
+          <li>The MCP bridge then runs in the background.</li>
+        </ol>
+      </SetupNextSteps>
       <output
         aria-live="polite"
-        className="flex items-center gap-2.5 rounded-lg border px-3 py-2.5"
+        className="mt-5 flex items-center gap-2 border-t pt-4"
       >
         {device ? (
           <CheckCircle2
@@ -77,20 +90,18 @@ export function McpBridgeSetup({ device }: { device: DesktopDevice | null }) {
             aria-hidden
           />
         ) : (
-          <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+          <Loader2
+            className="size-4 shrink-0 animate-spin text-muted-foreground"
+            aria-hidden
+          />
         )}
-        <span key={device ? "linked" : "waiting"} className="font-medium">
+        <span
+          key={device ? "linked" : "waiting"}
+          className={device ? undefined : "text-muted-foreground"}
+        >
           {device ? `${device.name} is linked` : "Waiting for your device..."}
         </span>
       </output>
-      <p className="text-xs text-muted-foreground">
-        <span>
-          The MCP bridge starts by itself when you log in. To remove it from
-          your device, run{" "}
-        </span>
-        <code className="font-mono">{uninstallCommand(windows)}</code>
-        <span>.</span>
-      </p>
     </div>
   );
 }
@@ -113,7 +124,8 @@ export function McpBridgeSetupDialog({
       open={open}
       onOpenChange={onOpenChange}
       size="medium"
-      bodyClassName="space-y-4"
+      // Wide enough for the command's lines on one line each.
+      className="max-w-3xl"
       title={
         <span className="flex items-center gap-2 pr-6 text-left leading-snug">
           <Laptop className="h-5 w-5 shrink-0" />

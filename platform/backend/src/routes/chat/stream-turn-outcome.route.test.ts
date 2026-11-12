@@ -9,14 +9,22 @@ import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { ChatErrorCode, TURN_NOTICE_PART_TYPE } from "@archestra/shared";
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
+import {
+  LoggerProvider,
+  SimpleLogRecordProcessor,
+} from "@opentelemetry/sdk-logs";
 import { jsonSchema, simulateReadableStream, tool, type UIMessage } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import logger from "@/logging";
+import { createLogger } from "@/logging/create-logger";
+import { toOtelLogRecord } from "@/logging/otel-log-record";
 import { ModelModel } from "@/models";
 import MessageModel from "@/models/message";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -27,6 +35,9 @@ const mockCreateLLMModelForAgent = vi.hoisted(() =>
 );
 const mockGetChatMcpTools = vi.hoisted(() => vi.fn());
 const mockGetChatMcpToolUiResourceUris = vi.hoisted(() => vi.fn());
+
+// The real logger is a Proxy that vi.spyOn cannot intercept on this branch.
+vi.mock("@/logging");
 
 vi.mock("@/clients/llm-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/clients/llm-client")>();
@@ -220,6 +231,137 @@ describe("POST /api/chat turn outcome", () => {
       .limit(1);
     return run?.status;
   }
+
+  test.each([
+    "metadata_only",
+    "full",
+  ] as const)("%s logs a failed assistant insert without changing the streamed answer", async (contentMode) => {
+    const marker = "synthetic-private-failed-chat-insert";
+    const stdout: string[] = [];
+    const exported: string[] = [];
+    const retained: Record<string, unknown>[] = [];
+    const collector = createServer((request, response) => {
+      let body = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk) => {
+        body += chunk;
+      });
+      request.on("end", () => {
+        exported.push(body);
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end("{}");
+      });
+    });
+    await new Promise<void>((resolve) =>
+      collector.listen(0, "127.0.0.1", resolve),
+    );
+    const { port } = collector.address() as AddressInfo;
+    const provider = new LoggerProvider({
+      processors: [
+        new SimpleLogRecordProcessor({
+          exporter: new OTLPLogExporter({
+            url: `http://127.0.0.1:${port}/v1/logs`,
+          }),
+        }),
+      ],
+    });
+    const otelLogger = provider.getLogger("pino");
+    const capturingLogger = createLogger({
+      contentMode,
+      level: "error",
+      streams: [
+        { stream: { write: (record) => stdout.push(record) } },
+        {
+          // The production OTLP and retention streams each parse the same
+          // already-redacted record; capture it once for both here.
+          stream: {
+            write: (chunk) => {
+              const record = JSON.parse(String(chunk));
+              retained.push(record);
+              otelLogger.emit(toOtelLogRecord(record));
+            },
+          },
+        },
+      ],
+    });
+    const log = vi
+      .mocked(logger.error)
+      .mockImplementation(capturingLogger.error.bind(capturingLogger));
+    // Real PostgreSQL constraint rejection in this test's disposable PGlite.
+    // The user write succeeds; only the streamed assistant's final insert fails.
+    useModel(
+      new MockLanguageModelV3({
+        doStream: async () => textReply(marker, "stop"),
+      }),
+    );
+    try {
+      await db.execute(
+        sql`ALTER TABLE messages ADD CONSTRAINT synthetic_assistant_insert_failure CHECK (role <> 'assistant')`,
+      );
+      const chunks = await sendTurn("Synthetic user prompt");
+      expect(chunks).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "text-delta", delta: marker }),
+        ]),
+      );
+      await expect
+        .poll(() =>
+          retained.some(
+            (record) =>
+              record.msg === "Failed to persist messages during onFinish",
+          ),
+        )
+        .toBe(true);
+      await provider.forceFlush();
+      await expect.poll(() => exported.length).toBe(retained.length);
+      expect(exported.length).toBeGreaterThan(0);
+      expect(retained).toEqual(stdout.map((record) => JSON.parse(record)));
+      const record = retained.find(
+        (entry) => entry.msg === "Failed to persist messages during onFinish",
+      );
+      expect(record).toMatchObject({ conversationId });
+      const rows = await MessageModel.findByConversation(conversationId);
+      expect(rows.some((row) => row.role === "user")).toBe(true);
+      expect(rows.some((row) => row.role === "assistant")).toBe(false);
+      if (contentMode === "metadata_only") {
+        expect(JSON.stringify([stdout, retained, exported])).not.toContain(
+          marker,
+        );
+        expect(record).toMatchObject({
+          error: {
+            statement: "INSERT",
+            parameterCount: expect.any(Number),
+            cause: {
+              code: "23514",
+              severity: "ERROR",
+              constraint: "synthetic_assistant_insert_failure",
+            },
+          },
+        });
+        expect(exported.join("")).toContain("23514");
+        expect(exported.join("")).toContain("INSERT");
+      } else {
+        expect(stdout.join("")).toContain(marker);
+        expect(exported.join("")).toContain(marker);
+      }
+    } finally {
+      log.mockReset();
+      try {
+        await db.execute(
+          sql`ALTER TABLE messages DROP CONSTRAINT IF EXISTS synthetic_assistant_insert_failure`,
+        );
+      } finally {
+        try {
+          await provider.shutdown();
+        } finally {
+          collector.closeAllConnections();
+          await new Promise<void>((resolve) =>
+            collector.close(() => resolve()),
+          );
+        }
+      }
+    }
+  });
 
   test("keeps the assistant reply when a tool's execute throws", async () => {
     mockGetChatMcpTools.mockResolvedValue({

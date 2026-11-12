@@ -668,15 +668,11 @@ class PermissionSyncService {
           stats.membershipsRemoved = membershipsRemoved;
           stats.groupSyncFailed = true;
           runLog.warn(
-            {
-              error: extractErrorMessage(error),
-              // Query errors (e.g. Drizzle) carry the actionable Postgres
-              // error in `cause`, not in the message.
-              cause:
-                error instanceof Error && error.cause
-                  ? extractErrorMessage(error.cause)
-                  : undefined,
-            },
+            // Query errors (e.g. Drizzle) carry the actionable Postgres error
+            // in `cause`. The err serializer keeps that chain, and in
+            // metadata-only mode reduces it to SQLSTATE and constraint, since
+            // the driver's message can echo the rejected value.
+            { err: error },
             "Permission sync group step failed; continuing to document reconcile with the previous group snapshot",
           );
           metrics.rag.reportPermissionSyncGroupFailure(connector.connectorType);

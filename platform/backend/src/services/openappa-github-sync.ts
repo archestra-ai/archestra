@@ -428,20 +428,30 @@ export async function createAppaGithubRepository(params: {
     try {
       const base = `${api}/repos/${repo}`;
       const branch = created.default_branch;
+      const parent = await branchHead({ base, token, branch, setup: true });
+      const files = firstFileAtEachPath([
+        { path: "appa.toml", content: seed },
+        ...transferredFiles(transfer, {
+          path: "appa.toml",
+          validationDirectory,
+        }),
+      ]);
       // The template's own example is replaced in one commit with the current
       // policy and what it reads beside it; identical bytes need no commit.
+      // A copy that already holds files the policy's globs would read, and
+      // that were never in the policy, loses them in the same commit.
       const outcome = await commitSetupFiles({
         base,
         token,
         branch,
-        parent: await branchHead({ base, token, branch, setup: true }),
-        files: [
-          { path: "appa.toml", content: seed },
-          ...transferredFiles(transfer, {
-            path: "appa.toml",
-            validationDirectory,
-          }),
-        ],
+        parent,
+        files,
+        remove: strayGlobMatches({
+          content: seed,
+          policyPath: "appa.toml",
+          paths: await blobPaths({ base, token, commit: parent }),
+          written: files.map((file) => file.path),
+        }),
         message: "Seed current OpenAPPA policy",
         pull: {
           title: "Seed current OpenAPPA policy",

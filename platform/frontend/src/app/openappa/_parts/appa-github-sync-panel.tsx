@@ -408,7 +408,7 @@ function SelfServiceRow({
           action={
             toFinish && canManage ? (
               <Button
-                size="sm"
+                size="xs"
                 type="button"
                 variant="outline"
                 onClick={() => setSetup(true)}

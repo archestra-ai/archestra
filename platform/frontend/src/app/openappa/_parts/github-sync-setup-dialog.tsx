@@ -1484,11 +1484,11 @@ function RepositoryNotice({
           </span>
           <InlineNoticeText className="flex-1">
             {status === "template"
-              ? "Setup copies your current policy into it."
+              ? "Setup copies your current policy and the files it reads into it."
               : status === "empty"
-                ? "Setup adds the OpenAPPA files and your current policy."
+                ? "Setup adds the OpenAPPA files, your current policy and the files it reads."
                 : status === "policy"
-                  ? "It becomes your policy, in place of the current one."
+                  ? `Setup opens a ${gitlab ? "merge" : "pull"} request that puts your current policy and the files it reads in place of it. Your current policy stays active until it merges.`
                   : `Pick another ${gitlab ? "project" : "repository"}, or set the policy's location under Advanced.`}
           </InlineNoticeText>
         </InlineNotice>

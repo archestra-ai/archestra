@@ -26,7 +26,10 @@ import {
   githubFetch,
   isEmptyGithubRepository,
 } from "@/services/openappa-github";
-import { resolveOpenAppaGitlabAccess } from "@/services/openappa-github-access";
+import {
+  resolveOpenAppaGitlabAccess,
+  templateExampleBlob,
+} from "@/services/openappa-github-access";
 import { openappaGitlab } from "@/services/openappa-gitlab";
 import { ApiError } from "@/types";
 import type {
@@ -357,23 +360,34 @@ class OpenAppaGithubAppSetup {
     if (await isEmptyGithubRepository({ api: app.api, repo, token }))
       return { status: "empty", validations: null };
     const directory = params.validationDirectory ?? VALIDATION_DIRECTORY;
-    if (
+    const fresh =
       !ref &&
       path === "appa.toml" &&
       directory === VALIDATION_DIRECTORY &&
-      found.data.private &&
+      found.data.private;
+    if (
+      fresh &&
       found.data.template_repository?.full_name.toLowerCase() === TEMPLATE_REPO
     )
       return { status: "template", validations: null };
-    const contents = (entry: string) =>
+    const contents = (entry: string, method: "GET" | "HEAD") =>
       get(
         `${app.api}/repos/${repo}/contents/${entry.split("/").map(encodeURIComponent).join("/")}${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`,
-        "HEAD",
+        method,
       );
     const [policy, validations] = await Promise.all([
-      contents(path),
-      contents(directory),
+      contents(path, fresh ? "GET" : "HEAD"),
+      contents(directory, "HEAD"),
     ]);
+    // A private repository holding the template's example unchanged is a
+    // fresh copy too, however it was made: setup seeds it.
+    if (fresh && policy?.ok) {
+      const file = (await policy.json().catch(() => null)) as {
+        sha?: string;
+      } | null;
+      if (file?.sha === templateExampleBlob())
+        return { status: "template", validations: null };
+    }
     return {
       status: policy?.ok ? "policy" : "other",
       validations: !!validations?.ok,

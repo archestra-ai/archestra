@@ -308,6 +308,8 @@ export class GitHostClient {
     webUrl: string;
     state: "open" | "merged" | "closed";
     sourceBranch: string;
+    /** The request's head commit, which outlives its source branch. */
+    sha: string | null;
     mergeable: boolean | null;
   }> {
     const request = await this.json<{
@@ -315,11 +317,13 @@ export class GitHostClient {
       web_url: string;
       state: string;
       source_branch: string;
+      sha?: string | null;
       detailed_merge_status?: string;
     }>(`${this.repoApi(repo)}/merge_requests/${iid}`);
     return {
       iid: request.iid,
       webUrl: request.web_url,
+      sha: request.sha ?? null,
       state:
         request.state === "merged"
           ? "merged"

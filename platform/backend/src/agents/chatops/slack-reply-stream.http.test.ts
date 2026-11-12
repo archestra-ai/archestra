@@ -64,6 +64,8 @@ describe("Slack reply stream HTTP boundary", () => {
     const provider = new SlackProvider({
       enabled: true,
       botToken: "fixture-unused-token",
+      signingSecret: "fixture-unused-secret",
+      appId: "A_ORIGINAL",
     });
     (provider as unknown as { client: WebClient }).client = new WebClient(
       "fixture-unused-token",
@@ -92,6 +94,8 @@ describe("Slack reply stream HTTP boundary", () => {
       senderId: "U_ORIGINAL",
       senderName: "Synthetic user",
       text: "Hello",
+      rawText: "Hello",
+      isThreadReply: false,
       timestamp: new Date(),
       metadata: {
         channelType,

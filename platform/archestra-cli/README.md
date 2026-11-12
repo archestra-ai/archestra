@@ -11,6 +11,7 @@ The computer opens every connection: the client polls Archestra for MCP messages
 ```bash
 archestra bridge start --url https://archestra.example.com
 archestra bridge stop
+archestra bridge status
 archestra bridge enable-auto-start
 archestra bridge disable-auto-start
 archestra update
@@ -23,6 +24,7 @@ The commands of a component are `archestra <component> <action>`. `update` and `
 | --- | --- | --- |
 | `bridge start` | Starts the MCP bridge in the background. | Auto-start, except at the first start. |
 | `bridge stop` | Stops the MCP bridge that runs in the background. | Auto-start, the config file and the device key. |
+| `bridge status` | Shows if the MCP bridge runs, if auto-start is on, which Archestra the device is linked to, the version and the log file. | Everything: it only reads. |
 | `bridge enable-auto-start` | Turns auto-start on: the MCP bridge starts at each login. | What runs now. |
 | `bridge disable-auto-start` | Turns auto-start off. | What runs now. |
 | `update` | Gets the program that Archestra serves now, and starts the MCP bridge again with it. | Auto-start, the config file and the device key. |
@@ -206,7 +208,7 @@ On Windows x86_64, `aws-lc-sys` needs NASM, or `AWS_LC_SYS_PREBUILT_NASM=1` for 
 
 Archestra offers the program in its install command from the folder that `ARCHESTRA_CLI_DIR` names (default `/app/archestra-cli`, where the platform image has it).
 
-With Tilt, start the resource `archestra-cli-build` (`tilt trigger archestra-cli-build`). It runs `platform/dev/build-archestra-cli-dev.sh`: a release build for this computer, put in `target/dev-clients/` with a `manifest.json` that names the version of `Cargo.toml` with `-dev`. Tilt sets `ARCHESTRA_CLI_DIR` to that folder when `.env` does not set it, so the install command of the local Archestra downloads the program of this checkout. Each build has another SHA-256, so a device that is linked to the local Archestra offers an update after it.
+With Tilt, the resource `archestra-cli-build` does it at `tilt up` and at each change of the program. It runs `platform/dev/build-archestra-cli-dev.sh`: a release build for this computer, put in `target/dev-clients/` with a `manifest.json` that names the version of `Cargo.toml` with `-dev`. Tilt sets `ARCHESTRA_CLI_DIR` to that folder when `.env` does not set it, so the install command of the local Archestra downloads the program of this checkout. Each build has another SHA-256, so a device that is linked to the local Archestra offers an update after it.
 
 Without Tilt, put the release builds in a folder as `archestra-<system>-<cpu>` and set `ARCHESTRA_CLI_DIR` to that folder. A `manifest.json` with `{ "version": "…" }` in the folder gives the version; without it Archestra knows only the checksums:
 

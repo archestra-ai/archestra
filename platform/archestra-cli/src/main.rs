@@ -64,6 +64,7 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }),
         Command::BridgeStop => or_report(bridge::stop::run()),
+        Command::BridgeStatus => or_report(bridge::status::run()),
         Command::BridgeEnableAutoStart => or_report(bridge::at_login::enable()),
         Command::BridgeDisableAutoStart => or_report(bridge::at_login::disable()),
         Command::Update => or_report(update::run()),

@@ -660,14 +660,14 @@ mod tests {
             let uuid = uuid_v4();
             let groups: Vec<&str> = uuid.split('-').collect();
             let lengths: Vec<usize> = groups.iter().map(|group| group.len()).collect();
-            assert_eq!(lengths, [8, 4, 4, 4, 12], "{uuid}");
+            assert_eq!(lengths, [8, 4, 4, 4, 12]);
             assert!(
                 uuid.chars()
                     .all(|c| c == '-' || c.is_ascii_digit() || ('a'..='f').contains(&c)),
-                "{uuid}"
+                "only hex digits and hyphens"
             );
-            assert!(groups[2].starts_with('4'), "{uuid}");
-            assert!(groups[3].starts_with(['8', '9', 'a', 'b']), "{uuid}");
+            assert!(groups[2].starts_with('4'), "version 4");
+            assert!(groups[3].starts_with(['8', '9', 'a', 'b']), "variant");
             assert!(seen.insert(uuid));
         }
     }

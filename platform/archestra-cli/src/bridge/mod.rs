@@ -42,6 +42,7 @@ mod report;
 pub mod sign_in;
 pub mod start;
 pub mod state;
+pub mod status;
 mod stdio_server;
 pub mod stop;
 mod sync;

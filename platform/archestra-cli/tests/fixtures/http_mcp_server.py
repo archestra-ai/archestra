@@ -41,7 +41,9 @@ def make_handler(root):
             if content_type:
                 self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
-            if session_id:
+            # Only an id that this server made goes into a header: never text
+            # that a request sent.
+            if session_id in sessions:
                 self.send_header(SESSION_HEADER, session_id)
             self.end_headers()
             self.wfile.write(body)

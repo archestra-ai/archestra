@@ -102,6 +102,13 @@ pub(super) fn disable(home: &Path) -> Result<bool, AutostartError> {
     remove_from_login(home, &mut SystemSystemctl)
 }
 
+/// `archestra bridge status` on Linux.
+#[cfg(target_os = "linux")]
+pub(super) fn status(home: &Path) -> Result<super::Status, AutostartError> {
+    let process_runs = crate::bridge::instance::is_running(home).unwrap_or(false);
+    bridge_status(home, &mut SystemSystemctl, process_runs)
+}
+
 /// The MCP bridge part of `archestra uninstall` on Linux.
 #[cfg(target_os = "linux")]
 pub(super) fn remove(home: &Path) -> Result<Removal, AutostartError> {
@@ -226,6 +233,32 @@ fn remove_from_login(home: &Path, systemctl: &mut impl Systemctl) -> Result<bool
     }
     removed |= remove_entry(&desktop_entry_path(home))?;
     Ok(removed)
+}
+
+/// Reads whether the MCP bridge runs (the unit is active, or `process_runs`:
+/// a process of its own holds the lock) and whether it is in the start at
+/// login (the unit is enabled, or the XDG autostart entry is there).
+fn bridge_status(
+    home: &Path,
+    systemctl: &mut impl Systemctl,
+    process_runs: bool,
+) -> Result<super::Status, AutostartError> {
+    let mut running = process_runs;
+    let mut auto_start = desktop_entry_path(home).exists();
+    if unit_path(home).exists() {
+        for (question, answer) in [("is-active", &mut running), ("is-enabled", &mut auto_start)] {
+            match systemctl.run(&[question, "--quiet", UNIT]) {
+                Ok(output) => *answer |= output.success,
+                // No systemctl: no systemd runs it.
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(LinuxError::Systemctl(error).into()),
+            }
+        }
+    }
+    Ok(super::Status {
+        running,
+        auto_start,
+    })
 }
 
 /// Stops the MCP bridge and removes the unit and both entries. Nothing to
@@ -465,6 +498,7 @@ mod tests {
             let success = self.answers.pop_front().unwrap_or(true);
             Ok(CommandOutput {
                 success,
+                stdout: String::new(),
                 stderr: if success {
                     String::new()
                 } else {
@@ -745,6 +779,52 @@ mod tests {
         // Not enabled: nothing to remove.
         let mut systemctl = SystemctlRecorder::answering(&[false]);
         assert!(!remove_from_login(home, &mut systemctl).expect("disable again"));
+    }
+
+    #[test]
+    fn status_asks_systemd_or_looks_at_the_process_and_the_autostart_entry() {
+        let fixture = Fixture::new();
+        let home = fixture.home.path();
+        // Nothing is there, and no process runs.
+        let mut systemctl = SystemctlRecorder::default();
+        assert_eq!(
+            bridge_status(home, &mut systemctl, false).expect("status"),
+            crate::bridge::autostart::Status {
+                running: false,
+                auto_start: false
+            }
+        );
+        assert!(systemctl.calls.is_empty());
+
+        // A unit that is active and not enabled.
+        write_entry(&unit_path(home), "unit").expect("write");
+        let mut systemctl = SystemctlRecorder::answering(&[true, false]);
+        assert_eq!(
+            bridge_status(home, &mut systemctl, false).expect("status"),
+            crate::bridge::autostart::Status {
+                running: true,
+                auto_start: false
+            }
+        );
+        assert_eq!(
+            systemctl.calls,
+            [
+                "is-active --quiet archestra-mcp-bridge.service",
+                "is-enabled --quiet archestra-mcp-bridge.service",
+            ]
+        );
+
+        // No systemd session: a process of its own and the autostart entry.
+        let fixture = Fixture::new();
+        let home = fixture.home.path();
+        write_entry(&desktop_entry_path(home), "entry").expect("write");
+        assert_eq!(
+            bridge_status(home, &mut SystemctlRecorder::default(), true).expect("status"),
+            crate::bridge::autostart::Status {
+                running: true,
+                auto_start: true
+            }
+        );
     }
 
     #[test]

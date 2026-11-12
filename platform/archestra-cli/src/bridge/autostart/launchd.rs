@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use super::{
-    AutostartError, CommandOutput, Options, Removal, Started, background_arguments,
+    AutostartError, CommandOutput, Options, Removal, Started, Status, background_arguments,
     install_program, installed_program, remove_if_present, run_tool, start_command, utf8,
     write_entry,
 };
@@ -80,6 +80,11 @@ pub(super) fn enable(options: &Options<'_>) -> Result<(), AutostartError> {
 /// `archestra bridge disable-auto-start` on macOS.
 pub(super) fn disable(home: &Path) -> Result<bool, AutostartError> {
     remove_agent(&login_agent_path(home))
+}
+
+/// `archestra bridge status` on macOS.
+pub(super) fn status(home: &Path) -> Result<Status, AutostartError> {
+    job_status(&mut SystemLaunchctl, home)
 }
 
 /// The MCP bridge part of `archestra uninstall` on macOS.
@@ -240,6 +245,22 @@ fn stop_job(launchctl: &mut impl Launchctl) -> Result<bool, AutostartError> {
     Ok(stopped)
 }
 
+/// Reads what launchd says of the job. launchd keeps a job that ended, so
+/// that it knows the job is not enough: `launchctl print` names its state.
+fn job_status(launchctl: &mut impl Launchctl, home: &Path) -> Result<Status, AutostartError> {
+    let service = format!("{}/{LABEL}", launchctl.domain());
+    let printed = run(launchctl, &["print", &service])?;
+    let running = printed.success
+        && printed
+            .stdout
+            .lines()
+            .any(|line| line.trim() == "state = running");
+    Ok(Status {
+        running,
+        auto_start: login_agent_path(home).exists(),
+    })
+}
+
 /// Stops the MCP bridge that launchd runs and removes both LaunchAgent
 /// files. Nothing to stop or remove is not an error. When launchd does not
 /// stop the job, the files stay, so that the user sees what launchd still
@@ -339,6 +360,8 @@ mod tests {
     struct Recorder {
         calls: Vec<String>,
         answers: VecDeque<bool>,
+        /// What a successful call writes to stdout.
+        stdout: String,
     }
 
     impl Recorder {
@@ -346,6 +369,7 @@ mod tests {
             Self {
                 calls: Vec::new(),
                 answers: answers.iter().copied().collect(),
+                stdout: String::new(),
             }
         }
     }
@@ -364,6 +388,11 @@ mod tests {
             let success = self.answers.pop_front().unwrap_or(true);
             Ok(CommandOutput {
                 success,
+                stdout: if success {
+                    self.stdout.clone()
+                } else {
+                    String::new()
+                },
                 stderr: if success {
                     String::new()
                 } else {
@@ -594,6 +623,46 @@ assert agent["StandardErrorPath"] == sys.argv[4], agent
         let mut launchctl = Recorder::answering(&[false]);
         assert!(!stop_job(&mut launchctl).expect("stop"));
         assert_eq!(launchctl.calls, ["print gui/501/ai.archestra.mcp-bridge"]);
+    }
+
+    #[test]
+    fn status_reads_the_state_of_the_job_and_the_start_at_login() {
+        let home = tempfile::tempdir().expect("temp home");
+        // launchd does not have the job.
+        let mut launchctl = Recorder::answering(&[false]);
+        assert_eq!(
+            job_status(&mut launchctl, home.path()).expect("status"),
+            Status {
+                running: false,
+                auto_start: false
+            }
+        );
+        assert_eq!(launchctl.calls, ["print gui/501/ai.archestra.mcp-bridge"]);
+
+        let (_login_agent, _, _) = write_files(home.path());
+        // The job runs.
+        let mut launchctl = Recorder {
+            stdout: "gui/501/ai.archestra.mcp-bridge = {\n\tstate = running\n\tpid = 4242\n}\n"
+                .to_owned(),
+            ..Recorder::default()
+        };
+        assert_eq!(
+            job_status(&mut launchctl, home.path()).expect("status"),
+            Status {
+                running: true,
+                auto_start: true
+            }
+        );
+        // launchd has the job, but its process ended.
+        let mut launchctl = Recorder {
+            stdout: "gui/501/ai.archestra.mcp-bridge = {\n\tstate = not running\n}\n".to_owned(),
+            ..Recorder::default()
+        };
+        assert!(
+            !job_status(&mut launchctl, home.path())
+                .expect("status")
+                .running
+        );
     }
 
     #[test]

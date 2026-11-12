@@ -242,11 +242,12 @@ local_resource(
 )
 
 # Build the `archestra` program (platform/archestra-cli) for this computer and
-# put it where the backend serves it from, to test the MCP bridge against the
-# local Archestra. Started by hand: only work on the MCP bridge needs it, and
-# it is a release build of a Rust program. After a build, a device that is
-# linked to this Archestra sees another program (a new SHA-256) and offers an
-# update.
+# put it where the backend serves it from, so that the install command of the
+# local Archestra downloads the program of this checkout. It runs at the start
+# and at each change of the program. The first run is a release build of a
+# Rust program (some minutes); a run with no change is quick. After a build
+# that changed the program, a device that is linked to this Archestra sees
+# another program (a new SHA-256) and offers an update.
 local_resource(
   'archestra-cli-build',
   # The default folder of the script is archestra_cli_dev_dir.
@@ -256,8 +257,8 @@ local_resource(
     '../archestra-cli/Cargo.toml',
     '../archestra-cli/Cargo.lock',
   ],
-  trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False,
+  # Nothing waits for it: Archestra starts without the program.
+  allow_parallel=True,
   labels=['dev'],
 )
 

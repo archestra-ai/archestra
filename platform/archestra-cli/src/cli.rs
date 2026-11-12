@@ -16,8 +16,8 @@ Connects this device to Archestra.
 
 Commands:
   bridge <action>   The MCP bridge. It connects MCP servers on this device
-                    to Archestra. Actions: start, stop, enable-auto-start,
-                    disable-auto-start.
+                    to Archestra. Actions: start, stop, status,
+                    enable-auto-start, disable-auto-start.
   update            Get the program that your Archestra serves now.
   uninstall         Remove Archestra from this device.
 
@@ -34,6 +34,7 @@ The MCP bridge connects MCP servers on this device to Archestra.
 Actions:
   start                Start the MCP bridge.
   stop                 Stop the MCP bridge.
+  status               Show if the MCP bridge runs.
   enable-auto-start    Start the MCP bridge at each login.
   disable-auto-start   Do not start the MCP bridge at each login.
 
@@ -81,6 +82,18 @@ Stops the MCP bridge that runs in the background. Nothing else changes:
 
 An MCP bridge that runs in a terminal (--foreground) is not in the
 background: stop it there with Ctrl-C.
+
+Options:
+  -h, --help        Show this text.";
+
+const STATUS_HELP: &str = "\
+Usage: archestra bridge status
+
+Shows what the MCP bridge on this device does now. It changes nothing.
+- If it runs in the background.
+- If auto-start is on.
+- Which Archestra this device is linked to.
+- The version of this program, and where its log file is.
 
 Options:
   -h, --help        Show this text.";
@@ -155,6 +168,7 @@ pub enum Invocation {
 pub enum Command {
     BridgeStart(StartArgs),
     BridgeStop,
+    BridgeStatus,
     BridgeEnableAutoStart,
     BridgeDisableAutoStart,
     Update,
@@ -168,6 +182,7 @@ pub enum Help {
     Bridge,
     BridgeStart,
     BridgeStop,
+    BridgeStatus,
     BridgeEnableAutoStart,
     BridgeDisableAutoStart,
     Update,
@@ -181,6 +196,7 @@ impl Help {
             Self::Bridge => BRIDGE_HELP,
             Self::BridgeStart => START_HELP,
             Self::BridgeStop => STOP_HELP,
+            Self::BridgeStatus => STATUS_HELP,
             Self::BridgeEnableAutoStart => ENABLE_AUTO_START_HELP,
             Self::BridgeDisableAutoStart => DISABLE_AUTO_START_HELP,
             Self::Update => UPDATE_HELP,
@@ -226,6 +242,7 @@ impl std::fmt::Display for Help {
             Self::Bridge => BRIDGE,
             Self::BridgeStart => "bridge start",
             Self::BridgeStop => "bridge stop",
+            Self::BridgeStatus => "bridge status",
             Self::BridgeEnableAutoStart => "bridge enable-auto-start",
             Self::BridgeDisableAutoStart => "bridge disable-auto-start",
             Self::Update => UPDATE,
@@ -256,6 +273,7 @@ fn parse_bridge(mut arguments: impl Iterator<Item = String>) -> Result<Invocatio
         "-h" | "--help" => Ok(Invocation::Help(Help::Bridge)),
         "start" => parse_bridge_start(arguments),
         "stop" => no_more_arguments(Help::BridgeStop, Command::BridgeStop, arguments),
+        "status" => no_more_arguments(Help::BridgeStatus, Command::BridgeStatus, arguments),
         "enable-auto-start" => no_more_arguments(
             Help::BridgeEnableAutoStart,
             Command::BridgeEnableAutoStart,
@@ -379,6 +397,10 @@ mod tests {
             Ok(Invocation::Run(Command::BridgeStop))
         );
         assert_eq!(
+            parse_strs(&["bridge", "status"]),
+            Ok(Invocation::Run(Command::BridgeStatus))
+        );
+        assert_eq!(
             parse_strs(&["bridge", "enable-auto-start"]),
             Ok(Invocation::Run(Command::BridgeEnableAutoStart))
         );
@@ -463,6 +485,7 @@ mod tests {
         );
         for (action, help) in [
             ("stop", Help::BridgeStop),
+            ("status", Help::BridgeStatus),
             ("enable-auto-start", Help::BridgeEnableAutoStart),
             ("disable-auto-start", Help::BridgeDisableAutoStart),
         ] {

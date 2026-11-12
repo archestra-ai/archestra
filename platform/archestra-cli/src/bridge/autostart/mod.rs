@@ -82,6 +82,15 @@ pub enum AutostartError {
     Windows(#[from] windows::WindowsError),
 }
 
+/// What the OS says of the MCP bridge now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Status {
+    /// The MCP bridge runs in the background.
+    pub running: bool,
+    /// It is in the start at login.
+    pub auto_start: bool,
+}
+
 /// What [`remove`] did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Removal {
@@ -171,6 +180,12 @@ pub fn remove() -> Result<Removal, AutostartError> {
     os::remove(&home()?)
 }
 
+/// `archestra bridge status`: whether the MCP bridge runs in the background,
+/// and whether it is in the start at login. It changes nothing.
+pub fn status() -> Result<Status, AutostartError> {
+    os::status(&home()?)
+}
+
 fn home() -> Result<PathBuf, AutostartError> {
     std::env::home_dir().ok_or(AutostartError::NoHome)
 }
@@ -190,10 +205,11 @@ fn options<'a>(home: &'a Path, current_program: &'a Path, config_path: &'a Path)
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CommandOutput {
     success: bool,
+    stdout: String,
     stderr: String,
 }
 
-/// Runs an OS tool and keeps what it wrote to stderr.
+/// Runs an OS tool and keeps what it wrote.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn run_tool<S: AsRef<OsStr>>(
     tool: &str,
@@ -204,11 +220,12 @@ fn run_tool<S: AsRef<OsStr>>(
     let output = Command::new(tool)
         .args(arguments)
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()?;
     Ok(CommandOutput {
         success: output.status.success(),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
     })
 }
@@ -423,6 +440,7 @@ fn started_message(started: Started) -> String {
         "Setup is done. The MCP bridge runs in the background.\n\
          {}\n\
          {at_login}\
+         To check it later, open a new terminal and run: archestra bridge status\n\
          You can go back to Archestra.",
         started.where_it_runs,
     )
@@ -489,7 +507,7 @@ mod tests {
     }
 
     #[test]
-    fn the_message_is_short_and_names_no_path_or_command() {
+    fn the_message_is_short_names_no_path_and_names_the_status_command() {
         let message = started_message(Started {
             where_it_runs: "Its icon in the menu bar shows its status.",
             at_login: true,
@@ -498,6 +516,7 @@ mod tests {
             message,
             "Setup is done. The MCP bridge runs in the background.\n\
              Its icon in the menu bar shows its status.\n\
+             To check it later, open a new terminal and run: archestra bridge status\n\
              You can go back to Archestra."
         );
         assert!(!message.contains(".archestra"));

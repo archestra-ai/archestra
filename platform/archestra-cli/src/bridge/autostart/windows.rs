@@ -85,6 +85,13 @@ pub(super) fn disable(_home: &Path) -> Result<bool, AutostartError> {
     remove_from_login(&mut SystemRunKey)
 }
 
+/// `archestra bridge status` on Windows.
+#[cfg(windows)]
+pub(super) fn status(home: &Path) -> Result<super::Status, AutostartError> {
+    let running = crate::bridge::instance::is_running(home).unwrap_or(false);
+    bridge_status(&mut SystemRunKey, running)
+}
+
 /// The MCP bridge part of `archestra uninstall` on Windows.
 #[cfg(windows)]
 pub(super) fn remove(home: &Path) -> Result<Removal, AutostartError> {
@@ -151,6 +158,20 @@ fn remove_from_login(run_key: &mut impl RunKey) -> Result<bool, AutostartError> 
     Ok(run_key
         .delete(RUN_VALUE_NAME)
         .map_err(WindowsError::Delete)?)
+}
+
+/// `running`: the MCP bridge holds its lock. It is in the start at login when
+/// the `Run` value is there.
+fn bridge_status(
+    run_key: &mut impl RunKey,
+    running: bool,
+) -> Result<super::Status, AutostartError> {
+    Ok(super::Status {
+        running,
+        auto_start: run_key
+            .contains(RUN_VALUE_NAME)
+            .map_err(WindowsError::Read)?,
+    })
 }
 
 /// Stops the MCP bridge and deletes the `Run` value.
@@ -447,6 +468,24 @@ mod tests {
         assert!(remove_from_login(&mut run_key).expect("disable"));
         assert!(run_key.values.is_empty());
         assert!(!remove_from_login(&mut run_key).expect("disable again"));
+    }
+
+    #[test]
+    fn status_reads_the_run_value() {
+        let mut run_key = MemoryRunKey::default();
+        assert_eq!(
+            bridge_status(&mut run_key, true).expect("status"),
+            crate::bridge::autostart::Status {
+                running: true,
+                auto_start: false
+            }
+        );
+        run_key.set(RUN_VALUE_NAME, "value").expect("set");
+        assert!(
+            bridge_status(&mut run_key, false)
+                .expect("status")
+                .auto_start
+        );
     }
 
     #[test]

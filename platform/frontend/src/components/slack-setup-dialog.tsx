@@ -714,10 +714,9 @@ function SlackCommandPrefixNotice({
   return (
     <InlineNotice variant="info" role="status">
       <Info />
-      <span className="font-medium">Command prefix shortened</span>
       <InlineNoticeText>
-        Use <code>{command}</code> to stay within Slack's 32-character limit.
-        The app name is unchanged.
+        Slack commands are automatically shortened to fit Slack’s 32-character
+        limit.
       </InlineNoticeText>
     </InlineNotice>
   );

@@ -95,8 +95,8 @@ function readManifest(dialog: HTMLElement) {
 describe.each([
   "socket",
   "webhook",
-] as const)("Slack %s command preview", (mode) => {
-  it("shows the shortened command as the name changes, while preserving the display name", () => {
+] as const)("Slack %s command notice", (mode) => {
+  it("shows the concise notice only for shortened names, without a command preview", () => {
     const dialog = renderSetup(mode);
     const input = within(dialog).getByLabelText("App Name", { exact: true });
     expect(within(dialog).queryByRole("status")).not.toBeInTheDocument();
@@ -109,11 +109,12 @@ describe.each([
       fireEvent.change(input, { target: { value: name } });
       const manifest = readManifest(dialog);
       const notice = within(dialog).getByRole("status");
-      expect(notice).toHaveTextContent("Command prefix shortened");
       expect(notice).toHaveTextContent(
+        "Slack commands are automatically shortened to fit Slack’s 32-character limit.",
+      );
+      expect(notice).not.toHaveTextContent(
         manifest.features.slash_commands[0].command,
       );
-      expect(notice).toHaveTextContent("The app name is unchanged.");
       expect(manifest.display_information.name).toBe(name);
       expect(
         manifest.features.slash_commands.every(

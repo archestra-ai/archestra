@@ -2,10 +2,12 @@ import { Octokit } from "@octokit/rest";
 import type pino from "pino";
 import { LRUCacheManager } from "@/cache-manager";
 import { resolveInstallationToken } from "@/integrations/github/app-auth";
+import { extractPdfText } from "@/knowledge-base/pdf-ocr";
 import * as metrics from "@/observability/metrics";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
+  ConnectorSkipCategory,
   ConnectorSyncBatch,
   DocumentPermissions,
   GithubCheckpoint,
@@ -24,6 +26,10 @@ import {
   REQUEST_TIMEOUT_MS,
 } from "../base-connector";
 import { ConnectorIdentityCache } from "../identity-cache";
+import {
+  describePdfEmptyText,
+  describePdfExtractionWarning,
+} from "../pdf-utils";
 import { resolveGithubRepositorySettings } from "./github-repository-settings";
 
 const BATCH_SIZE = 50;
@@ -577,25 +583,31 @@ export class GithubConnector extends BaseConnector {
         }
 
         await this.rateLimit();
-        const content = await this.safeItemFetch({
+        const bytes = await this.safeItemFetch({
           fetch: () => getFileContent(octokit, repo, file),
           fallback: null,
           itemId: file.path,
           resource: "file_content",
           itemUnavailable: true,
         });
+        if (bytes === null) continue;
 
-        if (content !== null && looksBinary(content)) {
+        const content = await this.readRepositoryFile({
+          repoFullName,
+          path: file.path,
+          bytes,
+        });
+        if (content.text === null) {
           this.trackSkipped({
             itemId: file.path,
             sourceId: githubFileSourceId(repo.name, file.path),
             name: file.path,
-            reason: "Binary file",
-            category: "unsupported_type",
+            reason: content.skipReason,
+            category: content.skipCategory,
           });
-        } else if (content !== null) {
+        } else {
           documents.push(
-            repositoryFileToDocument(file.path, content, repo, branch),
+            repositoryFileToDocument(file.path, content.text, repo, branch),
           );
         }
       }
@@ -1001,6 +1013,62 @@ export class GithubConnector extends BaseConnector {
       page++;
     }
   }
+
+  /**
+   * Turn a fetched blob into indexable text. PDFs go through the shared PDF
+   * extractor (and the run's OCR pass for scanned pages) because their bytes
+   * are not text; every other selected file is read as UTF-8, and one that
+   * turns out to be binary is skipped.
+   */
+  private async readRepositoryFile(params: {
+    repoFullName: string;
+    path: string;
+    bytes: Buffer;
+  }): Promise<
+    | { text: string }
+    | {
+        text: null;
+        skipReason: string;
+        skipCategory: ConnectorSkipCategory;
+      }
+  > {
+    const { repoFullName, path, bytes } = params;
+
+    if (isPdfPath(path)) {
+      const extracted = await extractPdfText({
+        buffer: bytes,
+        filename: path,
+        ocr: this.ocrContext,
+      });
+      const warning = describePdfExtractionWarning(extracted);
+      if (warning) {
+        this.log.warn(
+          { repo: repoFullName, path, reason: warning },
+          "GitHub: PDF page extraction warning",
+        );
+      }
+      if (!extracted.text.trim()) {
+        return {
+          text: null,
+          skipReason:
+            describePdfEmptyText(extracted) ??
+            "PDF yielded no extractable text",
+          skipCategory: "no_extractable_text",
+        };
+      }
+      return { text: extracted.text };
+    }
+
+    const text = bytes.toString("utf-8");
+    if (looksBinary(text)) {
+      return {
+        text: null,
+        skipReason: "Binary file",
+        skipCategory: "unsupported_type",
+      };
+    }
+    return { text };
+  }
 }
 
 // ===== Module-level helpers =====
@@ -1332,7 +1400,8 @@ const DEFAULT_REPOSITORY_FILE_EXTENSIONS = [".md", ".mdx", ".yaml", ".yml"];
  * Extensions that `*` leaves out without fetching: they are never text, and
  * fetching each one would spend the credential's hourly request budget only to
  * discard the result. Anything else that turns out to be binary is caught by
- * {@link looksBinary} after the fetch.
+ * {@link looksBinary} after the fetch. `.pdf` is here because `*` means text
+ * files; an explicit `.pdf` entry selects PDFs for text extraction.
  */
 const BINARY_FILE_EXTENSIONS = new Set([
   ".7z",
@@ -1474,11 +1543,15 @@ function isWithinIndexedPaths(path: string, prefixes: string[]): boolean {
 
 type RepositoryFile = { path: string; sha: string; size?: number };
 
+/**
+ * Download a repository file's raw bytes. Decoding is the caller's job: text
+ * files read as UTF-8, while PDFs must reach the extractor byte-for-byte.
+ */
 async function getFileContent(
   octokit: Octokit,
   repo: { owner: string; name: string },
   file: RepositoryFile,
-): Promise<string> {
+): Promise<Buffer> {
   if (file.size === undefined || file.size <= CONTENTS_API_MAX_FILE_BYTES) {
     const response = await octokit.rest.repos.getContent({
       owner: repo.owner,
@@ -1488,7 +1561,7 @@ async function getFileContent(
 
     const data = response.data;
     if ("content" in data && data.content) {
-      return Buffer.from(data.content, "base64").toString("utf-8");
+      return Buffer.from(data.content, "base64");
     }
   }
 
@@ -1506,7 +1579,11 @@ async function getFileContent(
   return Buffer.from(
     blob.data.content,
     blob.data.encoding === "base64" ? "base64" : "utf-8",
-  ).toString("utf-8");
+  );
+}
+
+function isPdfPath(path: string): boolean {
+  return path.toLowerCase().endsWith(".pdf");
 }
 
 function repositoryFileToDocument(

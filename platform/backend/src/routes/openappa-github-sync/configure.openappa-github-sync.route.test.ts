@@ -59,21 +59,22 @@ function fakeGitData(
   const base = `https://api.github.com/repos/${repo}`;
   const written: Record<string, string>[] = [];
   const removed: string[][] = [];
-  const state = { commits: 0 };
+  const state = { commits: 0, treeReads: 0 };
   server.use(
     http.get(`${base}/git/commits/:sha`, () =>
       HttpResponse.json({ tree: { sha: HEAD_TREE } }),
     ),
     // The head's files, as setup lists them before writing over them.
-    http.get(`${base}/git/trees/:sha`, () =>
-      HttpResponse.json({
+    http.get(`${base}/git/trees/:sha`, () => {
+      state.treeReads++;
+      return HttpResponse.json({
         truncated: false,
         tree: Object.keys(options.head).map((path) => ({
           path,
           type: "blob",
         })),
-      }),
-    ),
+      });
+    }),
     http.post(`${base}/git/trees`, async ({ request }) => {
       const body = (await request.json()) as {
         base_tree: string;
@@ -987,6 +988,8 @@ describe("APPA GitHub sync", () => {
     expect(response.statusCode, response.body).toBe(200);
     // The current policy is proposed over the repository's, never pulled over.
     expect(git.written()).toEqual({ "appa.toml": current });
+    // A policy with no include glob needs no look at the repository's tree.
+    expect(git.state.treeReads).toBe(0);
     expect(response.json()).toMatchObject({
       validationDirectory: "checks",
       source: {
@@ -1203,6 +1206,9 @@ describe("APPA GitHub sync", () => {
       },
     });
     let pull = { merged: false, state: "open" };
+    // What the setup pull request carries: Archestra's one commit, until
+    // someone pushes another.
+    let carried = [{ sha: SETUP_COMMIT, author: { login: "policy-app[bot]" } }];
     server.use(
       http.post(
         `https://api.github.com/app/installations/${installationId}/access_tokens`,
@@ -1211,6 +1217,17 @@ describe("APPA GitHub sync", () => {
             token: "test-installation-token",
             expires_at: new Date(Date.now() + 3600000).toISOString(),
           }),
+      ),
+      http.get("https://api.github.com/app", () =>
+        HttpResponse.json({ slug: "policy-app", name: "Policy App" }),
+      ),
+      http.get(
+        `https://api.github.com/app/installations/${installationId}`,
+        () => HttpResponse.json({ html_url: "https://github.com/x" }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/pulls/8/commits",
+        () => HttpResponse.json(carried),
       ),
       http.get("https://api.github.com/repos/example/other-policy", () =>
         HttpResponse.json({ default_branch: "main" }),
@@ -1276,6 +1293,27 @@ describe("APPA GitHub sync", () => {
       errors: [],
       included: [{ path: "rules/current.toml", sha256: expect.any(String) }],
     });
+    // A commit someone else pushed onto the request: nothing is read from
+    // it until the merge, so nothing unmerged reaches the composition.
+    expect(git.state.treeReads).toBeGreaterThan(0);
+    carried = [
+      ...carried,
+      { sha: "d".repeat(40), author: { login: "someone-else" } },
+    ];
+    vi.useFakeTimers({ now: Date.now() + 61_000, toFake: ["Date"] });
+    try {
+      expect(
+        await openappaRepositoryIncludes.expand({
+          organizationId,
+          content: root,
+        }),
+      ).toMatchObject({
+        errors: [expect.stringContaining("accepted no repository commit")],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    carried = carried.slice(0, 1);
     pull = { merged: true, state: "closed" };
     await syncAppaGithubPolicy(organizationId);
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({

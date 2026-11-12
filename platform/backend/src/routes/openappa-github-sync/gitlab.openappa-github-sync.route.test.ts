@@ -310,12 +310,36 @@ describe("APPA GitLab sync", () => {
       errors: [],
       included: [{ path: "rules/current.toml", sha256: expect.any(String) }],
     });
+    // A commit someone else pushed onto the request: nothing is read from
+    // it, so nothing unmerged reaches the composition.
+    const branch = gitlab.sourceBranch(repo, 1);
+    const own = gitlab.branchHead(repo, branch);
+    gitlab.commit(
+      repo,
+      branch,
+      { "NOTES.md": "# Mine\n" },
+      "someone@example.test",
+    );
+    vi.useFakeTimers({ now: Date.now() + 61_000, toFake: ["Date"] });
+    try {
+      expect(
+        await openappaRepositoryIncludes.expand({
+          organizationId,
+          content: root,
+        }),
+      ).toMatchObject({
+        errors: [expect.stringContaining("accepted no repository commit")],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    gitlab.setBranch(repo, branch, own);
     // Merged, its branch removed, not pulled yet: still read, at its head.
     // The open request's commit was kept for a minute; a minute later the
     // merged request is looked up again.
     gitlab.merge(repo, 1);
     gitlab.deleteSourceBranch(repo, 1);
-    vi.useFakeTimers({ now: Date.now() + 61_000, toFake: ["Date"] });
+    vi.useFakeTimers({ now: Date.now() + 122_000, toFake: ["Date"] });
     try {
       const before = gitlab.requests.length;
       expect(

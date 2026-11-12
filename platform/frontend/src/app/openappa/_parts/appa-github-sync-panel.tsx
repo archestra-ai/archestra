@@ -370,13 +370,7 @@ function SelfServiceRow({
           <strong className="font-bold">Disabled</strong>
         </>
       );
-    if (ready)
-      return (
-        <>
-          MCP Guardrails Self-Service ready to be{" "}
-          <strong className="font-bold">Enabled</strong>
-        </>
-      );
+    if (ready) return "MCP Guardrails Self-Service is ready to be Enabled";
     // The repository's state decides the word; until it is read, none.
     if (eligible && !data) return "MCP Guardrails Self-Service";
     return (

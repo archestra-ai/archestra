@@ -168,7 +168,7 @@ test("a ruleset still to set up: the row says ready to be Enabled, with Finish s
   show();
   expect(
     await screen.findByRole("heading", {
-      name: "MCP Guardrails Self-Service ready to be Enabled",
+      name: "MCP Guardrails Self-Service is ready to be Enabled",
     }),
   ).toBeVisible();
   expect(screen.getByRole("button", { name: "Finish setup" })).toBeEnabled();
@@ -243,7 +243,7 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
   show();
   expect(
     await screen.findByRole("heading", {
-      name: "MCP Guardrails Self-Service ready to be Enabled",
+      name: "MCP Guardrails Self-Service is ready to be Enabled",
     }),
   ).toBeVisible();
   expect(screen.queryByText(/Administration permission/)).toBeNull();
@@ -335,7 +335,7 @@ test("Finish setup walks through the App's permissions, the ruleset and the incl
   // button finishes it; no sentence repeats what is missing.
   expect(
     await screen.findByRole("heading", {
-      name: "MCP Guardrails Self-Service ready to be Enabled",
+      name: "MCP Guardrails Self-Service is ready to be Enabled",
     }),
   ).toBeVisible();
   expect(screen.queryByText(/does not include/)).toBeNull();
@@ -373,7 +373,7 @@ test("Finish setup walks through the App's permissions, the ruleset and the incl
   const link = await screen.findByRole("link", { name: "Pull request #12" });
   expect(
     screen.getByRole("heading", {
-      name: "MCP Guardrails Self-Service ready to be Enabled",
+      name: "MCP Guardrails Self-Service is ready to be Enabled",
     }),
   ).toBeVisible();
   expect(screen.queryByText(/protects the policy on the/)).toBeNull();
@@ -441,7 +441,7 @@ test("shows the deployment's self-service settings read-only, naming the variabl
   // The ruleset is not up yet: ready, with Finish setup.
   expect(
     await screen.findByRole("heading", {
-      name: "MCP Guardrails Self-Service ready to be Enabled",
+      name: "MCP Guardrails Self-Service is ready to be Enabled",
     }),
   ).toBeVisible();
   expect(screen.getByRole("button", { name: "Finish setup" })).toBeEnabled();
@@ -1214,7 +1214,7 @@ test("links the pull request that includes the servers' folder while it waits, a
   expect(screen.queryByText(/does not include/)).toBeNull();
   expect(
     screen.getByRole("heading", {
-      name: "MCP Guardrails Self-Service ready to be Enabled",
+      name: "MCP Guardrails Self-Service is ready to be Enabled",
     }),
   ).toBeVisible();
   // Already on: the setup starts at the App step, and the folder is fixed.

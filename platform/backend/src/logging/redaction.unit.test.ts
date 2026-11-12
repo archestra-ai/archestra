@@ -559,6 +559,84 @@ describe("metadata-only database failures", () => {
     expect(cause.detail).toBe(marker);
   });
 
+  test("withholds failed-query values copied into messages, other keys, nested values and child bindings", () => {
+    const { logger, records } = createCapturingLogger("metadata_only");
+    const marker = "synthetic-private-chat-text";
+    const error = new DrizzleQueryError(
+      'insert into "messages" ("content") values ($1)',
+      [JSON.stringify({ parts: [{ type: "text", text: marker }] })],
+      Object.assign(new Error("canceling statement due to statement timeout"), {
+        code: "57014",
+      }),
+    );
+    const expected = {
+      type: "DrizzleQueryError",
+      statement: "INSERT",
+      parameterCount: 1,
+      cause: { code: "57014" },
+    };
+    logger.error({ err: error }, error.message);
+    logger.error(`Error updating limit: ${error}`);
+    logger.error("Persist failed: %s (%o)", error, { cause: error });
+    logger.warn({
+      e: error,
+      persistErr: error,
+      reason: error.message,
+      results: [{ status: "rejected", reason: error }],
+      conversationId: "synthetic-id",
+    });
+    logger
+      .child({ dbErr: error })
+      .child({ reason: `${error}` })
+      .info("run");
+    expect(JSON.stringify(records)).not.toContain(marker);
+    expect(records[0]).toMatchObject({
+      err: expected,
+      msg: "Failed query: INSERT [not stored: log content mode]",
+    });
+    expect(records[1].msg).toBe(
+      "Error updating limit: Error: Failed query: INSERT [not stored: log content mode]",
+    );
+    expect(records[2].msg).toContain(
+      "Persist failed: DrizzleQueryError: [not stored: log content mode]",
+    );
+    expect(records[3]).toMatchObject({
+      e: expected,
+      persistErr: expected,
+      reason: "Failed query: INSERT [not stored: log content mode]",
+      results: [{ status: "rejected", reason: expected }],
+      conversationId: "synthetic-id",
+    });
+    expect(records[4]).toMatchObject({
+      dbErr: expected,
+      reason: "Error: Failed query: INSERT [not stored: log content mode]",
+    });
+  });
+
+  test("leaves ordinary context untouched while scrubbing nested values", () => {
+    const { logger, records } = createCapturingLogger("metadata_only");
+    const circular: Record<string, unknown> = { id: "synthetic-id" };
+    circular.self = circular;
+    logger.info(
+      {
+        conversationId: "synthetic-id",
+        ids: [1, 2],
+        at: new Date(0),
+        circular,
+      },
+      "Synced %d rows for %s",
+      2,
+      "synthetic-run",
+    );
+    expect(records[0]).toMatchObject({
+      conversationId: "synthetic-id",
+      ids: [1, 2],
+      at: "1970-01-01T00:00:00.000Z",
+      circular: { id: "synthetic-id" },
+      msg: "Synced 2 rows for synthetic-run",
+    });
+  });
+
   test("does not treat provider codes or malformed database fields as safe metadata", () => {
     const { logger, records } = createCapturingLogger("metadata_only");
     const cause = Object.assign(new Error("private"), {
@@ -583,9 +661,16 @@ describe("metadata-only database failures", () => {
   test("preserves existing full-mode database diagnostics", () => {
     const { logger, records } = createCapturingLogger("full");
     const marker = "synthetic-full-mode-db-value";
-    logger.error({
-      err: new DrizzleQueryError("select $1", [marker], new Error("failed")),
-    });
-    expect(JSON.stringify(records)).toContain(marker);
+    const error = new DrizzleQueryError(
+      "select $1",
+      [marker],
+      new Error("failed"),
+    );
+    logger.error({ err: error });
+    logger.error(`Lookup failed: ${error}`);
+    logger.child({ dbErr: error }).error("Lookup failed");
+    expect(records).toHaveLength(3);
+    for (const record of records)
+      expect(JSON.stringify(record)).toContain(marker);
   });
 });

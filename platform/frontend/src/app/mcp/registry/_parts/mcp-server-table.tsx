@@ -14,6 +14,7 @@ import {
   BellOff,
   FileSearch,
   KeyRound,
+  Laptop,
   Loader2,
   MessageSquare,
   Pencil,
@@ -38,6 +39,7 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import type { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
 import { useFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
+import { DESKTOP_MCP_COPY } from "@/lib/mcp/desktop-mcp";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   type McpDeploymentFeedState,
@@ -58,6 +60,11 @@ import {
   DeploymentStatusIconDot,
   type DeploymentStatusSummary,
 } from "./deployment-status";
+import {
+  type DesktopMcpInstallState,
+  desktopAddAction,
+} from "./desktop-mcp-install";
+import { DesktopMcpWaitingStatus } from "./desktop-mcp-install-status";
 import type { DismissAlertTarget } from "./dismiss-alert-dialog";
 import { DismissAlertDialog } from "./dismiss-alert-dialog";
 import { McpCapabilityBadges } from "./mcp-capability-badges";
@@ -85,6 +92,7 @@ import {
   type UninstallServerInstall,
 } from "./uninstall-server-dialog";
 import { useChatWithCatalogItem } from "./use-chat-with-catalog-item";
+import { useDesktopInstallState } from "./use-desktop-install-state";
 
 type McpServerTableProps = {
   items: CatalogItem[];
@@ -149,10 +157,12 @@ export function McpServerTable({
   attention,
 }: McpServerTableProps) {
   const router = useRouter();
-  const { data: session } = useSession();
-  const _currentUserId = session?.user?.id;
   const isInstalledForViewer = (item: CatalogItem) =>
     item.install.installedForViewer;
+  const desktopStateOf = useDesktopInstallState({
+    items,
+    servers: useRegistryPageServers(),
+  });
   const canSelect = (item: CatalogItem) =>
     !isPlaywrightCatalogItem(item.id) &&
     (!!attention || !!getServerInfo(item).installedServer) &&
@@ -181,10 +191,16 @@ export function McpServerTable({
       rowLabel: (item) => `Select ${item.name}`,
       allLabel: "Select all MCP servers on this page",
       canSelect,
-      disabledReason: (item) =>
-        !attention && !getServerInfo(item).installedServer
-          ? "Install this server before selecting it"
-          : "Wait for installation to finish",
+      disabledReason: (item) => {
+        const isDesktopMcp = item.serverType === "desktop_mcp";
+        return !attention && !getServerInfo(item).installedServer
+          ? isDesktopMcp
+            ? "Link it to your device before selecting it"
+            : "Install this server before selecting it"
+          : isDesktopMcp
+            ? "Wait until it is linked to your device"
+            : "Wait for installation to finish";
+      },
     }),
     {
       id: "name",
@@ -222,7 +238,21 @@ export function McpServerTable({
       cell: ({ row }) => {
         const item = row.original;
         const { installedServer, isInstallInProgress } = getServerInfo(item);
-        if (installingItemId === item.id || isInstallInProgress) {
+        // A desktop MCP installation can wait for days for the viewer's
+        // computer: its state is the viewer's own installation, never a
+        // colleague's, and not the install-in-progress spinner.
+        const desktopState = desktopStateOf(item);
+        if (desktopState === "waiting") {
+          return (
+            <RowClickShield className="py-1.5">
+              <DesktopMcpWaitingStatus className={typeRole({ role: "body" })} />
+            </RowClickShield>
+          );
+        }
+        if (
+          installingItemId === item.id ||
+          (isInstallInProgress && !desktopState)
+        ) {
           return (
             <span
               className={cn(
@@ -231,7 +261,7 @@ export function McpServerTable({
               )}
             >
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Installing…
+              <span>{desktopState ? "Adding…" : "Installing…"}</span>
             </span>
           );
         }
@@ -253,8 +283,18 @@ export function McpServerTable({
         // catalog entry nobody has connected is not "Healthy" — it is nothing.
         // Neither is one only somebody else can use: the row still offers
         // Install, so it must not also read "Installed".
-        if (!installedServer || !isInstalledForViewer(item)) return null;
-        return <InstalledStatusCell />;
+        if (
+          !installedServer ||
+          !isInstalledForViewer(item) ||
+          (desktopState && desktopState !== "installed")
+        ) {
+          return null;
+        }
+        return (
+          <InstalledStatusCell
+            label={desktopState ? DESKTOP_MCP_COPY.added : "Installed"}
+          />
+        );
       },
     },
     {
@@ -264,15 +304,20 @@ export function McpServerTable({
       cell: ({ row }) => {
         const item = row.original;
         const { installedServer, isInstallInProgress } = getServerInfo(item);
+        const desktopState = desktopStateOf(item);
         return (
           <RowClickShield>
             <McpServerRowActions
               item={item}
               installedServer={installedServer}
               issues={issuesByCatalog.get(item.id) ?? []}
+              // For a desktop MCP server only the Add request itself is in
+              // progress; a waiting installation keeps its Remove.
               isInstalling={
-                installingItemId === item.id || !!isInstallInProgress
+                installingItemId === item.id ||
+                (!desktopState && !!isInstallInProgress)
               }
+              desktopState={desktopState}
               onInstall={onInstall}
               onReinstall={onReinstall}
               onCancelInstallation={onCancelInstallation}
@@ -438,6 +483,7 @@ const McpServerRowActions = memo(function McpServerRowActions({
   installedServer,
   issues,
   isInstalling,
+  desktopState,
   onInstall,
   onReinstall,
   onCancelInstallation,
@@ -446,6 +492,8 @@ const McpServerRowActions = memo(function McpServerRowActions({
   installedServer?: InstalledServer;
   issues: McpServerIssue[];
   isInstalling: boolean;
+  /** The viewer's state with a desktop MCP item; null for other items. */
+  desktopState: DesktopMcpInstallState | null;
   onInstall: McpServerTableProps["onInstall"];
   onReinstall: McpServerTableProps["onReinstall"];
   onCancelInstallation?: (serverId: string) => void;
@@ -466,6 +514,7 @@ const McpServerRowActions = memo(function McpServerRowActions({
   const isBuiltin =
     item.serverType === "builtin" || isPlaywrightCatalogItem(item.id);
   const isLocal = item.serverType === "local";
+  const isDesktopMcp = item.serverType === "desktop_mcp";
   const { canModify: canEditCatalog } = useCanModifyCatalogItem(
     !isBuiltin ? item : null,
   );
@@ -582,6 +631,8 @@ const McpServerRowActions = memo(function McpServerRowActions({
               name: install.name,
               scope: install.scope,
               teamId: install.teamId,
+              serverType: install.serverType,
+              ownedByViewer: install.ownerId === currentUserId,
             },
           },
         ]
@@ -622,7 +673,9 @@ const McpServerRowActions = memo(function McpServerRowActions({
     });
   }
   if (!isInstalling && !isBuiltin) {
-    if (showCombinedReinstall) {
+    // A desktop MCP server has nothing to reinstall: it runs on the user's
+    // computer, under the MCP bridge.
+    if (showCombinedReinstall && !isDesktopMcp) {
       actions.push({
         icon: <RefreshCw className="h-4 w-4" />,
         label: "Reinstall",
@@ -641,7 +694,7 @@ const McpServerRowActions = memo(function McpServerRowActions({
     if (hasPersonalConnection) {
       actions.push({
         icon: <Trash2 className="h-4 w-4" />,
-        label: "Uninstall",
+        label: isDesktopMcp ? DESKTOP_MCP_COPY.remove : "Uninstall",
         // Removing a connection is its own capability, as on the card.
         permissions: { mcpServerInstallation: ["delete"] },
         onClick: () => setUninstallOpen(true),
@@ -655,6 +708,23 @@ const McpServerRowActions = memo(function McpServerRowActions({
         permissions: { mcpServerInstallation: ["delete"] },
         onClick: () => setUninstallOpen(true),
       });
+    } else if (isDesktopMcp) {
+      // Only the viewer's own installation counts: a colleague's does not
+      // run the server on the viewer's computer.
+      const add = desktopAddAction({
+        state: desktopState,
+        installedForViewer: isInstalledForViewer,
+      });
+      if (add) {
+        actions.push({
+          icon: <Laptop className="h-4 w-4" />,
+          label: DESKTOP_MCP_COPY.add,
+          permissions: { mcpServerInstallation: ["create"] },
+          disabled: add.disabledReason !== null,
+          disabledTooltip: add.disabledReason ?? undefined,
+          onClick: () => onInstall(item),
+        });
+      }
     } else if (!isInstalledForViewer && !(isLocal && showApprovalPanel)) {
       // Install stays hidden once a team or organization connection already
       // serves the viewer, and for local items while the image awaits admin
@@ -819,7 +889,7 @@ function McpServerNameCell({
   );
 }
 
-function InstalledStatusCell() {
+function InstalledStatusCell({ label }: { label: string }) {
   return (
     <div
       className={cn(
@@ -827,7 +897,7 @@ function InstalledStatusCell() {
         "flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1",
       )}
     >
-      <Badge variant="secondary">Installed</Badge>
+      <Badge variant="secondary">{label}</Badge>
     </div>
   );
 }

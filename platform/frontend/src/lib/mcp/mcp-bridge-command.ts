@@ -1,0 +1,45 @@
+/**
+ * The command that sets up the MCP bridge on a device. It downloads the
+ * `archestra` program for this system and CPU, then runs `archestra bridge
+ * start`, which copies the program to the home folder and, at the first
+ * start on a device, turns on auto-start.
+ *
+ * `baseUrl` is the connection base URL, the one the MCP gateway and the LLM
+ * proxy use. The MCP bridge takes the deployment address: that URL without
+ * its `/v1`.
+ *
+ * - macOS and Linux share one command: `uname` runs on the user's computer.
+ *   The download URL is in double quotes on purpose: zsh (with the URL paste
+ *   helper that oh-my-zsh turns on) puts a backslash before `(` in a pasted
+ *   URL that is not quoted, which breaks `$(uname ...)`.
+ * - Windows gets a PowerShell command. `PROCESSOR_ARCHITECTURE` (`AMD64`,
+ *   `ARM64`) names the CPU. It works in Windows PowerShell 5.1, which has no
+ *   `&&`: `if ($?)` runs the program only after a good download. The download
+ *   goes to the current folder, not to `%USERPROFILE%\.archestra\bin`: Windows
+ *   cannot overwrite the program of a running MCP bridge, and `bridge start`
+ *   stops it before it copies itself there. No progress bar: it makes the
+ *   download of PowerShell 5.1 many times slower.
+ */
+export function bridgeCommand(baseUrl: string, windows: boolean): string {
+  const origin = baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+  const download = `${origin}/api/archestra-cli`;
+  if (windows) {
+    return (
+      `$ProgressPreference = 'SilentlyContinue'; irm "${download}/windows-$env:PROCESSOR_ARCHITECTURE" -OutFile archestra.exe; \`\n` +
+      `  if ($?) { .\\archestra.exe bridge start --url ${origin} }`
+    );
+  }
+  return `curl -fsSL "${download}/$(uname -s)-$(uname -m)" -o archestra \\\n  && chmod +x archestra && ./archestra bridge start --url ${origin}`;
+}
+
+/**
+ * Removes the `archestra` program from the computer: it stops the MCP bridge,
+ * takes it out of the start at login, asks Archestra to remove the device,
+ * and deletes its files. `archestra bridge start` copies the program to this
+ * path, so the command works from any folder.
+ */
+export function uninstallCommand(windows: boolean): string {
+  return windows
+    ? '& "$env:USERPROFILE\\.archestra\\bin\\archestra.exe" uninstall'
+    : "~/.archestra/bin/archestra uninstall";
+}

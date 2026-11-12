@@ -17,6 +17,7 @@ import {
   Building2,
   Check,
   ChevronsUpDown,
+  Laptop,
   Plus,
   RefreshCw,
   Trash,
@@ -72,6 +73,8 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useDesktopComputer } from "@/lib/desktop-device.query";
+import { DESKTOP_MCP_COPY } from "@/lib/mcp/desktop-mcp";
 import { useUpdateInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
@@ -87,7 +90,14 @@ import {
   getDeploymentLabel,
   STATE_PRIORITY,
 } from "./deployment-status";
+import {
+  desktopRowState,
+  hasDesktopTarget,
+  ownDesktopComputerLine,
+} from "./desktop-mcp-install";
 import { getLocalInstallationCopy } from "./local-installation-copy";
+import { usesInstallations } from "./mcp-server-type";
+import { personalConnectionsCopy } from "./personal-connections-copy";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
 
 type InstalledServer = archestraApiTypes.GetMcpServersResponses["200"][number];
@@ -187,6 +197,12 @@ export function ManageUsersContent({
   const { data: allServersUnfiltered = [], isFetched: serversFetched } =
     useMcpServers({ includeAssignedAgents: false, catalogId });
   const { data: catalogItemById } = useInternalMcpCatalogItem(catalogId);
+  // The viewer's own computer, to name it on their row of a desktop MCP
+  // server. Another user's computer is not readable here.
+  const { name: viewerDeviceName, hasComputer: viewerHasComputer } =
+    useDesktopComputer({
+      enabled: catalogItemById?.serverType === "desktop_mcp",
+    });
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -284,7 +300,11 @@ export function ManageUsersContent({
   const handleRevoke = async (mcpServer: (typeof allServers)[number]) => {
     // A team or organization connection serves everyone who resolves to it,
     // so removing one is confirmed against the agents it affects first.
-    if (resolveServerScope(mcpServer) !== "personal") {
+    // So is a desktop MCP server: removing it stops it on a computer.
+    if (
+      resolveServerScope(mcpServer) !== "personal" ||
+      mcpServer.serverType === "desktop_mcp"
+    ) {
       setUninstallTarget(mcpServer);
       return;
     }
@@ -390,6 +410,14 @@ export function ManageUsersContent({
     !split.hasOrgConnection &&
     !!hasMcpServerAdminPermission;
   const isLocalServer = catalogItem?.serverType === "local";
+  // A desktop MCP server is installed too, not connected with a credential:
+  // it shares the self-hosted wording, without the hosted-instance copy.
+  const isDesktopMcp = catalogItem?.serverType === "desktop_mcp";
+  // With no command and no URL there is nothing to add to a computer: the
+  // section says so instead of offering an Add that the backend refuses.
+  const desktopNotSetUp =
+    isDesktopMcp && !hasDesktopTarget(catalogItem?.desktopConfig);
+  const hasInstallations = usesInstallations(catalogItem?.serverType);
   const installationCopy = getLocalInstallationCopy(
     catalogItem?.multitenant === true,
   );
@@ -400,17 +428,32 @@ export function ManageUsersContent({
   // organization installs, and shared credentials are not the viewer's to
   // pick or inspect, so the view keeps only their own installations.
   const isMemberView = !hasMcpServerUpdatePermission;
-  // "for me" only tells a personal install apart from a shared one; in a
-  // member's view, where their own is the only kind listed, it says nothing.
-  const personalAddLabel = isLocalServer
-    ? isMemberView
-      ? "Install"
-      : "Install for me"
-    : "Connect my account";
+  const personalCopy = personalConnectionsCopy({
+    serverType: catalogItem?.serverType,
+    multitenant: catalogItem?.multitenant === true,
+    isMemberView,
+    desktopNotSetUp,
+  });
+  const personalAddLabel = isInstalling
+    ? personalCopy.adding
+    : personalCopy.add;
+
+  // A member sees only their own installation of a desktop MCP server: one
+  // line for their computer says it, where a table would count "0 computers"
+  // and claim that no one has added what colleagues did add.
+  const ownDesktopRowOnly = isDesktopMcp && isMemberView && !personalOnly;
 
   const showPersonalGroup = personalRows.length > 0 || canAddPersonal;
+  // A desktop MCP server is installed only for the user whose computer runs
+  // it, so it has no shared installations.
   const showSharedGroup =
-    !isMemberView && (serviceAccountRows.length > 0 || canAddServiceAccount);
+    !isMemberView &&
+    !isDesktopMcp &&
+    (serviceAccountRows.length > 0 || canAddServiceAccount);
+  const showConnectionsTable =
+    !personalOnly &&
+    !ownDesktopRowOnly &&
+    (showPersonalGroup || showSharedGroup);
 
   const rowProps: RowRenderProps = {
     deploymentStatuses,
@@ -425,6 +468,7 @@ export function ManageUsersContent({
     isDeleting: deleteMcpServerMutation.isPending,
     onOpenPodLogs,
     showInfrastructure: !isMemberView,
+    desktop: isDesktopMcp ? { viewerDeviceName, viewerHasComputer } : null,
   };
 
   return (
@@ -449,7 +493,7 @@ export function ManageUsersContent({
         {personalOnly ? (
           <OwnConnectionRow
             server={split.myPersonalServer}
-            isLocalServer={isLocalServer}
+            isLocalServer={hasInstallations}
             deploymentState={(() => {
               const status =
                 split.myPersonalServer &&
@@ -467,9 +511,7 @@ export function ManageUsersContent({
                   onClick={() => onAddPersonalConnection()}
                 >
                   <Plus className="h-4 w-4" />
-                  <span>
-                    {isInstalling ? "Installing..." : personalAddLabel}
-                  </span>
+                  <span>{personalAddLabel}</span>
                 </Button>
               ) : null
             }
@@ -490,34 +532,62 @@ export function ManageUsersContent({
             />
           )}
 
-        {!personalOnly && (showPersonalGroup || showSharedGroup) && (
+        {ownDesktopRowOnly && catalogItem ? (
+          <OwnDesktopComputerRow
+            line={ownDesktopComputerLine({
+              name: catalogItem.name,
+              installation: split.myPersonalServer
+                ? {
+                    ready:
+                      split.myPersonalServer.localInstallationStatus ===
+                      "success",
+                  }
+                : null,
+              canAdd: !desktopNotSetUp,
+              viewerDeviceName,
+              hasComputer: viewerHasComputer,
+            })}
+            onAdd={
+              canAddPersonal
+                ? () => {
+                    onClose();
+                    onAddPersonalConnection?.();
+                  }
+                : undefined
+            }
+            onRemove={() => {
+              if (split.myPersonalServer) {
+                setUninstallTarget(split.myPersonalServer);
+              }
+            }}
+            isAdding={isInstalling}
+            isRemoving={deleteMcpServerMutation.isPending}
+          />
+        ) : null}
+
+        {showConnectionsTable && (
           <ConnectionsTable
-            noun={isLocalServer ? "installation" : "credential"}
+            noun={personalCopy.noun}
             personal={
               showPersonalGroup
                 ? {
-                    title: isLocalServer
-                      ? "Personal installations"
-                      : "Personal connections",
-                    description: isLocalServer
-                      ? installationCopy.personal
-                      : "Private to its owner — only that person can use it.",
-                    emptyText: isLocalServer
-                      ? "No personal installations yet."
-                      : "No personal connections yet.",
+                    title: personalCopy.title,
+                    description: personalCopy.description,
+                    emptyText: personalCopy.emptyText,
                     rows: personalRows,
                     testId: E2eTestId.ManageCredentialsDialogTable,
-                    add: canAddPersonal ? (
-                      <GroupAddButton
-                        disabled={isInstalling}
-                        onClick={() => {
-                          onClose();
-                          onAddPersonalConnection?.();
-                        }}
-                      >
-                        {isInstalling ? "Installing..." : personalAddLabel}
-                      </GroupAddButton>
-                    ) : null,
+                    add:
+                      canAddPersonal && !desktopNotSetUp ? (
+                        <GroupAddButton
+                          disabled={isInstalling}
+                          onClick={() => {
+                            onClose();
+                            onAddPersonalConnection?.();
+                          }}
+                        >
+                          {personalAddLabel}
+                        </GroupAddButton>
+                      ) : null,
                   }
                 : null
             }
@@ -584,6 +654,8 @@ export function ManageUsersContent({
                     name: uninstallTarget.name,
                     scope: uninstallTarget.scope,
                     teamId: uninstallTarget.teamId,
+                    serverType: uninstallTarget.serverType,
+                    ownedByViewer: uninstallTarget.ownerId === currentUserId,
                   },
                 },
               ]
@@ -622,6 +694,15 @@ interface RowRenderProps {
   onOpenPodLogs?: (serverId: string) => void;
   /** The Pod column, for those who manage installations. */
   showInfrastructure: boolean;
+  /**
+   * A desktop MCP server: each row is the server on one user's computer.
+   * Only the viewer's own computer has a name here.
+   */
+  desktop: {
+    viewerDeviceName: string | null;
+    /** Whether the viewer has a computer; undefined while not known. */
+    viewerHasComputer: boolean | undefined;
+  } | null;
 }
 
 interface ConnectionGroup {
@@ -646,7 +727,7 @@ function ConnectionsTable({
   shared,
   ...rowProps
 }: {
-  noun: "credential" | "installation";
+  noun: "credential" | "installation" | "device";
   personal: ConnectionGroup | null;
   shared: ConnectionGroup | null;
 } & RowRenderProps) {
@@ -847,6 +928,7 @@ function ConnectionTableRow({
   handleRevoke,
   isDeleting,
   onOpenPodLogs,
+  desktop,
 }: {
   row: ConnectionRow;
   showPod: boolean;
@@ -868,11 +950,19 @@ function ConnectionTableRow({
   }
   actions.push({
     icon: <Trash2 className="size-4" />,
-    label: "Revoke",
+    label: desktop
+      ? isYou
+        ? DESKTOP_MCP_COPY.remove
+        : DESKTOP_MCP_COPY.removeTheirs
+      : "Revoke",
     variant: "destructive",
     onClick: () => handleRevoke(server),
     disabled: isDeleting || !canRevoke(server),
-    disabledTooltip: canRevoke(server) ? undefined : getRevokeTooltip(server),
+    disabledTooltip: canRevoke(server)
+      ? undefined
+      : desktop
+        ? "Only the person who linked it can unlink it from their device"
+        : getRevokeTooltip(server),
     testId: isYou
       ? `${E2eTestId.RevokeCredentialButton}-personal`
       : `${E2eTestId.RevokeCredentialButton}-${owner}`,
@@ -911,6 +1001,19 @@ function ConnectionTableRow({
               createdAt={server.createdAt}
               createdBy={createdBy}
               needsSignIn={needsSignIn}
+              desktopState={
+                desktop
+                  ? desktopRowState({
+                      isYou,
+                      // With no computer of their own the viewer's server
+                      // waits, whatever was read from one before.
+                      ready:
+                        server.localInstallationStatus === "success" &&
+                        !(isYou && desktop.viewerHasComputer === false),
+                      viewerDeviceName: desktop.viewerDeviceName,
+                    })
+                  : null
+              }
             />
           </div>
         </div>
@@ -993,15 +1096,26 @@ function ConnectionMeta({
   createdAt,
   createdBy,
   needsSignIn,
+  desktopState,
 }: {
   createdAt: string;
   createdBy: string | null;
   needsSignIn: boolean;
+  /** Where a desktop MCP server stands on that user's computer. */
+  desktopState: string | null;
 }) {
   const created = new Date(createdAt);
   const dot = <span className="px-1 text-muted-foreground/50">·</span>;
   return (
     <div className="flex min-w-0 flex-wrap items-baseline text-[11px] text-muted-foreground tabular-nums">
+      {desktopState ? (
+        <>
+          <span className="min-w-0 [overflow-wrap:anywhere]">
+            {desktopState}
+          </span>
+          {dot}
+        </>
+      ) : null}
       {needsSignIn ? (
         <>
           <span className="font-medium text-amber-600 dark:text-amber-500">
@@ -1183,6 +1297,69 @@ function OwnConnectionRow({
           Uninstall
         </Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The Computers section as a member sees it: their own computer, in one line
+ * with the one action it has. See {@link ownDesktopComputerLine}.
+ */
+function OwnDesktopComputerRow({
+  line,
+  onAdd,
+  onRemove,
+  isAdding,
+  isRemoving,
+}: {
+  line: { text: string; action: "add" | "remove" | null };
+  /** Undefined when the viewer may not add it. */
+  onAdd?: () => void;
+  onRemove: () => void;
+  isAdding: boolean;
+  isRemoving: boolean;
+}) {
+  return (
+    <div
+      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3"
+      data-testid={E2eTestId.CredentialRow}
+    >
+      <span className="inline-flex min-w-0 items-center gap-2 text-sm">
+        <Laptop
+          aria-hidden="true"
+          className="size-4 shrink-0 text-muted-foreground"
+        />
+        <span
+          key={line.text}
+          className={cn(
+            "min-w-0 [overflow-wrap:anywhere]",
+            line.action !== "remove" && "text-muted-foreground",
+          )}
+        >
+          {line.text}
+        </span>
+      </span>
+      {line.action === "add" && onAdd ? (
+        <Button variant="outline" size="sm" disabled={isAdding} onClick={onAdd}>
+          <Laptop className="h-4 w-4" />
+          <span>
+            {isAdding ? DESKTOP_MCP_COPY.adding : DESKTOP_MCP_COPY.add}
+          </span>
+        </Button>
+      ) : null}
+      {line.action === "remove" ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground hover:text-foreground"
+          disabled={isRemoving}
+          onClick={onRemove}
+          data-testid={`${E2eTestId.RevokeCredentialButton}-personal`}
+        >
+          <Trash className="h-4 w-4" />
+          <span>{DESKTOP_MCP_COPY.remove}</span>
+        </Button>
+      ) : null}
     </div>
   );
 }

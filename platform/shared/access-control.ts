@@ -614,6 +614,25 @@ export const requiredEndpointPermissionsMap: Partial<
   // The decision service verifies setup ownership and revalidates its scope.
   [RouteId.GetClientConnection]: {},
   [RouteId.DecideClientConnection]: {},
+  // Desktop devices. The tunnel client's own calls are public: sign-in start and
+  // poll carry a polling proof, the program download is not secret, and the
+  // tunnel endpoints authenticate with the device key.
+  [RouteId.StartDesktopDeviceSignIn]: {},
+  [RouteId.PollDesktopDeviceSignIn]: {},
+  [RouteId.DownloadArchestraCli]: {},
+  [RouteId.GetDesktopTunnel]: {},
+  [RouteId.PollDesktopTunnel]: {},
+  [RouteId.RespondDesktopTunnel]: {},
+  [RouteId.DeleteDesktopTunnel]: {},
+  // Any signed-in user may approve a sign-in for, see, and remove their own device.
+  [RouteId.GetDesktopDeviceSignIn]: {},
+  [RouteId.DecideDesktopDeviceSignIn]: {},
+  [RouteId.GetDesktopDevices]: {},
+  [RouteId.DeleteDesktopDevice]: {},
+  [RouteId.UpdateDesktopDeviceServer]: {},
+  [RouteId.RestartDesktopDeviceServer]: {},
+  [RouteId.TestDesktopDeviceServer]: {},
+  [RouteId.GetDesktopDeviceServerLog]: {},
   [RouteId.CreateConnectionSetup]: {},
   // A signed-in member may start a short connection window for their own user.
   // Reports whether a pre-built VAF Add On package exists for this

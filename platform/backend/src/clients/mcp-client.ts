@@ -151,6 +151,7 @@ import {
 } from "@/utils/network-errors";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { ConnectionLimiter } from "./connection-limiter";
+import { DesktopTunnelTransport } from "./desktop-tunnel-transport";
 import { K8sAttachTransport } from "./k8s-attach-transport";
 import {
   configureMcpElicitation,
@@ -457,7 +458,7 @@ type ToolCallAuthInfo = {
   llmToolCallId?: string;
 };
 
-type TransportKind = "stdio" | "http";
+type TransportKind = "stdio" | "http" | "desktop";
 
 const HTTP_CONCURRENCY_LIMIT = 4;
 const OAUTH_TOKEN_REFRESH_BUFFER_MS = 5 * TimeInMs.Minute;
@@ -1822,9 +1823,13 @@ class McpClient {
       // A client whose transport already closed (the SDK clears it on close)
       // cannot answer; its ping fails at once, so the catch replaces it.
       try {
+        // A desktop transport holds no connection between messages, and it
+        // checks the device for each one: a ping through the tunnel would
+        // only add a trip to the user's computer.
         if (
           !reusableClient.transport ||
-          this.shouldValidateActiveConnection(connectionKey)
+          (!(reusableClient.transport instanceof DesktopTunnelTransport) &&
+            this.shouldValidateActiveConnection(connectionKey))
         ) {
           await reusableClient.ping();
           this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
@@ -2506,11 +2511,15 @@ class McpClient {
           catalogId,
           tokenAuth,
         ))
-          ? this.buildAuthRequiredMessage(
-              catalogDisplayName,
-              catalogId,
-              tokenAuth,
-            )
+          ? // A desktop MCP server has no credentials to set up: the caller
+            // adds it to their own computer.
+            catalogItem.serverType === "desktop_mcp"
+            ? this.buildAddToComputerMessage(catalogDisplayName, catalogId)
+            : this.buildAuthRequiredMessage(
+                catalogDisplayName,
+                catalogId,
+                tokenAuth,
+              )
           : this.buildConnectionUnavailableMessage(
               catalogDisplayName,
               catalogId,
@@ -2560,6 +2569,33 @@ class McpClient {
         };
       }
       return { refusal: "browser_runtime_unavailable" };
+    }
+
+    // A desktop MCP server runs on the caller's own computer: the call goes
+    // through the caller's personal installation, whatever installation the
+    // assignment or the catalog item is pinned to. A pin would let one user's
+    // agent run tools on another user's computer.
+    if (catalogItem.serverType === "desktop_mcp") {
+      const callerId = tokenAuth?.userId;
+      const own = !callerId
+        ? null
+        : serverLookup
+          ? (serverLookup.byCatalogId
+              .get(catalogItem.id)
+              ?.find(
+                (install) =>
+                  install.scope === "personal" && install.ownerId === callerId,
+              ) ?? null)
+          : await McpServerModel.getUserPersonalServerForCatalog(
+              callerId,
+              catalogItem.id,
+            );
+      if (!own) return { refusal: "no_install" };
+      return {
+        targetMcpServerId: own.id,
+        mcpServerName: own.name,
+        resolvedServer: own,
+      };
     }
 
     // Static credential case: tool has a bound MCP server credential to use.
@@ -2854,6 +2890,9 @@ class McpClient {
     if (catalogItem.serverType === "remote") {
       return "http";
     }
+    if (catalogItem.serverType === "desktop_mcp") {
+      return "desktop";
+    }
 
     const usesStreamableHttp =
       await McpServerRuntimeManager.usesStreamableHttp(targetMcpServerId);
@@ -2881,6 +2920,9 @@ class McpClient {
       !(await PlaywrightRuntimeModel.isEnabled())
     ) {
       throw new Error("The built-in browser MCP is disabled");
+    }
+    if (transportKind === "desktop") {
+      return this.getDesktopTunnelTransport(catalogItem, targetMcpServerId);
     }
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
@@ -3073,6 +3115,29 @@ class McpClient {
     }
 
     throw new Error(`Unsupported transport kind: ${transportKind}`);
+  }
+
+  /**
+   * Transport to a desktop MCP server. The server runs on the computer of the
+   * user who owns the install, so that user's device takes the messages.
+   */
+  private async getDesktopTunnelTransport(
+    catalogItem: InternalMcpCatalog,
+    targetMcpServerId: string,
+  ): Promise<Transport> {
+    const [install] = await McpServerModel.findByIdsBasic([targetMcpServerId]);
+    if (!install?.ownerId) {
+      throw new Error(
+        `"${catalogItem.name}" runs on a user's own computer, and this installation has no owner.`,
+      );
+    }
+    // The transport finds the owner's device for each message, and says so
+    // when there is none or it is offline.
+    return new DesktopTunnelTransport({
+      userId: install.ownerId,
+      channel: catalogItem.id,
+      serverName: catalogItem.name,
+    });
   }
 
   private async resolveSecretsForTransport(params: {
@@ -3860,6 +3925,33 @@ class McpClient {
       catalogName: catalogDisplayName,
       action: "install_mcp_credentials",
       actionUrl: installUrl,
+    };
+  }
+
+  /**
+   * The refusal for a tool of a desktop MCP server that the caller has not
+   * added to their computer. The link opens the registry on the dialog that
+   * adds it. Same typed shape as buildAuthRequiredMessage, with its own
+   * action so clients word it as adding to a computer, not as credentials.
+   */
+  private buildAddToComputerMessage(
+    catalogDisplayName: string,
+    catalogId: string,
+  ): AuthRequiredMcpToolError {
+    const addUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${catalogId}`;
+    return {
+      type: "auth_required",
+      message: formatActionableAuthError({
+        title: `"${catalogDisplayName}" is not linked to your device`,
+        detail: `"${catalogDisplayName}" runs on your own device, and you have not linked it yet.`,
+        actionLabel: `link "${catalogDisplayName}" to your device`,
+        url: addUrl,
+        postAction: `Once "${catalogDisplayName}" is linked to your device, retry this tool call.`,
+      }),
+      catalogId,
+      catalogName: catalogDisplayName,
+      action: "add_desktop_mcp_server",
+      actionUrl: addUrl,
     };
   }
 

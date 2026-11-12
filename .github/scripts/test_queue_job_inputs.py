@@ -19,7 +19,7 @@ def load(name):
 
 inputs = load("queue-job-inputs")
 tags = load("release-upgrade-tags")
-ALL = {"backend": True, "frontend": True, "platform_rust": True, "ai_labs": True}
+ALL = {"backend": True, "frontend": True, "platform_rust": True, "ai_labs": True, "archestra_cli": True}
 
 
 def runs(*paths):
@@ -54,9 +54,15 @@ class ClassificationTests(unittest.TestCase):
 
     def test_rust_inputs(self):
         self.assertEqual(runs("platform/archestra-rs/sandbox-core/src/lib.rs"), {"backend", "platform_rust"})
-        self.assertEqual(runs("platform/rust-toolchain.toml"), {"backend", "frontend", "platform_rust"})
+        self.assertEqual(runs("platform/rust-toolchain.toml"),
+                         {"backend", "frontend", "platform_rust", "archestra_cli"})
         self.assertEqual(runs("ai-labs/runner/src/main.rs"), {"ai_labs"})
         self.assertEqual(runs(".agents/skills/archestra-dev-bench-analysis/bin/render-triage.mjs"), {"ai_labs"})
+        # Not read by the backend or frontend suites, but not on their skip
+        # lists either: an unknown path for them still runs them.
+        self.assertEqual(runs("platform/archestra-cli/src/main.rs"), {"backend", "frontend", "archestra_cli"})
+        # The release lock changes the platform image, not the program's build.
+        self.assertEqual(runs("platform/archestra-cli/release.lock.json"), {"backend", "frontend"})
 
     def test_shared_ci_plumbing_runs_every_family(self):
         for path in (".github/workflows/on-pull-requests.yml", ".github/actions/setup-env/action.yml",
@@ -90,6 +96,7 @@ class ClassificationTests(unittest.TestCase):
                                     capture_output=True, text=True, check=True)
             self.assertEqual(result.stdout.splitlines(), [
                 "backend=true", "frontend=false", "platform_rust=true", "ai_labs=false",
+                "archestra_cli=false",
             ])
             result = subprocess.run(["python3", str(script), "missing", "HEAD"], cwd=directory, capture_output=True)
             self.assertNotEqual(result.returncode, 0)

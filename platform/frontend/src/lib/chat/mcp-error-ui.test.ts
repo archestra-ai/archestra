@@ -1,11 +1,15 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import {
+  desktopAddPromptCopy,
   extractCatalogIdFromInstallUrl,
   extractIdsFromReauthUrl,
   hasToolPartsWithAuthErrors,
   isAuthInstructionText,
+  isInstallAuthAction,
   isInstallAuthResolved,
+  isNoDeviceError,
+  noDevicePromptCopy,
   parseAuthRequired,
   parseExpiredAuth,
   resolveAssistantTextAuthState,
@@ -596,6 +600,92 @@ describe("extractIdsFromReauthUrl", () => {
   });
 });
 
+describe("a desktop MCP server that is not on the caller's computer", () => {
+  const url = "http://localhost:3000/mcp/registry?install=cat_desktop";
+  // The text the backend sends for a desktop MCP tool the caller has not added.
+  const text = `"MATLAB" is not on your computer.\n\n"MATLAB" runs on your own computer, and you have not added it yet.\nTo add "MATLAB" to your computer, visit this URL: ${url}\n\nIMPORTANT: You MUST display the URL above to the user exactly as shown, in your reply text, never inside a question form. Do NOT omit it or paraphrase it.\n\nOnce "MATLAB" is on your computer, retry this tool call.`;
+
+  it("is read from the structured error with its own action", () => {
+    expect(
+      resolveToolAuthState({
+        rawOutput: {
+          _meta: {
+            archestraError: {
+              type: "auth_required",
+              message: text,
+              catalogId: "cat_desktop",
+              catalogName: "MATLAB",
+              action: "add_desktop_mcp_server",
+              actionUrl: url,
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      kind: "auth-required",
+      catalogName: "MATLAB",
+      actionUrl: url,
+      action: "add_desktop_mcp_server",
+      providerId: null,
+      catalogId: "cat_desktop",
+    });
+  });
+
+  it("is read from the text alone, as adding to a computer and not as credentials", () => {
+    expect(parseAuthRequired(text)).toEqual({
+      catalogName: "MATLAB",
+      actionUrl: url,
+      action: "add_desktop_mcp_server",
+      providerId: null,
+    });
+    expect(resolveAssistantTextAuthState(text)).toMatchObject({
+      kind: "auth-required",
+      action: "add_desktop_mcp_server",
+      catalogId: "cat_desktop",
+    });
+  });
+
+  it("opens the chat's own dialog, and is resolved once the server is added", () => {
+    expect(isInstallAuthAction("add_desktop_mcp_server")).toBe(true);
+    expect(isInstallAuthAction("install_mcp_credentials")).toBe(true);
+    expect(isInstallAuthAction("connect_identity_provider")).toBe(false);
+    const authState = resolveAssistantTextAuthState(text);
+    expect(
+      isInstallAuthResolved({
+        authState,
+        connectedCatalogIds: new Set(["cat_desktop"]),
+      }),
+    ).toBe(true);
+    expect(
+      isInstallAuthResolved({ authState, connectedCatalogIds: new Set() }),
+    ).toBe(false);
+  });
+
+  it("is worded with the desktop vocabulary", () => {
+    const prompt = desktopAddPromptCopy({
+      catalogName: "MATLAB",
+      resolved: false,
+    });
+    expect(prompt).toEqual({
+      title: "Not linked to your device",
+      description:
+        "\u201cMATLAB\u201d runs on your own device. Link it to your device to use this tool.",
+      buttonText: "Link to my device",
+    });
+    const added = desktopAddPromptCopy({
+      catalogName: "MATLAB",
+      resolved: true,
+    });
+    expect(added.title).toBe("Linked to your device");
+    expect(added.buttonText).toBeUndefined();
+    for (const copy of [prompt, added]) {
+      expect(`${copy.title} ${copy.description}`).not.toMatch(
+        /install|credential|authenticat/i,
+      );
+    }
+  });
+});
+
 describe("isInstallAuthResolved", () => {
   const installState: ToolAuthState = {
     kind: "auth-required",
@@ -693,5 +783,45 @@ describe("auth parsers on unrelated text", () => {
       },
     });
     expect(parseAuthRequired(envelope)?.catalogName).toBe("GitHub");
+  });
+});
+
+describe("a tool call that finds no device with the MCP bridge", () => {
+  it("is read from the error text, in the current and the older wording", () => {
+    expect(
+      isNoDeviceError({
+        errorText:
+          "MCP error -32603: No device is linked. Set up the MCP bridge on your device from the Device tab of Personal Settings and try again.",
+      }),
+    ).toBe(true);
+    expect(
+      isNoDeviceError({
+        errorText:
+          "MCP error -32603: No device is connected. Start the MCP bridge on your computer from the Connect page and try again.",
+      }),
+    ).toBe(true);
+    expect(
+      isNoDeviceError({ rawOutput: "No device is linked. Set up ..." }),
+    ).toBe(true);
+  });
+
+  it("is not a device that is linked but offline", () => {
+    expect(
+      isNoDeviceError({
+        errorText:
+          'Device "MBP" is offline. Start the MCP bridge on that device and try again.',
+      }),
+    ).toBe(false);
+    expect(isNoDeviceError({})).toBe(false);
+  });
+
+  it("offers the MCP bridge setup until a device is linked", () => {
+    expect(noDevicePromptCopy({ linked: false }).buttonText).toBe(
+      "Set up the MCP bridge",
+    );
+    expect(noDevicePromptCopy({ linked: true })).toEqual({
+      title: "Device linked",
+      description: "Your device is linked. Try again.",
+    });
   });
 });

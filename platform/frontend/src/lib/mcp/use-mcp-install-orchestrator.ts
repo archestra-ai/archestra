@@ -26,6 +26,7 @@ import {
 } from "@/lib/auth/oauth-session";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { getUsableConnectedCatalogIds } from "@/lib/mcp/connected-catalogs";
+import { addDesktopMcpServer } from "@/lib/mcp/desktop-mcp";
 import {
   fetchInternalMcpCatalogItem,
   useMcpRegistryIssueIndex,
@@ -42,6 +43,7 @@ type DialogKey =
   | "local-install"
   | "oauth"
   | "no-auth"
+  | "desktop-install"
   | "manage";
 
 /**
@@ -87,6 +89,8 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
   const [localServerCatalogItem, setLocalServerCatalogItem] =
     useState<CatalogItem | null>(null);
   const [noAuthCatalogItem, setNoAuthCatalogItem] =
+    useState<CatalogItem | null>(null);
+  const [desktopCatalogItem, setDesktopCatalogItem] =
     useState<CatalogItem | null>(null);
 
   // Manage dialog state
@@ -219,13 +223,23 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
       const catalogItem = await findCatalogItem(catalogId);
       if (!catalogItem) return;
 
-      if (catalogItem.serverType === "local") {
+      // A desktop MCP server is added to the user's own computer: it has its
+      // own dialog, and no scope or credentials to ask for.
+      if (catalogItem.serverType === "desktop_mcp") {
+        setDesktopCatalogItem(catalogItem);
+        openDialog("desktop-install");
+      } else if (catalogItem.serverType === "local") {
         handleInstallLocalServer(catalogItem);
       } else {
         handleInstallRemoteServer(catalogItem);
       }
     },
-    [findCatalogItem, handleInstallLocalServer, handleInstallRemoteServer],
+    [
+      findCatalogItem,
+      handleInstallLocalServer,
+      handleInstallRemoteServer,
+      openDialog,
+    ],
   );
 
   /** Trigger re-authentication for a specific server, preserving tool assignments */
@@ -388,6 +402,14 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
     setNoAuthCatalogItem(null);
   };
 
+  /**
+   * Adds a desktop MCP server to the user's computer. Resolves with the
+   * installation the Add dialog then follows, or null when it was refused
+   * (a toast says why) and the dialog stays for another try.
+   */
+  const handleDesktopAdd = (catalogItem: CatalogItem) =>
+    addDesktopMcpServer({ install: installMutation.mutateAsync, catalogItem });
+
   const handleOAuthConfirm = async (result: OAuthInstallResult) => {
     if (!selectedCatalogItem) return;
 
@@ -416,6 +438,7 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
     selectedCatalogItem,
     localServerCatalogItem,
     noAuthCatalogItem,
+    desktopCatalogItem,
     manageCatalogId,
     isInstalling: installMutation.isPending || reauthMutation.isPending,
     isReauth: !!reauthServerId,
@@ -424,6 +447,7 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
     handleRemoteServerInstallConfirm,
     handleLocalServerInstallConfirm,
     handleNoAuthConfirm,
+    handleDesktopAdd,
     handleOAuthConfirm,
 
     // Close handlers
@@ -442,6 +466,10 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
       closeDialog("no-auth");
       setNoAuthCatalogItem(null);
     },
+    closeDesktopInstall: () => {
+      closeDialog("desktop-install");
+      setDesktopCatalogItem(null);
+    },
     closeOAuth: () => {
       closeDialog("oauth");
       setSelectedCatalogItem(null);
@@ -456,9 +484,11 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
       closeDialog("remote-install");
       closeDialog("local-install");
       closeDialog("no-auth");
+      closeDialog("desktop-install");
       setSelectedCatalogItem(null);
       setLocalServerCatalogItem(null);
       setNoAuthCatalogItem(null);
+      setDesktopCatalogItem(null);
       setReauthServerId(null);
     },
   };

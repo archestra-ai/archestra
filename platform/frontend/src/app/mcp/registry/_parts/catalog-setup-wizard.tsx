@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleAlert,
+  Laptop,
   Loader2,
   PlugZap,
   RefreshCw,
@@ -57,6 +58,7 @@ import {
   setOAuthState,
   setOAuthTeamId,
 } from "@/lib/auth/oauth-session";
+import { addDesktopMcpServer, DESKTOP_MCP_COPY } from "@/lib/mcp/desktop-mcp";
 import {
   useInstallMcpServer,
   useMcpDeploymentStatuses,
@@ -70,6 +72,7 @@ import {
   type ToolWithAssignmentsData,
   useToolsWithAssignments,
 } from "@/lib/tools/tool.query";
+import { DesktopMcpInstallDialog } from "./desktop-mcp-install-dialog";
 import { InstallationProgress } from "./installation-progress";
 import {
   LocalServerInstallDialog,
@@ -168,7 +171,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
   }, [status, item.id, queryClient]);
 
   const [openDialog, setOpenDialog] = useState<
-    "local" | "remote" | "oauth" | null
+    "local" | "remote" | "oauth" | "desktop" | null
   >(null);
 
   const promptedEnvVars =
@@ -192,7 +195,12 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
       dontShowToast: true,
     });
 
+  const isDesktopMcp = item.serverType === "desktop_mcp";
   const startInstall = () => {
+    if (isDesktopMcp) {
+      setOpenDialog("desktop");
+      return;
+    }
     if (item.oauthConfig) {
       setOpenDialog("oauth");
       return;
@@ -282,18 +290,21 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
   return (
     <div className="space-y-4">
       {!target && !isInstalling ? (
+        // A desktop MCP server is added to the user's own computer: the tools
+        // are read once the MCP bridge there runs the server.
         <Empty className="border py-12">
           <EmptyHeader>
             <EmptyMedia variant="icon">
-              <PlugZap />
+              {isDesktopMcp ? <Laptop /> : <PlugZap />}
             </EmptyMedia>
             <EmptyDescription>
-              Create a connection to verify the server is reachable and discover
-              its tools.
+              {isDesktopMcp
+                ? `${item.name} runs on your device. Link it to your device to read its tools.`
+                : "Create a connection to verify the server is reachable and discover its tools."}
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent className="flex-row justify-center">
-            {needsRegistryHandoff ? (
+            {needsRegistryHandoff && !isDesktopMcp ? (
               <Button size="sm" asChild>
                 <Link
                   href={`/mcp/registry?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${item.id}`}
@@ -303,7 +314,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
               </Button>
             ) : (
               <Button size="sm" onClick={startInstall} disabled={isInstalling}>
-                Install
+                {isDesktopMcp ? DESKTOP_MCP_COPY.add : "Install"}
               </Button>
             )}
           </EmptyContent>
@@ -312,10 +323,13 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
         <div className="flex items-start gap-3 rounded-lg border border-green-600/30 bg-green-500/5 p-4">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
           <div className="text-sm">
-            <p className="font-medium">Connected</p>
+            <p className="font-medium">
+              {isDesktopMcp ? DESKTOP_MCP_COPY.added : "Connected"}
+            </p>
             <p className="text-muted-foreground">
-              The server responded and its tools were discovered. Continue to
-              review them.
+              {isDesktopMcp
+                ? `${item.name} is ready and its tools were read. Continue to review them.`
+                : "The server responded and its tools were discovered. Continue to review them."}
             </p>
           </div>
         </div>
@@ -372,6 +386,23 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
           onConfirm={handleLocalConfirm}
           catalogItem={item}
           isInstalling={installMutation.isPending}
+        />
+      )}
+
+      {openDialog === "desktop" && (
+        <DesktopMcpInstallDialog
+          isOpen
+          onClose={() => setOpenDialog(null)}
+          // The dialog stays open and follows the add until the tools are
+          // read.
+          onAdd={(catalogItem) =>
+            addDesktopMcpServer({
+              install: installMutation.mutateAsync,
+              catalogItem,
+            })
+          }
+          catalogItem={item}
+          isAdding={installMutation.isPending}
         />
       )}
 

@@ -34,6 +34,15 @@ export const WORKLOAD_IDENTITY_TOKEN_PATH = "/api/workload-identity/token";
 export const WELL_KNOWN_ACME_PREFIX = "/.well-known/acme-challenge/";
 export const MCP_GATEWAY_PREFIX = "/v1/mcp";
 export const PROXY_API_PREFIX = "/v1";
+/**
+ * Endpoints the tunnel client of a desktop device calls. They follow the
+ * OpenAI tunnel-client wire protocol and authenticate with the device key.
+ */
+export const DESKTOP_TUNNEL_PREFIX = "/v1/tunnels";
+/** Download of the `archestra` program, one file per system and CPU. */
+export const ARCHESTRA_CLI_DOWNLOAD_PREFIX = "/api/archestra-cli";
+export const DESKTOP_DEVICES_PATH = "/api/desktop-devices";
+export const DESKTOP_DEVICE_SIGN_IN_PATH = `${DESKTOP_DEVICES_PATH}/sign-in`;
 export const MODEL_ROUTER_PREFIX = `${PROXY_API_PREFIX}/model-router`;
 export const UNIFIED_MODEL_PREFIX = `${PROXY_API_PREFIX}/unified-model`;
 

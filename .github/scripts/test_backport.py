@@ -306,6 +306,7 @@ assert.equal(allowed('pull_request', {label:'not-backport release/1.3'}), false)
             "platform-rust-checks",
             "openappa-native-tests",
             "ai-labs-rust-checks",
+            "archestra-cli-checks",
             "changed-inputs",
             "backend-unit-tests",
             "backend-unit-tests-gate",
@@ -348,8 +349,8 @@ for (const [job, condition] of Object.entries(conditions)) {
     github: {event_name: 'merge_group'}, always: () => true, cancelled: () => false,
     needs: {'changed-inputs': inputs, 'dagger-sdk-integration': {result: 'success'}},
   });
-  const changed = {result: 'success', outputs: {backend: 'true', frontend: 'true', platform_rust: 'true', ai_labs: 'true'}};
-  const unchanged = {result: 'success', outputs: {backend: 'false', frontend: 'false', platform_rust: 'false', ai_labs: 'false'}};
+  const changed = {result: 'success', outputs: {backend: 'true', frontend: 'true', platform_rust: 'true', ai_labs: 'true', archestra_cli: 'true'}};
+  const unchanged = {result: 'success', outputs: {backend: 'false', frontend: 'false', platform_rust: 'false', ai_labs: 'false', archestra_cli: 'false'}};
   assert.equal(evaluate(changed), true, job);
   if (mergeGroupCondition.includes("needs['changed-inputs']")) {
     assert.equal(evaluate(unchanged), false, `${job} skips without its inputs`);

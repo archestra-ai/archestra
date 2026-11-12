@@ -73,6 +73,64 @@ class ImageInputHashTests(unittest.TestCase):
         self.commit()
         self.assertNotEqual(self.image_hash("mcp-base"), initial)
 
+    def test_archestra_cli_sources_stay_out_and_the_release_lock_stays_in(self):
+        self.write("platform/archestra-cli/src/main.rs", "fn main() {}\n")
+        self.write("platform/archestra-cli/Cargo.toml", "[package]\n")
+        self.write("platform/archestra-cli/release.lock.json", "{}\n")
+        with (self.repo / "platform/.dockerignore").open("a") as output:
+            output.write("archestra-cli/*\n!archestra-cli/release.lock.json\n")
+        self.commit()
+        initial = self.image_hash("platform")
+        for name in (
+            "platform/archestra-cli/src/main.rs",
+            "platform/archestra-cli/Cargo.toml",
+            "platform/archestra-cli/build.rs",
+            # The lock negation leaves the other exclusions in force.
+            "platform/e2e-tests/example.ts",
+            "platform/backend/app.test.ts",
+        ):
+            with self.subTest(path=name):
+                self.write(name, "changed\n")
+                self.commit()
+                self.assertEqual(self.image_hash("platform"), initial)
+        self.write("platform/archestra-cli/release.lock.json", '{"version": "0.2.0"}\n')
+        self.commit()
+        self.assertNotEqual(self.image_hash("platform"), initial)
+
+    def test_archestra_cli_sources_stay_in_without_the_exclusion(self):
+        self.write("platform/archestra-cli/src/main.rs", "fn main() {}\n")
+        self.commit()
+        initial = self.image_hash("platform")
+        self.write("platform/archestra-cli/src/main.rs", "changed\n")
+        self.commit()
+        self.assertNotEqual(self.image_hash("platform"), initial)
+
+    def test_any_other_negation_still_disables_every_exclusion(self):
+        self.write("platform/archestra-cli/src/main.rs", "fn main() {}\n")
+        for negation in ("!archestra-cli/src/main.rs", "!archestra-cli/release.lock.json ", "!e2e-tests/example.ts"):
+            with self.subTest(negation=negation):
+                self.write(
+                    "platform/.dockerignore",
+                    "e2e-tests\narchestra-cli/*\n!archestra-cli/release.lock.json\n" + negation + "\n",
+                )
+                self.commit()
+                previous = self.image_hash("platform")
+                for name in ("platform/archestra-cli/src/main.rs", "platform/e2e-tests/example.ts"):
+                    self.write(name, negation + " changed\n")
+                    self.commit()
+                    current = self.image_hash("platform")
+                    self.assertNotEqual(current, previous)
+                    previous = current
+
+    def test_platform_ignore_file_keeps_only_the_release_lock_of_archestra_cli(self):
+        # The hash script matches these two lines literally. The later line
+        # wins in Docker, so the negation has to follow the exclusion.
+        root = Path(__file__).resolve().parents[2]
+        patterns = (root / "platform/.dockerignore").read_text().splitlines()
+        self.assertEqual([p for p in patterns if p.lstrip().startswith("!")], ["!archestra-cli/release.lock.json"])
+        self.assertLess(patterns.index("archestra-cli/*"), patterns.index("!archestra-cli/release.lock.json"))
+        self.assertFalse((root / "platform/Dockerfile.dockerignore").exists())
+
     def image_hash(self, kind):
         return subprocess.check_output(
             ["bash", str(SCRIPT.resolve()), kind], cwd=self.repo, text=True

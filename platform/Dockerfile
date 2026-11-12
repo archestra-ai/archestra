@@ -206,6 +206,89 @@ RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
     cp "${versioned}" /out/; \
     cp "${versioned}" /out/archestra-m-files-vaf-add-on.mfappx
 
+# <----- Archestra CLI release binaries ----->
+# `archestra` is the program users run on their own computers. The backend
+# serves its binaries from /app/archestra-cli: one file per system and CPU,
+# plus manifest.json with their version.
+# This stage downloads the binaries instead of compiling them, because the
+# macOS and Windows binaries cannot be built in a Linux image.
+# .github/workflows/build-archestra-cli.yml builds all six on their own
+# systems and publishes them as the release archestra-cli-v<version>.
+# archestra-cli/release.lock.json pins that release: its URL and the SHA-256
+# of each file. A failed download or a checksum mismatch fails the build.
+# With an empty lock (no release pinned) /out stays empty: the image holds no
+# program and the backend answers "not found" for its downloads.
+# Only the lock file is copied, so this stage re-runs only when the lock
+# changes. The bytes are the same for every target architecture, so the stage
+# runs on the build platform, never under emulation.
+# The script uses paths relative to / so that
+# .github/scripts/test_archestra_cli_image_stage.py can run it in a directory
+# of its own.
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS archestra-cli-release
+WORKDIR /
+COPY archestra-cli/release.lock.json ./release.lock.json
+RUN <<'ARCHESTRA_CLI_RELEASE'
+set -eu
+mkdir out
+# node checks the lock and prints the version, the release URL, and then one
+# "<sha256>  <name>" line per file, the format that `sha256sum -c` reads.
+# Names and checksums are matched in full before any of them reaches a path.
+plan="$(node -e '
+const lock = JSON.parse(require("node:fs").readFileSync("release.lock.json", "utf8"));
+const fail = (message) => {
+  console.error("release.lock.json: " + message);
+  process.exit(1);
+};
+const files = lock.files;
+if (files === null || typeof files !== "object" || Array.isArray(files)) fail("files must be an object");
+const names = Object.keys(files).sort();
+if (lock.version === null && lock.url === null && names.length === 0) process.exit(0);
+if (typeof lock.version !== "string" || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(lock.version)) {
+  fail("version must look like 1.2.3");
+}
+if (typeof lock.url !== "string" || !/^https:\/\/[^\s\/][^\s]*[^\s\/]$/.test(lock.url)) {
+  fail("url must be an https URL with no slash at the end");
+}
+if (names.length === 0) fail("a pinned version needs files");
+for (const name of names) {
+  if (!/^archestra-(darwin|linux)-(arm64|x86_64)$|^archestra-windows-(arm64|x86_64)\.exe$/.test(name)) {
+    fail("unexpected file name: " + name);
+  }
+  if (typeof files[name] !== "string" || !/^[0-9a-f]{64}$/.test(files[name])) {
+    fail("the checksum of " + name + " must be 64 lowercase hex characters");
+  }
+}
+console.log(lock.version);
+console.log(lock.url);
+for (const name of names) console.log(files[name] + "  " + name);
+')"
+if [ -z "$plan" ]; then
+  echo "release.lock.json pins no release: this image holds no archestra program"
+  exit 0
+fi
+version="$(printf '%s\n' "$plan" | sed -n 1p)"
+url="$(printf '%s\n' "$plan" | sed -n 2p)"
+sums="$(mktemp)"
+printf '%s\n' "$plan" | sed 1,2d > "$sums"
+cd out
+# BusyBox wget has a read timeout (-T) and no retry option, so retry here.
+while read -r _ name; do
+  attempt=1
+  until wget -q -T 60 -O "$name" "$url/$name"; do
+    if [ "$attempt" -ge 3 ]; then
+      echo "ERROR: could not download $url/$name" >&2
+      exit 1
+    fi
+    attempt=$((attempt + 1))
+    sleep 5
+  done
+done < "$sums"
+sha256sum -c "$sums"
+chmod 0755 archestra-*
+rm "$sums"
+printf '{ "version": "%s" }\n' "$version" > manifest.json
+ARCHESTRA_CLI_RELEASE
+
 FROM ${NODE_IMAGE} AS base
 
 # Enable pnpm
@@ -651,6 +734,12 @@ RUN chmod +x /app/backend/scripts/start-production.sh
 # the connector-beta gating and rate limits — which is why it lives outside
 # the ungated static frontend/public tree.
 COPY --from=vaf-add-on-builder /out/ ./mfiles-vaf-add-on/
+
+# The released binaries of the archestra program and manifest.json with their
+# version, as pinned by archestra-cli/release.lock.json (the
+# archestra-cli-release stage above). The backend serves them to the users'
+# computers from this directory. It is empty while the lock pins no release.
+COPY --from=archestra-cli-release /out/ ./archestra-cli/
 
 # Copy built frontend
 COPY --from=builder /app/frontend/public ./frontend/public

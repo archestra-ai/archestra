@@ -300,10 +300,13 @@ export function useInstallMcpServer() {
     mutationFn: async (
       data: archestraApiTypes.InstallMcpServerData["body"] & {
         dontShowToast?: boolean;
+        /** A desktop MCP server: its toasts speak of the user's computer. */
+        desktop?: boolean;
       },
     ) => {
+      const { desktop, ...body } = data;
       const { data: installedServer, error } = await installMcpServer({
-        body: data,
+        body,
       });
       if (error) {
         // `handleApiError` doesn't throw, so API rejections still flow
@@ -330,6 +333,16 @@ export function useInstallMcpServer() {
         const errorMessage = boundedErrorMessage.startsWith(redundantPrefix)
           ? boundedErrorMessage.slice(redundantPrefix.length)
           : boundedErrorMessage;
+        if (desktop) {
+          toast.error(`Couldn't link ${data.name} to your device`, {
+            description: errorMessage,
+          });
+          return {
+            installedServer,
+            errorMessage,
+            dontShowToast: data.dontShowToast,
+          };
+        }
         toast.error(`Failed to install ${data.name}`, {
           description: errorMessage.includes(
             "Upstream MCP server returned HTTP 401",
@@ -452,7 +465,15 @@ export function useBulkUninstallMcpServers() {
 export function useDeleteMcpServer() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { id: string; name: string }) => {
+    mutationFn: async (data: {
+      id: string;
+      name: string;
+      /**
+       * A desktop MCP server: its toasts speak of the computer it is removed
+       * from, the viewer's own or another user's.
+       */
+      desktop?: "mine" | "theirs";
+    }) => {
       const response = await deleteMcpServer({ path: { id: data.id } });
       // The generated client runs with `throwOnError: false`, so a refusal
       // resolves like a success: without this, a 403 fell straight through to
@@ -479,13 +500,20 @@ export function useDeleteMcpServer() {
       ]);
       // Invalidate all tool assignment queries (tools, agent-tools, chat, etc.)
       invalidateToolAssignmentQueries(queryClient);
-      toast.success(`Successfully uninstalled ${variables.name}`);
+      toast.success(
+        variables.desktop
+          ? `${variables.name} unlinked from ${variables.desktop === "mine" ? "your" : "their"} device`
+          : `Successfully uninstalled ${variables.name}`,
+      );
     },
     onError: (error, variables) => {
       console.error("Uninstall error:", error);
-      toast.error(`Failed to uninstall ${variables.name}`, {
-        description: error.message,
-      });
+      toast.error(
+        variables.desktop
+          ? `Couldn't unlink ${variables.name} from ${variables.desktop === "mine" ? "your" : "their"} device`
+          : `Failed to uninstall ${variables.name}`,
+        { description: error.message },
+      );
     },
   });
 }

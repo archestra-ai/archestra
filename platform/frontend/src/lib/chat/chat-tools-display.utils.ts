@@ -7,7 +7,11 @@ import {
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
-import { parseAuthRequired, parseExpiredAuth } from "@/lib/chat/mcp-error-ui";
+import {
+  isNoDeviceError,
+  parseAuthRequired,
+  parseExpiredAuth,
+} from "@/lib/chat/mcp-error-ui";
 import type { PendingToolAction } from "@/lib/chat/pending-tool-state";
 
 const POLICY_PREVIEW_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
@@ -180,6 +184,11 @@ export function isCompactEligible(params: {
     }
 
     if (isAuthErrorText(errorText, toolResultPart ?? part)) {
+      return false;
+    }
+
+    // No device runs the MCP bridge: the card that sets it up stays open.
+    if (isNoDeviceError({ errorText })) {
       return false;
     }
 

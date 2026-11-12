@@ -6,6 +6,7 @@ import {
   MCP_CATALOG_SERVER_QUERY_PARAM,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
+import { DESKTOP_MCP_COPY } from "@/lib/mcp/desktop-mcp";
 
 export interface AuthRequiredResult {
   catalogName: string;
@@ -53,7 +54,9 @@ export function parseAuthRequired(
 ): AuthRequiredResult | null {
   // Cheap rejection before JSON.parse: these run for every tool result on
   // every render, and a tool's output can be a large JSON document.
-  if (!errorText.includes(AUTH_REQUIRED_MARKER)) return null;
+  if (!AUTH_REQUIRED_MARKERS.some((marker) => errorText.includes(marker))) {
+    return null;
+  }
   let message = errorText;
   try {
     const json = JSON.parse(errorText);
@@ -62,9 +65,14 @@ export function parseAuthRequired(
     /* not JSON, use raw text */
   }
 
-  if (!message.includes(AUTH_REQUIRED_MARKER)) return null;
-
-  const nameMatch = message.match(/Authentication required for "([^"]+)"/);
+  // A desktop MCP server the caller has not added to their computer: the
+  // same link, worded as adding it, not as credentials.
+  // The older wording stays for errors saved in chat history.
+  const desktopMatch = message.match(
+    /"([^"]+)" is not (?:linked to your device|on your computer)/,
+  );
+  const nameMatch =
+    desktopMatch ?? message.match(/Authentication required for "([^"]+)"/);
   const urlMatch = message.match(/visit(?:\s+this\s+URL)?:\s*(https?:\/\/\S+)/);
   if (!nameMatch || !urlMatch) return null;
 
@@ -72,7 +80,9 @@ export function parseAuthRequired(
   return {
     catalogName: nameMatch[1],
     actionUrl,
-    action: inferAuthRequiredAction(actionUrl),
+    action: desktopMatch
+      ? "add_desktop_mcp_server"
+      : inferAuthRequiredAction(actionUrl),
     providerId: extractProviderIdFromSsoUrl(actionUrl),
   };
 }
@@ -294,10 +304,88 @@ export function resolveAssistantTextAuthState(
 }
 
 /**
+ * An auth-required prompt the chat answers with its own install dialog, not
+ * with a link: setting up credentials for a server, or adding a desktop MCP
+ * server to the user's computer.
+ */
+export function isInstallAuthAction(action: AuthRequiredAction): boolean {
+  return (
+    action === "install_mcp_credentials" || action === "add_desktop_mcp_server"
+  );
+}
+
+/**
+ * Whether a tool call failed because the caller has no device with the MCP
+ * bridge: the chat then offers to set it up. Read from the text of the
+ * error, which the gateway words for the model. The older wording stays for
+ * errors saved in chat history. A device that is linked but offline is not
+ * this case: setting the MCP bridge up again would not help.
+ */
+export function isNoDeviceError(params: {
+  errorText?: string;
+  rawOutput?: unknown;
+}): boolean {
+  // A string output only: this runs for every tool part on every render.
+  const texts = [
+    params.errorText,
+    typeof params.rawOutput === "string" ? params.rawOutput : undefined,
+  ];
+  return texts.some(
+    (text) =>
+      typeof text === "string" &&
+      NO_DEVICE_MARKERS.some((marker) => text.includes(marker)),
+  );
+}
+
+/**
+ * The words of the card for a tool call that found no device; `linked` once
+ * the user has linked one since.
+ */
+export function noDevicePromptCopy(params: { linked: boolean }): {
+  title: string;
+  description: string;
+  buttonText?: string;
+} {
+  return params.linked
+    ? {
+        title: "Device linked",
+        description: "Your device is linked. Try again.",
+      }
+    : {
+        title: "No device is linked",
+        description:
+          "This tool runs on your own device. Set up the MCP bridge on it to use the tool.",
+        buttonText: "Set up the MCP bridge",
+      };
+}
+
+/**
+ * The words of the card for a tool of a desktop MCP server that the user has
+ * not added to their computer; `resolved` once they have.
+ */
+export function desktopAddPromptCopy(params: {
+  catalogName: string;
+  resolved: boolean;
+}): { title: string; description: string; buttonText?: string } {
+  const { catalogName, resolved } = params;
+  return resolved
+    ? {
+        title: "Linked to your device",
+        description: `\u201c${catalogName}\u201d is linked to your device. Try again once it is ready.`,
+      }
+    : {
+        title: DESKTOP_MCP_COPY.notAdded,
+        description: `\u201c${catalogName}\u201d runs on your own device. Link it to your device to use this tool.`,
+        buttonText: DESKTOP_MCP_COPY.add,
+      };
+}
+
+/**
  * An "Authentication Required" install prompt is resolved once a server for its
  * catalog has been connected — at that point the card should read as connected
- * rather than as an outstanding error. Scoped deliberately to the install case
- * (`install_mcp_credentials`): identity-provider connect, expired/re-auth, and
+ * rather than as an outstanding error. Scoped deliberately to the install cases
+ * (`install_mcp_credentials`, and a desktop MCP server to add to the user's
+ * computer): identity-provider connect, expired/re-auth, and
  * assigned-credential-unavailable cards are NOT covered, since "a server exists"
  * is not a valid resolution signal for those.
  */
@@ -308,7 +396,7 @@ export function isInstallAuthResolved(params: {
   const { authState, connectedCatalogIds } = params;
   return (
     authState?.kind === "auth-required" &&
-    authState.action === "install_mcp_credentials" &&
+    isInstallAuthAction(authState.action) &&
     authState.catalogId !== null &&
     connectedCatalogIds.has(authState.catalogId)
   );
@@ -374,7 +462,13 @@ export function isAuthInstructionText(text: string): boolean {
   );
 }
 
-const AUTH_REQUIRED_MARKER = "Authentication required for";
+const NO_DEVICE_MARKERS = ["No device is linked", "No device is connected"];
+
+const AUTH_REQUIRED_MARKERS = [
+  "Authentication required for",
+  "is not linked to your device",
+  "is not on your computer",
+];
 const EXPIRED_AUTH_MARKERS = [
   "Expired or invalid authentication for",
   "Your credentials have expired",

@@ -16,6 +16,7 @@ import {
   Globe,
   IdCard,
   KeyRound,
+  Laptop,
   Server,
   Sparkles,
   Trash2,
@@ -32,7 +33,9 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
+import { AlphaBadge } from "@/components/alpha-badge";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
+import { DesktopMcpTargetField } from "@/components/desktop-mcp-target-field";
 import {
   AddListItemButton,
   EmptyListState,
@@ -99,6 +102,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-seed";
+import { desktopHostingOffered } from "@/lib/mcp/desktop-mcp";
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useMcpDeploymentPermission } from "@/lib/mcp/use-mcp-deployment-permission";
@@ -241,6 +245,7 @@ export function McpCatalogForm({
   const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
 
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
+  const desktopMcpEnabled = useFeature("betaEnabled") === true;
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
   const appName = useAppName();
   const mcpAuthDocsUrl = getFrontendDocsUrl(
@@ -302,6 +307,7 @@ export function McpCatalogForm({
               serviceAccount: "",
               imagePullSecrets: [],
             },
+            desktopConfig: EMPTY_DESKTOP_CONFIG,
             scope: "personal",
             teams: [],
             environmentId: null,
@@ -342,6 +348,9 @@ export function McpCatalogForm({
 
   const instructions = form.watch("instructions");
   const currentServerType = form.watch("serverType");
+  // A desktop MCP server runs on each user's own computer: none of the
+  // connection, deployment or authentication sections apply to it.
+  const isDesktopMcp = currentServerType === "desktop_mcp";
   const currentTransportType = form.watch("localConfig.transportType");
   const isMultitenant = Boolean(form.watch("multitenant"));
   const isTenancyLocked = Boolean(initialValues);
@@ -646,9 +655,10 @@ export function McpCatalogForm({
   // environment only surfaces here, where it blocks Save until fixed.
   //
   // Only scan the fields actually live for the current server type: env vars
-  // for local, headers for remote. A local server submits no headers and a
-  // remote one submits no localConfig.environment, so scanning the inactive
-  // (and hidden) set would block Save on a field the user can't even see.
+  // for local, headers for remote, neither for desktop MCP. A local server
+  // submits no headers and a remote one submits no localConfig.environment,
+  // so scanning the inactive (and hidden) set would block Save on a field the
+  // user can't even see.
   const watchedEnvVars = form.watch("localConfig.environment");
   const watchedHeaders = form.watch("additionalHeaders");
   const envRuleViolations: string[] = [];
@@ -664,7 +674,7 @@ export function McpCatalogForm({
           envRuleViolations.push(envVar.key);
         }
       }
-    } else {
+    } else if (!isDesktopMcp) {
       for (const header of watchedHeaders ?? []) {
         if (
           !header.promptOnInstallation &&
@@ -684,7 +694,9 @@ export function McpCatalogForm({
   useEffect(() => {
     if (hasEnvRuleViolations) setAdvancedOpen(true);
   }, [hasEnvRuleViolations]);
-  const advancedSummary = detailsOnly ? "Labels" : "Environment and labels";
+  // A desktop MCP server runs on the user's computer, not in an environment.
+  const advancedSummary =
+    detailsOnly || isDesktopMcp ? "Labels" : "Environment and labels";
   // The configuration stays in the form, so its values and checks are what
   // they always were; a details-only editor just does not see it.
   const configurationSectionClass = detailsOnly ? "hidden" : undefined;
@@ -1058,16 +1070,20 @@ export function McpCatalogForm({
                 description={
                   currentServerType === "local"
                     ? "The container that runs this server, and how the gateway talks to it."
-                    : "Where the gateway reaches this server."
+                    : isDesktopMcp
+                      ? "The gateway reaches this server through the MCP bridge on each user's device."
+                      : "Where the gateway reaches this server."
                 }
               >
                 {mode === "create" && (
                   <HostingChoice
                     value={currentServerType}
                     localEnabled={isLocalMcpEnabled === true}
+                    desktopEnabled={desktopMcpEnabled}
                     onChange={(value) => form.setValue("serverType", value)}
                   />
                 )}
+                {isDesktopMcp && <DesktopMcpFields form={form} />}
                 {currentServerType === "remote" && (
                   <FormField
                     control={form.control}
@@ -2369,7 +2385,9 @@ export function McpCatalogForm({
                 <CollapsibleContent>
                   <SettingsSectionGroup className="border-t pt-8">
                     <SettingsSection
-                      className={configurationSectionClass}
+                      className={
+                        isDesktopMcp ? "hidden" : configurationSectionClass
+                      }
                       title="Environment"
                       description="Where this server runs and which resources it can reach."
                     >
@@ -2877,17 +2895,53 @@ function withCreationAccess(
 }
 
 /**
- * Remote vs self-hosted: the choice that decides every section below it, so
- * it gets a full-width two-up control rather than a small dropdown.
+ * What a desktop MCP server tells each computer: the command that starts it or
+ * the URL where it listens. The value may stay empty: the item is then saved,
+ * and cannot be added to a computer until it has one.
+ */
+function DesktopMcpFields({
+  form,
+}: {
+  form: UseFormReturn<McpCatalogFormValues>;
+}) {
+  // A draft imported for another hosting has no desktop config yet.
+  const config = form.watch("desktopConfig") ?? EMPTY_DESKTOP_CONFIG;
+  const setConfig = (next: Partial<typeof config>) =>
+    form.setValue(
+      "desktopConfig",
+      { ...config, ...next },
+      { shouldDirty: true, shouldValidate: form.formState.isSubmitted },
+    );
+  return (
+    <DesktopMcpTargetField
+      idPrefix="desktop-mcp-target"
+      kind={config.kind}
+      value={config.value}
+      onValueChange={(value) => setConfig({ value })}
+      error={form.formState.errors.desktopConfig?.value?.message}
+      autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+    />
+  );
+}
+
+const EMPTY_DESKTOP_CONFIG: NonNullable<McpCatalogFormValues["desktopConfig"]> =
+  { kind: "command", value: "" };
+
+/**
+ * Remote, self-hosted or desktop: the choice that decides every section below
+ * it, so it gets a full-width control rather than a small dropdown.
  */
 function HostingChoice({
   value,
   localEnabled,
+  desktopEnabled,
   onChange,
 }: {
-  value: "local" | "remote";
+  value: McpCatalogFormValues["serverType"];
   localEnabled: boolean;
-  onChange: (value: "local" | "remote") => void;
+  /** Desktop MCP is offered: the deployment's beta flag is on. */
+  desktopEnabled: boolean;
+  onChange: (value: McpCatalogFormValues["serverType"]) => void;
 }) {
   const options = [
     {
@@ -2896,6 +2950,7 @@ function HostingChoice({
       description: "Connect to a server running elsewhere.",
       icon: Globe,
       disabled: false,
+      alpha: false,
     },
     {
       value: "local" as const,
@@ -2905,16 +2960,36 @@ function HostingChoice({
         : LOCAL_MCP_DISABLED_MESSAGE,
       icon: Server,
       disabled: !localEnabled,
+      alpha: false,
     },
-  ];
+    {
+      value: "desktop_mcp" as const,
+      title: "Desktop",
+      description: "Runs a program that is already on each user's device.",
+      icon: Laptop,
+      disabled: false,
+      alpha: true,
+    },
+  ].filter(
+    // Desktop MCP is in alpha, offered only with the beta flag; an item that
+    // already is one keeps its choice.
+    (option) =>
+      option.value !== "desktop_mcp" ||
+      desktopHostingOffered({ betaEnabled: desktopEnabled, current: value }),
+  );
   return (
     <div className="space-y-2">
       <Label id="server-hosting-label">Hosting</Label>
       <RadioGroup
         aria-labelledby="server-hosting-label"
         value={value}
-        onValueChange={(next) => onChange(next as "local" | "remote")}
-        className="grid gap-3 sm:grid-cols-2"
+        onValueChange={(next) =>
+          onChange(next as McpCatalogFormValues["serverType"])
+        }
+        className={cn(
+          "grid gap-3",
+          options.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
+        )}
       >
         {options.map((option) => {
           const Icon = option.icon;
@@ -2938,8 +3013,9 @@ function HostingChoice({
                 className="mt-0.5 size-4 shrink-0 text-muted-foreground"
               />
               <span className="min-w-0 space-y-0.5">
-                <span className="block text-sm font-medium">
-                  {option.title}
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <span>{option.title}</span>
+                  {option.alpha && <AlphaBadge />}
                 </span>
                 <span className="block text-xs text-muted-foreground">
                   {option.description}

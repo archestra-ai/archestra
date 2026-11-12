@@ -22,6 +22,9 @@ export const CacheKey = {
   OpenAppaPolicyCheck: "openappa-policy-check",
   ClientConnection: "client-connection",
   ClientConnectionRateLimit: "client-connection-rate-limit",
+  DesktopDeviceSignIn: "desktop-device-sign-in",
+  DesktopDeviceSignInRateLimit: "desktop-device-sign-in-rate-limit",
+  DesktopMcpInstallAttempt: "desktop-mcp-install-attempt",
   /** models.dev sync tracking */
   ModelsDevSync: "models-dev-sync",
   /** Recent scheduled model sync attempt for an LLM provider API key */

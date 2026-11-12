@@ -19,6 +19,7 @@ import {
   CatalogTeamAccessLevelSchema,
   CatalogTeamInputSchema,
 } from "./catalog-team-level";
+import { DesktopMcpConfigSchema } from "./desktop-mcp";
 import {
   type EnterpriseManagedCredentialConfig,
   EnterpriseManagedCredentialConfigResponseSchema,
@@ -40,6 +41,9 @@ export const InternalMcpCatalogServerTypeSchema = z.enum([
   // real mcp_server exposing an `open` launch tool, but opts out of K8s deploy /
   // install / cascade / discovery. Served in-process via the owned-app builder.
   "app",
+  // An MCP server on a user's own computer. It has no URL and no deployment:
+  // calls go through a queue that the tunnel client on the device polls.
+  "desktop_mcp",
 ]);
 
 /**
@@ -169,6 +173,7 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigResponseSchema.nullable(),
     localConfig: LocalConfigSelectSchema.nullable(),
+    desktopConfig: DesktopMcpConfigSchema.nullable(),
     clonedFrom: z.string().uuid().nullable(),
     // Serialized as a nullable string (not the enum) because the OpenAPI client
     // generator drops `null` from a `nullable` enum; the column keeps its
@@ -238,6 +243,7 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
+    desktopConfig: DesktopMcpConfigSchema.nullable().optional(),
     clonedFrom: z.string().uuid().nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
@@ -309,6 +315,7 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
+    desktopConfig: DesktopMcpConfigSchema.nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
   })
@@ -413,11 +420,34 @@ function validateInternalMcpCatalog(
       environment?: Array<{ key: string }>;
     } | null;
     userConfig?: Record<string, UserConfigField> | null;
+    desktopConfig?: unknown;
   },
   ctx: z.RefinementCtx,
 ): void {
   validateEnterpriseManagedTransportConfig(value, ctx);
   validateHeaderMappedUserConfig(value.userConfig, ctx);
+  validateDesktopConfigServerType(value, ctx);
+}
+
+/**
+ * Only a desktop MCP catalog item has a command for devices. A partial update
+ * that does not name the server type is checked against the stored item by
+ * the service.
+ */
+function validateDesktopConfigServerType(
+  value: {
+    serverType?: InternalMcpCatalogServerType;
+    desktopConfig?: unknown;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  if (!value.desktopConfig || !value.serverType) return;
+  if (value.serverType === "desktop_mcp") return;
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: ["desktopConfig"],
+    message: "Only a desktop MCP server has a command for devices.",
+  });
 }
 
 function validateHeaderMappedUserConfig(

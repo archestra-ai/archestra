@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardFooter } from "@/components/wizard-footer";
+import { useFeature } from "@/lib/config/config.query";
 import {
   getCatalogMutationErrorCode,
   REMOTE_SERVER_URL_NOT_ALLOWED_CODE,
@@ -37,6 +38,8 @@ import {
 type SourceSubStep = "source" | "configure";
 
 export default function NewMcpCatalogItemPage() {
+  // Desktop MCP is in alpha, offered only with the beta flag.
+  const desktopMcpEnabled = useFeature("betaEnabled") === true;
   const router = useRouter();
   const searchParams = useSearchParams();
   const createMutation = useCreateInternalMcpCatalogItem();
@@ -146,8 +149,9 @@ export default function NewMcpCatalogItemPage() {
                       </div>
                       <CardTitle>Start from scratch</CardTitle>
                       <CardDescription>
-                        Configure a custom MCP server manually — remote URL or
-                        self-hosted command.
+                        {desktopMcpEnabled
+                          ? "Configure a custom MCP server manually — remote URL, self-hosted command, or a program on each user's own device."
+                          : "Configure a custom MCP server manually — remote URL or self-hosted command."}
                       </CardDescription>
                     </CardHeader>
                   </Card>

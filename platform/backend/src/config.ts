@@ -2660,6 +2660,34 @@ const config = {
      */
     skillsEnabled: process.env.ARCHESTRA_BETA === "true",
   },
+  mcpBridge: {
+    /**
+     * Longest time (ms) a tunnel client's poll is held open while its queue is
+     * empty. Keep it below the timeout of the load balancer in front of the
+     * API, or the load balancer cuts every idle poll.
+     */
+    pollMaxWaitMs: parsePositiveInt(
+      process.env.ARCHESTRA_MCP_BRIDGE_POLL_MAX_WAIT_MS,
+      8000,
+    ),
+    /**
+     * Whether the MCP bridge on a user's computer replaces itself with the
+     * program this deployment serves. Off: the user runs `archestra update`.
+     */
+    autoUpdateEnabled:
+      process.env.ARCHESTRA_MCP_BRIDGE_AUTO_UPDATE_ENABLED !== "false",
+  },
+  archestraCli: {
+    /**
+     * Folder with the `archestra` programs the Device tab offers for
+     * download, one file per target named `archestra-<target>` (for example
+     * `archestra-darwin-arm64`, or `archestra-windows-x86_64.exe` on Windows),
+     * and `manifest.json` with their version. The default is where the
+     * platform image puts them; a deployment that runs outside the image (a
+     * dev stack) has no such folder and offers no download.
+     */
+    downloadDir: process.env.ARCHESTRA_CLI_DIR?.trim() || "/app/archestra-cli",
+  },
   mcpServer: {
     /**
      * Opt-in periodic re-discovery of installed MCP servers' tools. Every N

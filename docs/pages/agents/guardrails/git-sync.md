@@ -75,6 +75,8 @@ include = [
 ]
 ```
 
+MCP servers whose tools carry the same tool prefix share one rules file, because rules are keyed by tool name. Members' personal copies of a server follow that file and never block a change. A change to a shared file takes edit access to each shared server.
+
 Enable it in the Guardrails setting when setting up git sync or afterwards. Can also be controlled with the [`ARCHESTRA_OPENAPPA_SELF_SERVICE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE) env var.
 
 ### The Check and the Ruleset

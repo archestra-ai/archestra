@@ -402,11 +402,11 @@ test("shows the deployment's self-service settings read-only, naming the variabl
     ),
   );
   show();
+  // The ruleset is not up yet: the heading says ready, in plain weight.
   expect(
-    await screen.findByText(
-      (_, element) =>
-        element?.tagName === "STRONG" && element.textContent === "Enabled",
-    ),
+    await screen.findByRole("heading", {
+      name: "MCP Guardrails Self-Service is ready to be Enabled",
+    }),
   ).toBeVisible();
   expect(screen.queryByText("On", { selector: "p" })).toBeNull();
   expect(

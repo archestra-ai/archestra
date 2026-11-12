@@ -7944,6 +7944,72 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(response.body).not.toContain("protected session");
   });
 
+  test.each([
+    { client: "cli", stream: false, rows: 2 },
+    { client: "cli", stream: true, rows: 2 },
+    { client: "claude-vscode", stream: false, rows: 1 },
+    { client: "claude-vscode", stream: true, rows: 1 },
+  ])("draws a $rows-row session receipt for Claude Code's $client entrypoint (stream: $stream)", async ({
+    client,
+    stream,
+    rows,
+  }) => {
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-context-secret-with-32-characters",
+    };
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...internalCallHeader(),
+        ...externalClientHeaders(),
+        "user-agent": `claude-cli/2.1.322 (external, ${client})`,
+        "x-claude-code-session-id": "9b6f3a1e-2c4d-4e5f-8a7b-0c1d2e3f4a5b",
+      },
+      payload: payload(stream, [
+        { role: "user", content: "Check the weather" },
+      ]),
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const text = stream
+      ? response.body
+          .split("\n")
+          .filter((line) => line.startsWith("data: "))
+          .map((line) => JSON.parse(line.slice(6)))
+          .filter((frame) => frame.type === "content_block_delta")
+          .map((frame) => frame.delta.text ?? "")
+          .join("")
+      : (response.json().content as Array<{ text: string }>)[0].text;
+    const receipt = text.match(
+      /▄█▄▄▄█▄ {2}protected session [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}(?:\n██▄█▄██)?/,
+    )?.[0];
+    expect(receipt?.split("\n")).toHaveLength(rows);
+
+    const echoed = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...internalCallHeader(),
+        ...externalClientHeaders(),
+        "user-agent": `claude-cli/2.1.322 (external, ${client})`,
+        "x-claude-code-session-id": "9b6f3a1e-2c4d-4e5f-8a7b-0c1d2e3f4a5b",
+      },
+      payload: payload(false, [
+        { role: "user", content: "Check the weather" },
+        { role: "assistant", content: text },
+        { role: "user", content: "and tomorrow?" },
+      ]),
+    });
+    expect(echoed.statusCode, echoed.body).toBe(200);
+    const forwarded = JSON.stringify(providerRequests.at(-1));
+    expect(forwarded).not.toContain("protected session");
+    expect(forwarded).not.toContain("██▄█▄██");
+  });
+
   test("appends a session receipt to a Claude compaction summary", async () => {
     config.openappa = {
       ...config.openappa,

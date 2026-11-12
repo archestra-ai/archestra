@@ -183,7 +183,7 @@ lock PR (opened by CI)   →  release.lock.json pins the version, the URL and th
 platform image build     →  a Dockerfile stage downloads the pinned files, checks each SHA-256, and writes manifest.json
 ```
 
-- **Change the program:** bump `version` in `Cargo.toml` in the same pull request. The check `.github/scripts/archestra-cli-version-check.py` fails when a file that goes into the binary changed and the version is released already. Changes to `*.md`, `tests/**` and `release.lock.json` need no bump.
+- **Change the program:** bump `version` in `Cargo.toml` in the same pull request. The check `.github/scripts/archestra-cli-version-check.py` fails when a file that goes into the binary changed and the version is released already. Changes to `*.md`, `tests/**` and `release.lock.json` need no bump. A new compiler in `platform/rust-toolchain.toml` needs none either: the devices get no update for a program that did not change.
 - **The lock file** `release.lock.json` decides what each image serves. A maintainer merges the lock PR. With an empty lock (`"version": null`) the image has no program, and the download answers "not found".
 - **In the image** the files are in `/app/archestra-cli/` with `manifest.json` (`{ "version": "…" }`). Archestra reads the version from there and computes each SHA-256 from the file that it serves.
 - **Not signed yet.** macOS and Windows builds have no code signature; see the Update section for what follows from that.
@@ -204,7 +204,11 @@ The tests run the client against a mock of the Archestra endpoints and two small
 
 On Windows x86_64, `aws-lc-sys` needs NASM, or `AWS_LC_SYS_PREBUILT_NASM=1` for its prebuilt objects.
 
-Archestra offers the program in its install command from the folder that `ARCHESTRA_CLI_DIR` names (default `/app/archestra-cli`, where the platform image has it). On a dev stack, put the release builds in a folder as `archestra-<system>-<cpu>` and set `ARCHESTRA_CLI_DIR` to that folder. A `manifest.json` with `{ "version": "…" }` in the folder gives the version; without it Archestra knows only the checksums:
+Archestra offers the program in its install command from the folder that `ARCHESTRA_CLI_DIR` names (default `/app/archestra-cli`, where the platform image has it).
+
+With Tilt, start the resource `archestra-cli-build` (`tilt trigger archestra-cli-build`). It runs `platform/dev/build-archestra-cli-dev.sh`: a release build for this computer, put in `target/dev-clients/` with a `manifest.json` that names the version of `Cargo.toml` with `-dev`. Tilt sets `ARCHESTRA_CLI_DIR` to that folder when `.env` does not set it, so the install command of the local Archestra downloads the program of this checkout. Each build has another SHA-256, so a device that is linked to the local Archestra offers an update after it.
+
+Without Tilt, put the release builds in a folder as `archestra-<system>-<cpu>` and set `ARCHESTRA_CLI_DIR` to that folder. A `manifest.json` with `{ "version": "…" }` in the folder gives the version; without it Archestra knows only the checksums:
 
 | System | Files |
 | --- | --- |

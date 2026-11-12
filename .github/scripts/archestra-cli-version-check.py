@@ -19,7 +19,6 @@ import tomllib
 
 PROGRAM = "platform/archestra-cli/"
 MANIFEST = PROGRAM + "Cargo.toml"
-TOOLCHAIN = "platform/rust-toolchain.toml"
 TAG_PREFIX = "archestra-cli-v"
 
 
@@ -28,11 +27,13 @@ def binary_input(path):
 
     A skip list inside the program's directory: prose, the tests and the
     release lock never reach the binary. Everything else there counts, so a
-    new build.rs or .cargo/config.toml needs no change here. The toolchain
-    file pins the compiler.
+    new build.rs or .cargo/config.toml needs no change here.
+
+    platform/rust-toolchain.toml does not count, though it pins the compiler:
+    the rest of the platform shares it, and a new compiler alone must not
+    make each device download a program that did not change. The next change
+    of the program is built with the compiler of that day.
     """
-    if path == TOOLCHAIN:
-        return True
     if not path.startswith(PROGRAM):
         return False
     rest = path[len(PROGRAM):]

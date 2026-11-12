@@ -51,7 +51,6 @@ on:
       - "!platform/archestra-cli/**.md"
       - "!platform/archestra-cli/tests/**"
       - "!platform/archestra-cli/release.lock.json"
-      - "platform/rust-toolchain.toml"
       - ".github/workflows/build-archestra-cli.yml"
   pull_request:
     # Only main publishes, so only pull requests into main need the bump. A
@@ -64,7 +63,6 @@ on:
       - "!platform/archestra-cli/**.md"
       - "!platform/archestra-cli/tests/**"
       - "!platform/archestra-cli/release.lock.json"
-      - "platform/rust-toolchain.toml"
       - ".github/workflows/build-archestra-cli.yml"
   workflow_dispatch: {}
 

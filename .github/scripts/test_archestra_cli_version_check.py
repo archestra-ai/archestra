@@ -21,11 +21,10 @@ MANIFEST = '[workspace]\n\n[package]\nname = "archestra_cli"\nversion = "{}"\n\n
 
 
 class BinaryInputTests(unittest.TestCase):
-    def test_sources_manifests_and_toolchain_reach_the_binary(self):
+    def test_sources_and_manifests_reach_the_binary(self):
         for path in (
             CLI + "src/main.rs", CLI + "src/bridge/tray/macos.rs", CLI + "Cargo.toml", CLI + "Cargo.lock",
             CLI + "build.rs", CLI + ".cargo/config.toml", CLI + "assets/icon.ico",
-            "platform/rust-toolchain.toml",
         ):
             with self.subTest(path=path):
                 self.assertTrue(check.binary_input(path))
@@ -37,6 +36,9 @@ class BinaryInputTests(unittest.TestCase):
             "platform/archestra-rs/Cargo.toml", "platform/archestra-cli-notes/src/main.rs",
             "platform/backend/src/routes/archestra-cli/archestra-cli.routes.ts",
             WORKFLOW, ".github/scripts/archestra-cli-version-check.py", "rust-toolchain.toml",
+            # The compiler that the platform shares: a new one alone is not a
+            # new program for the devices.
+            "platform/rust-toolchain.toml",
         ):
             with self.subTest(path=path):
                 self.assertFalse(check.binary_input(path))
@@ -205,12 +207,19 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(calls, ["repos/fixture/repository/releases/tags/archestra-cli-v0.1.0"])
 
     def test_a_tag_without_a_release_counts_as_released(self):
-        self.write("platform/rust-toolchain.toml", '[toolchain]\nchannel = "1.94.0"\n')
+        self.write(CLI + "Cargo.lock", "# a dependency moved\n")
         self.commit()
         result, calls = self.run_check(release="missing", tag="found")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("platform/rust-toolchain.toml", result.stderr)
+        self.assertIn("platform/archestra-cli/Cargo.lock", result.stderr)
         self.assertEqual(len(calls), 2)
+
+    def test_a_new_compiler_alone_needs_no_bump(self):
+        self.write("platform/rust-toolchain.toml", '[toolchain]\nchannel = "1.94.0"\n')
+        self.commit()
+        result, calls = self.run_check(release="found")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(calls, [])
 
     def test_source_change_with_a_bumped_unreleased_version_passes(self):
         self.write(CLI + "src/main.rs", "fn main() { println!(); }\n")

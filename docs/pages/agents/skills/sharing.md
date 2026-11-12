@@ -70,6 +70,12 @@ What to know:
 - The marketplace name looks like `archestra-acme-skills`.
 - Access ends when you leave the organization or lose read access to skills.
 
+### OAuth Access Tokens
+
+Integrations can also send a user access token from MCP gateway browser sign-in, with the `mcp` scope. This scope includes reading every skill that user can read in the marketplace. The gateway's MCP `skills/list` still shows only skills published on that gateway.
+
+Pass the access token as the Git HTTP Basic password or in an `Authorization: Bearer` header. Git does not read your MCP client's OAuth cache or refresh tokens automatically. Your integration must supply a current access token and refresh it through the OAuth client that obtained it. Expired or revoked tokens stop working. Tokens restricted to a gateway, runtime, or app, service credentials, and LLM virtual keys cannot authenticate to the marketplace.
+
 ### Anonymous Access
 
 To let anyone clone the marketplace without signing in, go to **Settings → Skills → Skills marketplace access** and pick **Allow anonymous clones**. Anonymous clones get only organization-wide skills. Treat this as a public listing: anyone who can reach the deployment can install them.

@@ -12,6 +12,7 @@ import {
 } from "@/models";
 import { port } from "@/models/ports";
 import type { MaterializeSkillInput } from "./layout";
+import { resolveMarketplaceOAuthIdentity } from "./oauth-identity";
 
 /**
  * The static marketplace endpoint: one URL for the whole deployment, cloned by
@@ -22,8 +23,8 @@ import type { MaterializeSkillInput } from "./layout";
  * user's credential helper) or as a Bearer header. The value is either a
  * marketplace credential — the narrow, read-only token the setup script writes
  * into the client's marketplace URL — or one of the personal credentials the
- * platform already issues: a personal token from the account page, or an API
- * key, which is what someone typing at git's password prompt will have.
+ * platform already issues: a personal token, an API key, or an unbound user
+ * OAuth access token with the MCP scope.
  */
 
 /**
@@ -182,8 +183,8 @@ function parseCredential(authorization: string | undefined): string | null {
 /**
  * Marketplace credential first — it is the one the setup script issues, so it
  * is by far the most common, and its prefix makes the check a cheap miss for
- * anything else. Then a personal token, then an API key. Service-account
- * tokens are not accepted.
+ * anything else. Then a personal token, user OAuth, and an API key.
+ * Service-account tokens and LLM virtual keys are not accepted.
  */
 async function resolveCredential(
   credential: string,
@@ -204,6 +205,9 @@ async function resolveCredential(
       organizationId: userToken.organizationId,
     };
   }
+
+  const oauthIdentity = await resolveMarketplaceOAuthIdentity(credential);
+  if (oauthIdentity) return oauthIdentity;
 
   let apiKeyUserId: string | null = null;
   // Outside the try below, which reads any failure as an invalid key.

@@ -851,6 +851,19 @@ test("editing an App-backed source keeps its repository and only warns about mis
   show();
   fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
   expect(await screen.findByText("Edit Git sync")).toBeVisible();
+  // Every earlier step opens again, as for a new setup: the organization
+  // and the start choice, then the App, where another can be created.
+  const stepper = screen.getByRole("list", { name: "Setup progress" });
+  fireEvent.click(within(stepper).getByRole("button", { name: /Start/ }));
+  expect(screen.getByLabelText("Organization")).toHaveValue("example");
+  fireEvent.click(screen.getByText("Use an existing repository"));
+  expect(
+    await screen.findByRole("radio", { name: /Policy App/ }),
+  ).toBeChecked();
+  expect(
+    screen.getByRole("button", { name: "Create a new GitHub App instead" }),
+  ).toBeVisible();
+  fireEvent.click(within(stepper).getByRole("button", { name: /Repository/ }));
   expect(
     await screen.findByText("No traces/ folder", {}, { timeout: 3000 }),
   ).toBeVisible();

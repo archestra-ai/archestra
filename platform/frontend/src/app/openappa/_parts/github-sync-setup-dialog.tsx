@@ -512,7 +512,8 @@ export function GithubSyncSetupDialog({
   function back() {
     if (gitlab) return setStep(step === "repo" ? "app" : "provider");
     if (step === "start") {
-      if (origin) return setOrigin(null);
+      // The template panel goes back to the choice; the choice, to the host.
+      if (origin === "fresh") return setOrigin(null);
       return setStep("provider");
     }
     if (step === "repo") return setStep("selfService");
@@ -741,7 +742,7 @@ export function GithubSyncSetupDialog({
         />
       ) : null}
 
-      {step === "start" && !origin ? (
+      {step === "start" && origin !== "fresh" ? (
         <GithubAccountFields
           idPrefix="github-sync"
           githubUrl={githubUrl}
@@ -754,7 +755,7 @@ export function GithubSyncSetupDialog({
         />
       ) : null}
 
-      {step === "start" && !origin ? (
+      {step === "start" && origin !== "fresh" ? (
         <ChoiceTiles>
           <ChoiceTile
             disabled={!ready}
@@ -898,19 +899,34 @@ export function GithubSyncSetupDialog({
       ) : null}
 
       {step === "app" && !gitlab && !loadingApps && mode === "pick" ? (
-        <GithubAppPicker
-          idPrefix="github-sync-app"
-          value={pickedId}
-          onChange={setPickedId}
-          apps={apps.map((app) => ({
-            id: app.id,
-            name: app.name,
-            icon: app.icon,
-            account:
-              accounts.data?.find((entry) => entry.id === app.id)?.account ??
-              null,
-          }))}
-        />
+        <div className="space-y-3">
+          <GithubAppPicker
+            idPrefix="github-sync-app"
+            value={pickedId}
+            onChange={setPickedId}
+            apps={apps.map((app) => ({
+              id: app.id,
+              name: app.name,
+              icon: app.icon,
+              account:
+                accounts.data?.find((entry) => entry.id === app.id)?.account ??
+                null,
+            }))}
+          />
+          {canCreateCredentials ? (
+            // An edited source opens on its App; creating another is a
+            // step away, not a guess at Back.
+            <Button
+              type="button"
+              variant="link"
+              size="xs"
+              className="h-auto px-0 text-muted-foreground"
+              onClick={() => setMode("create")}
+            >
+              <span>Create a new GitHub App instead</span>
+            </Button>
+          ) : null}
+        </div>
       ) : null}
 
       {step === "app" && !gitlab && !loadingApps && mode === "create" ? (

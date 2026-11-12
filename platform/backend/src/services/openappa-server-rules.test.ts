@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import config from "@/config";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import GithubAppConfigModel from "@/models/github-app-config";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -1277,6 +1278,8 @@ test("a server's editors propose its rules as a pull request; readers and outsid
   expect(commits[0]).not.toHaveProperty("author");
   expect(pulls[0]).toMatchObject({ base: "main" });
   expect(pulls[0]?.body).toContain("Requested in Archestra by Pat");
+  // Without auto-merge, someone merges it on GitHub.
+  expect(proposed.instruction).toContain("merges it on GitHub themselves");
 
   // GitHub refused the pull request: the branch made for it goes too.
   const deleted: string[] = [];
@@ -1320,13 +1323,18 @@ test("a server's editors propose its rules as a pull request; readers and outsid
       ),
     ),
   );
+  // With auto-merge on, the pull request merges by itself once its check passes.
+  await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
   expect(
     await proposeServerRulesChange({
       ...change,
       userId: pat.id,
       summary: "Refunds need a trusted session",
     }),
-  ).toMatchObject({ number: 8 });
+  ).toMatchObject({
+    number: 8,
+    instruction: expect.stringContaining("merges by itself"),
+  });
   expect(deleted).toHaveLength(1);
 
   server.use(
@@ -1742,6 +1750,7 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
     enabled: false,
     setting: false,
     directory: "mcp",
+    autoMerge: { enabled: false, setting: false },
   });
   await expect(
     getServerRules({
@@ -1764,6 +1773,7 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
     enabled: true,
     setting: true,
     directory: "mcp",
+    autoMerge: { enabled: false, setting: false },
   });
   expect(calls).toEqual(["POST rulesets"]);
   listed = [
@@ -1786,6 +1796,7 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
       enabled: false,
       setting: true,
       directory: "mcp",
+      autoMerge: { enabled: false, setting: false },
       environment: {
         variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE",
         value: "disabled",
@@ -1833,6 +1844,7 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
     enabled: false,
     setting: false,
     directory: "mcp",
+    autoMerge: { enabled: false, setting: false },
   });
   expect(calls).toEqual(["DELETE 5", "PUT 7"]);
   expect(written).toEqual({
@@ -1874,6 +1886,7 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
     gitlabTokenId: null,
     selfService: true,
     selfServiceDirectory: "mcp",
+    selfServiceAutoMerge: false,
   };
   // A move that does not save withdraws nothing: the branch keeps its
   // ruleset until the new source is really in place.
@@ -2184,6 +2197,263 @@ test("the policy check judges who asked for a pull request Archestra opened, rea
   expect(runs).toHaveLength(6);
 });
 
+/**
+ * A repository with open pull requests for the auto-merge tests: each names
+ * its head branch, opener, files and commits; the merges GitHub was asked
+ * for, and the branches deleted, are recorded.
+ */
+async function serveAutoMergeRepository(params: {
+  organizationId: string;
+  requester: string;
+}) {
+  await connectApp({ organizationId: params.organizationId });
+  const root = `include = ["mcp/*.toml"]\n${RULES}`;
+  const results = Object.fromEntries(
+    [1, 2, 3, 4].map((number) => [number, String(number + 4).repeat(40)]),
+  ) as Record<number, string>;
+  serveRepository({
+    head: FIRST,
+    files: {
+      [FIRST]: { "appa.toml": root, "mcp/payments_api.toml": REFUNDS },
+      [results[1] as string]: {
+        "appa.toml": root,
+        "mcp/payments_api.toml": INVOICES,
+      },
+      // Rules for another server's tools: the policy check fails.
+      [results[2] as string]: {
+        "appa.toml": root,
+        "mcp/payments_api.toml": `${REFUNDS}\n[[policy.tool]]\nname = "helpdesk__close_ticket"\ndelta = {}\n`,
+      },
+      [results[3] as string]: {
+        "appa.toml": root,
+        "mcp/payments_api.toml": INVOICES,
+      },
+      [results[4] as string]: { "appa.toml": root },
+    },
+  });
+  await syncAppaGithubPolicy(params.organizationId);
+  const bot = { id: 900, login: "acme-guardrails[bot]", type: "Bot" };
+  const signed = (sha: string) => ({
+    sha,
+    commit: {
+      message: `Guardrails rules for Payments API\n\nRequested-by: ${params.requester}`,
+      verification: { verified: true, reason: "valid" },
+    },
+    author: bot,
+    committer: { login: "web-flow", type: "User" },
+  });
+  const pulls: Record<
+    number,
+    {
+      ref: string;
+      user: { id: number; login: string; type: string };
+      files: string[];
+      commits: unknown[];
+    }
+  > = {
+    // Self-served: the App opened it on a server rules branch.
+    1: {
+      ref: "archestra/openappa-server-payments_api-0a1b2c3d",
+      user: bot,
+      files: ["mcp/payments_api.toml"],
+      commits: [signed(results[1] as string)],
+    },
+    // Self-served, but its check fails.
+    2: {
+      ref: "archestra/openappa-server-payments_api-4e5f6a7b",
+      user: bot,
+      files: ["mcp/payments_api.toml"],
+      commits: [signed(results[2] as string)],
+    },
+    // A person opened it: theirs to merge.
+    3: {
+      ref: "riley/payments-rules",
+      user: { id: 1004, login: "riley-gh", type: "User" },
+      files: ["mcp/payments_api.toml"],
+      commits: [],
+    },
+    // The pull request that includes the servers' folder: the policy file.
+    4: {
+      ref: "archestra/openappa-self-service",
+      user: bot,
+      files: ["appa.toml"],
+      commits: [signed(results[4] as string)],
+    },
+  };
+  const runs: Array<{ head_sha: string; conclusion: string }> = [];
+  const merges: Array<{ number: number; sha: string; merge_method: string }> =
+    [];
+  const deleted: string[] = [];
+  const merge = { status: 200 };
+  server.use(
+    http.get("https://api.github.com/app", () =>
+      HttpResponse.json({ slug: "acme-guardrails", name: "Policy App" }),
+    ),
+    // Merge commits are off here: squash is the method the App picks.
+    http.get(REPO, () =>
+      HttpResponse.json({
+        default_branch: "main",
+        allow_merge_commit: false,
+        allow_squash_merge: true,
+        allow_rebase_merge: true,
+      }),
+    ),
+    http.get(`${REPO}/pulls`, () =>
+      HttpResponse.json(
+        Object.entries(pulls).map(([number, pull]) => ({
+          number: Number(number),
+          head: { sha: results[Number(number)], ref: pull.ref },
+          merge_commit_sha: null,
+          user: pull.user,
+        })),
+      ),
+    ),
+    http.get(`${REPO}/pulls/:number/files`, ({ params }) =>
+      HttpResponse.json(
+        pulls[Number(params.number)]?.files.map((filename) => ({ filename })),
+      ),
+    ),
+    http.get(`${REPO}/pulls/:number/commits`, ({ params }) =>
+      HttpResponse.json(pulls[Number(params.number)]?.commits),
+    ),
+    http.post(`${REPO}/check-runs`, async ({ request }) => {
+      runs.push((await request.json()) as (typeof runs)[number]);
+      return HttpResponse.json({ id: 1 }, { status: 201 });
+    }),
+    http.put(`${REPO}/pulls/:number/merge`, async ({ params, request }) => {
+      merges.push({
+        number: Number(params.number),
+        ...((await request.json()) as { sha: string; merge_method: string }),
+      });
+      return merge.status === 200
+        ? HttpResponse.json({ merged: true, sha: "f".repeat(40) })
+        : HttpResponse.json(
+            { message: "Repository rule violations found" },
+            { status: merge.status },
+          );
+    }),
+    http.delete(`${REPO}/git/refs/heads/archestra/:branch`, ({ params }) => {
+      deleted.push(`archestra/${params.branch}`);
+      return new HttpResponse(null, { status: 204 });
+    }),
+  );
+  return { results, runs, merges, deleted, merge };
+}
+
+/** The queued pulls of the organization's Git sync. */
+async function queuedSyncs() {
+  return db
+    .select()
+    .from(schema.tasksTable)
+    .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
+}
+
+test("with auto-merge on, a self-served pull request whose check passes is merged at its head and a pull is queued; a failing one, a person's, the include pull request and any while auto-merge is off are left for people", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, runs, merges, deleted } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+  });
+
+  // Off by default: every check is posted, nothing is merged.
+  await checkDueAppaGithubSyncs();
+  expect(
+    Object.fromEntries(runs.map((run) => [run.head_sha, run.conclusion])),
+  ).toEqual({
+    [results[1] as string]: "success",
+    [results[2] as string]: "failure",
+    [results[3] as string]: "success",
+    [results[4] as string]: "success",
+  });
+  expect(merges).toEqual([]);
+
+  const status = await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service_auto_merge",
+    enabled: true,
+  });
+  expect(status.selfService.autoMerge).toEqual({
+    enabled: true,
+    setting: true,
+  });
+  await db
+    .delete(schema.tasksTable)
+    .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
+
+  // On, the passing self-served pull request merges at the head its check
+  // read, with the method the repository allows; the others stay open.
+  await checkDueAppaGithubSyncs();
+  expect(merges).toEqual([
+    { number: 1, sha: results[1], merge_method: "squash" },
+  ]);
+  expect(deleted).toEqual(["archestra/openappa-server-payments_api-0a1b2c3d"]);
+  // A pull applies the merge at once.
+  expect(await queuedSyncs()).toHaveLength(1);
+  // The checks stood: nothing was posted again.
+  expect(runs).toHaveLength(4);
+
+  // Turned off again, nothing more is merged.
+  await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service_auto_merge",
+    enabled: false,
+  });
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(1);
+});
+
+test("a self-served pull request GitHub refuses to merge is logged and left for people, and tried again fifteen minutes later, not the next minute", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, merges, merge } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+  });
+  await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
+  merge.status = 405;
+  const warn = vi.spyOn(logger, "warn");
+
+  await checkDueAppaGithubSyncs();
+  expect(merges).toEqual([
+    { number: 1, sha: results[1], merge_method: "squash" },
+  ]);
+  expect(warn).toHaveBeenCalledWith(
+    expect.objectContaining({
+      number: 1,
+      status: 405,
+      message: "Repository rule violations found",
+    }),
+    expect.stringContaining("GitHub refused to merge"),
+  );
+  expect(await queuedSyncs()).toHaveLength(0);
+
+  // The next minute leaves it alone.
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(1);
+
+  // Fifteen minutes on, it is tried again, and merges.
+  merge.status = 200;
+  const now = Date.now();
+  const later = vi.spyOn(Date, "now").mockReturnValue(now + 16 * 60_000);
+  await checkDueAppaGithubSyncs();
+  later.mockRestore();
+  expect(merges).toHaveLength(2);
+  expect(await queuedSyncs()).toHaveLength(1);
+});
+
 test("a policy in a folder of a repository that holds other work gets the same one-rule ruleset, and a pull request that changes no policy file gets the check as skipped at once", async ({
   makeOrganization,
   makeUser,
@@ -2295,6 +2565,7 @@ test("a policy in a folder of a repository that holds other work gets the same o
       gitlabTokenId: null,
       selfService: true,
       selfServiceDirectory: "mcp",
+      selfServiceAutoMerge: false,
     },
   });
   // A saved source has no accepted commit until it is pulled again.
@@ -2436,6 +2707,7 @@ test("the self-service folder is chosen when turning on: the servers' files live
     enabled: true,
     setting: true,
     directory: "rules/servers",
+    autoMerge: { enabled: false, setting: false },
   });
   // Moving the folder while on would turn the servers' files into
   // organization policy: that takes off and on again.

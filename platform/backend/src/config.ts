@@ -2233,11 +2233,13 @@ export function parseOpenAppaConfig({
   softBlockMode,
   policyCheckName,
   selfService,
+  selfServiceAutoMerge,
 }: {
   humanApprovalMode?: string;
   softBlockMode?: string;
   policyCheckName?: string;
   selfService?: string;
+  selfServiceAutoMerge?: string;
   yellEnabled?: string;
   yellForwardingEnabled?: string;
   offerSigningSecret?: string;
@@ -2300,10 +2302,19 @@ export function parseOpenAppaConfig({
     selfService,
     ["enabled", "disabled"] as const,
   );
+  // Whether the GitHub App merges a self-served rules pull request once its
+  // policy check passes. While set, it overrides the saved setting.
+  const selfServiceAutoMergeOverride = optionalChoice(
+    "selfServiceAutoMerge",
+    OPENAPPA_SELF_SERVICE_AUTO_MERGE_VARIABLE,
+    selfServiceAutoMerge,
+    ["enabled", "disabled"] as const,
+  );
   return {
     enabled: true,
     policyCheckName: parseOpenAppaPolicyCheckName(policyCheckName),
     ...selfServiceOverride,
+    ...selfServiceAutoMergeOverride,
     yellEnabled: (yellEnabled ?? "true") === "true",
     // External diagnostic delivery requires its own opt-in in every environment.
     yellForwardingEnabled: forwarding === "true",
@@ -2322,6 +2333,10 @@ export function parseOpenAppaConfig({
 
 /** The variable that turns self-service Guardrails on or off for the deployment. */
 export const OPENAPPA_SELF_SERVICE_VARIABLE = "ARCHESTRA_OPENAPPA_SELF_SERVICE";
+
+/** The variable that turns auto-merge of self-served pull requests on or off. */
+export const OPENAPPA_SELF_SERVICE_AUTO_MERGE_VARIABLE =
+  "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE";
 
 /** An unset or empty variable sets nothing; any other value must be a choice. */
 function optionalChoice<
@@ -2477,6 +2492,7 @@ const openappa = parseOpenAppaConfig({
   softBlockMode: process.env.ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE,
   policyCheckName: process.env.ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME,
   selfService: process.env.ARCHESTRA_OPENAPPA_SELF_SERVICE,
+  selfServiceAutoMerge: process.env.ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE,
   yellForwardingEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED,
   offerSigningSecret: process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   postgresMaxConnections:

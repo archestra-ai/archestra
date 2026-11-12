@@ -18,13 +18,18 @@ class OpenAppaGithubSyncModel {
     organizationId: string,
     source: Omit<
       AppaGithubSource,
-      "gitlabTokenId" | "selfService" | "selfServiceDirectory"
+      | "gitlabTokenId"
+      | "selfService"
+      | "selfServiceDirectory"
+      | "selfServiceAutoMerge"
     > & {
       gitlabTokenId?: string | null;
       /** Off unless the source says otherwise. */
       selfService?: boolean;
       /** The servers' folder; mcp unless the source says otherwise. */
       selfServiceDirectory?: string;
+      /** Off unless the source says otherwise. */
+      selfServiceAutoMerge?: boolean;
       setupPullRequestNumber?: number;
     },
   ) {
@@ -34,6 +39,7 @@ class OpenAppaGithubSyncModel {
       gitlabTokenId = null,
       selfService = false,
       selfServiceDirectory = "mcp",
+      selfServiceAutoMerge = false,
       ...policySource
     } = source;
     const values = {
@@ -41,6 +47,7 @@ class OpenAppaGithubSyncModel {
       gitlabTokenId,
       selfService,
       selfServiceDirectory,
+      selfServiceAutoMerge,
       ...policySource,
       revision: randomUUID(),
       sourceCommit: null,
@@ -88,6 +95,16 @@ class OpenAppaGithubSyncModel {
         selfService,
         ...(selfServiceDirectory ? { selfServiceDirectory } : {}),
       })
+      .where(eq(table.organizationId, organizationId));
+  }
+  /** Turn auto-merge of self-served pull requests on or off for the source. */
+  static async setSelfServiceAutoMerge(
+    organizationId: string,
+    selfServiceAutoMerge: boolean,
+  ) {
+    await db
+      .update(table)
+      .set({ selfServiceAutoMerge })
       .where(eq(table.organizationId, organizationId));
   }
   /** Change or stop the schedule. */

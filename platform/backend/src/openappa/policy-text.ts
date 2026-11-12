@@ -268,6 +268,9 @@ function serverRulesFilePrefix(folder: string, path: string): string | null {
 /** A tool prefix as Archestra writes one: a slugified server name. */
 const SERVER_PREFIX = /^[a-z0-9_-]+$/;
 
+/** Pull request branches this deployment opens for a server's rules. */
+const SERVER_RULES_BRANCH = "archestra/openappa-server-";
+
 /**
  * A repository-relative `.toml` path outside `batteries/`, with no `.` or
  * `..` segment, which the segment pattern rules out by refusing a leading dot.
@@ -307,6 +310,29 @@ export function isServerRulesFile(folder: string, path: string): boolean {
 /** The tool prefix a server rules file is named for, or null for another path. */
 export function serverRulesPrefix(folder: string, path: string): string | null {
   return serverRulesFilePrefix(folder, path);
+}
+
+/** The branch of a pull request this deployment opens for one server's rules. */
+export function serverRulesBranch(toolPrefix: string, suffix: string): string {
+  return `${SERVER_RULES_BRANCH}${toolPrefix}-${suffix}`;
+}
+
+/**
+ * Whether a branch is one this deployment opened for a server's rules: for
+ * the server with this tool prefix, or for any server when none is given.
+ */
+export function isServerRulesBranch(
+  branch: string,
+  toolPrefix?: string,
+): boolean {
+  if (!branch.startsWith(SERVER_RULES_BRANCH)) return false;
+  const named = /^(.+)-[0-9a-f]{8}$/.exec(
+    branch.slice(SERVER_RULES_BRANCH.length),
+  )?.[1];
+  if (named === undefined) return false;
+  return toolPrefix === undefined
+    ? SERVER_PREFIX.test(named)
+    : named === toolPrefix;
 }
 
 /**

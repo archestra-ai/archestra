@@ -75,6 +75,12 @@ export const AppaGithubSourceSchema = z
     selfService: z.boolean().default(false),
     /** Where each server's rules file lives, beside the policy file. */
     selfServiceDirectory: SelfServiceDirectorySchema.default("mcp"),
+    /**
+     * Merge each self-served rules pull request once its policy check
+     * passes. GitHub App sources only; ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE,
+     * while set, wins over it.
+     */
+    selfServiceAutoMerge: z.boolean().default(false),
   })
   .strict()
   .refine(
@@ -122,6 +128,8 @@ export const CreateAppaGithubRepositorySchema = z
     selfService: z.boolean().optional(),
     /** Where each server's rules file lives, beside the policy file; mcp unless set. */
     selfServiceDirectory: SelfServiceDirectorySchema.optional(),
+    /** Merge each self-served rules pull request once its check passes; off unless set. */
+    selfServiceAutoMerge: z.boolean().optional(),
   })
   .strict()
   .refine(
@@ -207,6 +215,20 @@ export const AppaSelfServiceSchema = z.object({
   environment: z
     .object({ variable: z.string(), value: SelfServiceChoiceSchema })
     .optional(),
+  /**
+   * Whether the GitHub App merges each self-served rules pull request once
+   * its policy check passes, and what decides it.
+   */
+  autoMerge: z.object({
+    /** In force: the environment variable while one is set, else the saved setting. */
+    enabled: z.boolean(),
+    /** The setting saved with the Git sync source. */
+    setting: z.boolean(),
+    /** The environment variable that sets it, while one does, with its value. */
+    environment: z
+      .object({ variable: z.string(), value: SelfServiceChoiceSchema })
+      .optional(),
+  }),
 });
 export const AppaGithubSyncStatusSchema = z.object({
   enabled: z.boolean(),
@@ -232,6 +254,16 @@ export const AppaGithubSyncActionSchema = z.discriminatedUnion("action", [
       enabled: z.boolean(),
       /** The self-service folder to use when turning on; the saved one unless set. */
       directory: SelfServiceDirectorySchema.optional(),
+    })
+    .strict(),
+  /**
+   * Turn auto-merge of self-served pull requests on or off; refused while
+   * the environment variable sets it, and while self-service is off.
+   */
+  z
+    .object({
+      action: z.literal("self_service_auto_merge"),
+      enabled: z.boolean(),
     })
     .strict(),
   /**

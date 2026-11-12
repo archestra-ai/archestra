@@ -13,8 +13,10 @@ import {
   includedFileErrors,
   includesServerRules,
   includesServerRulesFolder,
+  isServerRulesBranch,
   parsePolicyToml,
   repositoryIncludePaths,
+  serverRulesBranch,
   serverRulesFolderOf,
   serverRulesInclude,
   serverRulesPath,
@@ -37,6 +39,7 @@ import {
   hasOwnFile,
   POLICY_CHECK_NAME,
   selfServiceActive,
+  selfServiceAutoMergeActive,
   syncAppaGithubPolicy,
 } from "@/services/openappa-github-sync";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -55,18 +58,8 @@ import { ApiError } from "@/types";
  * decide, and Git sync applies it once merged. Nothing is stored here.
  */
 
-/** Pull request branches this deployment opens for a server's rules. */
-const BRANCH_PREFIX = "archestra/openappa-server-";
 /** The branch of the pull request that includes the self-service folder. */
 const INCLUDE_BRANCH = "archestra/openappa-self-service";
-
-/** Whether a branch is one this deployment opened for this server's rules. */
-function isServerBranch(prefix: string, branch: string): boolean {
-  const start = `${BRANCH_PREFIX}${prefix}-`;
-  return (
-    branch.startsWith(start) && /^[0-9a-f]{8}$/.test(branch.slice(start.length))
-  );
-}
 
 type Caller = { organizationId: string; userId: string };
 
@@ -229,7 +222,10 @@ export async function proposeServerRulesChange(
       ? [{ path: change.source.path, content: change.rootAfter }]
       : []),
   ];
-  const head = `${BRANCH_PREFIX}${change.server.prefix}-${randomUUID().slice(0, 8)}`;
+  const head = serverRulesBranch(
+    change.server.prefix,
+    randomUUID().slice(0, 8),
+  );
   // The commit names the person who asked, in a trailer GitHub's signature
   // for the App covers: the policy check reads it from there.
   const opened = await openGithubPull({
@@ -246,7 +242,9 @@ export async function proposeServerRulesChange(
     ...opened,
     repo: change.source.repo,
     ...change.view,
-    instruction: `Give the user the link. Once its ${POLICY_CHECK_NAME} check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does; no other approval is needed. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.`,
+    instruction: selfServiceAutoMergeActive(change.source)
+      ? `Give the user the link. The pull request merges by itself within about a minute of its ${POLICY_CHECK_NAME} check passing; nobody needs to merge it. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.`
+      : `Give the user the link. Once its ${POLICY_CHECK_NAME} check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does; no other approval is needed. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.`,
   };
 }
 
@@ -266,7 +264,7 @@ export async function getServerRulesChangeStatus(
     merge_commit_sha?: string | null;
     head?: { ref?: string };
   }>({ token, url: `${base}/pulls/${params.number}` });
-  if (!isServerBranch(server.prefix, pull.head?.ref ?? ""))
+  if (!isServerRulesBranch(pull.head?.ref ?? "", server.prefix))
     throw new ApiError(404, "No rules change for this server has that number");
   const merged = pull.merged === true && !!pull.merge_commit_sha;
   // Applied once the accepted commit contains the merge.

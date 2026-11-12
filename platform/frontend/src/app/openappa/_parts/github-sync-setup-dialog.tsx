@@ -28,6 +28,11 @@ import {
   GitProviderLogo,
   SetupStepper,
 } from "@/components/git/git-setup-chrome";
+import {
+  openGithubWindow,
+  postManifest,
+} from "@/components/github-app-setup/github-app-window";
+import { ManifestRow } from "@/components/github-app-setup/manifest-row";
 import { GitHubConnectButton } from "@/components/github-connect-button";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -71,6 +76,7 @@ import {
   useAppaGithubAppAccounts,
   useAppaGithubAppRepositories,
   useAppaGithubRepositoryStatus,
+  useAppaGithubSync,
   useConfigureAppaGithubSync,
   useCreateAppaGithubRepository,
   useDiscardAppaGithubApp,
@@ -81,6 +87,7 @@ import {
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
 import { onGithubAppSetup } from "./github-app-channel";
+import { SelfServiceOutcomeStep } from "./self-service-setup-dialog";
 import { OpenAppaSetupPullRequestDialog } from "./setup-pull-request-dialog";
 
 /**
@@ -178,6 +185,11 @@ export function GithubSyncSetupDialog({
     account: string;
   } | null>(null);
   const [chosenRepo, setRepo] = useState(editing?.repo ?? "");
+  // Release 1.4: MCP Guardrails Self-Service is the deployment's setting. On,
+  // the App also gets Checks and Administration, and the connect step shows
+  // what the save brought: the branch ruleset and the include pull request.
+  const selfServiceState = useAppaGithubSync().data?.selfService;
+  const selfService = selfServiceState?.enabled === true;
   const [advanced, setAdvanced] = useState(false);
   const [refreshed, setRefreshed] = useState(false);
   const [ref, setRef] = useState(editing?.ref ?? "");
@@ -188,6 +200,9 @@ export function GithubSyncSetupDialog({
   const [interval, setSyncInterval] = useState<SyncInterval>(
     editing?.interval ?? DEFAULT_INTERVAL,
   );
+  // With self-service on, the connect step stays open on what the save
+  // brought: the ruleset and the include pull request.
+  const [outcome, setOutcome] = useState<(() => Promise<unknown>) | null>(null);
   const [pullRequest, setPullRequest] = useState<{
     repo: string;
     number: number;
@@ -235,6 +250,8 @@ export function GithubSyncSetupDialog({
         ? validations.trim().replace(/\/+$/, "")
         : undefined,
   };
+  const serversFolder =
+    selfServiceState?.directory ?? DEFAULT_SELF_SERVICE_FOLDER;
   const locationValid =
     (!location.path || POLICY_PATH.test(location.path)) &&
     (!location.validationDirectory ||
@@ -327,13 +344,13 @@ export function GithubSyncSetupDialog({
   function createApp() {
     if (!github || !ready) return;
     // Open the tab inside the click so the browser does not block it.
-    const tab = openGithubWindow("about:blank");
+    const tab = openGithubWindow("about:blank", GITHUB_WINDOW);
     setWaiting("create");
     start.mutate(
       { githubUrl: github.web, owner },
       {
         onSuccess: (manifest) => {
-          if (manifest) postManifest(manifest);
+          if (manifest) postManifest(manifest, GITHUB_WINDOW);
           else tab?.close();
         },
         onError: () => {
@@ -347,7 +364,7 @@ export function GithubSyncSetupDialog({
   function installApp() {
     if (!createdApp) return;
     install.reset();
-    openGithubWindow(createdApp.installUrl);
+    openGithubWindow(createdApp.installUrl, GITHUB_WINDOW);
     setWaiting("install");
   }
 
@@ -383,47 +400,59 @@ export function GithubSyncSetupDialog({
       ? { gitlabTokenId: appId }
       : { githubAppConfigId: appId };
     setStep("connect");
+    const withSelfService = !gitlab && selfService;
     if (keepsSource) {
-      configure.mutate(
-        {
-          repo,
-          ref: location.ref ?? null,
-          path: location.path ?? "appa.toml",
-          interval,
-          validationDirectory: validationFolder,
-          githubPatId: null,
-          githubAppConfigId: null,
-          gitlabTokenId: null,
-          ...credential,
-        },
-        { onSuccess: () => onOpenChange(false), onError },
-      );
+      const body = {
+        repo,
+        ref: location.ref ?? null,
+        path: location.path ?? "appa.toml",
+        interval,
+        validationDirectory: validationFolder,
+        githubPatId: null,
+        githubAppConfigId: null,
+        gitlabTokenId: null,
+        ...credential,
+      };
+      if (withSelfService) setOutcome(() => () => configure.mutateAsync(body));
+      else
+        configure.mutate(body, {
+          onSuccess: () => onOpenChange(false),
+          onError,
+        });
       return;
     }
     // GitLab nests groups: the project is the last segment, its group the rest.
     const slash = repo.lastIndexOf("/");
-    create.mutate(
-      {
-        ...(creatingProject
-          ? { owner: chosenGroup ?? "", name: projectName.trim() }
-          : { owner: repo.slice(0, slash), name: repo.slice(slash + 1) }),
-        ...credential,
-        interval,
-        existing: !creatingProject,
-        // Editing moves the running sync to the new repository, created or not.
-        ...((!creatingProject || editing) && { replace: !!editing }),
-        ...location,
-      },
-      {
+    const body = {
+      ...(creatingProject
+        ? { owner: chosenGroup ?? "", name: projectName.trim() }
+        : { owner: repo.slice(0, slash), name: repo.slice(slash + 1) }),
+      ...credential,
+      interval,
+      existing: !creatingProject,
+      // Editing moves the running sync to the new repository, created or not.
+      ...((!creatingProject || editing) && { replace: !!editing }),
+      ...location,
+    };
+    const setupPull = (
+      data: Awaited<ReturnType<typeof create.mutateAsync>>,
+    ) => {
+      const number = data?.source?.setupPullRequestNumber;
+      if (number && data.source?.repo) {
+        setPullRequest({ repo: data.source.repo, number });
+        return true;
+      }
+      return false;
+    };
+    if (withSelfService)
+      setOutcome(() => () => create.mutateAsync(body).then(setupPull));
+    else
+      create.mutate(body, {
         onSuccess: (data) => {
-          const number = data?.source?.setupPullRequestNumber;
-          if (number && data.source?.repo)
-            setPullRequest({ repo: data.source.repo, number });
-          else onOpenChange(false);
+          if (!setupPull(data)) onOpenChange(false);
         },
         onError,
-      },
-    );
+      });
   }
 
   function back() {
@@ -456,7 +485,9 @@ export function GithubSyncSetupDialog({
   const policyDocsUrl = getFrontendDocsUrl(
     DocsPage.PlatformAiToolGuardrailsGitSync,
   );
+  const wizardSteps = gitlab ? GITLAB_STEPS : GITHUB_STEPS;
   const header = headerFor({
+    githubApp: appLabel ?? null,
     editing: !!editing,
     step,
     origin,
@@ -489,14 +520,24 @@ export function GithubSyncSetupDialog({
               <span>Back</span>
             </Button>
           ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={step === "connect"}
-            onClick={() => onOpenChange(false)}
-          >
-            <span>Cancel</span>
-          </Button>
+          {step === "connect" && outcome ? (
+            <Button
+              type="button"
+              disabled={configure.isPending || create.isPending}
+              onClick={() => onOpenChange(false)}
+            >
+              <span>Done</span>
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={step === "connect"}
+              onClick={() => onOpenChange(false)}
+            >
+              <span>Cancel</span>
+            </Button>
+          )}
           {step === "start" && origin === "fresh" ? (
             <Button type="button" onClick={() => setStep("app")}>
               <span>Continue</span>
@@ -538,15 +579,21 @@ export function GithubSyncSetupDialog({
       }
     >
       <SetupStepper
-        steps={(gitlab ? GITLAB_STEPS : GITHUB_STEPS).map(
-          (entry) => entry.label,
-        )}
+        steps={wizardSteps.map((entry) => entry.label)}
         current={
           step === "connect"
-            ? (gitlab ? GITLAB_STEPS : GITHUB_STEPS).length
-            : (gitlab ? GITLAB_STEPS : GITHUB_STEPS).findIndex(
-                (entry) => entry.id === step,
-              )
+            ? wizardSteps.length
+            : wizardSteps.findIndex((entry) => entry.id === step)
+        }
+        // Done steps open again; editing a source unlocks every step.
+        onSelect={(index) => {
+          const target = wizardSteps[index];
+          if (target && step !== "connect") setStep(target.id);
+        }}
+        selectable={(index) =>
+          step !== "connect" &&
+          (index < wizardSteps.findIndex((entry) => entry.id === step) ||
+            (!!editing && index < wizardSteps.length))
         }
       />
 
@@ -872,7 +919,10 @@ export function GithubSyncSetupDialog({
             {createdApp ? (
               <AppLogoTip settingsUrl={createdApp.settingsUrl} />
             ) : null}
-            <AccessSummary workflows={!github?.dotCom} />
+            <AccessSummary
+              workflows={!github?.dotCom}
+              selfService={selfService}
+            />
           </div>
         ) : (
           <InlineNotice variant="info">
@@ -898,6 +948,9 @@ export function GithubSyncSetupDialog({
             <SelectedAppBar
               provider="github"
               name={appLabel ?? "GitHub App"}
+              url={
+                accounts.data?.find((entry) => entry.id === appId)?.url ?? null
+              }
               icon={
                 mode === "pick"
                   ? (apps.find((app) => app.id === pickedId)?.icon ?? null)
@@ -1010,7 +1063,7 @@ export function GithubSyncSetupDialog({
               <FieldDescription>
                 {gitlab
                   ? "Projects the token can reach."
-                  : "The repositories the selected App can access."}
+                  : `The repositories the ${appLabel ? `${appLabel} App` : "selected App"} can access.`}
                 {repositories.data?.manageUrl ? (
                   <>
                     {" "}
@@ -1135,7 +1188,7 @@ export function GithubSyncSetupDialog({
                       ? repositories.error.message
                       : gitlab
                         ? "The token can't reach any project."
-                        : `${appLabel ?? "The App"} can't access any. Give it access on GitHub.`}
+                        : `${appLabel ? `The ${appLabel} App` : "The App"} can't access any. Give it access on GitHub.`}
                   </InlineNoticeText>
                   <Button
                     type="button"
@@ -1270,7 +1323,25 @@ export function GithubSyncSetupDialog({
         </div>
       ) : null}
 
-      {step === "connect" ? (
+      {step === "connect" && outcome ? (
+        <SelfServiceOutcomeStep
+          run={outcome}
+          labels={{
+            pending: editing
+              ? "Save Git sync and pull the policy"
+              : "Connect the repository and pull the policy",
+            done: editing
+              ? "Git sync saved and the policy pulled"
+              : "Repository connected and the policy pulled",
+            failed: editing
+              ? "Could not save Git sync"
+              : "Could not connect the repository",
+          }}
+          directory={serversFolder}
+          policyFile={location.path?.split("/").pop() ?? "appa.toml"}
+        />
+      ) : null}
+      {step === "connect" && !outcome ? (
         <ul
           className="space-y-3 rounded-lg border bg-card p-4"
           aria-live="polite"
@@ -1441,12 +1512,15 @@ function RepositoryNotice({
 function SelectedAppBar({
   provider,
   name,
+  url,
   icon,
   account,
   onChange,
 }: {
   provider: GitProvider;
   name: string;
+  /** The App's or token's page on its host; the name links there. */
+  url?: string | null;
   icon: string | null;
   account: string | null;
   onChange: () => void;
@@ -1458,7 +1532,18 @@ function SelectedAppBar({
         className="size-3.5"
         size={14}
       />
-      <span className="min-w-0 truncate font-medium">{name}</span>
+      {url ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="min-w-0 truncate font-medium underline-offset-4 hover:underline"
+        >
+          {name}
+        </a>
+      ) : (
+        <span className="min-w-0 truncate font-medium">{name}</span>
+      )}
       {account ? <AccountChip account={account} provider={provider} /> : null}
       <Button
         type="button"
@@ -1600,106 +1685,6 @@ function AppIconStack({ icons }: { icons: (string | null)[] }) {
   );
 }
 
-function ManifestRow({
-  index,
-  title,
-  hint,
-  waiting,
-  locked = false,
-  onCheckAgain,
-  result,
-  action,
-  inlineAction = false,
-  error,
-}: {
-  index: number;
-  title: string;
-  hint: string;
-  /**
-   * Replaces the hint while this step's last attempt failed. A step with an
-   * inline action (install) also offers to check GitHub again beside it.
-   */
-  error?: string;
-  waiting: boolean;
-  locked?: boolean;
-  onCheckAgain: () => void;
-  result: React.ReactNode;
-  action: React.ReactNode;
-  /** Short actions sit beside the text; wide ones (a form) go underneath. */
-  inlineAction?: boolean;
-}) {
-  const done = !!result;
-  const showAction = !(done || waiting || locked);
-  return (
-    <li
-      className={cn(
-        "flex items-start gap-3 border-b p-4 last:border-b-0 transition-opacity",
-        locked && "opacity-60",
-      )}
-    >
-      <span
-        className={cn(
-          "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border text-xs tabular-nums transition-colors",
-          done &&
-            "border-emerald-600/30 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-950/50 dark:text-emerald-400",
-        )}
-      >
-        {done ? <Check className="size-3.5" /> : <span>{index}</span>}
-      </span>
-      <div className="min-w-0 flex-1 space-y-1">
-        <p className="text-sm font-medium">{title}</p>
-        {done ? (
-          <div className="flex flex-wrap items-center gap-2 animate-in fade-in duration-300">
-            {result}
-          </div>
-        ) : waiting ? (
-          <p
-            className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
-            aria-live="polite"
-          >
-            <LoaderCircle className="size-3.5 animate-spin" />
-            <span>Finish in the GitHub tab that opened.</span>
-            <Button
-              type="button"
-              variant="link"
-              size="xs"
-              className="h-auto px-0"
-              onClick={onCheckAgain}
-            >
-              <span>Done? Check again</span>
-            </Button>
-          </p>
-        ) : error ? (
-          <p className="flex items-start gap-1.5 text-xs text-destructive">
-            <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
-            <span>{error}</span>
-          </p>
-        ) : (
-          <p className="text-xs text-muted-foreground">{hint}</p>
-        )}
-        {showAction && !inlineAction ? (
-          <div className="pt-2">{action}</div>
-        ) : null}
-      </div>
-      {showAction && inlineAction ? (
-        <div className="flex shrink-0 items-center gap-2 self-center">
-          {error ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onCheckAgain}
-            >
-              <span>Check again</span>
-            </Button>
-          ) : null}
-          {action}
-        </div>
-      ) : null}
-    </li>
-  );
-}
-
 // GitHub's manifest cannot set a logo, so the admin uploads it on the App's page.
 function AppLogoTip({ settingsUrl }: { settingsUrl: string }) {
   return (
@@ -1726,7 +1711,14 @@ function AppLogoTip({ settingsUrl }: { settingsUrl: string }) {
 }
 
 /** Off github.com the App also writes the validation workflow into the new repository. */
-function AccessSummary({ workflows }: { workflows: boolean }) {
+function AccessSummary({
+  workflows,
+  selfService,
+}: {
+  workflows: boolean;
+  /** MCP Guardrails Self-Service is on: the App also posts the check and keeps the ruleset. */
+  selfService: boolean;
+}) {
   return (
     <div className="flex items-start gap-3 rounded-lg bg-muted/40 px-4 py-3">
       <ShieldCheck className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -1739,6 +1731,7 @@ function AccessSummary({ workflows }: { workflows: boolean }) {
           {[
             "Contents",
             "Pull requests",
+            ...(selfService ? ["Checks", "Administration"] : []),
             ...(workflows ? ["Workflows"] : []),
           ].map((permission) => (
             <Badge key={permission} variant="outline" className="bg-background">
@@ -1770,6 +1763,8 @@ function AccountChip({
 }
 
 function headerFor(params: {
+  /** The selected App's name, once there is one. */
+  githubApp: string | null;
   editing: boolean;
   step: Step;
   origin: Origin | null;
@@ -1841,36 +1836,13 @@ function headerFor(params: {
   if (params.step === "repo")
     return {
       title: "Choose the policy repository",
-      description: "From the repositories the GitHub App can see.",
+      description: `From the repositories the ${params.githubApp ? `${params.githubApp} App` : "GitHub App"} can see.`,
     };
   return {
     title: "Connecting the repository",
     description: "This takes a few seconds.",
   };
 }
-
-function openGithubWindow(url: string) {
-  // A named tab, so the manifest post and the install land in the same one.
-  return window.open(url, GITHUB_WINDOW);
-}
-
-/** GitHub only accepts a manifest as a form post, so post one into the window. */
-function postManifest(params: { url: string; manifest: string }) {
-  const form = document.createElement("form");
-  form.method = "post";
-  form.action = params.url;
-  form.target = GITHUB_WINDOW;
-  const input = document.createElement("input");
-  input.type = "hidden";
-  input.name = "manifest";
-  input.value = params.manifest;
-  form.appendChild(input);
-  document.body.appendChild(form);
-  form.submit();
-  form.remove();
-}
-
-const GITHUB_WINDOW = "openappa-github-app";
 
 const GITHUB_STEPS: { id: Step; label: string }[] = [
   { id: "provider", label: "Host" },
@@ -1891,6 +1863,8 @@ const TEMPLATE = { owner: "archestra-ai", name: "openappa-config" };
 const OWNER_PATTERN = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;
 const DOT_COM_API = "https://api.github.com";
 const DOT_COM_WEB = "https://github.com";
+/** The tab Guardrails works with GitHub in. */
+export const GITHUB_WINDOW = "openappa-github-app";
 const FRESH_NAME = "openappa-policy";
 const USABLE = new Set<RepositoryStatus>([
   "template",
@@ -1956,6 +1930,7 @@ type EditedSource = {
 };
 const VALIDATION_GUIDE_URL = "https://www.openappa.com/validation";
 const DIRECTORY_PATH = /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/;
+const DEFAULT_SELF_SERVICE_FOLDER = "mcp";
 const POLICY_PATH = /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*\.toml$/;
 
 const APP_LOGO_PATH = "/openappa/github-app-logo.png";

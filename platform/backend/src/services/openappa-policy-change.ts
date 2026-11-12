@@ -2,18 +2,23 @@ import { randomUUID } from "node:crypto";
 import { userHasPermission } from "@/auth";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
+import UserModel from "@/models/user";
 import { declaredCredentials } from "@/openappa/battery-target";
 import {
   addedGrants,
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
-import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
+import { withRequester } from "@/openappa/policy-text";
 import {
   guardrailsPolicyService,
   requireGrantPermission,
 } from "@/services/guardrails-policy";
 import { resolveProposedPolicy } from "@/services/guardrails-policy-proposal";
+import {
+  githubJson,
+  githubPolicyChangeErrors,
+} from "@/services/openappa-github";
 import {
   resolveOpenAppaGithubAccess,
   resolveOpenAppaGitlabAccess,
@@ -145,16 +150,18 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     source.ref ??
     (
       await githubJson<{ default_branch: string }>({
-        path: base,
+        url: base,
         token,
+        errors: githubPolicyChangeErrors,
       })
     ).default_branch;
   if (!branch || !/^[^\p{Cc}\s~^:?*[\\]+$/u.test(branch))
     throw new ApiError(409, "The configured GitHub branch is invalid");
 
   const branchData = await githubJson<{ commit: { sha: string } }>({
-    path: `${base}/branches/${encodeURIComponent(branch)}`,
+    url: `${base}/branches/${encodeURIComponent(branch)}`,
     token,
+    errors: githubPolicyChangeErrors,
   });
   const baseSha = branchData.commit?.sha;
   if (!baseSha || !/^[a-f0-9]{40}$/.test(baseSha))
@@ -165,12 +172,19 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       "GitHub has changed since the last policy sync. Sync the policy, then review the new revision.",
     );
 
+  // The commit names the person who asked, in a trailer GitHub's signature
+  // for the App covers; an author of its own would leave the commit unsigned.
+  const requester = await UserModel.getById(params.userId);
+  const message = requester
+    ? withRequester(params.title, requester.email)
+    : params.title;
   let head: string;
   if (params.validationChanges) {
     await assertValidationSource(params);
     const commit = await githubJson<{ tree: { sha: string } }>({
-      path: `${base}/git/commits/${baseSha}`,
+      url: `${base}/git/commits/${baseSha}`,
       token,
+      errors: githubPolicyChangeErrors,
     });
     const baseTree = checkedSha(commit.tree?.sha);
     const changes = params.validationChanges;
@@ -184,8 +198,9 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     await assertBranchUnchanged({ base, branch, baseSha, token });
     const tree = await githubJson<{ sha: string }>({
       method: "POST",
-      path: `${base}/git/trees`,
+      url: `${base}/git/trees`,
       token,
+      errors: githubPolicyChangeErrors,
       body: {
         base_tree: baseTree,
         tree: [
@@ -216,10 +231,11 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     });
     const commitResult = await githubJson<{ sha: string }>({
       method: "POST",
-      path: `${base}/git/commits`,
+      url: `${base}/git/commits`,
       token,
+      errors: githubPolicyChangeErrors,
       body: {
-        message: params.title,
+        message,
         tree: checkedSha(tree.sha),
         parents: [baseSha],
       },
@@ -230,15 +246,17 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     head = `archestra/openappa-${randomUUID()}`;
     await githubJson({
       method: "POST",
-      path: `${base}/git/refs`,
+      url: `${base}/git/refs`,
       token,
+      errors: githubPolicyChangeErrors,
       body: { ref: `refs/heads/${head}`, sha: commitSha },
     });
   } else {
     const path = source.path.split("/").map(encodeURIComponent).join("/");
     const file = await githubJson<{ sha: string }>({
-      path: `${base}/contents/${path}?ref=${baseSha}`,
+      url: `${base}/contents/${path}?ref=${baseSha}`,
       token,
+      errors: githubPolicyChangeErrors,
     });
     if (!file.sha || !/^[a-f0-9]{40}$/.test(file.sha))
       throw new ApiError(502, "GitHub returned an invalid policy file");
@@ -249,16 +267,18 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     head = `archestra/openappa-${randomUUID()}`;
     await githubJson({
       method: "POST",
-      path: `${base}/git/refs`,
+      url: `${base}/git/refs`,
       token,
+      errors: githubPolicyChangeErrors,
       body: { ref: `refs/heads/${head}`, sha: baseSha },
     });
     await githubJson({
       method: "PUT",
-      path: `${base}/contents/${path}`,
+      url: `${base}/contents/${path}`,
       token,
+      errors: githubPolicyChangeErrors,
       body: {
-        message: params.title,
+        message,
         content: Buffer.from(content).toString("base64"),
         sha: file.sha,
         branch: head,
@@ -267,8 +287,9 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
   }
   const pull = await githubJson<{ number: number; html_url: string }>({
     method: "POST",
-    path: `${base}/pulls`,
+    url: `${base}/pulls`,
     token,
+    errors: githubPolicyChangeErrors,
     body: {
       title: params.title,
       body: params.summary,
@@ -345,8 +366,9 @@ export async function getOpenAppaPolicyChangeStatus(params: {
     mergeable: boolean | null;
     head: { ref: string };
   }>({
-    path: `${api}/repos/${source.repo}/pulls/${params.number}`,
+    url: `${api}/repos/${source.repo}/pulls/${params.number}`,
     token,
+    errors: githubPolicyChangeErrors,
   });
   if (!pull.head?.ref?.startsWith("archestra/openappa-"))
     throw new ApiError(404, "OpenAPPA policy pull request not found");
@@ -410,43 +432,6 @@ export async function refuseCredentialLines(params: {
       openappaDeclarations.rootGrants(submitted.resolution),
     ),
   });
-}
-
-async function githubJson<T = unknown>(params: {
-  /** Full API URL; the base comes from the source's credential. */
-  path: string;
-  token: string;
-  method?: "GET" | "POST" | "PUT";
-  body?: object;
-}): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(params.path, {
-      method: params.method ?? "GET",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${params.token}`,
-        ...(params.body ? { "Content-Type": "application/json" } : {}),
-      },
-      redirect: "error",
-      ...(params.body ? { body: JSON.stringify(params.body) } : {}),
-      signal: AbortSignal.timeout(15000),
-    });
-  } catch {
-    throw new ApiError(502, "Could not reach GitHub");
-  }
-  if (!response.ok)
-    throw new ApiError(
-      response.status === 404 ? 404 : 502,
-      `GitHub returned HTTP ${response.status}. Check repository access and credential permissions. PR publishing needs Contents and Pull requests read/write.`,
-    );
-  const bytes = await readResponseBodyWithLimit(response, 2 * 1024 * 1024);
-  if (!bytes) throw new ApiError(502, "GitHub response is too large");
-  try {
-    return JSON.parse(bytes.toString()) as T;
-  } catch {
-    throw new ApiError(502, "GitHub returned an invalid response");
-  }
 }
 
 function checkedPullUrl(params: {
@@ -563,10 +548,14 @@ async function resolveWriteToken(source: {
   organizationId: string;
   githubPatId: string | null;
   githubAppConfigId: string | null;
+  repo: string | null;
 }) {
   if (!source.githubPatId && !source.githubAppConfigId)
     throw new ApiError(409, "A GitHub write credential is required");
-  const access = await resolveOpenAppaGithubAccess(source);
+  const access = await resolveOpenAppaGithubAccess(source, {
+    contents: "write",
+    pull_requests: "write",
+  });
   return { ...access, token: access.token as string };
 }
 
@@ -652,8 +641,9 @@ async function assertBranchUnchanged(params: {
   token: string;
 }) {
   const branch = await githubJson<{ commit: { sha: string } }>({
-    path: `${params.base}/branches/${encodeURIComponent(params.branch)}`,
+    url: `${params.base}/branches/${encodeURIComponent(params.branch)}`,
     token: params.token,
+    errors: githubPolicyChangeErrors,
   });
   if (branch.commit?.sha !== params.baseSha)
     throw new ApiError(
@@ -688,8 +678,9 @@ async function assertRegularGitPaths(params: {
           truncated: boolean;
           tree: { path: string; mode: string; type: string; sha: string }[];
         }>({
-          path: `${params.base}/git/trees/${treeSha}`,
+          url: `${params.base}/git/trees/${treeSha}`,
           token: params.token,
+          errors: githubPolicyChangeErrors,
         });
         if (result.truncated || !Array.isArray(result.tree))
           throw new ApiError(

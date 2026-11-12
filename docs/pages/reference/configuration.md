@@ -1492,6 +1492,19 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Values: at least 32 characters, the same on every replica. A shorter value stops startup.
   - Set it to rotate this key separately from the session secret.
 
+- **`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`** - Name of the check Archestra posts on the policy repository's pull requests with [Git sync](/docs/agents/guardrails/git-sync#the-check-and-the-ruleset), and of the branch ruleset that requires it.
+  - Default: `Check OpenAPPA Guardrails`.
+  - Values: up to 100 characters. A rename moves the ruleset and its required check over at the next sync.
+
+- **`ARCHESTRA_OPENAPPA_SELF_SERVICE`** - Whether the people who can edit an MCP server change its Guardrails rules themselves, through pull requests on the Git sync repository. See [MCP Guardrails Self-Service](/docs/agents/guardrails/git-sync#mcp-guardrails-self-service). Shown read-only under **Git sync** in **Settings → Guardrails**.
+  - Default: `disabled`
+  - Values: `disabled`, `enabled`. Other values stop startup.
+  - Later releases make this an editable setting with the same default. While this variable is set they use it instead and lock the setting, so keep it set when you upgrade to keep the same behaviour.
+
+- **`ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY`** - The folder beside the policy file that holds one rules file per MCP server, which the policy includes as `<folder>/*.toml`. Shown read-only under **Git sync** in **Settings → Guardrails**.
+  - Default: `mcp`
+  - Values: a folder path such as `mcp` or `rules/servers`: no `..`, no `*`, not under `batteries/`. Other values stop startup.
+
 - **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Whether a call or remedy plan waiting for human approval runs anyway, with a yell. Shown read-only under [Break the glass](/docs/agents/guardrails/policies#yells) in **Settings → Guardrails**.
   - Default: `block`
   - Values: `block` (wait for a person), `unattended` (waive in Agent Runtime runs, Scheduled task runs, and clients sending `X-Archestra-Unattended: 1`; a remedy plan a workload runs counts too), `everywhere`. Other values stop startup.

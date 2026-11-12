@@ -158,6 +158,19 @@ class OpenAppaGithubSyncModel {
         ),
       );
   }
+  /** Every source a pull has accepted a commit from: those with pull requests to check. */
+  static async findConnected() {
+    return db
+      .select()
+      .from(table)
+      .where(
+        and(
+          isNotNull(table.interval),
+          isNotNull(table.repo),
+          isNotNull(table.sourceCommit),
+        ),
+      );
+  }
   static async enqueue(organizationId: string) {
     // The partial unique index also deduplicates simultaneous requests on different replicas.
     await db

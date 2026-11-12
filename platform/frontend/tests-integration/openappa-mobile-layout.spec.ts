@@ -44,7 +44,23 @@ for (const width of [320, 375]) {
         {
           method: "get",
           url: "/api/openappa/github-sync",
-          body: { enabled: false, hasPolicy: false, source: null },
+          body: {
+            selfService: {
+              enabled: false,
+              directory: "mcp",
+              environment: {
+                variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE",
+                value: "disabled",
+              },
+              directoryEnvironment: {
+                variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY",
+                value: "mcp",
+              },
+            },
+            enabled: false,
+            hasPolicy: false,
+            source: null,
+          },
         },
         {
           method: "get",

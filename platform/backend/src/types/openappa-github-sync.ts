@@ -104,9 +104,89 @@ export const CreateAppaGithubRepositorySchema = z
 const AppaGithubSyncSchema = createSelectSchema(openappaGithubSyncTable, {
   interval: z.union([AppaSyncIntervalSchema, z.null()]),
 }).omit({ content: true });
+/**
+ * How the policy repository protects its server rules files: the branch
+ * ruleset Archestra keeps, which makes the policy check the gate. Null while
+ * self-service is off, or without a connected GitHub App source.
+ */
+/**
+ * The GitHub App's grants against what self-service needs, with where to
+ * change them: the App's permissions page, and the installation that accepts
+ * a change.
+ */
+export const AppaGithubAppGrantsSchema = z.object({
+  /** The App's name on GitHub, and its page there. */
+  name: z.string(),
+  url: z.string().nullable(),
+  settingsUrl: z.string(),
+  installationUrl: z.string().nullable(),
+  permissions: z.array(
+    z.object({
+      name: z.enum(["contents", "pull_requests", "checks", "administration"]),
+      granted: z.boolean(),
+    }),
+  ),
+});
+
+export const AppaRepositoryProtectionSchema = z
+  .object({
+    /** The name of the policy check, and of the ruleset that requires it. */
+    checkName: z.string(),
+    /** The GitHub App's grants against what the feature needs, and where to change them. */
+    app: AppaGithubAppGrantsSchema.optional(),
+    branchRules: z.object({
+      state: z.enum([
+        "active",
+        "incomplete",
+        "missing",
+        "needs_permission",
+        "unavailable",
+        "error",
+      ]),
+      url: z.string().optional(),
+      detail: z.string().optional(),
+      /** Bypass entries an administrator added on GitHub; they skip the rules. */
+      bypassActors: z.number().int().positive().optional(),
+      /** A ruleset requires the check while the GitHub App cannot post it. */
+      checkRule: z.enum(["unposted"]).optional(),
+    }),
+    /**
+     * Whether the policy file includes the self-service folder, which is
+     * what makes the servers' files apply: `included`, or `pull_open` while
+     * the pull request that adds the line waits, or `missing`; `unknown`
+     * while the repository cannot be read.
+     */
+    include: z.object({
+      folder: z.string(),
+      state: z.enum(["included", "pull_open", "missing", "unknown"]),
+      pull: z.object({ number: z.number().int(), url: z.string() }).optional(),
+    }),
+  })
+  .nullable();
+
+export const SelfServiceChoiceSchema = z.enum(["enabled", "disabled"]);
+/**
+ * Whether each MCP server's editors change its own rules through pull
+ * requests, and the folder their files live in. Release 1.4 sets both with
+ * environment variables, and Settings shows them read-only; later releases
+ * save the switch with the Git sync source.
+ */
+export const AppaSelfServiceSchema = z.object({
+  enabled: z.boolean(),
+  /** The folder beside the policy file that holds each server's rules file. */
+  directory: z.string(),
+  /** The environment variable that sets the switch, with its value. */
+  environment: z.object({
+    variable: z.string(),
+    value: SelfServiceChoiceSchema,
+  }),
+  /** The environment variable that names the folder, with its value. */
+  directoryEnvironment: z.object({ variable: z.string(), value: z.string() }),
+});
 export const AppaGithubSyncStatusSchema = z.object({
   enabled: z.boolean(),
   source: AppaGithubSyncSchema.nullable(),
+  selfService: AppaSelfServiceSchema,
   hasPolicy: z.boolean(),
   validationDirectory: z.string(),
   /** Web origin of the source's host, e.g. https://github.com, for links. */
@@ -120,4 +200,19 @@ export const AppaGithubSyncActionSchema = z.discriminatedUnion("action", [
   z
     .object({ action: z.literal("schedule"), interval: AppaSyncIntervalSchema })
     .strict(),
+  /**
+   * Open the pull request that adds the self-service folder's include to the
+   * policy file, in the caller's name, when the file lacks it and none waits.
+   */
+  z.object({ action: z.literal("include_servers") }).strict(),
+  /**
+   * Bring the repository's protection in line now, as each sync does: the
+   * branch ruleset that requires the policy check, once the GitHub App may
+   * keep it. Finish setup runs it rather than waiting for the next sync.
+   */
+  z.object({ action: z.literal("protect") }).strict(),
 ]);
+/** Whether the caller's organization lets server editors change their own rules now. */
+export const AppaSelfServiceAvailabilitySchema = z.object({
+  enabled: z.boolean(),
+});

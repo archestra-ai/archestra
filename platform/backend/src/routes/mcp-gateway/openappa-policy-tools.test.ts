@@ -77,16 +77,23 @@ async function listed(params: {
   return response.tools.map((tool) => tool.name);
 }
 
+/**
+ * Which of the policy tools the search offers, one exact query per name:
+ * release 1.4's search has no pages, and the Guardrails tools outnumber one.
+ */
 async function searched(context: ArchestraContext): Promise<string[]> {
-  const result = await executeArchestraTool(
-    archestraMcpBranding.getToolName("search_tools"),
-    { query: "guardrails|openappa", mode: "regex", limit: 20 },
-    context,
-  );
-  expect(result.isError).toBeFalsy();
-  return (result.structuredContent as SearchResult).tools.map(
-    (tool) => tool.toolName,
-  );
+  const names: string[] = [];
+  for (const name of [...READ, ...WRITE]) {
+    const result = await executeArchestraTool(
+      archestraMcpBranding.getToolName("search_tools"),
+      { query: `^${name}$`, mode: "regex", limit: 5 },
+      context,
+    );
+    expect(result.isError).toBeFalsy();
+    const page = result.structuredContent as SearchResult;
+    if (page.tools.some((tool) => tool.toolName === name)) names.push(name);
+  }
+  return names;
 }
 
 type Admission = "admitted" | "not_assigned" | "denied";

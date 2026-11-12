@@ -163,6 +163,10 @@ async function loadPolicyTestCollection(
       );
     return { ...fallback, files, version };
   } catch (error) {
+    logger.warn(
+      { err: error, organizationId },
+      "OpenAPPA could not load GitHub policy validation files",
+    );
     return {
       ...fallback,
       error:

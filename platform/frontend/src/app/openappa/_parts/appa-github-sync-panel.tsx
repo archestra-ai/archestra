@@ -1,11 +1,17 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  getDocsUrl,
+  type gitWebUrls,
+} from "@archestra/shared";
 import { AlertTriangle, ExternalLink, GitBranch } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   GitSourceBranch,
   GitSourceCard,
@@ -16,6 +22,7 @@ import { OpenAppaGithubAppRequirements } from "@/components/openappa-github-app-
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
+import { DeploymentSettingRow } from "@/components/settings/deployment-setting-row";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
 import { SettingsBlock } from "@/components/settings/settings-block";
 import { StandardFormDialog } from "@/components/standard-dialog";
@@ -39,9 +46,11 @@ import {
 } from "@/components/ui/tooltip";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github-credential";
 import {
   useAppaGithubSync,
+  useAppaRepositoryProtection,
   useConfigureAppaGithubSync,
   useUpdateAppaGithubSync,
 } from "@/lib/openappa-github-sync.query";
@@ -49,6 +58,7 @@ import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { appaGitHost } from "./appa-git-host";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
+import { SelfServiceSetupDialog } from "./self-service-setup-dialog";
 
 type Source = NonNullable<
   archestraApiTypes.GetAppaGithubSyncResponses["200"]["source"]
@@ -91,8 +101,14 @@ export function AppaGithubSyncPanel() {
         className="mb-6 h-auto"
       />
     );
-  const { source, enabled, hasPolicy, validationDirectory, githubWebUrl } =
-    query.data;
+  const {
+    source,
+    enabled,
+    hasPolicy,
+    validationDirectory,
+    githubWebUrl,
+    selfService,
+  } = query.data;
   const git = appaGitHost(query.data);
   const urls = source?.repo ? git.urls(source.repo) : null;
   const lastChecked = source?.lastSyncedAt
@@ -207,7 +223,7 @@ export function AppaGithubSyncPanel() {
                         onClick={() => setEditing(true)}
                       >
                         <span>
-                          {connected ? "Edit source" : `Reconnect ${git.label}`}
+                          {connected ? "Edit" : `Reconnect ${git.label}`}
                         </span>
                       </Button>
                       {connected && (
@@ -254,6 +270,14 @@ export function AppaGithubSyncPanel() {
                     message={source.lastSyncError}
                   />
                 ) : null}
+                {connected && !source.setupPullRequestNumber && (
+                  <SelfServiceRow
+                    source={source}
+                    urls={urls}
+                    selfService={selfService}
+                    canManage={canManage === true}
+                  />
+                )}
               </GitSourceCard>
             ) : null}
           </div>
@@ -297,6 +321,278 @@ export function AppaGithubSyncPanel() {
           setDisconnecting(false);
         }}
       />
+    </>
+  );
+}
+
+type Protection = NonNullable<
+  archestraApiTypes.GetAppaRepositoryProtectionResponses["200"]
+>;
+
+/**
+ * The repository's protection for server rules files: the branch ruleset
+ * Archestra keeps in line at each sync.
+ */
+/**
+ * MCP Guardrails Self-Service as the deployment sets it: whether each MCP
+ * server's editors change its own rules through pull requests, and the
+ * folder their files live in. Release 1.4 reads both from the environment,
+ * so the rows only show them; on, the repository's protection follows, and
+ * is off for a source without a GitHub App, which posts no check.
+ */
+function SelfServiceRow({
+  source,
+  urls,
+  selfService,
+  canManage,
+}: {
+  source: Source;
+  /** Browser links into the repository, for the branch and the folder. */
+  urls: ReturnType<typeof gitWebUrls> | null;
+  selfService: archestraApiTypes.GetAppaGithubSyncResponses["200"]["selfService"];
+  canManage: boolean;
+}) {
+  const eligible = !!source.githubAppConfigId;
+  const [setup, setSetup] = useState(false);
+  const protection = useAppaRepositoryProtection(selfService.enabled);
+  const data = selfService.enabled ? (protection.data ?? null) : null;
+  // What Finish setup still does: the ruleset, or the include pull request.
+  const toFinish =
+    !!data &&
+    (data.branchRules.state !== "active" || data.include.state === "missing");
+  // On in full only once the ruleset holds and the include line is merged.
+  const ready = toFinish || data?.include.state === "pull_open";
+  const heading = (() => {
+    if (!selfService.enabled)
+      return (
+        <>
+          MCP Guardrails Self-Service is{" "}
+          <strong className="font-bold">Disabled</strong>
+        </>
+      );
+    if (ready) return "MCP Guardrails Self-Service is ready to be Enabled";
+    // The repository's state decides the word; until it is read, none.
+    if (eligible && !data) return "MCP Guardrails Self-Service";
+    return (
+      <>
+        MCP Guardrails Self-Service is{" "}
+        <strong className="font-bold">Enabled</strong>
+      </>
+    );
+  })();
+  const description = (
+    <>
+      {eligible
+        ? "Lets MCP owners manage their MCPs' Guardrails. Additional GitHub App permissions are added to ensure the related pull requests are checked."
+        : "Connect the policy repository through a GitHub App so MCP owners can manage MCP Guardrails."}{" "}
+      <SelfServiceDocsLink />
+    </>
+  );
+  return (
+    <GitSourceNotice>
+      <div className="space-y-2">
+        <DeploymentSettingRow
+          compact
+          title="MCP Guardrails Self-Service"
+          heading={heading}
+          description={description}
+          value={selfService.enabled ? "enabled" : "disabled"}
+          disabled
+          hideValue
+          action={
+            toFinish && canManage ? (
+              <Button
+                size="xs"
+                type="button"
+                variant="outline"
+                onClick={() => setSetup(true)}
+              >
+                Finish setup
+              </Button>
+            ) : undefined
+          }
+          environmentVariable={selfService.environment.variable}
+          options={[
+            { value: "enabled", label: "On" },
+            { value: "disabled", label: "Off" },
+          ]}
+        />
+        <DeploymentSettingRow
+          compact
+          title="Self-service folder"
+          description={
+            <>
+              Each MCP server policy file goes to{" "}
+              <strong className="font-medium text-foreground">
+                {selfService.directory}/
+              </strong>
+              .
+            </>
+          }
+          value={selfService.directory}
+          disabled
+          hideValue
+          environmentVariable={selfService.directoryEnvironment.variable}
+          options={[
+            {
+              value: selfService.directory,
+              label: `${selfService.directory}/`,
+            },
+          ]}
+        />
+        {data ? (
+          <RepositoryState
+            data={data}
+            ready={ready}
+            policyPath={source.path ?? "appa.toml"}
+            branchUrl={urls?.tree(source.ref ?? "HEAD") ?? null}
+          />
+        ) : null}
+      </div>
+      {setup ? (
+        <SelfServiceSetupDialog
+          open
+          onOpenChange={setSetup}
+          policyPath={source.path ?? "appa.toml"}
+          directory={selfService.directory}
+        />
+      ) : null}
+    </GitSourceNotice>
+  );
+}
+
+/** How self-service works, on the Git sync docs page; the row says only what it is. */
+function SelfServiceDocsLink() {
+  const href = getVisibleDocsUrl(
+    getDocsUrl(
+      DocsPage.PlatformAiToolGuardrailsGitSync,
+      "mcp-guardrails-self-service",
+    ),
+  );
+  if (!href) return null;
+  return (
+    <ExternalDocsLink
+      href={href}
+      showIcon={false}
+      className="text-primary underline underline-offset-2 hover:text-primary/80"
+    >
+      Learn more
+    </ExternalDocsLink>
+  );
+}
+
+/**
+ * The repository's state under the rows. Setup still to finish: only the
+ * include pull request while one waits, since the heading and Finish setup
+ * say the rest. On in full: the ruleset, and the include when it could not
+ * be read.
+ */
+function RepositoryState({
+  data,
+  ready,
+  policyPath,
+  branchUrl,
+}: {
+  data: Protection;
+  /** Setup is not finished: the ruleset, the include, or its pull request. */
+  ready: boolean;
+  policyPath: string;
+  /** The synced branch on the host, for the ruleset sentence. */
+  branchUrl: string | null;
+}) {
+  const policyFile = policyPath.slice(policyPath.lastIndexOf("/") + 1);
+  const include = includeSentence(data.include, policyFile);
+  const lines = ready
+    ? data.include.state === "pull_open"
+      ? [include]
+      : []
+    : [protectionSentence(data.branchRules, branchUrl, data.app), include];
+  const shown = lines.filter((line) => line != null);
+  if (shown.length === 0) return null;
+  // The repository's state reads at the rows' size, set off from the settings.
+  return (
+    <div className="space-y-1 pt-2 text-sm leading-5 text-muted-foreground">
+      {shown.map((line, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: two fixed sentences
+        <p key={index}>{line}</p>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * One sentence on the include that makes the servers' files apply: the pull
+ * request that adds the line, or that it could not be read. Included, the
+ * folder row above already says where the files go; missing, the heading
+ * and Finish setup say so.
+ */
+function includeSentence(
+  include: Protection["include"],
+  policyFile: string,
+): ReactNode {
+  const entry = <code>{`${include.folder}/*.toml`}</code>;
+  switch (include.state) {
+    case "pull_open":
+      return (
+        <span>
+          <a
+            href={include.pull?.url}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-foreground underline underline-offset-4 hover:text-foreground/80"
+          >
+            Pull request #{include.pull?.number}
+          </a>{" "}
+          adds {entry} to {policyFile}. Merge it and re-sync.
+        </span>
+      );
+    case "unknown":
+      return (
+        <span>
+          Could not read the policy repository to tell whether {policyFile}{" "}
+          includes {entry}. Try again in a moment.
+        </span>
+      );
+    default:
+      return null;
+  }
+}
+
+/** A link into the repository on its host, or the text alone without one. */
+function hostLink(href: string | null | undefined, text: string): ReactNode {
+  return href ? (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="font-medium text-foreground underline underline-offset-4 hover:text-foreground/80"
+    >
+      {text}
+    </a>
+  ) : (
+    <span>{text}</span>
+  );
+}
+
+/** The ruleset once it holds; the heading covers every state before that. */
+function protectionSentence(
+  rules: Protection["branchRules"],
+  branchUrl: string | null,
+  app: Protection["app"],
+): ReactNode {
+  if (rules.checkRule === "unposted")
+    return (
+      <>
+        The Self-service branch protection {hostLink(rules.url, "ruleset")}{" "}
+        holds pull requests until the{" "}
+        {app ? <>{hostLink(app.url, app.name)} App</> : <span>GitHub App</span>}{" "}
+        can post the check.
+      </>
+    );
+  return (
+    <>
+      {hostLink(rules.url, "Ruleset")} protects the policy on the{" "}
+      {hostLink(branchUrl, "branch")}
     </>
   );
 }

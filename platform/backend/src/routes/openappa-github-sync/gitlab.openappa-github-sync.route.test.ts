@@ -119,6 +119,43 @@ describe("APPA GitLab sync", () => {
     );
   });
 
+  test("saving a GitLab source with MCP Guardrails Self-Service on neither pulls inline nor opens an include pull request", async () => {
+    // Release 1.4: the variable is the deployment's, but the policy check and
+    // the include pull request are a GitHub App's. A token source is saved
+    // and left to its schedule, as with the variable off.
+    gitlab.addProject({
+      path: "platform/security/policies",
+      files: { "appa.toml": initialPolicy() },
+    });
+    config.openappa.selfService = "enabled";
+    try {
+      const response = await app.inject({
+        method: "PUT",
+        url: "/api/openappa/github-sync",
+        payload: {
+          repo: "platform/security/policies",
+          ref: null,
+          path: "appa.toml",
+          interval: "1h",
+          githubPatId: null,
+          githubAppConfigId: null,
+          gitlabTokenId,
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().selfService).toMatchObject({
+        enabled: true,
+        directory: "mcp",
+      });
+      // Queued for the schedule, not pulled in the request.
+      expect(
+        (await OpenAppaGithubSyncModel.find(organizationId))?.sourceCommit,
+      ).toBeNull();
+    } finally {
+      config.openappa.selfService = "disabled";
+    }
+  });
+
   test("reports what setup would do with a project", async () => {
     gitlab.addProject({ path: "team/empty" });
     gitlab.addProject({

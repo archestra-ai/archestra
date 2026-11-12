@@ -56,7 +56,23 @@ for (const viewport of [
       await mswControl.use({
         method: "get",
         url: "/api/openappa/github-sync",
-        body: { enabled: true, hasPolicy: false, source: null },
+        body: {
+          selfService: {
+            enabled: false,
+            directory: "mcp",
+            environment: {
+              variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE",
+              value: "disabled",
+            },
+            directoryEnvironment: {
+              variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY",
+              value: "mcp",
+            },
+          },
+          enabled: true,
+          hasPolicy: false,
+          source: null,
+        },
       });
       await mswControl.use({
         method: "get",

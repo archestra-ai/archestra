@@ -13,6 +13,15 @@ export class FakeGitlab {
   readonly requests: { method: string; path: string }[] = [];
   /** Branches a direct commit is refused on, as GitLab does for protected branches. */
   readonly protectedBranches = new Set<string>();
+  /** Commit statuses posted, in order. */
+  readonly statuses: {
+    sha: string;
+    state: string;
+    name: string;
+    description?: string;
+  }[] = [];
+  /** The most entries a keyset tree page returns, to test paging with few files. */
+  treePageSize = 100;
   private nextId = 1;
 
   constructor(
@@ -32,6 +41,7 @@ export class FakeGitlab {
       defaultBranch: null,
       branches: new Map(),
       commits: new Map(),
+      parents: new Map(),
       mergeRequests: [],
     };
     this.projects.set(params.path, project);
@@ -39,10 +49,25 @@ export class FakeGitlab {
       const branch = params.branch ?? "main";
       const sha = commitSha(params.files);
       project.commits.set(sha, new Map(Object.entries(params.files)));
+      project.parents.set(sha, null);
       project.branches.set(branch, sha);
       project.defaultBranch = branch;
     }
     return project;
+  }
+
+  /** A commit on `branch` that sets `files` over its tip; returns its sha. */
+  commit(path: string, branch: string, files: Record<string, string>): string {
+    const project = this.mustProject(path);
+    const parent = project.branches.get(branch) ?? null;
+    const next = new Map(parent ? project.commits.get(parent) : []);
+    for (const [file, content] of Object.entries(files))
+      next.set(file, content);
+    const sha = commitSha(Object.fromEntries(next), parent);
+    project.commits.set(sha, next);
+    project.parents.set(sha, parent);
+    project.branches.set(branch, sha);
+    return sha;
   }
 
   addGroup(fullPath: string) {
@@ -65,6 +90,8 @@ export class FakeGitlab {
     if (!sha) throw new Error("Merge request branch is gone");
     project.branches.set(request.targetBranch, sha);
     request.state = "merged";
+    // A fast-forward: the head itself lands, with no merge commit.
+    request.mergedSha = sha;
   }
 
   handlers() {
@@ -135,6 +162,30 @@ export class FakeGitlab {
     if (!project) return notFound();
     if (rest.length === 0) return HttpResponse.json(projectJson(project));
     const [area, kind, name, raw] = rest;
+    if (area === "statuses" && kind && method === "POST") {
+      const body = (await request.json()) as {
+        state: string;
+        name: string;
+        description?: string;
+      };
+      this.statuses.push({ sha: kind, ...body });
+      return HttpResponse.json({ id: this.statuses.length }, { status: 201 });
+    }
+    if (area === "merge_requests" && !kind && method === "GET") {
+      const state = url.searchParams.get("state");
+      const target = url.searchParams.get("target_branch");
+      const source = url.searchParams.get("source_branch");
+      return HttpResponse.json(
+        project.mergeRequests
+          .filter(
+            (entry) =>
+              (!state || entry.state === state) &&
+              (!target || entry.targetBranch === target) &&
+              (!source || entry.sourceBranch === source),
+          )
+          .map((entry) => mergeRequestJson(this.webUrl, project, entry)),
+      );
+    }
     if (area === "merge_requests") {
       if (method === "POST") {
         const body = (await request.json()) as {
@@ -202,6 +253,7 @@ export class FakeGitlab {
         body.start_sha ??
         project.branches.get(body.start_branch ?? body.branch) ??
         null;
+      const parentOf = parent;
       const files = new Map(parent ? project.commits.get(parent) : []);
       for (const action of body.actions) {
         if (action.action === "delete") files.delete(action.file_path);
@@ -214,6 +266,7 @@ export class FakeGitlab {
       }
       const sha = commitSha(Object.fromEntries(files), parent);
       project.commits.set(sha, files);
+      project.parents.set(sha, parentOf);
       project.branches.set(body.branch, sha);
       project.defaultBranch ??= body.branch;
       return HttpResponse.json({ id: sha }, { status: 201 });
@@ -225,6 +278,25 @@ export class FakeGitlab {
     if (kind === "branches") {
       const sha = project.branches.get(name ?? "");
       return sha ? HttpResponse.json({ commit: { id: sha } }) : notFound();
+    }
+    if (kind === "merge_base") {
+      const [first, second] = url.searchParams
+        .getAll("refs[]")
+        .map((target) => resolve(target));
+      if (!first || !second) return notFound();
+      const history = (sha: string) => {
+        const seen: string[] = [];
+        for (
+          let at: string | null = sha;
+          at;
+          at = project.parents.get(at) ?? null
+        )
+          seen.push(at);
+        return seen;
+      };
+      const ofFirst = new Set(history(first));
+      const base = history(second).find((sha) => ofFirst.has(sha));
+      return base ? HttpResponse.json({ id: base }) : notFound();
     }
     const sha = resolve(ref);
     if (!sha) return notFound();
@@ -240,7 +312,26 @@ export class FakeGitlab {
       );
       // Like GitLab, a path that is a file or missing is "404 Tree Not Found".
       if (prefix && entries.length === 0) return notFound();
-      return HttpResponse.json(entries);
+      if (url.searchParams.get("pagination") !== "keyset")
+        return HttpResponse.json(entries);
+      // Keyset pages, each naming the next in its Link header.
+      const size = Math.min(
+        Number(url.searchParams.get("per_page") ?? 20),
+        this.treePageSize,
+      );
+      const after = url.searchParams.get("page_token");
+      const start = after
+        ? entries.findIndex((entry) => entry.path === after) + 1
+        : 0;
+      const page = entries.slice(start, start + size);
+      const last = page.at(-1);
+      if (start + size >= entries.length || !last)
+        return HttpResponse.json(page);
+      const next = new URL(url);
+      next.searchParams.set("page_token", last.path);
+      return HttpResponse.json(page, {
+        headers: { Link: `<${next.href}>; rel="next"` },
+      });
     }
     if (kind === "files" && name) {
       const content = files.get(name);
@@ -264,6 +355,8 @@ export interface FakeProject {
   defaultBranch: string | null;
   branches: Map<string, string>;
   commits: Map<string, Map<string, string>>;
+  /** Each commit's parent, null for a first commit. */
+  parents: Map<string, string | null>;
   mergeRequests: FakeMergeRequest[];
 }
 
@@ -273,6 +366,8 @@ interface FakeMergeRequest {
   targetBranch: string;
   title: string;
   state: "opened" | "merged" | "closed";
+  /** What merging put on the target branch. */
+  mergedSha?: string;
 }
 
 function commitSha(files: Record<string, string>, parent?: string | null) {
@@ -288,9 +383,19 @@ function treeEntries(files: Map<string, string>) {
     for (let index = 1; index < parts.length; index++)
       folders.add(parts.slice(0, index).join("/"));
   }
+  const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1);
   return [
-    ...[...folders].map((path) => ({ path, type: "tree", mode: "040000" })),
-    ...[...files.keys()].map((path) => ({
+    ...[...folders].map((path) => ({
+      id: createHash("sha1").update(`tree ${path}`).digest("hex"),
+      name: nameOf(path),
+      path,
+      type: "tree",
+      mode: "040000",
+    })),
+    ...[...files].map(([path, content]) => ({
+      // Like a blob id, the same content keeps the same id.
+      id: createHash("sha1").update(`blob ${content}`).digest("hex"),
+      name: nameOf(path),
       path,
       type: "blob",
       mode: "100644",
@@ -318,7 +423,11 @@ function mergeRequestJson(
     web_url: `${webUrl}/${project.path}/-/merge_requests/${request.iid}`,
     state: request.state,
     source_branch: request.sourceBranch,
+    target_branch: request.targetBranch,
     detailed_merge_status: "mergeable",
+    sha: request.mergedSha ?? project.branches.get(request.sourceBranch),
+    merge_commit_sha: null,
+    squash_commit_sha: null,
   };
 }
 

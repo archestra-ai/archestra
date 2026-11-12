@@ -1,6 +1,7 @@
 import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -26,6 +27,7 @@ import {
 } from "./appa-github-sync-panel";
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/hooks/use-app-name", () => ({ useAppName: () => "Acme AI" }));
 vi.mock("sonner");
 const navigation = vi.hoisted(() => ({
   search: new URLSearchParams(),
@@ -60,6 +62,21 @@ const source = {
   lastSyncedAt: "2026-09-15T12:00:00Z",
   lastSyncError: null,
 };
+/** Release 1.4: the status reports the deployment's variables. */
+function selfServiceSetting(enabled: boolean, directory = "mcp") {
+  return {
+    enabled,
+    directory,
+    environment: {
+      variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE",
+      value: enabled ? ("enabled" as const) : ("disabled" as const),
+    },
+    directoryEnvironment: {
+      variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY",
+      value: directory,
+    },
+  };
+}
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
@@ -79,6 +96,8 @@ beforeEach(() => {
     githubWebUrl: "https://github.com",
     provider: "github",
     source,
+    // Off unless a test turns the deployment's variable on.
+    selfService: selfServiceSetting(false),
   };
   server.use(http.get(url, () => HttpResponse.json(state)));
 });
@@ -127,6 +146,335 @@ test("syncs on demand and shows the server's failure while retaining the source"
   expect(toast.success).not.toHaveBeenCalled();
 });
 
+test("a ruleset still to set up: the row says ready to be Enabled, with Finish setup, and no sentence under it", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: "app-1" },
+    selfService: selfServiceSetting(true),
+  };
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Guardrails Policy Admission",
+        include: { folder: "mcp", state: "included" },
+        branchRules: {
+          state: "incomplete",
+          url: "https://github.com/example/policies/rules/5",
+          bypassActors: 2,
+        },
+      }),
+    ),
+  );
+  show();
+  expect(
+    await screen.findByRole("heading", {
+      name: "MCP Guardrails Self-Service is ready to be Enabled",
+    }),
+  ).toBeVisible();
+  expect(screen.getByRole("button", { name: "Finish setup" })).toBeEnabled();
+  expect(screen.queryByText(/branch protection/)).toBeNull();
+  expect(screen.queryByRole("link", { name: "ruleset" })).toBeNull();
+});
+
+test("on in full: the row says Enabled and names the ruleset", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: "app-1" },
+    selfService: selfServiceSetting(true),
+  };
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Guardrails Policy Admission",
+        include: { folder: "mcp", state: "included" },
+        branchRules: {
+          state: "active",
+          url: "https://github.com/example/policies/rules/5",
+        },
+      }),
+    ),
+  );
+  show();
+  expect(
+    await screen.findByRole("heading", {
+      name: "MCP Guardrails Self-Service is Enabled",
+    }),
+  ).toBeVisible();
+  expect(
+    await screen.findByText(/protects the policy on the/),
+  ).toHaveTextContent("Ruleset protects the policy on the branch");
+  expect(screen.getByRole("link", { name: "Ruleset" })).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/rules/5",
+  );
+  expect(screen.queryByRole("button", { name: "Finish setup" })).toBeNull();
+});
+
+test("Finish setup lists the permissions an existing GitHub App lacks, with where to grant and accept them", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: "app-1" },
+    selfService: selfServiceSetting(true),
+  };
+  let granted = false;
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Guardrails Policy Admission",
+        include: { folder: "mcp", state: "included" },
+        branchRules: { state: "needs_permission" },
+      }),
+    ),
+    http.get(`${url}/app-grants`, () =>
+      HttpResponse.json({
+        name: "Policy App",
+        url: "https://github.com/apps/policy-app",
+        settingsUrl: "https://github.com/settings/apps/policy-app/permissions",
+        installationUrl: "https://github.com/settings/installations/7",
+        permissions: [
+          { name: "contents", granted: true },
+          { name: "pull_requests", granted: true },
+          { name: "checks", granted },
+          { name: "administration", granted },
+        ],
+      }),
+    ),
+  );
+  show();
+  expect(
+    await screen.findByRole("heading", {
+      name: "MCP Guardrails Self-Service is ready to be Enabled",
+    }),
+  ).toBeVisible();
+  expect(screen.queryByText(/Administration permission/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
+  const dialog = await screen.findByRole("dialog", {
+    name: "MCP Guardrails Self-Service",
+  });
+  expect(
+    await within(dialog).findByText(
+      (_, element) =>
+        element?.tagName === "SPAN" &&
+        /^Missing: Administration and Checks\./.test(element.textContent ?? ""),
+    ),
+  ).toBeVisible();
+  expect(
+    within(dialog).getByRole("button", { name: /Update App/ }),
+  ).toBeEnabled();
+  expect(
+    within(dialog).getByRole("button", { name: "Approve the request" }),
+  ).toBeEnabled();
+  expect(
+    within(dialog).getByRole("button", { name: "Continue" }),
+  ).toBeDisabled();
+  granted = true;
+  fireEvent.click(within(dialog).getByRole("button", { name: "Check again" }));
+  await waitFor(() =>
+    expect(
+      within(dialog).getByRole("button", { name: "Continue" }),
+    ).toBeEnabled(),
+  );
+  expect(
+    within(dialog).getByText(/every permission self-service needs/),
+  ).toBeVisible();
+});
+
+test("Finish setup walks through the App's permissions, the ruleset and the include pull request", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: "app-1" },
+    selfService: selfServiceSetting(true, "rules/servers"),
+  };
+  let include: Record<string, unknown> = {
+    folder: "rules/servers",
+    state: "missing",
+  };
+  const protection = vi.fn(() =>
+    HttpResponse.json({
+      checkName: "Guardrails Policy Admission",
+      include,
+      branchRules: {
+        state: "active",
+        url: "https://github.com/example/policies/rules/5",
+      },
+    }),
+  );
+  const actions: unknown[] = [];
+  server.use(
+    http.get(`${url}/app-grants`, () =>
+      HttpResponse.json({
+        name: "Policy App",
+        url: "https://github.com/apps/policy-app",
+        settingsUrl: "https://github.com/settings/apps/policy-app/permissions",
+        installationUrl: "https://github.com/settings/installations/7",
+        permissions: [
+          { name: "contents", granted: true },
+          { name: "pull_requests", granted: true },
+          { name: "checks", granted: true },
+          { name: "administration", granted: true },
+        ],
+      }),
+    ),
+    http.get(`${url}/protection`, protection),
+    http.patch(url, async ({ request }) => {
+      const body = (await request.json()) as { action: string };
+      actions.push(body);
+      // Only the include step opens the pull request; protect keeps the ruleset.
+      if (body.action === "include_servers")
+        include = {
+          folder: "rules/servers",
+          state: "pull_open",
+          pull: {
+            number: 12,
+            url: "https://github.com/example/policies/pull/12",
+          },
+        };
+      return HttpResponse.json(state);
+    }),
+  );
+  show();
+  // On by the variable, but not in full: the heading says so, and the
+  // button finishes it; no sentence repeats what is missing.
+  expect(
+    await screen.findByRole("heading", {
+      name: "MCP Guardrails Self-Service is ready to be Enabled",
+    }),
+  ).toBeVisible();
+  expect(screen.queryByText(/does not include/)).toBeNull();
+  expect(screen.queryByRole("button", { name: "Enable" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
+  const dialog = await screen.findByRole("dialog", {
+    name: "MCP Guardrails Self-Service",
+  });
+  expect(
+    await within(dialog).findByText(/every permission self-service needs/),
+  ).toBeVisible();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+
+  // The switch is the deployment's; the ruleset, then the pull request,
+  // each reported.
+  expect(
+    await within(dialog).findByText("MCP Guardrails Self-Service is on"),
+  ).toBeVisible();
+  expect(
+    await within(dialog).findByText(/Branch ruleset created/),
+  ).toBeVisible();
+  expect(
+    (await within(dialog).findByRole("link", { name: "Pull request #12" }))
+      .parentElement,
+  ).toHaveTextContent(
+    "Pull request #12 opened. Merge it and re-sync to apply the new settings.",
+  );
+  expect(actions).toEqual([
+    { action: "protect" },
+    { action: "include_servers" },
+  ]);
+  fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+
+  // Until the pull request merges, the card points at it and nothing else.
+  const link = await screen.findByRole("link", { name: "Pull request #12" });
+  expect(
+    screen.getByRole("heading", {
+      name: "MCP Guardrails Self-Service is ready to be Enabled",
+    }),
+  ).toBeVisible();
+  expect(screen.queryByText(/protects the policy on the/)).toBeNull();
+  expect(link.closest("p")).toHaveTextContent(
+    "Pull request #12 adds rules/servers/*.toml to appa.toml. Merge it and re-sync.",
+  );
+  expect(screen.queryByRole("button", { name: "Finish setup" })).toBeNull();
+  // The variables are the switch: the card offers none of its own.
+  expect(screen.queryByRole("button", { name: "Disable" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Edit" })).toBeEnabled();
+});
+
+test("shows the deployment's self-service settings read-only, naming the variables and their values", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: "app-1" },
+    selfService: selfServiceSetting(true),
+  };
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Guardrails Policy Admission",
+        include: { folder: "mcp", state: "included" },
+        branchRules: { state: "missing" },
+      }),
+    ),
+  );
+  show();
+  // The ruleset is not up yet: the heading says ready, in plain weight.
+  expect(
+    await screen.findByRole("heading", {
+      name: "MCP Guardrails Self-Service is ready to be Enabled",
+    }),
+  ).toBeVisible();
+  expect(screen.queryByText("On", { selector: "p" })).toBeNull();
+  expect(
+    screen.queryByRole("combobox", { name: "MCP Guardrails Self-Service" }),
+  ).toBeNull();
+  const code = (text: string) =>
+    screen.getByText(
+      (_, element) =>
+        element?.tagName === "CODE" && element.textContent === text,
+    );
+  expect(code("ARCHESTRA_OPENAPPA_SELF_SERVICE=enabled")).toBeVisible();
+  expect(
+    screen.getByRole("button", {
+      name: "MCP Guardrails Self-Service environment values",
+    }),
+  ).toBeEnabled();
+  // The folder too, named in its sentence and not in a value column, with
+  // no other values to list.
+  expect(
+    screen.getByText(
+      (_, element) =>
+        element?.tagName === "STRONG" && element.textContent === "mcp/",
+    ),
+  ).toBeVisible();
+  expect(screen.queryByText("mcp/", { selector: "p" })).toBeNull();
+  expect(code("ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY=mcp")).toBeVisible();
+  expect(
+    screen.queryByRole("button", {
+      name: "Self-service folder environment values",
+    }),
+  ).toBeNull();
+  // The ruleset is not up yet: ready, with Finish setup.
+  expect(
+    await screen.findByRole("heading", {
+      name: "MCP Guardrails Self-Service is ready to be Enabled",
+    }),
+  ).toBeVisible();
+  expect(screen.getByRole("button", { name: "Finish setup" })).toBeEnabled();
+});
+
+test("self-service needs a GitHub App: a source without one gets no check or ruleset", async () => {
+  state = {
+    ...state,
+    source: { ...source },
+    selfService: selfServiceSetting(false),
+  };
+  show();
+  expect(
+    await screen.findByText(
+      (_, element) =>
+        element?.tagName === "STRONG" && element.textContent === "Disabled",
+    ),
+  ).toBeVisible();
+  expect(
+    screen.getByText(/Connect the policy repository through a GitHub App/),
+  ).toBeVisible();
+  expect(screen.getByRole("link", { name: /Learn more/ })).toHaveAttribute(
+    "href",
+    expect.stringContaining("git-sync#mcp-guardrails-self-service"),
+  );
+  expect(screen.queryByText(/Self-service branch protection/)).toBeNull();
+});
+
 test("confirms disconnect, stops automatic updates and preserves the accepted policy", async () => {
   server.use(
     http.patch(url, async ({ request }) => {
@@ -169,7 +517,7 @@ test("read-only users see status without mutation controls", async () => {
     screen.queryByRole("button", { name: "Sync now" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: "Edit source" }),
+    screen.queryByRole("button", { name: "Edit" }),
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Stop syncing" }),
@@ -282,6 +630,8 @@ test("links an existing repository whose policy lives elsewhere through Advanced
     target: { value: "example" },
   });
   fireEvent.click(screen.getByText("Use an existing repository"));
+  // The Self-service step comes first; nothing to change here.
+  fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
   // With a single App there is nothing to pick: it goes straight to its repositories.
   fireEvent.click(await screen.findByText("Use an App I already have"));
   fireEvent.click(await screen.findByRole("combobox", { name: "Repository" }));
@@ -361,6 +711,8 @@ test("starts fresh from the template, connects it through a chosen App and finis
     visibility: "private",
   });
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  // The Self-service step comes first; nothing to change here.
+  fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
   fireEvent.click(await screen.findByText("Use an App I already have"));
   fireEvent.click(await screen.findByRole("radio", { name: /Policy App/ }));
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -425,9 +777,11 @@ test("starts fresh from the template, connects it through a chosen App and finis
 });
 
 test("editing an App-backed source keeps its repository and only warns about missing validations", async () => {
+  // On: the save's outcome stays on screen, the ruleset and the include.
   state = {
     ...state,
     source: { ...source, githubAppConfigId: appId },
+    selfService: selfServiceSetting(true),
   };
   serveApps([[appId, "Policy App"]]);
   serveRepositories({ [appId]: ["example/policies"] });
@@ -440,19 +794,41 @@ test("editing an App-backed source keeps its repository and only warns about mis
       saved = await request.json();
       return HttpResponse.json(state);
     }),
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Check OpenAPPA Guardrails",
+        include: { folder: "mcp", state: "included" },
+        branchRules: {
+          state: "active",
+          url: "https://github.com/example/policies/rules/5",
+        },
+      }),
+    ),
   );
   show();
-  fireEvent.click(await screen.findByRole("button", { name: "Edit source" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
   expect(await screen.findByText("Edit Git sync")).toBeVisible();
   expect(
     await screen.findByText("No traces/ folder", {}, { timeout: 3000 }),
   ).toBeVisible();
   // The repository already syncing is kept, not announced as a new find.
   expect(
-    within(screen.getByRole("dialog")).queryByText(/appa\.toml/),
+    within(screen.getByRole("dialog")).queryByText(/becomes your policy/),
   ).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Branch")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  // With self-service on, the dialog stays open on what the save brought.
+  const dialog = screen.getByRole("dialog");
+  expect(
+    await within(dialog).findByText("Git sync saved and the policy pulled"),
+  ).toBeVisible();
+  expect(
+    await within(dialog).findByText(/Branch ruleset created/),
+  ).toBeVisible();
+  expect(await within(dialog).findByText(/already includes/)).toHaveTextContent(
+    "appa.toml already includes mcp/*.toml.",
+  );
+  fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
@@ -567,7 +943,7 @@ test("moving a GitHub sync to a new GitLab project starts GitLab fresh and repla
     }),
   );
   show();
-  fireEvent.click(await screen.findByRole("button", { name: "Edit source" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
   expect(await screen.findByText("Edit Git sync")).toBeVisible();
   // Back to the host step, then over to GitLab.
   while (!screen.queryByRole("button", { name: /^GitLab/ }))
@@ -631,7 +1007,7 @@ test("moving a GitHub sync to an existing GitLab project connects that project",
     }),
   );
   show();
-  fireEvent.click(await screen.findByRole("button", { name: "Edit source" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
   while (!screen.queryByRole("button", { name: /^GitLab/ }))
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
   fireEvent.click(screen.getByRole("button", { name: /^GitLab/ }));
@@ -786,4 +1162,72 @@ test("keeps the merge link after reload and removes it once initial sync complet
     ).not.toBeInTheDocument(),
   );
   expect(screen.getByText("Connected")).toBeVisible();
+});
+
+test("links the pull request that includes the servers' folder while it waits, and offers to finish the setup when a part is missing", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: "app-1" },
+    selfService: selfServiceSetting(true),
+  };
+  let include: Record<string, unknown> = {
+    folder: "mcp",
+    state: "pull_open",
+    pull: { number: 12, url: "https://github.com/example/policies/pull/12" },
+  };
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Guardrails Policy Admission",
+        include,
+        branchRules: {
+          state: "active",
+          url: "https://github.com/example/policies/rules/5",
+        },
+      }),
+    ),
+    http.get(`${url}/app-grants`, () =>
+      HttpResponse.json({
+        name: "Policy App",
+        url: "https://github.com/apps/policy-app",
+        settingsUrl: "https://github.com/settings/apps/policy-app/permissions",
+        installationUrl: "https://github.com/settings/installations/7",
+        permissions: [
+          { name: "contents", granted: true },
+          { name: "pull_requests", granted: true },
+          { name: "checks", granted: true },
+          { name: "administration", granted: true },
+        ],
+      }),
+    ),
+  );
+  show();
+  const link = await screen.findByRole("link", { name: "Pull request #12" });
+  expect(link).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/pull/12",
+  );
+  expect(link.closest("p")).toHaveTextContent(
+    "Pull request #12 adds mcp/*.toml to appa.toml. Merge it and re-sync.",
+  );
+  expect(screen.queryByRole("button", { name: "Finish setup" })).toBeNull();
+
+  cleanup();
+  include = { folder: "mcp", state: "missing" };
+  show();
+  const finish = await screen.findByRole("button", { name: "Finish setup" });
+  expect(screen.queryByText(/does not include/)).toBeNull();
+  expect(
+    screen.getByRole("heading", {
+      name: "MCP Guardrails Self-Service is ready to be Enabled",
+    }),
+  ).toBeVisible();
+  // Already on: the setup starts at the App step, and the folder is fixed.
+  fireEvent.click(finish);
+  const dialog = await screen.findByRole("dialog", {
+    name: "MCP Guardrails Self-Service",
+  });
+  expect(
+    await within(dialog).findByText(/every permission self-service needs/),
+  ).toBeVisible();
 });

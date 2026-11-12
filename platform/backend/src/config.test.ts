@@ -70,6 +70,8 @@ import config, {
   parseMetricsPort,
   parseNonNegativeInt,
   parseOpenAppaConfig,
+  parseOpenAppaPolicyCheckName,
+  parseOpenAppaSelfServiceDirectory,
   parseOptionalPort,
   parseOtelCaptureContent,
   parseProcessType,
@@ -3660,6 +3662,64 @@ describe("OpenAPPA feature configuration", () => {
     );
   });
 
+  test("the policy check's name defaults to a product-free one, is trimmed, and is bounded", () => {
+    expect(parseOpenAppaPolicyCheckName(undefined)).toBe(
+      "Check OpenAPPA Guardrails",
+    );
+    expect(parseOpenAppaPolicyCheckName("  ")).toBe(
+      "Check OpenAPPA Guardrails",
+    );
+    expect(parseOpenAppaPolicyCheckName(" Acme policy ")).toBe("Acme policy");
+    expect(() => parseOpenAppaPolicyCheckName("x".repeat(101))).toThrow(
+      "ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME must be at most 100 characters",
+    );
+    expect(
+      parseOpenAppaConfig({ policyCheckName: "Acme policy" }),
+    ).toMatchObject({ policyCheckName: "Acme policy" });
+  });
+
+  test("MCP Guardrails Self-Service is off by default, and set only to disabled or enabled", () => {
+    expect(parseOpenAppaConfig().selfService).toBe("disabled");
+    expect(parseOpenAppaConfig({ selfService: " " }).selfService).toBe(
+      "disabled",
+    );
+    expect(parseOpenAppaConfig({ selfService: "enabled" }).selfService).toBe(
+      "enabled",
+    );
+    expect(parseOpenAppaConfig({ selfService: "disabled" }).selfService).toBe(
+      "disabled",
+    );
+    expect(() => parseOpenAppaConfig({ selfService: "true" })).toThrow(
+      "ARCHESTRA_OPENAPPA_SELF_SERVICE must be one of: disabled, enabled",
+    );
+  });
+
+  test("the self-service folder is mcp by default, trimmed, and a folder beside the policy file", () => {
+    expect(parseOpenAppaSelfServiceDirectory(undefined)).toBe("mcp");
+    expect(parseOpenAppaSelfServiceDirectory("  ")).toBe("mcp");
+    expect(parseOpenAppaSelfServiceDirectory(" rules/servers ")).toBe(
+      "rules/servers",
+    );
+    expect(parseOpenAppaConfig().selfServiceDirectory).toBe("mcp");
+    expect(
+      parseOpenAppaConfig({ selfServiceDirectory: "servers" })
+        .selfServiceDirectory,
+    ).toBe("servers");
+    for (const bad of [
+      "mcp/",
+      "/mcp",
+      "../mcp",
+      "mcp/*",
+      "batteries",
+      "batteries/x",
+      ".hidden",
+    ]) {
+      expect(() => parseOpenAppaSelfServiceDirectory(bad)).toThrow(
+        "ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY must be a folder beside the policy file",
+      );
+    }
+  });
+
   test("reporting defaults on and supports an explicit opt-out", () => {
     expect(parseOpenAppaConfig().yellEnabled).toBe(true);
     expect(parseOpenAppaConfig({ yellEnabled: "true" }).yellEnabled).toBe(true);
@@ -3714,6 +3774,9 @@ describe("OpenAPPA feature configuration", () => {
       enabled: true,
       humanApprovalMode: "block",
       softBlockMode: "refuse",
+      policyCheckName: "Check OpenAPPA Guardrails",
+      selfService: "disabled",
+      selfServiceDirectory: "mcp",
       yellEnabled: true,
       yellForwardingEnabled: false,
       offerSigningSecret: "",

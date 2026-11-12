@@ -47,6 +47,41 @@ describe("POST /api/openappa/github-app/manifest", () => {
       payload: { githubUrl: "https://github.com", owner },
     });
 
+  test("the manifest asks for the sync's permissions, and with MCP Guardrails Self-Service on for the policy check's and the branch ruleset's too", async () => {
+    server.use(
+      http.get("https://api.github.com/users/:login", ({ params }) =>
+        HttpResponse.json({ login: params.login, type: "Organization" }),
+      ),
+    );
+    const permissions = async () => {
+      const started = await start("acme");
+      expect(started.statusCode, started.body).toBe(200);
+      return (
+        JSON.parse(started.json().manifest) as {
+          default_permissions: Record<string, string>;
+        }
+      ).default_permissions;
+    };
+    const sync = {
+      contents: "write",
+      pull_requests: "write",
+      metadata: "read",
+    };
+    expect(await permissions()).toEqual(sync);
+    // Release 1.4: ARCHESTRA_OPENAPPA_SELF_SERVICE decides for every App. On,
+    // the policy check (Checks) and the branch ruleset (Administration).
+    config.openappa.selfService = "enabled";
+    try {
+      expect(await permissions()).toEqual({
+        ...sync,
+        checks: "write",
+        administration: "write",
+      });
+    } finally {
+      config.openappa.selfService = "disabled";
+    }
+  });
+
   test("takes an organization GitHub hides behind its enterprise's sign-in", async () => {
     // Anonymous API reads of an Enterprise Managed Users organization get a
     // 404, as for a missing account; only its web profile tells them apart.

@@ -65,6 +65,7 @@ The first two rows depend on the policy's \`revision\` and \`delivery\`: read th
 | Why a scheduled task run failed or was blocked | **Investigate a scheduled run** in \`references/requests.md\` |
 | Why a gateway LLM session failed or was blocked | **Investigate an LLM session** in \`references/requests.md\` |
 | Why a call was blocked | **Explain a block** in the policy-writing rules; \`references/adjust.md\` if the operator wants a change |
+| Change, explain or check one MCP server's own rules, its file in the policy repository; also when the operator cannot read the organization policy | **Server rules** below, without reading the policy first |
 
 If the request says \`diagnose\` and \`inspect only\`, do not propose or make changes: inspect the host and report **Health** for runtime, policy, agents, and tool servers, an optional **Unavailable** section, one **OpenAPPA pieces** line, and then **No changes applied.** Do not mention battery matches or suggested includes in that report.
 
@@ -117,6 +118,20 @@ This replaces the summary in the shared **Publish and finish**.
 3. A pull request: give its URL and say the change is not enforced until it merges and the repository syncs. Check it with \`archestra__get_guardrails_policy_change_status\` only when asked, and never for a local revision. If Git sync lacks a ready credential or the source changed upstream, do not claim a policy update; fix or sync the source first.
 4. A local revision: read back the policy and report any \`effective.error\` or non-\`active\` battery as a problem. If composition is refused, \`effective.error\` holds the refusal and \`effective.content\` (with \`composed: true\`) keeps the last composition that opened, if one did; do not claim the new text is enforced. The publish result's \`enforcement\` is the evidence for the switch; composition alone proves nothing. For a healthy, enabled save the result banner is the completion: add no summary, revision number, or link, overriding the summary in **Publish and finish**; only **Add batteries** adds a short summary, a first policy its one-sentence next step, and a targeted change the validation offer from \`references/validation.md\`. If enforcement is off or confirmation failed, say which revision was saved, what is not active and why, and link [OpenAPPA Policy](/openappa/policy). Never claim Guardrails v2 switched off or that an unsaved draft is active. Later saves leave the enforcement switch unchanged.
 5. If a response fails, read the current state before any retry. Never duplicate a successful write or claim success without evidence.
+
+## Server rules
+
+With Git sync, each MCP server can keep its own rules in the policy repository's self-service folder, \`mcp/<tool prefix>.toml\` unless the administrator chose another folder, which \`appa.toml\` includes by name or with every server's through \`<folder>/*.toml\`. Whoever may edit the server in the MCP registry may propose a change to that file as a pull request, without access to the organization policy. The repository's review decides whether it merges; Git sync then applies it, and refuses a file that reaches outside its server. The organization's own rule for a tool wins over the file's.
+
+1. Read it with \`archestra__get_guardrails_server_rules\` and the server's catalog ID. When \`repository\` is null or \`canEdit\` is false, say why, from \`instruction\`, and stop.
+2. Write the complete file: \`[policy]\` with \`version = 2\`, then \`[[policy.tool]]\` rules for the listed \`tools\` only, and any \`[[policy.annotator]]\` they use, named \`<tool prefix>.<name>\`. Keep the rules already there unless the operator asks otherwise. Load \`references/contracts.md\` for syntax the file does not show yet. A rule for a tool in \`rootRules\` changes nothing, since the organization's rule wins: say so.
+   - For a rule that covers every tool of the server, use \`<tool prefix>__*\`, never \`*\`: it applies to each of the server's tools the file has no rule of its own for, including tools the server gains later.
+   - The file declares no authority or sanitizer; it uses those in \`organizationHelpers\`. For a person's approval, require an attention mark an authority permits (\`requires = { attention = ["<mark>"] }\`; \`["*"]\` permits every mark). For a sanitizer, give the tool one of its \`tags\`; a \`tool_output\` one also needs the tool under \`[policy.deployment]\` \`confined_results\`, the one deployment setting the file may set. When none fits, say that an administrator adds one to \`appa.toml\`.
+3. Preview it with \`archestra__preview_guardrails_server_rules_change\` and \`expectedCommit\`; fix errors and preview again. Explain the effect on agents. When \`appa.toml\` includes no server files yet, the change also adds the folder's \`<folder>/*.toml\` entry to its include list (\`rootChange\`), once for every server; that file's reviewers approve it.
+4. Ask "Open this pull request?" as in **Approval in Archestra**. On Approve, call \`archestra__propose_guardrails_server_rules_change\` with the same \`content\` and \`expectedCommit\` and a plain \`summary\` for the reviewers, then give the link: nothing applies until it merges and Git sync pulls it.
+5. Check whether it applies with \`archestra__get_guardrails_server_rules_change_status\` only when asked.
+
+Never copy a server's rules into \`appa.toml\` with \`archestra__update_guardrails_policy\` when the operator asked for that server's rules.
 
 ## Rules
 

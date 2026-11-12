@@ -2100,9 +2100,15 @@ export function parseOpenAppaConfig({
   authSecret,
   humanApprovalMode,
   softBlockMode,
+  policyCheckName,
+  selfService,
+  selfServiceDirectory,
 }: {
   humanApprovalMode?: string;
   softBlockMode?: string;
+  policyCheckName?: string;
+  selfService?: string;
+  selfServiceDirectory?: string;
   yellEnabled?: string;
   yellForwardingEnabled?: string;
   offerSigningSecret?: string;
@@ -2153,6 +2159,19 @@ export function parseOpenAppaConfig({
       softBlockMode,
       ["refuse", "allow"] as const,
     ),
+    policyCheckName: parseOpenAppaPolicyCheckName(policyCheckName),
+    // Whether an MCP server's editors change its own Guardrails rules through
+    // Git sync, and the folder their files live in. Release 1.4 sets both
+    // here only, off by default; later releases save the switch with the Git
+    // sync source and, while this variable is set, use it instead, so a
+    // cluster upgraded from 1.4 keeps the behaviour it was configured for.
+    selfService: parseOpenAppaChoice(
+      OPENAPPA_SELF_SERVICE_VARIABLE,
+      selfService,
+      ["disabled", "enabled"] as const,
+    ),
+    selfServiceDirectory:
+      parseOpenAppaSelfServiceDirectory(selfServiceDirectory),
     yellEnabled: (yellEnabled ?? "true") === "true",
     // External diagnostic delivery requires its own opt-in in every environment.
     yellForwardingEnabled: forwarding === "true",
@@ -2165,6 +2184,12 @@ export function parseOpenAppaConfig({
     ...(reviewSummary ? { reviewSummary } : {}),
   };
 }
+
+/** The variable that turns MCP Guardrails Self-Service on or off for the deployment. */
+export const OPENAPPA_SELF_SERVICE_VARIABLE = "ARCHESTRA_OPENAPPA_SELF_SERVICE";
+/** The variable that names the folder each MCP server's rules file lives in. */
+export const OPENAPPA_SELF_SERVICE_DIRECTORY_VARIABLE =
+  "ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY";
 
 /** The first choice is the default; any other value stops startup. */
 function parseOpenAppaChoice<const T extends readonly [string, ...string[]]>(
@@ -2207,6 +2232,41 @@ function parseOpenAppaPostgresMaxConnections(envValue?: string): number {
  * from the organization's default provider. Validation errors name variables
  * only, never credential values.
  */
+/**
+ * The name of the check Archestra posts on the policy repository's pull
+ * requests, and of the branch ruleset that requires it. Carries no product
+ * name by default, so a white-labeled deployment shows its users none.
+ * @public — exported for testability
+ */
+export function parseOpenAppaPolicyCheckName(value?: string): string {
+  const name = value?.trim() ?? "";
+  if (name === "") return "Check OpenAPPA Guardrails";
+  if (name.length > 100)
+    throw new Error(
+      "ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME must be at most 100 characters",
+    );
+  return name;
+}
+
+/**
+ * The folder beside the policy file that holds one rules file per MCP
+ * server, `mcp` unless set: segments of letters, digits, `_`, `-` and inner
+ * dots, so no `*`, no `.` or `..`, no slash at either end, and not the
+ * batteries' own folder.
+ * @public — exported for testability
+ */
+export function parseOpenAppaSelfServiceDirectory(value?: string): string {
+  const folder = value?.trim() ?? "";
+  if (folder === "") return "mcp";
+  if (folder.length > 200 || !SELF_SERVICE_DIRECTORY.test(folder))
+    throw new Error(
+      `${OPENAPPA_SELF_SERVICE_DIRECTORY_VARIABLE} must be a folder beside the policy file, such as mcp or rules/servers`,
+    );
+  return folder;
+}
+const SELF_SERVICE_DIRECTORY =
+  /^(?!batteries(?:\/|$))[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$/;
+
 function parseOpenAppaReviewSummary({
   provider,
   model,
@@ -2298,6 +2358,9 @@ const openappa = parseOpenAppaConfig({
   yellEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
   humanApprovalMode: process.env.ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE,
   softBlockMode: process.env.ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE,
+  policyCheckName: process.env.ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME,
+  selfService: process.env.ARCHESTRA_OPENAPPA_SELF_SERVICE,
+  selfServiceDirectory: process.env.ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY,
   yellForwardingEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED,
   offerSigningSecret: process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   postgresMaxConnections:

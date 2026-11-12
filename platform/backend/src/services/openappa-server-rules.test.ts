@@ -2770,7 +2770,9 @@ test("a read lists every rule for the server's tools across the policy, the root
     head: FIRST,
     files: {
       [FIRST]: {
-        "appa.toml": `include = ["teams/*.toml"]\n\n${RULES}`,
+        // Release 1.4 reads server rules only once setup is complete: the
+        // servers' folder included, and the ruleset the App keeps in place.
+        "appa.toml": `include = ["teams/*.toml", "mcp/*.toml"]\n\n${RULES}`,
         "teams/support.toml": team,
       },
     },

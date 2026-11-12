@@ -146,8 +146,12 @@ test("syncs on demand and shows the server's failure while retaining the source"
   expect(toast.success).not.toHaveBeenCalled();
 });
 
-test("shows the repository protection kept for server rules files, with bypass entries", async () => {
-  state = { ...state, selfService: selfServiceSetting(true) };
+test("a ruleset still to set up: the row says ready to be Enabled, with Finish setup, and no sentence under it", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: "app-1" },
+    selfService: selfServiceSetting(true),
+  };
   server.use(
     http.get(`${url}/protection`, () =>
       HttpResponse.json({
@@ -162,14 +166,48 @@ test("shows the repository protection kept for server rules files, with bypass e
     ),
   );
   show();
-  // In the deployment's own name, one sentence, with the ruleset linked.
   expect(
-    await screen.findByText(/Acme AI sets the Self-service branch protection/),
+    await screen.findByRole("heading", {
+      name: "MCP Guardrails Self-Service ready to be Enabled",
+    }),
   ).toBeVisible();
-  expect(screen.getByRole("link", { name: "ruleset" })).toHaveAttribute(
+  expect(screen.getByRole("button", { name: "Finish setup" })).toBeEnabled();
+  expect(screen.queryByText(/branch protection/)).toBeNull();
+  expect(screen.queryByRole("link", { name: "ruleset" })).toBeNull();
+});
+
+test("on in full: the row says Enabled and names the ruleset", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: "app-1" },
+    selfService: selfServiceSetting(true),
+  };
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Guardrails Policy Admission",
+        include: { folder: "mcp", state: "included" },
+        branchRules: {
+          state: "active",
+          url: "https://github.com/example/policies/rules/5",
+        },
+      }),
+    ),
+  );
+  show();
+  expect(
+    await screen.findByRole("heading", {
+      name: "MCP Guardrails Self-Service is Enabled",
+    }),
+  ).toBeVisible();
+  expect(
+    await screen.findByText(/protects the policy on the/),
+  ).toHaveTextContent("Ruleset protects the policy on the branch");
+  expect(screen.getByRole("link", { name: "Ruleset" })).toHaveAttribute(
     "href",
     "https://github.com/example/policies/rules/5",
   );
+  expect(screen.queryByRole("button", { name: "Finish setup" })).toBeNull();
 });
 
 test("Finish setup lists the permissions an existing GitHub App lacks, with where to grant and accept them", async () => {
@@ -204,14 +242,11 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
   );
   show();
   expect(
-    await screen.findByText(
-      (_, element) =>
-        element?.tagName === "P" &&
-        /waits for the GitHub App's Administration permission/.test(
-          element.textContent ?? "",
-        ),
-    ),
+    await screen.findByRole("heading", {
+      name: "MCP Guardrails Self-Service ready to be Enabled",
+    }),
   ).toBeVisible();
+  expect(screen.queryByText(/Administration permission/)).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
   const dialog = await screen.findByRole("dialog", {
     name: "MCP Guardrails Self-Service",
@@ -296,10 +331,14 @@ test("Finish setup walks through the App's permissions, the ruleset and the incl
     }),
   );
   show();
-  // On by the variable: the card shows it, and what is still missing.
-  expect(await screen.findByText(/does not include/)).toHaveTextContent(
-    "appa.toml does not include rules/servers/*.toml yet.",
-  );
+  // On by the variable, but not in full: the heading says so, and the
+  // button finishes it; no sentence repeats what is missing.
+  expect(
+    await screen.findByRole("heading", {
+      name: "MCP Guardrails Self-Service ready to be Enabled",
+    }),
+  ).toBeVisible();
+  expect(screen.queryByText(/does not include/)).toBeNull();
   expect(screen.queryByRole("button", { name: "Enable" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
   const dialog = await screen.findByRole("dialog", {
@@ -330,19 +369,14 @@ test("Finish setup walks through the App's permissions, the ruleset and the incl
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
 
-  // The card says what is in place.
-  expect(
-    await screen.findByText(/protects the policy on the/),
-  ).toHaveTextContent("Ruleset protects the policy on the branch");
-  expect(screen.getByRole("link", { name: "Ruleset" })).toHaveAttribute(
-    "href",
-    "https://github.com/example/policies/rules/5",
-  );
-  expect(screen.getByRole("link", { name: "branch" })).toHaveAttribute(
-    "href",
-    "https://github.com/example/policies/tree/main",
-  );
+  // Until the pull request merges, the card points at it and nothing else.
   const link = await screen.findByRole("link", { name: "Pull request #12" });
+  expect(
+    screen.getByRole("heading", {
+      name: "MCP Guardrails Self-Service ready to be Enabled",
+    }),
+  ).toBeVisible();
+  expect(screen.queryByText(/protects the policy on the/)).toBeNull();
   expect(link.closest("p")).toHaveTextContent(
     "Pull request #12 adds rules/servers/*.toml to appa.toml. Merge it and re-sync.",
   );
@@ -404,10 +438,13 @@ test("shows the deployment's self-service settings read-only, naming the variabl
       name: "Self-service folder environment values",
     }),
   ).toBeNull();
-  // In force: the protection shows all the same.
+  // The ruleset is not up yet: ready, with Finish setup.
   expect(
-    await screen.findByText(/sets the Self-service branch protection/),
+    await screen.findByRole("heading", {
+      name: "MCP Guardrails Self-Service ready to be Enabled",
+    }),
   ).toBeVisible();
+  expect(screen.getByRole("button", { name: "Finish setup" })).toBeEnabled();
 });
 
 test("self-service needs a GitHub App: a source without one gets no check or ruleset", async () => {
@@ -1174,9 +1211,12 @@ test("links the pull request that includes the servers' folder while it waits, a
   include = { folder: "mcp", state: "missing" };
   show();
   const finish = await screen.findByRole("button", { name: "Finish setup" });
-  expect(finish.closest("p")).toHaveTextContent(
-    "appa.toml does not include mcp/*.toml yet.",
-  );
+  expect(screen.queryByText(/does not include/)).toBeNull();
+  expect(
+    screen.getByRole("heading", {
+      name: "MCP Guardrails Self-Service ready to be Enabled",
+    }),
+  ).toBeVisible();
   // Already on: the setup starts at the App step, and the folder is fixed.
   fireEvent.click(finish);
   const dialog = await screen.findByRole("dialog", {

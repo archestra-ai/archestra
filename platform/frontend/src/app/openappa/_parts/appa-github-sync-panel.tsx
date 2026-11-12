@@ -47,7 +47,6 @@ import {
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { getVisibleDocsUrl } from "@/lib/docs/docs";
-import { useAppName } from "@/lib/hooks/use-app-name";
 import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github-credential";
 import {
   useAppaGithubSync,
@@ -355,6 +354,38 @@ function SelfServiceRow({
 }) {
   const eligible = !!source.githubAppConfigId;
   const [setup, setSetup] = useState(false);
+  const protection = useAppaRepositoryProtection(selfService.enabled);
+  const data = selfService.enabled ? (protection.data ?? null) : null;
+  // What Finish setup still does: the ruleset, or the include pull request.
+  const toFinish =
+    !!data &&
+    (data.branchRules.state !== "active" || data.include.state === "missing");
+  // On in full only once the ruleset holds and the include line is merged.
+  const ready = toFinish || data?.include.state === "pull_open";
+  const heading = (() => {
+    if (!selfService.enabled)
+      return (
+        <>
+          MCP Guardrails Self-Service is{" "}
+          <strong className="font-bold">Disabled</strong>
+        </>
+      );
+    if (ready)
+      return (
+        <>
+          MCP Guardrails Self-Service ready to be{" "}
+          <strong className="font-bold">Enabled</strong>
+        </>
+      );
+    // The repository's state decides the word; until it is read, none.
+    if (eligible && !data) return "MCP Guardrails Self-Service";
+    return (
+      <>
+        MCP Guardrails Self-Service is{" "}
+        <strong className="font-bold">Enabled</strong>
+      </>
+    );
+  })();
   const description = (
     <>
       {eligible
@@ -369,18 +400,23 @@ function SelfServiceRow({
         <DeploymentSettingRow
           compact
           title="MCP Guardrails Self-Service"
-          heading={
-            <>
-              MCP Guardrails Self-Service is{" "}
-              <strong className="font-bold">
-                {selfService.enabled ? "Enabled" : "Disabled"}
-              </strong>
-            </>
-          }
+          heading={heading}
           description={description}
           value={selfService.enabled ? "enabled" : "disabled"}
           disabled
           hideValue
+          action={
+            toFinish && canManage ? (
+              <Button
+                size="sm"
+                type="button"
+                variant="outline"
+                onClick={() => setSetup(true)}
+              >
+                Finish setup
+              </Button>
+            ) : undefined
+          }
           environmentVariable={selfService.environment.variable}
           options={[
             { value: "enabled", label: "On" },
@@ -410,11 +446,12 @@ function SelfServiceRow({
             },
           ]}
         />
-        {selfService.enabled ? (
-          <RepositoryProtection
+        {data ? (
+          <RepositoryState
+            data={data}
+            ready={ready}
             policyPath={source.path ?? "appa.toml"}
             branchUrl={urls?.tree(source.ref ?? "HEAD") ?? null}
-            onFinishSetup={canManage ? () => setSetup(true) : undefined}
           />
         ) : null}
       </div>
@@ -450,50 +487,50 @@ function SelfServiceDocsLink() {
   );
 }
 
-function RepositoryProtection({
+/**
+ * The repository's state under the rows. Setup still to finish: only the
+ * include pull request while one waits, since the heading and Finish setup
+ * say the rest. On in full: the ruleset, and the include when it could not
+ * be read.
+ */
+function RepositoryState({
+  data,
+  ready,
   policyPath,
   branchUrl,
-  onFinishSetup,
 }: {
+  data: Protection;
+  /** Setup is not finished: the ruleset, the include, or its pull request. */
+  ready: boolean;
   policyPath: string;
   /** The synced branch on the host, for the ruleset sentence. */
   branchUrl: string | null;
-  /** Opens the self-service setup again, for a part that is still missing. */
-  onFinishSetup?: () => void;
 }) {
-  const { data } = useAppaRepositoryProtection(true);
-  const appName = useAppName();
-  if (!data) return null;
   const policyFile = policyPath.slice(policyPath.lastIndexOf("/") + 1);
-  const unfinished =
-    data.branchRules.state !== "active" || data.include.state === "missing";
   const include = includeSentence(data.include, policyFile);
-  const finish =
-    unfinished && onFinishSetup ? (
-      <Button size="xs" type="button" variant="outline" onClick={onFinishSetup}>
-        Finish setup
-      </Button>
-    ) : null;
+  const lines = ready
+    ? data.include.state === "pull_open"
+      ? [include]
+      : []
+    : [protectionSentence(data.branchRules, branchUrl, data.app), include];
+  const shown = lines.filter((line) => line != null);
+  if (shown.length === 0) return null;
   // The repository's state reads at the rows' size, set off from the settings.
   return (
     <div className="space-y-1 pt-2 text-sm leading-5 text-muted-foreground">
-      <p>
-        {protectionSentence(data.branchRules, appName, branchUrl, data.app)}
-      </p>
-      {include || finish ? (
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          {include}
-          {finish}
-        </p>
-      ) : null}
+      {shown.map((line, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: two fixed sentences
+        <p key={index}>{line}</p>
+      ))}
     </div>
   );
 }
 
 /**
  * One sentence on the include that makes the servers' files apply: the pull
- * request that adds the line, or that it is missing. Included, the folder
- * row above already says where the files go.
+ * request that adds the line, or that it could not be read. Included, the
+ * folder row above already says where the files go; missing, the heading
+ * and Finish setup say so.
  */
 function includeSentence(
   include: Protection["include"],
@@ -501,8 +538,6 @@ function includeSentence(
 ): ReactNode {
   const entry = <code>{`${include.folder}/*.toml`}</code>;
   switch (include.state) {
-    case "included":
-      return null;
     case "pull_open":
       return (
         <span>
@@ -525,19 +560,10 @@ function includeSentence(
         </span>
       );
     default:
-      return (
-        <span>
-          {policyFile} does not include {entry} yet.
-        </span>
-      );
+      return null;
   }
 }
 
-/**
- * One sentence on the ruleset: on, with a link to it, or why not yet. The
- * check the App cannot post comes first, since a rule that requires it holds
- * every pull request.
- */
 /** A link into the repository on its host, or the text alone without one. */
 function hostLink(href: string | null | undefined, text: string): ReactNode {
   return href ? (
@@ -554,58 +580,29 @@ function hostLink(href: string | null | undefined, text: string): ReactNode {
   );
 }
 
+/** The ruleset once it holds; the heading covers every state before that. */
 function protectionSentence(
   rules: Protection["branchRules"],
-  appName: string,
   branchUrl: string | null,
   app: Protection["app"],
 ): ReactNode {
-  const ruleset = hostLink(rules.url, "ruleset");
-  // The App by its own name, linked to its page; "GitHub App" before it is known.
-  const githubApp = app ? (
-    <>{hostLink(app.url, app.name)} App</>
-  ) : (
-    <span>GitHub App</span>
-  );
   if (rules.checkRule === "unposted")
     return (
       <>
-        The Self-service branch protection {ruleset} holds pull requests until
-        the {githubApp} can post the check.
+        The Self-service branch protection {hostLink(rules.url, "ruleset")}{" "}
+        holds pull requests until the{" "}
+        {app ? <>{hostLink(app.url, app.name)} App</> : <span>GitHub App</span>}{" "}
+        can post the check.
       </>
     );
-  switch (rules.state) {
-    case "active":
-      return (
-        <>
-          {hostLink(rules.url, "Ruleset")} protects the policy on the{" "}
-          {hostLink(branchUrl, "branch")}
-        </>
-      );
-    case "incomplete":
-    case "missing":
-      return (
-        <>
-          {appName} sets the Self-service branch protection {ruleset} up at the
-          next sync.
-        </>
-      );
-    case "needs_permission":
-      return (
-        <>
-          The Self-service branch protection ruleset waits for the {githubApp}
-          &apos;s Administration permission.
-        </>
-      );
-    default:
-      return (
-        <>
-          The Self-service branch protection ruleset could not be checked
-          {rules.detail ? <span>: {rules.detail}</span> : <span>.</span>}
-        </>
-      );
-  }
+  return (
+    <>
+      {hostLink(rules.url, "Ruleset")} protects the policy on the{" "}
+      {hostLink(branchUrl, "branch")}
+    </>
+  );
 }
+
 export function OpenAppaSourceForm({
   source,
   onOpenChange,

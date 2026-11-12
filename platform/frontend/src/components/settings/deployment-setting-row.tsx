@@ -28,6 +28,8 @@ export function DeploymentSettingRow<T extends string>(props: {
   title: string;
   /** The heading as shown, when it carries markup; the title otherwise. */
   heading?: ReactNode;
+  /** A control on the heading's line, in place of the value. */
+  action?: ReactNode;
   description: ReactNode;
   value: T | undefined;
   disabled: boolean;
@@ -112,9 +114,11 @@ export function DeploymentSettingRow<T extends string>(props: {
         </div>
         {props.compact ? note : null}
       </div>
-      {props.value &&
-      props.environmentVariable &&
-      props.hideValue ? null : props.value && props.environmentVariable ? (
+      {props.action ? (
+        <div className="shrink-0">{props.action}</div>
+      ) : props.value &&
+        props.environmentVariable &&
+        props.hideValue ? null : props.value && props.environmentVariable ? (
         <div
           className={cn(
             "min-w-0 space-y-1",

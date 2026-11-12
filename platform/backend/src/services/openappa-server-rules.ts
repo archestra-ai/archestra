@@ -3,6 +3,7 @@ import { isBuiltInCatalogId, slugifyMcpServerName } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import ToolModel from "@/models/tool";
 import UserModel from "@/models/user";
@@ -34,8 +35,12 @@ import {
   resolveOpenAppaGithubAccess,
 } from "@/services/openappa-github-access";
 import {
-  hasOwnFile,
+  listedNames,
+  ownersAsNamedFor,
+  ownersNotEditable,
   POLICY_CHECK_NAME,
+  rulesFileRefusal,
+  rulesFileServers,
   selfServiceActive,
   selfServiceSetupComplete,
   syncAppaGithubPolicy,
@@ -106,6 +111,8 @@ export async function getServerRules(params: Caller & { catalogId: string }) {
     },
     canEdit: server.canEdit,
     path: server.path,
+    sharedWith: server.sharedWith,
+    hiddenCopies: server.hiddenCopies,
     included,
     content: accepted,
     // A server without a file yet starts from one that names every tool.
@@ -129,10 +136,12 @@ export async function getServerRules(params: Caller & { catalogId: string }) {
     instruction: !repositoryView(source)
       ? "Git sync is not set up, so server rules cannot be proposed. Tell the user an administrator sets it up under Settings → Guardrails."
       : !server.canEdit
-        ? "The user may read these rules but not propose a change: that takes edit access to this MCP server in the MCP registry."
-        : accepted === null
-          ? `This server has no rules file of its own yet${rules.length > 0 ? "; `rules` lists the rules other files of the policy keep for its tools, which stay where they are" : ""}. Start from \`starter\`, which lists every tool with the organization's defaults; write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees.`
-          : "`rules` lists every rule for this server's tools across the policy, with the file each comes from; only the server's own file at `path` is changed here. To change it, write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees.",
+        ? `The user may read these rules but not propose a change: that takes edit access to ${server.needs(unseenServers("the user"))} in the MCP registry.${sharedSentence(server)}`
+        : `${
+            accepted === null
+              ? `This server has no rules file of its own yet${rules.length > 0 ? "; `rules` lists the rules other files of the policy keep for its tools, which stay where they are" : ""}. Start from \`starter\`, which lists every tool with the organization's defaults; write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees.`
+              : "`rules` lists every rule for this server's tools across the policy, with the file each comes from; only the server's own file at `path` is changed here. To change it, write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees."
+          }${sharedSentence(server)}`,
     expectedCommit: source?.sourceCommit ?? null,
   };
 }
@@ -220,7 +229,7 @@ export async function proposeServerRulesChange(
   const body = [
     params.summary.trim(),
     "",
-    `Requested in ${archestraMcpBranding.appName} by ${requester?.name ?? "a user"}${requester?.email ? ` (${requester.email})` : ""}, who may edit the MCP server ${change.server.name} in the MCP registry.`,
+    `Requested in ${archestraMcpBranding.appName} by ${requester?.name ?? "a user"}${requester?.email ? ` (${requester.email})` : ""}, who may edit ${await ownersAsNamedFor({ organizationId: params.organizationId, userId: params.userId, servers: change.server.owners })} in the MCP registry.`,
     `This changes \`${change.server.path}\`${change.rootChanged ? `, and adds \`${change.include}\` to \`${change.source.path}\`'s include list, so every MCP server's own rules file applies from then on` : ""}. It applies once merged and pulled by Git sync.`,
   ].join("\n");
   const files = [
@@ -327,14 +336,6 @@ async function serverFor(
     scope: catalog.id,
     action: "read",
   });
-  // The registry's own edit rule: whoever may edit the server may propose its rules.
-  const canEdit = await ResourcePermissions.allows({
-    organizationId,
-    userId,
-    resource: "mcpRegistry",
-    scope: catalog.id,
-    action: "update",
-  });
   // SPDX-SnippetEnd
   const tools = (await ToolModel.getToolNamesByCatalogIds([catalog.id]))
     .map((tool) => tool.name)
@@ -344,27 +345,85 @@ async function serverFor(
       409,
       `${catalog.name} has no tools yet. Connect it first, so its rules have tools to name.`,
     );
-  // The file is named by the server's own slug, and only when every one of
-  // its tools carries that prefix and no other server's tool does: a server
-  // must not reach another's file, or the built-in tools, through its name.
+  // The file is named by the server's own slug, and governs every server
+  // whose tools carry that prefix: those servers share it.
   const prefix = slugifyMcpServerName(catalog.name);
-  const owners = await catalogToolPrefixes(organizationId, {
+  const prefixes = await catalogToolPrefixes(organizationId, {
     targets: [prefix],
     catalogIds: [catalog.id],
   });
-  if (!hasOwnFile(catalog, owners))
-    throw new ApiError(
-      409,
-      `${catalog.name}'s tools do not all carry its own name prefix, ${prefix}__, or another server's tools carry it too, so it has no rules file of its own`,
-    );
+  const refusal = rulesFileRefusal({ catalog, tools, prefixes });
+  if (refusal) throw new ApiError(409, refusal);
+  const servers = await rulesFileServers(prefix, prefixes);
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // The registry's own edit rule: whoever may edit every server that owns
+  // the file may propose its rules.
+  const notEditable = await ownersNotEditable({
+    organizationId,
+    userId,
+    servers,
+  });
+  // SPDX-SnippetEnd
+  const readable = new Set(
+    await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+      userId,
+      false,
+      organizationId,
+    ),
+  );
+  const others = servers.filter((server) => server.id !== catalog.id);
   return {
     id: catalog.id,
     name: catalog.name,
     prefix,
     path: serverRulesPath(folder, prefix),
-    canEdit,
+    canEdit: notEditable.length === 0,
+    /**
+     * The owners the caller may not edit, named when the caller may see
+     * them; the rest counted as `hidden` words them.
+     */
+    needs: (hidden: (count: number) => string) => {
+      const named = notEditable
+        .filter((server) => server.id === catalog.id || readable.has(server.id))
+        .map((server) => server.name);
+      const unseen = notEditable.length - named.length;
+      return listedNames([...named, ...(unseen > 0 ? [hidden(unseen)] : [])]);
+    },
+    owners: servers.filter((server) => server.owner),
+    sharedWith: others.filter((server) => readable.has(server.id)),
+    hiddenCopies: others.filter(
+      (server) => server.scope === "personal" && !readable.has(server.id),
+    ).length,
     tools,
   };
+}
+
+/** Owners of a file the caller cannot see, as a sentence counts them. */
+function unseenServers(who: string): (count: number) => string {
+  return (count) =>
+    count === 1
+      ? `an MCP server ${who} cannot see`
+      : `${count} MCP servers ${who} cannot see`;
+}
+
+/** What the Keeper says about a file other servers share, if any. */
+function sharedSentence(server: {
+  sharedWith: Array<{ name: string }>;
+  hiddenCopies: number;
+}): string {
+  const names = [
+    ...server.sharedWith.map((other) => other.name),
+    ...(server.hiddenCopies > 0
+      ? [
+          `${server.hiddenCopies} personal ${server.hiddenCopies === 1 ? "copy" : "copies"} the user cannot see`,
+        ]
+      : []),
+  ];
+  return names.length === 0
+    ? ""
+    : ` The file is shared: its rules also govern ${listedNames(names)}, whose tools carry the same prefix.`;
 }
 
 /** The checks a preview and a proposal share, and what the change would do. */
@@ -383,7 +442,7 @@ async function checkedChange(
   if (!server.canEdit)
     throw new ApiError(
       403,
-      `You may propose ${server.name}'s Guardrails rules only if you may edit it in the MCP registry`,
+      `You may propose ${server.name}'s Guardrails rules only if you may edit ${server.needs(unseenServers("you"))} in the MCP registry`,
     );
   if (source.sourceCommit !== params.expectedCommit)
     throw new ApiError(
@@ -726,9 +785,9 @@ function serverRulesReadme(folder: string, policyPath: string): string {
   return [
     "# Guardrails rules per MCP server",
     "",
-    `Each MCP server's Guardrails rules live here, one \`<tool prefix>.toml\` file per server, which \`${policyFile}\` includes through \`${folder}/*.toml\`. A file holds rules for its own server's tools only; a rule in \`${policyFile}\` for the same tool wins.`,
+    `Each MCP server's Guardrails rules live here, one \`<tool prefix>.toml\` file per tool prefix, which \`${policyFile}\` includes through \`${folder}/*.toml\`. A file holds rules only for the tools that carry its prefix, and servers whose tools share a prefix share its file. A rule in \`${policyFile}\` for the same tool wins.`,
     "",
-    `The people who may edit a server in the ${archestraMcpBranding.appName} MCP registry change its file through **Edit Guardrails** there, which opens a pull request. The ${archestraMcpBranding.appName} policy check on each pull request confirms the change.`,
+    `The people who may edit a server in the ${archestraMcpBranding.appName} MCP registry change its file through **Edit Guardrails** there, which opens a pull request. A shared file takes edit access to each server shared with a team or the organization. The ${archestraMcpBranding.appName} policy check on each pull request confirms the change.`,
     "",
   ].join("\n");
 }

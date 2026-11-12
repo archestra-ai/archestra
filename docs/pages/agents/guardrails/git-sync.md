@@ -74,6 +74,8 @@ include = [
 ]
 ```
 
+MCP servers whose tools carry the same tool prefix share one rules file, because rules match tools by name. To change a shared file, you need edit access to each of these servers that is shared with a team or the organization. Members' personal copies of these servers follow the same file. When only personal copies carry the prefix, a change needs edit access to each copy.
+
 Turn it on for the deployment with [`ARCHESTRA_OPENAPPA_SELF_SERVICE=enabled`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE), and name another folder with [`ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY). **Settings → Guardrails → Git sync** shows both, and **Finish setup** there grants the GitHub App the two permissions the check needs and opens the pull request that includes the folder. Until that pull request is merged and pulled, and the ruleset is in place, the MCP Registry offers no **Edit Guardrails** action and the Keeper's server rules tools refuse.
 
 ### The Check and the Ruleset

@@ -15,6 +15,7 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   desktopArgumentsProgramNotice,
+  desktopArgumentsSaveIsFollowed,
   desktopMcpArgumentsError,
 } from "@/lib/mcp/desktop-mcp";
 import { DesktopMcpArgumentsFields } from "./desktop-mcp-arguments-fields";
@@ -29,7 +30,8 @@ import { desktopArgumentsChanged } from "./desktop-mcp-install";
  * A device whose program is from before the arguments starts nothing again.
  * The dialog says so before the save, with how to get a newer program; the
  * save then stores the arguments and the dialog closes, with nothing to
- * follow.
+ * follow. Nothing follows either when the saved installation is complete
+ * all the same, as with a device that did not report its version yet.
  */
 export function DesktopMcpArgumentsDialog({
   onClose,
@@ -100,8 +102,17 @@ export function DesktopMcpArgumentsDialog({
             }
             onClick={() => {
               update.mutate(
-                { id: server.id, desktopArguments, followed: notice === null },
-                { onSuccess: notice === null ? onSaved : onClose },
+                { id: server.id, desktopArguments, notice },
+                {
+                  onSuccess: (saved) => {
+                    const followed = desktopArgumentsSaveIsFollowed({
+                      notice,
+                      installStatus: saved?.localInstallationStatus,
+                    });
+                    if (followed) onSaved();
+                    else onClose();
+                  },
+                },
               );
             }}
           >

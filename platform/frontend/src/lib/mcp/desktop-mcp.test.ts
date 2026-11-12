@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   addDesktopMcpServer,
   desktopArgumentsProgramNotice,
+  desktopArgumentsSaveIsFollowed,
   desktopHostingOffered,
   desktopMcpArgumentsError,
   desktopMcpCommandOf,
@@ -189,6 +190,46 @@ describe("desktopArgumentsProgramNotice", () => {
     ).toBe(
       "The MCP bridge on MBP-0142 did not report its version. Arguments need version 0.1.2 or newer. Acme does not offer that version yet. Arguments are saved and apply once the device has it.",
     );
+  });
+});
+
+describe("desktopArgumentsSaveIsFollowed", () => {
+  const notice = {
+    title: "Arguments need a newer version of the MCP bridge",
+    text: { before: "", command: null, after: "" },
+  };
+
+  it("follows an installation that waits again: the MCP server starts again on the device", () => {
+    expect(
+      desktopArgumentsSaveIsFollowed({
+        notice: null,
+        installStatus: "pending",
+      }),
+    ).toBe(true);
+    expect(
+      desktopArgumentsSaveIsFollowed({
+        notice: null,
+        installStatus: "discovering-tools",
+      }),
+    ).toBe(true);
+  });
+
+  it("follows nothing on a device that does not apply arguments, whatever the installation says", () => {
+    expect(
+      desktopArgumentsSaveIsFollowed({ notice, installStatus: "success" }),
+    ).toBe(false);
+    expect(
+      desktopArgumentsSaveIsFollowed({ notice, installStatus: "pending" }),
+    ).toBe(false);
+  });
+
+  it("follows nothing when the saved installation is complete: the dialog would say connected at once", () => {
+    expect(
+      desktopArgumentsSaveIsFollowed({
+        notice: null,
+        installStatus: "success",
+      }),
+    ).toBe(false);
   });
 });
 

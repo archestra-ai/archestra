@@ -200,6 +200,24 @@ export function desktopArgumentsProgramNotice(params: {
 }
 
 /**
+ * Whether the Connect dialog follows an installation after its arguments
+ * were saved. It does when the MCP server starts again on the device: the
+ * saved installation then waits for its tools. It does not when
+ * - the device runs a program from before the arguments (a notice said so):
+ *   nothing starts again;
+ * - the saved installation is complete all the same: Archestra found
+ *   nothing to wait for, and the dialog would say "connected" at once.
+ */
+export function desktopArgumentsSaveIsFollowed(params: {
+  /** The notice the dialog showed; null when it showed none. */
+  notice: DesktopArgumentsProgramNotice | null;
+  /** The status of the installation, as the save answered it. */
+  installStatus: string | null | undefined;
+}): boolean {
+  return params.notice === null && params.installStatus !== "success";
+}
+
+/**
  * Adds a desktop MCP catalog item to the caller's own computer, through the
  * caller's install mutation. The installation is always personal: the server
  * runs on the computer of the user who adds it. Resolves with the

@@ -622,11 +622,12 @@ fn render_released_call(status: &str, call: &ProposedCall, owner: Option<&OfferO
 /// The released call's arguments as the client spelled them. Before the
 /// runtime judges a call, the backend (`normalizeToolArgumentsForPolicy`)
 /// copies a command tool's `command` argument to `cmd`, or `cmd` to
-/// `command`, and a Read, Write or Edit call's `path` to `file_path` when it
-/// has none, so a rule matches every client's spelling. The client's tool
-/// accepts only its own spelling, and a model that follows the tool schema
-/// cannot send the copy, so the retry text leaves it out. The backend copies
-/// the retry the same way, so the retry still matches the released call.
+/// `command`, a Read, Write, Edit, `view` or `create` call's `path` to
+/// `file_path`, and a lowercase `edit` call's `path` to `filePath` when it has
+/// none, so a rule matches every client's spelling. The client's tool accepts
+/// only its own spelling, and a model that follows the tool schema cannot send
+/// the copy, so the retry text leaves it out. The backend copies the retry the
+/// same way, so the retry still matches the released call.
 fn retry_arguments(call: &ProposedCall) -> String {
     let raw = call.arguments.get();
     let tool = call.tool.as_str();
@@ -642,10 +643,14 @@ fn retry_arguments(call: &ProposedCall) -> String {
     // The same tools the backend copies an argument for.
     let command_tool = matches!(
         lowered.as_str(),
-        "bash" | "shell" | "exec_command" | "run_command" | "cmd"
+        "bash" | "mcp__workspace__bash" | "shell" | "exec_command" | "run_command" | "cmd"
     );
-    let path_file_tool = matches!(tool, "Read" | "Write" | "Edit");
-    if !command_tool && !path_file_tool {
+    let path_copy_target = match tool {
+        "Read" | "Write" | "Edit" | "view" | "create" => Some("file_path"),
+        "edit" => Some("filePath"),
+        _ => None,
+    };
+    if !command_tool && path_copy_target.is_none() {
         return raw.to_owned();
     }
     let Ok(Value::Object(arguments)) = serde_json::from_str::<Value>(raw) else {
@@ -655,11 +660,14 @@ fn retry_arguments(call: &ProposedCall) -> String {
         arguments.get(original).is_some() && arguments.get(original) == arguments.get(copy)
     };
     // The path copy reads `/` where a Windows client sent `\`.
-    let path_copied = arguments
-        .get("path")
-        .and_then(Value::as_str)
-        .map(|path| path.replace('\\', "/"))
-        .is_some_and(|path| arguments.get("file_path").and_then(Value::as_str) == Some(&path));
+    let path_copied = path_copy_target.and_then(|target| {
+        arguments
+            .get("path")
+            .and_then(Value::as_str)
+            .map(|path| path.replace('\\', "/"))
+            .filter(|path| arguments.get(target).and_then(Value::as_str) == Some(path.as_str()))
+            .map(|_| target)
+    });
     let copy = if command_tool && copies("command", "cmd") {
         // Codex's exec_command is the one command tool that spells it `cmd`.
         if lowered == "exec_command" {
@@ -667,9 +675,9 @@ fn retry_arguments(call: &ProposedCall) -> String {
         } else {
             "cmd"
         }
-    } else if path_file_tool && path_copied {
-        // Only a call without `file_path` gets the copy.
-        "file_path"
+    } else if let Some(target) = path_copied {
+        // Only a call without the target key gets the copy.
+        target
     } else {
         return raw.to_owned();
     };
@@ -1085,6 +1093,45 @@ mod typed_tests {
         assert_eq!(
             released("Read", serde_json::json!({ "file_path": "/repo/.env" })),
             serde_json::json!({ "file_path": "/repo/.env" })
+        );
+        // Copilot CLI's lowercase `view`, `create` and `edit` name the file `path`.
+        assert_eq!(
+            released(
+                "host/archestra/create",
+                serde_json::json!({
+                    "path": "C:\\repo\\.mcp.json",
+                    "file_path": "C:/repo/.mcp.json",
+                    "file_text": "{}",
+                })
+            ),
+            serde_json::json!({
+                "path": "C:\\repo\\.mcp.json",
+                "file_text": "{}",
+            })
+        );
+        assert_eq!(
+            released(
+                "host/archestra/edit",
+                serde_json::json!({
+                    "path": "C:\\Users\\me\\.npmrc",
+                    "filePath": "C:/Users/me/.npmrc",
+                    "old_str": "a",
+                    "new_str": "b",
+                })
+            ),
+            serde_json::json!({
+                "path": "C:\\Users\\me\\.npmrc",
+                "old_str": "a",
+                "new_str": "b",
+            })
+        );
+        // OpenCode's lowercase `edit` keeps its own `filePath`.
+        assert_eq!(
+            released(
+                "host/archestra/edit",
+                serde_json::json!({ "filePath": "/repo/.env", "oldString": "a", "newString": "b" })
+            ),
+            serde_json::json!({ "filePath": "/repo/.env", "oldString": "a", "newString": "b" })
         );
     }
 

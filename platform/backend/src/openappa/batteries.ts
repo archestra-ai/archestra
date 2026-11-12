@@ -83,7 +83,10 @@ import {
   packageContentHash,
   uploadedEntry,
 } from "./declarations";
-import { withHostToolRules } from "./host-tool-rules";
+import {
+  withHostClientCodingAliases,
+  withHostToolRules,
+} from "./host-tool-rules";
 
 /** A battery after a write, and the derived row that write stands for. */
 type BatteryWriteResult = {
@@ -1248,11 +1251,23 @@ class OpenAppaBatteriesService {
       serverName,
     } = params;
     const native = await loadNative();
-    const result = await native.composeOpenappaPolicy({
+    const rosters = memberRosters(params.roster);
+    const augmentedRoot = withHostClientCodingAliases({
       root: root.content,
       batteries: composed,
-      memberRosters: memberRosters(params.roster),
     });
+    let result = await native.composeOpenappaPolicy({
+      root: augmentedRoot,
+      batteries: composed,
+      memberRosters: rosters,
+    });
+    if ((result.content ?? null) === null && augmentedRoot !== root.content) {
+      result = await native.composeOpenappaPolicy({
+        root: root.content,
+        batteries: composed,
+        memberRosters: rosters,
+      });
+    }
     // A refused composition carries no document. napi renders that absence as
     // `undefined`, not the `null` the generated typing spells, so normalize it
     // before deciding whether the runtime refused: an identity test against
@@ -2184,9 +2199,11 @@ function heldBackRemedy(battery: HeldBackBattery): string {
 // rows that leave `yell` to the catch-all (v9), rows that dropped a retired
 // name live opening policies bound differently (v10), rows that keep
 // retired annotators for conversations opened under earlier policies (v11),
-// rows without the empty peer read rule (v12), and rows that rule the peer
-// read under the default server name on a white-labeled deployment (v13).
-const COMPOSITION_VERSION = "v13:";
+// rows without the empty peer read rule (v12), rows that rule the peer read
+// under the default server name on a white-labeled deployment (v13), and rows
+// composed before host client coding tool aliases were supplied to saved
+// revisions (v14).
+const COMPOSITION_VERSION = "v14:";
 
 /**
  * What a stored composition answers: the batteries it composed, the credential

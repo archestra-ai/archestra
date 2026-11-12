@@ -338,31 +338,6 @@ export class GitHostClient {
     };
   }
 
-  /** Who the GitLab token acts as: the author of every commit it makes. */
-  async gitlabCurrentUser(): Promise<{
-    username: string;
-    email: string | null;
-  }> {
-    const user = await this.json<{ username: string; email?: string | null }>(
-      `${this.host.apiUrl}/user`,
-    );
-    return { username: user.username, email: user.email ?? null };
-  }
-
-  /** The commits a GitLab merge request carries, newest first as GitLab lists them. */
-  async gitlabMergeRequestCommits(
-    repo: string,
-    iid: number,
-  ): Promise<{ id: string; authorEmail: string | null }[]> {
-    const commits = await this.json<
-      { id: string; author_email?: string | null }[]
-    >(`${this.repoApi(repo)}/merge_requests/${iid}/commits?per_page=2`);
-    return commits.map((commit) => ({
-      id: commit.id,
-      authorEmail: commit.author_email ?? null,
-    }));
-  }
-
   /** The commit a GitLab branch points at. */
   async gitlabBranchCommit(repo: string, branch: string): Promise<string> {
     const data = await this.json<{ commit: { id: string } }>(

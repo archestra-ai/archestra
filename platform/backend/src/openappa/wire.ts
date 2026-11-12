@@ -32,7 +32,11 @@ import {
   readNotice,
   readRemedyExecution,
 } from "./notice";
-import { appendSessionReceipt, stripSessionReceipts } from "./session-token";
+import {
+  appendSessionReceipt,
+  type SessionReceiptLayout,
+  stripSessionReceipts,
+} from "./session-token";
 import {
   parseTrajectoryStamp,
   restoreTrajectoryStampText,
@@ -433,10 +437,11 @@ export function appendSessionReceiptToResponse(params: {
   family: AppaWireFamily;
   response: unknown;
   code: string;
+  layout?: SessionReceiptLayout;
 }): boolean {
   for (const site of responseTextSites(params.family, params.response)) {
     if (!site.get()) continue;
-    site.set(appendSessionReceipt(site.get(), params.code));
+    site.set(appendSessionReceipt(site.get(), params.code, params.layout));
     return true;
   }
   return false;

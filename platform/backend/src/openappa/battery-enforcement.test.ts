@@ -16,9 +16,12 @@ import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
+import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import ToolModel from "@/models/tool";
+import { normalizeToolArgumentsForPolicy } from "@/openappa/command-normalization";
 import { AppaGrokAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/grok";
 import memberRoutes from "@/routes/member";
 import {
@@ -524,6 +527,175 @@ requires = { audience = { contains = ["self"] } }
       workflow: [UNDECLARED_TOOL_ANNOTATOR],
       "unruled-mcp-tool": [UNDECLARED_TOOL_ANNOTATOR],
       "mcp-named-like-the-host": [UNDECLARED_TOOL_ANNOTATOR],
+    });
+  });
+
+  test("an earlier saved policy revision governs newer client built-ins after startup recompile without rewriting organization.appa.toml", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+  }) => {
+    config.openappa.enabled = true;
+    const organizationId = (await makeOrganization()).id;
+    const admin = await makeAdmin();
+    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+    // Simulate an organization that edited and saved its policy when only the
+    // earliest Codex / OpenCode `[aliases.tool.coding]` targets existed.
+    const legacyCodingTable = `[aliases.tool.coding]
+shell = [
+  { name = "host/archestra/exec_command", args = { command = "cmd" } },
+  { name = "host/archestra/shell", args = { command = "command" } },
+  { name = "host/archestra/bash", args = { command = "command" } },
+]
+read_file = [{ name = "host/archestra/read", args = { file_path = "filePath" } }]
+search_files = [{ name = "host/archestra/grep", args = { path = "path" } }]
+write_file = [{ name = "host/archestra/write", args = { file_path = "filePath" } }]
+edit_file = [{ name = "host/archestra/edit", args = { file_path = "filePath" } }]
+fetch_url = [{ name = "host/archestra/webfetch", args = { url = "url" } }]`;
+
+    const savedLegacyPolicy = `${initialPolicy().replace(
+      /\[aliases\.tool\.coding\][\s\S]*?(?=\n\[policy\])/,
+      `${legacyCodingTable}\n`,
+    )}
+[[policy.tool]]
+name = "host/archestra/publish_probe"
+delta = {}
+requires = { audience = { contains = ["public"] } }
+
+[[policy.tool]]
+name = "host/archestra/trusted_sink"
+delta = {}
+requires = { trust = "trusted" }
+
+[[policy.tool]]
+name = "host/archestra/read_file(target_file:/repo/forbidden.txt)"
+delta = {}
+requires = { attention = ["blocked"] }
+`;
+    expect(savedLegacyPolicy).not.toContain("host/archestra/view");
+    expect(savedLegacyPolicy).not.toContain("host/archestra/create");
+    expect(savedLegacyPolicy).not.toContain("host/archestra/web_fetch");
+
+    await declareRoot({
+      organizationId,
+      userId: admin.id,
+      content: savedLegacyPolicy,
+    });
+    const first = await openappaBatteriesService.recompile(organizationId);
+    expect(first.lastError).toBeNull();
+
+    // Seed an older composition version fingerprint and verify startup recompile
+    // refreshes the effective policy while leaving organization.appa.toml untouched.
+    const existing = await OpenAppaEffectivePolicyModel.find(organizationId);
+    expect(existing).not.toBeNull();
+    if (!existing) throw new Error("expected stored effective policy");
+    await OpenAppaEffectivePolicyModel.save({
+      organizationId,
+      expected: existing,
+      now: new Date(),
+      values: {
+        content: existing.content,
+        contentHash: existing.contentHash,
+        rootRevision: existing.rootRevision,
+        installFingerprint: existing.installFingerprint.replace(
+          /^v\d+:/,
+          "v13:",
+        ),
+        served: existing.served,
+        error: null,
+      },
+    });
+
+    await recompileAllOnStart();
+    const afterStart = await OpenAppaEffectivePolicyModel.find(organizationId);
+    expect(afterStart?.installFingerprint.startsWith("v14:")).toBe(true);
+    expect(
+      (await GuardrailsPolicyModel.findLatest(organizationId))?.content,
+    ).toBe(savedLegacyPolicy);
+
+    const probe = "host/archestra/publish_probe {}\nexpect allow\n";
+    const trustedSink = "host/archestra/trusted_sink {}\nexpect allow\n";
+    const grok = new AppaGrokAdapter();
+    const call = (tool: string, args: Record<string, unknown>) =>
+      `${tool} {\n${Object.entries(args)
+        .map(([key, value]) => `  ${key}: ${JSON.stringify(value)}\n`)
+        .join("")}}\nexpect allow\n`;
+    const copilotEditProtected = normalizeToolArgumentsForPolicy("edit", {
+      path: "/repo/.mcp.json",
+      old_str: "old",
+      new_str: "new",
+    }) as Record<string, unknown>;
+    const copilotEditOrdinary = normalizeToolArgumentsForPolicy("edit", {
+      path: "/repo/note.txt",
+      old_str: "old",
+      new_str: "new",
+    }) as Record<string, unknown>;
+
+    const scenarios = {
+      "grok-read-env": `${call("host/archestra/read_file", { target_file: "/repo/.env" })}${probe}`,
+      "grok-read-readme": `${call("host/archestra/read_file", { target_file: "/repo/README.md" })}${probe}`,
+      "grok-read-explicit-root-deny": call("host/archestra/read_file", {
+        target_file: "/repo/forbidden.txt",
+      }),
+      "grok-web-search": `${call(`host/archestra/${grok.normalizeLocalToolName("web_search")}`, { query: "archestra guardrails" })}${trustedSink}`,
+      "grok-list-dir": `${call(`host/archestra/${grok.normalizeLocalToolName("list_dir")}`, { path: "/repo" })}${probe}`,
+      "grok-todo-write": call(
+        `host/archestra/${grok.normalizeLocalToolName("todo_write")}`,
+        { todos: [] },
+      ),
+      "copilot-view-env": `${call("host/archestra/view", { path: "/repo/.env" })}${probe}`,
+      "copilot-view-readme": `${call("host/archestra/view", { path: "/repo/README.md" })}${probe}`,
+      "copilot-create-protected": call("host/archestra/create", {
+        path: "/repo/.mcp.json",
+        file_text: "{}",
+      }),
+      "copilot-create-ordinary": call("host/archestra/create", {
+        path: "/repo/note.txt",
+        file_text: "hello",
+      }),
+      "copilot-edit-protected": call(
+        "host/archestra/edit",
+        copilotEditProtected,
+      ),
+      "copilot-edit-ordinary": call("host/archestra/edit", copilotEditOrdinary),
+      "copilot-web-fetch-docs": `${call("host/archestra/web_fetch", { url: "https://archestra.ai/docs" })}${probe}`,
+      "copilot-web-fetch-external": call("host/archestra/web_fetch", {
+        url: "https://example.com/",
+      }),
+      "cowork-bash-credentials": `${call("host/archestra/mcp__workspace__bash", { command: "cat ~/.aws/credentials" })}${probe}`,
+      "kimi-fetch": call("host/archestra/FetchURL", {
+        url: "https://example.com/",
+      }),
+    };
+
+    const dispatched = await replay({ organizationId, scenarios });
+    expect(
+      Object.fromEntries(
+        Object.entries(dispatched).map(([path, file]) => [
+          path,
+          file.steps.map(stepOutcome),
+        ]),
+      ),
+      JSON.stringify(dispatched, null, 1),
+    ).toEqual({
+      "grok-read-env": ["allow", "authority human-approval"],
+      "grok-read-readme": ["allow", "allow"],
+      "grok-read-explicit-root-deny": ["deny"],
+      "grok-web-search": ["allow", "authority human-approval"],
+      "grok-list-dir": ["allow", "allow"],
+      "grok-todo-write": ["allow"],
+      "copilot-view-env": ["allow", "authority human-approval"],
+      "copilot-view-readme": ["allow", "allow"],
+      "copilot-create-protected": ["authority human-approval"],
+      "copilot-create-ordinary": ["allow"],
+      "copilot-edit-protected": ["authority human-approval"],
+      "copilot-edit-ordinary": ["allow"],
+      "copilot-web-fetch-docs": ["allow", "allow"],
+      "copilot-web-fetch-external": ["claude-code.fetch-requirements"],
+      "cowork-bash-credentials": ["allow", "authority human-approval"],
+      "kimi-fetch": ["claude-code.fetch-requirements"],
     });
   });
 });

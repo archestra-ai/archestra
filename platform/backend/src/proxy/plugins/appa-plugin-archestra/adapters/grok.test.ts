@@ -207,13 +207,96 @@ describe("Grok native wire", () => {
     ["run_terminal_command", "Bash"],
     ["search_tool", "ToolSearch"],
     ["search_replace", "Edit"],
+    ["list_dir", "Glob"],
     ["write", "Write"],
     ["grep", "Grep"],
+    ["web_search", "WebSearch"],
+    ["todo_write", "TodoWrite"],
+    ["enter_plan_mode", "EnterPlanMode"],
+    ["exit_plan_mode", "ExitPlanMode"],
+    ["kill_command_or_subagent", "TaskStop"],
+    ["scheduler_list", "CronList"],
+    ["send_feedback", "SendFeedback"],
     ["read_file", "read_file"],
   ])("normalizes %s without changing its argument schema", (name, canonical) => {
     expect(adapter.classifyToolName(name)).toBe("local");
     expect(adapter.normalizeLocalToolName(name)).toBe(canonical);
     expect(adapter.blockedToolReason(name)).toBeUndefined();
+  });
+
+  test("maps Grok web_search and session-local built-ins onto coding and claude-code rules without a fallback annotator", async () => {
+    const root = `include = ["batteries/coding/appa.toml", "batteries/claude-code/appa.toml"]
+[aliases.host]
+claude-code = ["archestra"]
+[policy]
+version = 2
+
+[[policy.authority]]
+name = "human-approval"
+hint = "Ask the person running this session to approve this exact call."
+
+[policy.authority.permits]
+trust_below = "trusted"
+
+[[policy.tool]]
+name = "host/archestra/trusted_sink"
+delta = {}
+requires = { trust = "trusted" }
+
+[externals.authorities.human-approval]
+builtin = "hitl"
+`;
+    const batteries = (await listBundledOpenappaBatteries())
+      .filter(({ name }) => ["coding", "claude-code"].includes(name))
+      .map(({ name, base }) => ({
+        entry: `batteries/${name}/appa.toml`,
+        name,
+        policy: base,
+      }));
+    const composed = await composeOpenappaPolicy({ root, batteries });
+    expect(composed.errors).toEqual([]);
+
+    const sessionLocalCalls = [
+      "list_dir",
+      "todo_write",
+      "enter_plan_mode",
+      "exit_plan_mode",
+      "kill_command_or_subagent",
+      "scheduler_list",
+      "send_feedback",
+    ]
+      .map(
+        (tool) =>
+          `host/archestra/${adapter.normalizeLocalToolName(tool)} {}\nexpect allow\n`,
+      )
+      .join("");
+    const result = JSON.parse(
+      await replayOpenappaPolicy(
+        JSON.stringify({
+          content: composed.content,
+          files: [
+            {
+              path: "session-local.appa",
+              content: `${sessionLocalCalls}host/archestra/trusted_sink {}\nexpect allow\n`,
+            },
+            {
+              path: "web-search.appa",
+              content: `host/archestra/${adapter.normalizeLocalToolName("web_search")} {\n  query: "archestra openappa"\n}\nexpect allow\nhost/archestra/trusted_sink {}\nexpect allow\n`,
+            },
+          ],
+        }),
+      ),
+    );
+    expect(result.files).toMatchObject([
+      {
+        path: "session-local.appa",
+        status: "passed",
+      },
+      {
+        path: "web-search.appa",
+        steps: [{ actual: "allow" }, { actual: "authority human-approval" }],
+      },
+    ]);
   });
 
   test("catalog discovery uses the bundled ToolSearch contract without a fallback annotator and preserves explicit denials", async () => {

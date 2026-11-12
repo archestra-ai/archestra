@@ -18,12 +18,14 @@ export function isCommandExecutionTool(name: string): boolean {
  * The arguments a call is evaluated with. A command tool gets `command` and
  * `cmd` set to one value, so a rule matches either client's spelling. Kimi
  * Code's Read, Write and Edit name the file `path`, while the coding
- * battery's rules for those tools (Claude Code's names) read `file_path`, and
- * a policy cannot map a second argument name onto the same tool. Such a call
- * also gets `file_path`, only when it has none. The copy spells the path with
- * forward slashes: on Windows the client sends `C:\Users\me\.npmrc`, and the
- * battery's selectors (`*\/.npmrc`) read `/`. So a `file_path` equal to the
- * `path` spelled that way is always this copy.
+ * battery's rules for those tools (Claude Code's names) read `file_path`;
+ * similarly, Copilot CLI's lowercase `edit` names the file `path`, while the
+ * coding alias for `host/archestra/edit` reads OpenCode's `filePath`, and a
+ * policy cannot map a second argument name onto the same tool. Such a call
+ * also gets its ruled target argument, only when it has none. The copy spells
+ * the path with forward slashes: on Windows the client sends
+ * `C:\Users\me\.npmrc`, and the battery's selectors (`*\/.npmrc`) read `/`. So
+ * a target argument equal to the `path` spelled that way is always this copy.
  */
 export function normalizeToolArgumentsForPolicy(
   toolName: string,
@@ -38,12 +40,13 @@ export function normalizeToolArgumentsForPolicy(
       normalized.command = normalized.cmd;
     }
   }
+  const pathTarget = pathFileTarget(localToolName(toolName));
   if (
-    PATH_FILE_TOOLS.has(localToolName(toolName)) &&
+    pathTarget !== null &&
     typeof normalized.path === "string" &&
-    normalized.file_path == null
+    normalized[pathTarget] == null
   ) {
-    normalized.file_path = policyPath(normalized.path);
+    normalized[pathTarget] = policyPath(normalized.path);
   }
   return normalized;
 }
@@ -60,10 +63,11 @@ export function argumentSpellingConflict(
 ): string | null {
   if (typeof args !== "object" || args === null) return null;
   const record = args as Record<string, unknown>;
+  const pathTarget = pathFileTarget(localToolName(toolName));
   const spellings = isCommandExecutionTool(toolName)
     ? { ruled: "command", other: "cmd", copy: (value: string) => value }
-    : PATH_FILE_TOOLS.has(localToolName(toolName))
-      ? { ruled: "file_path", other: "path", copy: policyPath }
+    : pathTarget !== null
+      ? { ruled: pathTarget, other: "path", copy: policyPath }
       : null;
   if (!spellings) return null;
   const { ruled, other, copy } = spellings;
@@ -89,12 +93,13 @@ export function withoutArgumentCopies(
   const copies = new Set<string>();
   if (isCommandExecutionTool(toolName) && args.cmd === args.command)
     copies.add("cmd");
+  const pathTarget = pathFileTarget(localToolName(toolName));
   if (
-    PATH_FILE_TOOLS.has(localToolName(toolName)) &&
+    pathTarget !== null &&
     typeof args.path === "string" &&
-    args.file_path === policyPath(args.path)
+    args[pathTarget] === policyPath(args.path)
   )
-    copies.add("file_path");
+    copies.add(pathTarget);
   if (copies.size === 0) return args;
   return Object.fromEntries(
     Object.entries(args).filter(([name]) => !copies.has(name)),
@@ -105,8 +110,15 @@ export function withoutArgumentCopies(
 // Internal helpers
 // =============================================================================
 
-// Kimi Code's file tools: Claude Code's names, with the file named `path`.
-const PATH_FILE_TOOLS = new Set(["Read", "Write", "Edit"]);
+// Kimi Code's Read/Write/Edit (`path` -> `file_path`) and Copilot CLI's
+// lowercase `edit` (`path` -> OpenCode's `filePath`).
+function pathFileTarget(tool: string): "file_path" | "filePath" | null {
+  if (tool === "Read" || tool === "Write" || tool === "Edit") {
+    return "file_path";
+  }
+  if (tool === "edit") return "filePath";
+  return null;
+}
 
 function localToolName(name: string): string {
   return name.replace(/^(builtin:|host\/[^/]+\/)/, "");

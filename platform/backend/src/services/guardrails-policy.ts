@@ -22,6 +22,7 @@ import {
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
+import { formatHostClientCodingAliases } from "@/openappa/host-tool-rules";
 import { withoutRepositoryIncludes } from "@/openappa/policy-text";
 import {
   classifyRuleTarget,
@@ -462,28 +463,11 @@ ${ARCHESTRA_BATTERY} = ["${archestraMcpBranding.serverName}"]
 ${CLAUDE_CODE_BATTERY} = ["archestra"]
 
 # The coding battery's tools under Codex's, OpenCode's, Claude Desktop
-# Cowork's and Kimi Code's spellings. Kimi Code shares Claude Code's other tool
-# names; the proxy also evaluates its Read, Write and Edit \`path\` as
-# \`file_path\`.
-[aliases.tool.${CODING_BATTERY}]
-shell = [
-  { name = "host/archestra/exec_command", args = { command = "cmd" } },
-  { name = "host/archestra/shell", args = { command = "command" } },
-  { name = "host/archestra/bash", args = { command = "command" } },
-  { name = "host/archestra/mcp__workspace__bash", args = { command = "command" }, confined = true },
-]
-read_file = [
-  { name = "host/archestra/read", args = { file_path = "filePath" } },
-  { name = "host/archestra/read_file", args = { file_path = "target_file" } },
-]
-search_files = [{ name = "host/archestra/grep", args = { path = "path" } }]
-write_file = [{ name = "host/archestra/write", args = { file_path = "filePath" } }]
-edit_file = [{ name = "host/archestra/edit", args = { file_path = "filePath" } }]
-fetch_url = [
-  { name = "host/archestra/webfetch", args = { url = "url" } },
-  { name = "host/archestra/mcp__workspace__web_fetch", args = { url = "url" } },
-  { name = "host/archestra/FetchURL", args = { url = "url" } },
-]
+# Cowork's, Kimi Code's, Copilot CLI's and Grok's spellings. Kimi Code shares
+# Claude Code's other tool names; the proxy also evaluates its Read, Write and
+# Edit \`path\` as \`file_path\`, and Copilot CLI's lowercase \`edit\` \`path\` as
+# \`filePath\`.
+${formatHostClientCodingAliases()}
 
 [policy]
 version = 2

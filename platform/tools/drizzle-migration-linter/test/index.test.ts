@@ -163,8 +163,8 @@ describe("lintMigrationSql", () => {
   test("allow-breaking marker suppresses contract errors but not warnings", () => {
     const result = lintMigrationSql(`
       -- drizzle-migration-linter: allow-breaking
-      -- drizzle-migration-linter: reason=old column has been unused for two releases
-      ALTER TABLE "agents" DROP COLUMN "legacy_name";
+      -- drizzle-migration-linter: reason=old index has been unused for two releases
+      DROP INDEX "agents_legacy_name_idx";
       CREATE INDEX "agents_name_idx" ON "agents" ("name");
     `);
 
@@ -179,8 +179,8 @@ describe("lintMigrationSql", () => {
   test("allow-breaking marker accepts horizontal spacing only", () => {
     const result = lintMigrationSql(`
       --\tdrizzle-migration-linter:\tallow-breaking
-      -- drizzle-migration-linter:\treason\t=\told column has been unused for two releases
-      ALTER TABLE "agents" DROP COLUMN "legacy_name";
+      -- drizzle-migration-linter:\treason\t=\told index has been unused for two releases
+      DROP INDEX "agents_legacy_name_idx";
     `);
 
     expect(result.issues).toEqual([]);
@@ -189,7 +189,7 @@ describe("lintMigrationSql", () => {
   test("allow-breaking marker requires a reason", () => {
     const result = lintMigrationSql(`
       -- drizzle-migration-linter: allow-breaking
-      ALTER TABLE "agents" DROP COLUMN "legacy_name";
+      DROP INDEX "agents_legacy_name_idx";
     `);
 
     expect(result.issues).toMatchObject([
@@ -204,7 +204,7 @@ describe("lintMigrationSql", () => {
     const result = lintMigrationSql(`
       -- drizzle-migration-linter: allow-breaking
       -- drizzle-migration-linter: reason=${" ".repeat(4)}
-      ALTER TABLE "agents" DROP COLUMN "legacy_name";
+      DROP INDEX "agents_legacy_name_idx";
     `);
 
     expect(result.issues).toMatchObject([
@@ -218,7 +218,7 @@ describe("lintMigrationSql", () => {
   test("allow-breaking reason check finishes quickly on a long blank run", () => {
     const started = performance.now();
     const result = lintMigrationSql(
-      `-- drizzle-migration-linter: allow-breaking\n-- drizzle-migration-linter: reason=${" ".repeat(50_000)}\nALTER TABLE "agents" DROP COLUMN "legacy_name";`,
+      `-- drizzle-migration-linter: allow-breaking\n-- drizzle-migration-linter: reason=${" ".repeat(50_000)}\nDROP INDEX "agents_legacy_name_idx";`,
     );
 
     expect(performance.now() - started).toBeLessThan(2000);
@@ -228,6 +228,27 @@ describe("lintMigrationSql", () => {
         severity: "error",
       },
     ]);
+  });
+
+  test("allow-breaking marker does not permit dropping a column", () => {
+    const result = lintMigrationSql(`
+      -- drizzle-migration-linter: allow-breaking
+      -- drizzle-migration-linter: reason=old column has been unused for two releases
+      ALTER TABLE "agents" DROP COLUMN "legacy_name";
+      DROP INDEX "agents_legacy_name_idx";
+    `);
+
+    expect(result.issues).toMatchObject([
+      { code: "drop-column", severity: "error" },
+    ]);
+  });
+
+  test("allows relaxing a deprecated column to nullable", () => {
+    const result = lintMigrationSql(
+      'ALTER TABLE "agents" ALTER COLUMN "legacy_name" DROP NOT NULL;',
+    );
+
+    expect(result.issues).toEqual([]);
   });
 
   test("strips malformed block comments without regex backtracking", () => {

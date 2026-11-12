@@ -1133,6 +1133,8 @@ function ServerStatus({
   if (desktopState === "no-device") {
     return <DesktopMcpNoDeviceStatus className={typeRole({ role: "body" })} />;
   }
+  // The viewer's device is still being read: no claim yet.
+  if (desktopState === "checking") return null;
   if (desktopState === "installed") {
     return <DesktopMcpAddedStatus className={typeRole({ role: "body" })} />;
   }

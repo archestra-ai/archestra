@@ -127,7 +127,10 @@ describe("desktopInstallStateOfRow for a desktop MCP item", () => {
 });
 
 describe("desktopInstallStateOfRow with no computer connected", () => {
-  const stateWith = (status: string, hasComputer: boolean | undefined) =>
+  const stateWith = (
+    status: string,
+    hasComputer: boolean | "checking" | undefined,
+  ) =>
     desktopInstallStateOfRow({
       item: {
         id: CATALOG_ID,
@@ -152,6 +155,12 @@ describe("desktopInstallStateOfRow with no computer connected", () => {
   it("reads as the installation says with a computer, and while that is not known", () => {
     expect(stateWith("success", true)).toBe("installed");
     expect(stateWith("success", undefined)).toBe("installed");
+  });
+
+  it("claims nothing while the devices are read for the first time", () => {
+    // Not Linked first and Device not linked a moment later.
+    expect(stateWith("success", "checking")).toBe("checking");
+    expect(stateWith("pending", "checking")).toBe("checking");
   });
 
   it("still offers Add for a server the viewer has not added", () => {
@@ -545,6 +554,16 @@ describe("ownDesktopComputerLine", () => {
         hasComputer: false,
       }),
     ).toEqual({ text: "Waiting for your device", action: "remove" });
+  });
+
+  it("does not say the server is on the device while the devices are read", () => {
+    expect(
+      line({
+        installation: { ready: true },
+        viewerDeviceName: null,
+        hasComputer: "checking",
+      }).text,
+    ).toBe("Waiting for your device");
   });
 
   it("reads as the installation says while the computer is not known", () => {

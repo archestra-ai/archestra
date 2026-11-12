@@ -701,7 +701,7 @@ interface RowRenderProps {
   desktop: {
     viewerDeviceName: string | null;
     /** Whether the viewer has a computer; undefined while not known. */
-    viewerHasComputer: boolean | undefined;
+    viewerHasComputer: boolean | "checking" | undefined;
   } | null;
 }
 
@@ -1006,10 +1006,15 @@ function ConnectionTableRow({
                   ? desktopRowState({
                       isYou,
                       // With no computer of their own the viewer's server
-                      // waits, whatever was read from one before.
+                      // waits, whatever was read from one before; while
+                      // their devices are read it is not claimed ready.
                       ready:
                         server.localInstallationStatus === "success" &&
-                        !(isYou && desktop.viewerHasComputer === false),
+                        !(
+                          isYou &&
+                          (desktop.viewerHasComputer === false ||
+                            desktop.viewerHasComputer === "checking")
+                        ),
                       viewerDeviceName: desktop.viewerDeviceName,
                     })
                   : null

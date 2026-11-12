@@ -22,7 +22,7 @@ export function useDesktopInstallState(params: {
   const { items, servers } = params;
   const { data: session } = useSession();
   const viewerId = session?.user?.id;
-  const stateOf = (item: Item, hasComputer?: boolean) =>
+  const stateOf = (item: Item, hasComputer?: boolean | "checking") =>
     desktopInstallStateOfRow({ item, servers, viewerId, hasComputer });
   const { hasComputer } = useDesktopComputer({
     enabled: items.some((item) => {

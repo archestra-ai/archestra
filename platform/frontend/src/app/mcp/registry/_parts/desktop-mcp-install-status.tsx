@@ -2,8 +2,7 @@
 
 import { Laptop } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
-import { McpBridgeSetupDialog } from "@/components/mcp-bridge-setup";
+import { openMcpBridgeSetup } from "@/components/mcp-bridge-setup";
 import { badgeVariants } from "@/components/ui/badge";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { DESKTOP_MCP_COPY, DEVICES_HREF } from "@/lib/mcp/desktop-mcp";
@@ -55,22 +54,19 @@ export function DesktopMcpWaitingStatus(props: StatusProps) {
 /**
  * A desktop MCP server the user linked while no device of theirs runs the
  * MCP bridge: they unlinked it, or never set it up. It opens the MCP bridge
- * setup.
+ * setup, the app-wide one: this status goes away once the device is linked,
+ * and the dialog stays to say so.
  */
 export function DesktopMcpNoDeviceStatus(props: StatusProps) {
-  const [setupOpen, setSetupOpen] = useState(false);
   return (
-    <>
-      <UnstyledButton
-        type="button"
-        onClick={() => setSetupOpen(true)}
-        className={statusClass(props)}
-      >
-        <StatusIcon badge={props.badge} />
-        <span>{DESKTOP_MCP_COPY.noDevice}</span>
-      </UnstyledButton>
-      <McpBridgeSetupDialog open={setupOpen} onOpenChange={setSetupOpen} />
-    </>
+    <UnstyledButton
+      type="button"
+      onClick={openMcpBridgeSetup}
+      className={statusClass(props)}
+    >
+      <StatusIcon badge={props.badge} />
+      <span>{DESKTOP_MCP_COPY.noDevice}</span>
+    </UnstyledButton>
   );
 }
 

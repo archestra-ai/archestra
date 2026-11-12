@@ -24,6 +24,11 @@ export type DesktopMcpInstallState =
   | "waiting"
   /** The viewer linked it, but has no device with the MCP bridge. */
   | "no-device"
+  /**
+   * The viewer linked it, and their devices are still being read: neither
+   * Linked nor Device not linked is known, so nothing is shown yet.
+   */
+  | "checking"
   | "installed";
 
 type DesktopTarget = {
@@ -52,10 +57,11 @@ export function desktopInstallStateOfRow(params: {
   servers: InstallRow[] | undefined;
   viewerId: string | null | undefined;
   /**
-   * Whether the viewer has a computer with the MCP bridge; undefined while
-   * that is not known, which reads as the installation says.
+   * Whether the viewer has a device with the MCP bridge; "checking" while it
+   * is read for the first time; undefined when it is not known (it could not
+   * be read), which reads as the installation says.
    */
-  hasComputer?: boolean;
+  hasComputer?: boolean | "checking";
 }): DesktopMcpInstallState | null {
   const { item, servers, viewerId, hasComputer } = params;
   if (item.serverType !== "desktop_mcp") return null;
@@ -67,9 +73,9 @@ export function desktopInstallStateOfRow(params: {
   });
   // Linked, but no device runs it: the viewer unlinked their device, or
   // never set the MCP bridge up.
-  return (state === "installed" || state === "waiting") && hasComputer === false
-    ? "no-device"
-    : state;
+  if (state !== "installed" && state !== "waiting") return state;
+  if (hasComputer === "checking") return "checking";
+  return hasComputer === false ? "no-device" : state;
 }
 
 /**
@@ -381,8 +387,11 @@ export function ownDesktopComputerLine(params: {
   /** Whether the catalog item has a command or a URL to run. */
   canAdd: boolean;
   viewerDeviceName: string | null;
-  /** Whether the viewer has a computer; undefined while not known. */
-  hasComputer: boolean | undefined;
+  /**
+   * Whether the viewer has a device; "checking" during the first read,
+   * undefined when it could not be read.
+   */
+  hasComputer: boolean | "checking" | undefined;
 }): { text: string; action: "add" | "remove" | null } {
   const { name, installation, canAdd, viewerDeviceName, hasComputer } = params;
   if (!installation) {
@@ -393,7 +402,12 @@ export function ownDesktopComputerLine(params: {
   return {
     text: desktopRowState({
       isYou: true,
-      ready: installation.ready && hasComputer !== false,
+      // Linked only once a device is known to run it: no "linked" that
+      // turns into "not linked" a moment later.
+      ready:
+        installation.ready &&
+        hasComputer !== false &&
+        hasComputer !== "checking",
       viewerDeviceName,
     }),
     action: "remove",

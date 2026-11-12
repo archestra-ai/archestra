@@ -17,7 +17,6 @@ import {
   useDesktopDevices,
 } from "@/lib/desktop-device.query";
 import {
-  bridgeBackgroundSentence,
   DEVICES_HREF,
   desktopServerStartLabel,
   ownDesktopMcpServers,
@@ -43,7 +42,6 @@ export default function DeviceApprovalPage() {
             {decision.data.status === "approved" ? (
               <ConnectedNextSteps
                 deviceName={request.data?.deviceName ?? null}
-                platform={request.data?.platform}
               />
             ) : (
               <InlineNotice variant="neutral">
@@ -124,13 +122,7 @@ export default function DeviceApprovalPage() {
  * After the approval: the program in the terminal hands over to the MCP
  * bridge in the background, which starts the servers the user added.
  */
-function ConnectedNextSteps({
-  deviceName,
-  platform,
-}: {
-  deviceName: string | null;
-  platform: Parameters<typeof bridgeBackgroundSentence>[0];
-}) {
+function ConnectedNextSteps({ deviceName }: { deviceName: string | null }) {
   const { data: session } = useSession();
   const { data: issueIndex } = useMcpRegistryIssueIndex();
   const { data: devices } = useDesktopDevices();
@@ -154,8 +146,7 @@ function ConnectedNextSteps({
         <span>Your device is linked.</span>
       </p>
       <p className="text-muted-foreground">
-        {bridgeBackgroundSentence(platform)} The command in your terminal has
-        finished, and you can close this page.
+        The MCP bridge now runs in the background. You can close this page.
       </p>
       {servers.length > 0 ? (
         <div className="space-y-1.5">

@@ -1,7 +1,12 @@
 "use client";
 
 import { Check, CheckCircle2, Laptop, Loader2 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   OneOf,
   ScriptBlock,
@@ -181,6 +186,43 @@ function SetupStep({
     </li>
   );
 }
+
+/**
+ * Opens the one MCP bridge setup dialog of the app, which
+ * {@link McpBridgeSetupHost} keeps. For a place that disappears once the
+ * device is linked, such as the "Device not linked" status: a dialog of its
+ * own would close with it, before it shows that the device is linked.
+ */
+export function openMcpBridgeSetup() {
+  setupDialog.set(true);
+}
+
+/** The dialog that {@link openMcpBridgeSetup} opens; mounted once, app-wide. */
+export function McpBridgeSetupHost() {
+  const open = useSyncExternalStore(
+    setupDialog.subscribe,
+    setupDialog.get,
+    () => false,
+  );
+  return <McpBridgeSetupDialog open={open} onOpenChange={setupDialog.set} />;
+}
+
+/** Whether the app-wide setup dialog is open, for its few readers. */
+const setupDialog = (() => {
+  let open = false;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => open,
+    set: (next: boolean) => {
+      open = next;
+      for (const listener of listeners) listener();
+    },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+})();
 
 /**
  * {@link McpBridgeSetup} in a dialog of its own, in the shape of the

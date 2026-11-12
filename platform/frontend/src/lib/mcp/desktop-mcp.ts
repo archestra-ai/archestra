@@ -245,23 +245,6 @@ export function desktopServerErrorSentence(params: {
   return error;
 }
 
-/**
- * Where the MCP bridge shows itself once it runs in the background: its tray
- * icon, in the menu bar on macOS and the taskbar on Windows. Linux has none.
- */
-export function bridgeBackgroundSentence(
-  platform: DesktopDevice["platform"] | undefined,
-): string {
-  switch (platform) {
-    case "macos":
-      return "The MCP bridge now runs in the background. Look for its icon in the menu bar.";
-    case "windows":
-      return "The MCP bridge now runs in the background. Look for its icon in the taskbar, next to the clock.";
-    default:
-      return "The MCP bridge now runs in the background.";
-  }
-}
-
 // ===
 
 type DeviceServerState = DesktopDevice["servers"][number]["state"];

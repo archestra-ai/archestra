@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   addDesktopMcpServer,
-  bridgeBackgroundSentence,
   desktopHostingOffered,
   desktopMcpTargetError,
   desktopMcpTargetOf,
@@ -323,16 +322,6 @@ describe("desktopServerErrorSentence", () => {
   it("returns an error it does not know as it came", () => {
     expect(sentence("the program has no stdin or stdout pipe")).toBe(
       "the program has no stdin or stdout pipe",
-    );
-  });
-});
-
-describe("bridgeBackgroundSentence", () => {
-  it("points at the tray icon where the system has one", () => {
-    expect(bridgeBackgroundSentence("macos")).toContain("menu bar");
-    expect(bridgeBackgroundSentence("windows")).toContain("taskbar");
-    expect(bridgeBackgroundSentence("linux")).toBe(
-      "The MCP bridge now runs in the background.",
     );
   });
 });

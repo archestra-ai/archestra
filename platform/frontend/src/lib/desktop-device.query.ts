@@ -46,12 +46,14 @@ export function useDesktopDevices(options?: {
  * desktop MCP server asks nothing.
  */
 export function useDesktopComputer(options: { enabled: boolean }): {
-  hasComputer: boolean | undefined;
+  /** "checking" during the first read; undefined when it could not be read. */
+  hasComputer: boolean | "checking" | undefined;
   name: string | null;
 } {
-  const { data } = useDesktopDevices({ ...options, live: false });
+  const { data, isLoading } = useDesktopDevices({ ...options, live: false });
   return {
-    hasComputer: data === undefined ? undefined : data.length > 0,
+    hasComputer:
+      data !== undefined ? data.length > 0 : isLoading ? "checking" : undefined,
     name: data?.[0]?.name ?? null,
   };
 }

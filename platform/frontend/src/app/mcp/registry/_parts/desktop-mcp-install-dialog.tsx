@@ -53,6 +53,12 @@ type Props = {
    * intro.
    */
   startAtOnce?: boolean;
+  /**
+   * The user's installation of the item, made earlier: the dialog follows
+   * it from where it is (the MCP bridge setup when no device is linked, or
+   * the steps) and adds nothing.
+   */
+  followServerId?: string;
 };
 
 /**
@@ -87,6 +93,7 @@ function DesktopMcpAddFlow({
   catalogItem,
   isAdding,
   startAtOnce = false,
+  followServerId,
 }: Props) {
   const appName = useAppName();
   const { startChat, isCreating } = useChatWithCatalogItem();
@@ -122,18 +129,30 @@ function DesktopMcpAddFlow({
     });
   };
 
-  // Started from a button that named the action: no intro, once the devices
-  // are known (they decide whether the setup comes first).
+  // Started from a button that named the action, or to follow an earlier
+  // installation: no intro, once the devices are known (they decide whether
+  // the setup comes first).
   const startedAtOnce = useRef(false);
   useEffect(() => {
     if (
-      !startAtOnce ||
+      !(startAtOnce || followServerId) ||
       startedAtOnce.current ||
-      !canAdd ||
       addCase.kind === "loading"
     ) {
       return;
     }
+    if (followServerId) {
+      startedAtOnce.current = true;
+      const bridgeSetup = addCase.kind === "no-bridge";
+      setAdded({
+        id: followServerId,
+        at: Date.now(),
+        bridgeSetup,
+        viaSetup: bridgeSetup,
+      });
+      return;
+    }
+    if (!canAdd) return;
     startedAtOnce.current = true;
     void add();
   });

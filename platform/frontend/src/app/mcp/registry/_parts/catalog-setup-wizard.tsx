@@ -178,6 +178,9 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
   const [openDialog, setOpenDialog] = useState<
     "local" | "remote" | "oauth" | "desktop" | null
   >(null);
+  // The desktop dialog follows the user's earlier installation instead of
+  // adding one.
+  const [followDesktopInstall, setFollowDesktopInstall] = useState(false);
 
   const promptedEnvVars =
     item.localConfig?.environment?.filter(
@@ -208,6 +211,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
   );
   const startInstall = () => {
     if (isDesktopMcp) {
+      setFollowDesktopInstall(false);
       setOpenDialog("desktop");
       return;
     }
@@ -340,6 +344,41 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
             )}
           </EmptyContent>
         </Empty>
+      ) : isDesktopMcp &&
+        target &&
+        !installMutation.isPending &&
+        desktopAddCase.kind === "loading" ? (
+        <Skeleton className="h-[58px] w-full rounded-lg" />
+      ) : isDesktopMcp &&
+        target &&
+        !installMutation.isPending &&
+        (status === "pending" ||
+          (status === "success" && desktopAddCase.kind === "no-bridge")) ? (
+        // Added, and no device runs it: the device has not run it yet, or
+        // no device is linked any more, whatever an earlier device read.
+        // Say why, and let the user pick the connection up again.
+        <div className="flex items-center gap-3 rounded-lg border p-4 text-sm">
+          <Laptop
+            className="size-4 shrink-0 text-muted-foreground"
+            aria-hidden
+          />
+          <span className="text-muted-foreground">
+            {desktopAddCase.kind === "no-bridge"
+              ? DESKTOP_MCP_COPY.noDevice
+              : DESKTOP_MCP_COPY.waiting}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="ml-auto"
+            onClick={() => {
+              setFollowDesktopInstall(true);
+              setOpenDialog("desktop");
+            }}
+          >
+            Continue
+          </Button>
+        </div>
       ) : status === "success" ? (
         <div className="flex items-start gap-3 rounded-lg border border-green-600/30 bg-green-500/5 p-4">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
@@ -425,6 +464,9 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
           catalogItem={item}
           isAdding={installMutation.isPending}
           startAtOnce
+          followServerId={
+            followDesktopInstall && target ? target.id : undefined
+          }
         />
       )}
 

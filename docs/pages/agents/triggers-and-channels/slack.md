@@ -2,7 +2,7 @@
 title: Slack
 description: Give each Archestra agent its own Slack bot
 order: 3
-lastUpdated: 2026-11-11
+lastUpdated: 2026-11-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -47,11 +47,7 @@ If Archestra can reach the internet freely, there is nothing to set up. If your 
 
 You need both entries. The wildcard entry, written with `*`, covers addresses such as `files.slack.com`, but many firewalls do not let it cover `slack.com` itself. Without `slack.com`, Archestra cannot use Slack's API, which it needs to check your tokens and to read and post messages, so connecting Slack fails or never finishes.
 
-Apply these rules to the backend (web) pods, which connect bots, receive Socket Mode events, and read and send messages and files.
-
-If you run a separate worker deployment, also allow its pods to reach `slack.com` on port 443. Workers check the Slack workspace, read threads to recover interrupted deliveries, and post or update runtime attention notices. Allowing only the web pods leaves those notices undelivered.
-
-Workers do not open Socket Mode connections for attention notices. The Socket Mode and file addresses below are needed by the backend (web) pods; worker attention notices use only `slack.com`.
+Apply these rules to the Archestra server. If you run [separate workers](/docs/admin/deployment/helm), allow them to reach `slack.com` on port 443 too, or Agent Runtime notifications will not reach Slack. Those notifications do not need Socket Mode or Slack's file addresses.
 
 The `api.slack.com` links in the setup steps open in your own browser. The Archestra server never connects to that address, so you do not need to allow it.
 

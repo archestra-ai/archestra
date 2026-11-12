@@ -48,7 +48,16 @@ export function DesktopMcpArgumentsFields({
     <div className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor={commandId}>Command</Label>
-        <Input id={commandId} value={command} readOnly className="font-mono" />
+        {/* Out of the tab order: a dialog puts the focus on its first field
+            and selects its text, and that must be the arguments, the one
+            field the user fills. */}
+        <Input
+          id={commandId}
+          value={command}
+          readOnly
+          tabIndex={-1}
+          className="font-mono"
+        />
       </div>
       <ContainerArgumentsField
         id={`${idPrefix}-arguments`}

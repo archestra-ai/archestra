@@ -1,8 +1,8 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import {
+  getDatabaseOutageErrorCode,
   getDbResourceExhaustionErrorCode,
   getNonDatabaseConnectionTarget,
-  getTransientDbErrorCode,
   isDbStatementTimeoutError,
 } from "@/database/retry";
 import { extractVaultErrorMessage } from "@/secrets-manager/utils";
@@ -62,7 +62,8 @@ export function classifyErrorForTracking(
   // Transient database connectivity failures (DNS lookup, connection refused
   // during a restart, pool connect timeouts) get wrapped per-query by the ORM,
   // which otherwise fragments one incident into an issue per SQL statement.
-  const transientDbErrorCode = getTransientDbErrorCode(error);
+  // A bare socket errno counts only when the database client raised it.
+  const transientDbErrorCode = getDatabaseOutageErrorCode(error);
   if (transientDbErrorCode) {
     return {
       report: true,

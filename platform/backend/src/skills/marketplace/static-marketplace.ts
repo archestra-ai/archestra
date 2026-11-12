@@ -1,7 +1,11 @@
 import { CONNECTION_SETUP_MAX_SKILLS } from "@archestra/shared/connection-setup";
+import { MCP_GATEWAY_OAUTH_SCOPE } from "@archestra/shared/oauth";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import {
+  ManagedOauthClientModel,
+  OAuthAccessTokenModel,
+  OAuthClientModel,
   OrganizationModel,
   SkillFileModel,
   SkillMarketplaceCredentialModel,
@@ -12,7 +16,6 @@ import {
 } from "@/models";
 import { port } from "@/models/ports";
 import type { MaterializeSkillInput } from "./layout";
-import { resolveMarketplaceOAuthIdentity } from "./oauth-identity";
 
 /**
  * The static marketplace endpoint: one URL for the whole deployment, cloned by
@@ -225,6 +228,51 @@ async function resolveCredential(
 
   const user = await UserModel.getById(apiKeyUserId);
   if (!user?.organizationId) return null;
+  return { userId: user.id, organizationId: user.organizationId };
+}
+
+/** Resolve a browser user's MCP grant without widening a bound token's audience. */
+async function resolveMarketplaceOAuthIdentity(
+  credential: string,
+): Promise<MarketplaceIdentity | null> {
+  const token = await OAuthAccessTokenModel.getByTokenHash(
+    OAuthAccessTokenModel.hashTokenForLookup(credential),
+  );
+  if (
+    !token?.userId ||
+    token.referenceId ||
+    token.refreshTokenRevoked ||
+    token.expiresAt <= new Date() ||
+    !token.scopes?.includes(MCP_GATEWAY_OAUTH_SCOPE)
+  )
+    return null;
+
+  // Check every client, including DCR/CIMD clients. Internal issuers have
+  // disabled clients with no authorization-code grant and must stay excluded.
+  const client = await OAuthClientModel.findByClientId(token.clientId);
+  if (
+    !client ||
+    client.disabled ||
+    client.serviceAccountId ||
+    !client.grantTypes?.includes("authorization_code") ||
+    (client.scopes && !client.scopes.includes(MCP_GATEWAY_OAUTH_SCOPE))
+  )
+    return null;
+
+  // getById joins the user's current membership, like personal credentials.
+  const user = await UserModel.getById(token.userId);
+  if (!user?.organizationId) return null;
+
+  const managedClient = await ManagedOauthClientModel.findByClientId(
+    token.clientId,
+  );
+  if (
+    managedClient &&
+    (managedClient.organizationId !== user.organizationId ||
+      !managedClient.scopes.includes(MCP_GATEWAY_OAUTH_SCOPE))
+  )
+    return null;
+
   return { userId: user.id, organizationId: user.organizationId };
 }
 

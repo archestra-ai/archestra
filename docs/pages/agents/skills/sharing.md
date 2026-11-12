@@ -2,7 +2,7 @@
 title: Sharing Skills
 description: Install Archestra skills in your coding agents from one shared marketplace
 order: 3
-lastUpdated: 2026-10-14
+lastUpdated: 2026-11-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -72,9 +72,7 @@ What to know:
 
 ### OAuth Access Tokens
 
-Integrations can also send a user access token from MCP gateway browser sign-in, with the `mcp` scope. This scope includes reading every skill that user can read in the marketplace. The gateway's MCP `skills/list` still shows only skills published on that gateway.
-
-Pass the access token as the Git HTTP Basic password or in an `Authorization: Bearer` header. Git does not read your MCP client's OAuth cache or refresh tokens automatically. Your integration must supply a current access token and refresh it through the OAuth client that obtained it. Expired or revoked tokens stop working. Tokens restricted to a gateway, runtime, or app, service credentials, and LLM virtual keys cannot authenticate to the marketplace.
+Use a user OAuth access token from MCP gateway browser sign-in (`mcp` scope) as Git's HTTP Basic password or in an `Authorization: Bearer` header. It reads every skill you can access in the marketplace. Git does not reuse your MCP client's OAuth cache or refresh tokens; your integration must supply a current token.
 
 ### Anonymous Access
 

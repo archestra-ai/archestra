@@ -704,6 +704,99 @@ jobs:
       - name: Rust tests
         run: cargo test --workspace --locked
 
+  # The archestra program (platform/archestra-cli) runs on the computers of
+  # the users, on macOS, Windows and Linux, and has OS-specific code for each
+  # (start at login, tray icon, process handling). Each system builds and
+  # tests it, so a change for one cannot break another with no signal. It is
+  # a Cargo workspace of its own, apart from platform/archestra-rs.
+  archestra-cli-checks:
+    name: Archestra CLI Checks (${{ matrix.os }})
+    needs: [changed-inputs]
+    # Skips only when the classification succeeded and found no archestra-cli input.
+    if: ${{ !cancelled() && github.event_name == 'merge_group' && (needs.changed-inputs.result != 'success' || needs.changed-inputs.outputs.archestra_cli != 'false') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: ./platform/archestra-cli
+    env:
+      # aws-lc-sys on Windows x86_64 uses its prebuilt NASM objects instead of
+      # a NASM install.
+      AWS_LC_SYS_PREBUILT_NASM: "1"
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # See the note in ai-labs-rust-checks. One system is enough: the
+      # lockfile is the same on all three. The action compares with the
+      # lockfile of the base, so it needs one there: the change that adds the
+      # lockfile is checked by the organization's Supply-Chain Policy check.
+      - name: Find the lockfile in the base
+        id: base-lockfile
+        if: runner.os == 'Linux'
+        env:
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          GH_TOKEN: ${{ github.token }}
+          GIT_CONFIG_COUNT: "2"
+          GIT_CONFIG_KEY_0: credential.helper
+          GIT_CONFIG_VALUE_0: ""
+          GIT_CONFIG_KEY_1: credential.https://github.com.helper
+          GIT_CONFIG_VALUE_1: '!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f'
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          if git cat-file -e "$BASE_SHA:platform/archestra-cli/Cargo.lock"; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check new Cargo dependency release ages
+        if: runner.os == 'Linux' && steps.base-lockfile.outputs.present == 'true'
+        uses: archestra-ai/.github/actions/cargo-release-age@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GIT_CONFIG_COUNT: "2"
+          GIT_CONFIG_KEY_0: credential.helper
+          GIT_CONFIG_VALUE_0: ""
+          GIT_CONFIG_KEY_1: credential.https://github.com.helper
+          GIT_CONFIG_VALUE_1: '!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f'
+        with:
+          base-sha: ${{ github.event.merge_group.base_sha }}
+          lockfiles: platform/archestra-cli/Cargo.lock
+
+      # The pinned toolchain of platform/rust-toolchain.toml. No Cargo cache:
+      # only default-branch runs may save one, and none builds this workspace.
+      - name: Install pinned Rust toolchain
+        uses: $/.github/actions/setup-rust-build
+        with:
+          workspaces: platform/archestra-cli
+          cache: "false"
+
+      # The pinned toolchain has the minimal profile: no clippy.
+      - name: Install clippy
+        run: rustup component add clippy
+
+      - name: Rust formatting
+        run: cargo fmt --check
+
+      - name: Rust lint
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      # The tests run small MCP servers in Python, which each runner has
+      # (`python` on Windows, `python3` elsewhere).
+      - name: Rust tests
+        run: cargo test --locked
+
   # Decides which queue jobs the merge group can affect, so jobs whose inputs
   # are untouched skip instead of allocating paid runners. merge_group events
   # do not support `paths:` filters, so this diffs the group's base and head
@@ -722,6 +815,7 @@ jobs:
       frontend: ${{ steps.diff.outputs.frontend }}
       platform_rust: ${{ steps.diff.outputs.platform_rust }}
       ai_labs: ${{ steps.diff.outputs.ai_labs }}
+      archestra_cli: ${{ steps.diff.outputs.archestra_cli }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

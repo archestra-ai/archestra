@@ -912,17 +912,16 @@ describe("McpCatalogItemDetailPage overview", () => {
     installedWithNoDeploymentEntry();
     renderPage({ serverType: "remote", localConfig: null, toolCount: 3 });
 
-    expect(screen.getByRole("link", { name: "Connect" })).toHaveAttribute(
-      "href",
-      "/connection",
-    );
+    expect(
+      screen.getByRole("link", { name: "Connect a client" }),
+    ).toHaveAttribute("href", "/connection");
   });
 
   it("offers no Connect before the server is installed", () => {
     useMcpServers.mockReturnValue({ data: [] });
     renderPage({ serverType: "remote", localConfig: null, toolCount: 3 });
 
-    expect(screen.queryByRole("link", { name: "Connect" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Connect a client" })).toBeNull();
   });
 
   it("says it is still checking while the deployment feed is loading", () => {

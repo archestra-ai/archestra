@@ -27,6 +27,7 @@ export function makeCatalogItem(
     clientSecretId: null,
     localConfigSecretId: null,
     localConfig: null,
+    desktopConfig: null,
     deploymentSpecYaml: null,
     userConfig: null,
     oauthConfig: null,

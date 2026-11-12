@@ -6,11 +6,22 @@ import UserTokenModel from "@/models/user-token";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import type { AuditActorType, AuditEventName, AuditOutcome } from "@/types";
 import type { AuditableRouteConfig } from "@/types/audit-route-config";
+import {
+  extractAuditResourceName,
+  extractAuditSourceIp,
+  sanitizeAuditSnapshot,
+} from "@/utils/audit-snapshot";
 import { trackBackgroundWork } from "@/utils/background-work";
 import {
   deriveAction,
   resolveAuditableRouteConfig,
 } from "./audit-log-registry";
+
+/**
+ * @public — shared with the Archestra MCP tool dispatch's audit writer so
+ * names resolve and snapshots sanitize identically on both surfaces.
+ */
+export { extractAuditResourceName, sanitizeAuditSnapshot };
 
 function resolveEffectiveCfg(
   routePattern: string | undefined,
@@ -133,7 +144,7 @@ async function recordResponseAudit(
             routeParams: request.params as Record<string, unknown> | undefined,
           });
 
-  const sourceIp = extractIp(request);
+  const sourceIp = extractAuditSourceIp(request);
   const userAgent =
     (request.headers["user-agent"] as string | undefined) ?? null;
   const httpPath = stripQueryString(request.url).slice(0, 2048);
@@ -355,6 +366,9 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   // ephemeral connection-setup render tickets (installer secrets), incoming-email
   // subscription config, oauth grant runtime (tokens are runtime state).
   { kind: "prefix", value: "/api/connection-setups" },
+  // A setup code only lets the MCP bridge setup dialog find the sign-in that
+  // its command starts; the approval itself is audited.
+  { kind: "exact", value: "/api/desktop-devices/setup-codes" },
   { kind: "prefix", value: "/api/incoming-email" },
   { kind: "exact", value: "/api/oauth/initiate" },
   { kind: "exact", value: "/api/oauth/callback" },
@@ -483,27 +497,6 @@ function stripQueryString(url: string): string {
   }
 }
 
-/**
- * Resolve the client IP for an audited request.
- *
- * Prefers `request.ip` — Fastify applies the `trustProxy` setting so this
- * already incorporates `x-forwarded-for` when a trusted proxy is configured.
- * Falls back to the first hop in `x-forwarded-for` for environments where
- * `socket.remoteAddress` is unavailable (e.g. Unix-socket listeners) and for
- * setups that have a proxy but haven't configured `ARCHESTRA_TRUST_PROXY`.
- */
-function extractIp(request: {
-  ip: string;
-  headers: Record<string, string | string[] | undefined>;
-}): string | null {
-  if (request.ip) return request.ip;
-  const forwarded = request.headers["x-forwarded-for"];
-  if (typeof forwarded === "string")
-    return forwarded.split(",")[0]?.trim() || null;
-  if (Array.isArray(forwarded)) return forwarded[0] ?? null;
-  return null;
-}
-
 async function resolveAfterState(params: {
   method: string;
   action: AuditEventName;
@@ -533,64 +526,4 @@ async function resolveAfterState(params: {
     logger.error({ err }, "audit: fetchById (post) failed");
     return null;
   });
-}
-
-/** Cap stored resource names — entity name columns are unbounded text. */
-const AUDIT_RESOURCE_NAME_MAX_LENGTH = 512;
-
-/**
- * Denormalized human-readable identity of the audited resource, frozen at
- * event time (never updated on later renames). Prefers the post-state (an
- * update row carries the resulting name), falls back to the prior state
- * (deletes), then to the snapshot's `email` for entities addressed by email
- * rather than name (invitations). Keep the key/snapshot precedence in sync
- * with the frontend's legacy-row fallback `resourceDisplayName`
- * (frontend/src/app/audit/logs/_parts/audit-log-action-labels.ts).
- * @public — shared with the Archestra MCP tool dispatch's audit writer so
- * names resolve identically on both surfaces.
- */
-export function extractAuditResourceName(
-  after: Record<string, unknown> | null,
-  before: Record<string, unknown> | null,
-): string | null {
-  for (const key of ["name", "email"]) {
-    for (const snapshot of [after, before]) {
-      const value = snapshot?.[key];
-      if (typeof value !== "string") continue;
-      const trimmed = value.trim();
-      if (trimmed) return trimmed.slice(0, AUDIT_RESOURCE_NAME_MAX_LENGTH);
-    }
-  }
-  return null;
-}
-
-/**
- * Drop volatile timestamp fields so diffs surface real config changes.
- * @public — shared with the Archestra MCP tool dispatch's audit writer so
- * snapshots sanitize identically on both surfaces.
- */
-export function sanitizeAuditSnapshot(
-  state: Record<string, unknown> | null,
-): Record<string, unknown> | null {
-  if (state === null) return null;
-  return deepOmitKeys(state, new Set(["updatedAt"])) as Record<string, unknown>;
-}
-
-function deepOmitKeys(value: unknown, keys: Set<string>): unknown {
-  if (value === null || value === undefined) return value;
-  if (value instanceof Date) return value;
-  if (Array.isArray(value)) return value.map((v) => deepOmitKeys(v, keys));
-  if (
-    typeof value === "object" &&
-    Object.getPrototypeOf(value) === Object.prototype
-  ) {
-    const obj = value as Record<string, unknown>;
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(obj)) {
-      if (keys.has(k)) continue;
-      out[k] = deepOmitKeys(v, keys);
-    }
-    return out;
-  }
-  return value;
 }

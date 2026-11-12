@@ -1,7 +1,11 @@
 import { CONNECTION_SETUP_MAX_SKILLS } from "@archestra/shared/connection-setup";
+import { MCP_GATEWAY_OAUTH_SCOPE } from "@archestra/shared/oauth";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import {
+  ManagedOauthClientModel,
+  OAuthAccessTokenModel,
+  OAuthClientModel,
   OrganizationModel,
   SkillFileModel,
   SkillMarketplaceCredentialModel,
@@ -22,8 +26,8 @@ import type { MaterializeSkillInput } from "./layout";
  * user's credential helper) or as a Bearer header. The value is either a
  * marketplace credential — the narrow, read-only token the setup script writes
  * into the client's marketplace URL — or one of the personal credentials the
- * platform already issues: a personal token from the account page, or an API
- * key, which is what someone typing at git's password prompt will have.
+ * platform already issues: a personal token, an API key, or an unbound user
+ * OAuth access token with the MCP scope.
  */
 
 /**
@@ -182,8 +186,8 @@ function parseCredential(authorization: string | undefined): string | null {
 /**
  * Marketplace credential first — it is the one the setup script issues, so it
  * is by far the most common, and its prefix makes the check a cheap miss for
- * anything else. Then a personal token, then an API key. Service-account
- * tokens are not accepted.
+ * anything else. Then a personal token, user OAuth, and an API key.
+ * Service-account tokens and LLM virtual keys are not accepted.
  */
 async function resolveCredential(
   credential: string,
@@ -205,6 +209,9 @@ async function resolveCredential(
     };
   }
 
+  const oauthIdentity = await resolveMarketplaceOAuthIdentity(credential);
+  if (oauthIdentity) return oauthIdentity;
+
   let apiKeyUserId: string | null = null;
   // Outside the try below, which reads any failure as an invalid key.
   const authSessions = await port("authSessions");
@@ -221,6 +228,51 @@ async function resolveCredential(
 
   const user = await UserModel.getById(apiKeyUserId);
   if (!user?.organizationId) return null;
+  return { userId: user.id, organizationId: user.organizationId };
+}
+
+/** Resolve a browser user's MCP grant without widening a bound token's audience. */
+async function resolveMarketplaceOAuthIdentity(
+  credential: string,
+): Promise<MarketplaceIdentity | null> {
+  const token = await OAuthAccessTokenModel.getByTokenHash(
+    OAuthAccessTokenModel.hashTokenForLookup(credential),
+  );
+  if (
+    !token?.userId ||
+    token.referenceId ||
+    token.refreshTokenRevoked ||
+    token.expiresAt <= new Date() ||
+    !token.scopes?.includes(MCP_GATEWAY_OAUTH_SCOPE)
+  )
+    return null;
+
+  // Check every client, including DCR/CIMD clients. Internal issuers have
+  // disabled clients with no authorization-code grant and must stay excluded.
+  const client = await OAuthClientModel.findByClientId(token.clientId);
+  if (
+    !client ||
+    client.disabled ||
+    client.serviceAccountId ||
+    !client.grantTypes?.includes("authorization_code") ||
+    (client.scopes && !client.scopes.includes(MCP_GATEWAY_OAUTH_SCOPE))
+  )
+    return null;
+
+  // getById joins the user's current membership, like personal credentials.
+  const user = await UserModel.getById(token.userId);
+  if (!user?.organizationId) return null;
+
+  const managedClient = await ManagedOauthClientModel.findByClientId(
+    token.clientId,
+  );
+  if (
+    managedClient &&
+    (managedClient.organizationId !== user.organizationId ||
+      !managedClient.scopes.includes(MCP_GATEWAY_OAUTH_SCOPE))
+  )
+    return null;
+
   return { userId: user.id, organizationId: user.organizationId };
 }
 

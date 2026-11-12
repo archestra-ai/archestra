@@ -460,3 +460,25 @@ describe("isCompactEligible auth check", () => {
     }
   });
 });
+
+describe("isCompactEligible for a tool call that found no device", () => {
+  it("keeps the call open, so its MCP bridge setup card shows", () => {
+    const failed = (errorText: string) =>
+      isCompactEligible({
+        toolName: "archestra__run_tool",
+        part: {
+          type: "tool-archestra__run_tool",
+          state: "output-error",
+          errorText,
+        } as never,
+        toolResultPart: null,
+      });
+    expect(
+      failed(
+        "MCP error -32603: No device is linked. Set up the MCP bridge on your device from the Device tab of Personal Settings and try again.",
+      ),
+    ).toBe(false);
+    // Any other failure folds into the row as before.
+    expect(failed("MCP error -32603: Request failed")).toBe(true);
+  });
+});

@@ -343,6 +343,20 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "MCP session-level transport state",
   },
+  desktopDevicesTable: {
+    audited: false,
+    reason:
+      "A user's own tunnel client registration; the sign-in decision (desktopDeviceSignIn.updated) and removing the device (desktopDevice.deleted) carry the audit signal",
+  },
+  desktopDeviceServersTable: {
+    audited: false,
+    reason:
+      "Which MCP servers a user stopped on their own device, and the states its tunnel client reports; the route audit (desktopDevice.updated) carries Start and Stop",
+  },
+  desktopMcpRequestsTable: {
+    audited: false,
+    reason: "Short-lived queue of MCP messages waiting for a device",
+  },
   mcpPresetEntriesTable: {
     audited: false,
     reason: "preset definitions; static config, audited via catalog",

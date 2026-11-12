@@ -1,0 +1,87 @@
+# `archestra`: the program a user runs on their own computer. Today it has one
+# component, the MCP bridge (the tunnel client). It is a program of its own,
+# not a native addon of the backend, so it is its own Cargo workspace and stays
+# out of `archestra-rs` and of the backend image.
+[workspace]
+
+[package]
+name = "archestra_cli"
+version = "0.1.1"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "archestra"
+path = "src/main.rs"
+
+[dependencies]
+# The SHA-256 of the program file, for the update of the program. reqwest
+# has this crate already (rustls uses it), so it adds no crate.
+aws-lc-rs = { version = "1.18", default-features = false }
+# jitter for the retry backoff, and the request id of a state report.
+fastrand = "2"
+# rustls with the OS trust store (a company CA works), no native-tls/openssl.
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# maintained YAML crate (serde_yaml is unmaintained).
+serde-saphyr = { version = "2.0", default-features = false, features = [
+    "serialize",
+    "deserialize",
+] }
+# shell-style splitting of `mcp.commands[].command`.
+shlex = "2"
+thiserror = "2"
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "process",
+    "io-util",
+    "time",
+    "sync",
+    "signal",
+] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+    "std",
+    "fmt",
+    "env-filter",
+] }
+
+# uname: the device name is the hostname. getuid: the launchd domain of the
+# user. kill: `stop bridge` sends SIGTERM to an MCP bridge of the XDG autostart.
+# dup2: the MCP bridge in the background on Linux writes to its log file.
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["process", "stdio", "system"] }
+
+# Windows: the Run key, the `Path` value of the user, the job object that ends
+# the process tree of an MCP server, the stop request to the MCP bridge, and
+# the browser for the sign-in (ShellExecute). The platform bindings only; the
+# version is the one that tokio already brings.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Console",
+    "Win32_System_JobObjects",
+    "Win32_System_Registry",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+axum = { version = "0.8", default-features = false, features = [
+    "http1",
+    "json",
+    "query",
+    "tokio",
+] }
+tempfile = "3"
+tokio = { version = "1", features = ["net"] }
+
+# A small program matters here: it sits on every user's computer.
+[profile.release]
+strip = "symbols"
+lto = true
+codegen-units = 1

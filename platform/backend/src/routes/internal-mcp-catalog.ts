@@ -70,6 +70,7 @@ import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
 import { CredentialAccess } from "@/services/credential-access";
 import { preflightMcpCredentials } from "@/services/credentials";
+import { desktopBridgeControlService } from "@/services/desktop-mcp/desktop-bridge-control";
 import {
   assertCanAssignEnvironment,
   assertRemoteServerUrlAllowedByNetworkPolicy,
@@ -287,6 +288,7 @@ const McpRegistryRowSchema = ListInternalMcpCatalogSchema.pick({
   appId: true,
   appEnabled: true,
   docsUrl: true,
+  desktopConfig: true,
 }).extend({
   /** An emoji icon; image icons are served from `iconUrl` instead. */
   icon: z.string().nullable(),
@@ -697,6 +699,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             catalogReinstallRequired: item.catalogReinstallRequired,
             dynamicConnectionMcpServerId: item.dynamicConnectionMcpServerId,
             docsUrl: item.docsUrl,
+            desktopConfig: item.desktopConfig,
             appId:
               item.serverType === "app"
                 ? (appIdByCatalog.get(item.id) ?? null)
@@ -981,6 +984,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "App catalog entities are managed via the Apps API.",
         );
       }
+      assertDesktopMcpOffered(restBody.serverType);
       await assertCanWriteMcpDeploymentYaml({
         userId: request.user.id,
         organizationId: request.organizationId,
@@ -1180,6 +1184,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         ),
       );
+      await desktopBridgeControlService.notifyCatalogItemChanged(catalogItem);
       return reply.send(catalogItem);
     },
   );
@@ -1509,6 +1514,23 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // injected (then later installed). The normal scope/team/environment
       // authorization below still applies; the change is propagated to the linked
       // app + server after the update.
+      // A partial update may not name the server type: check the command for
+      // devices against the type the item will have.
+      // A server can become a desktop MCP server only where those are offered.
+      if (originalCatalogItem.serverType !== "desktop_mcp") {
+        assertDesktopMcpOffered(restBody.serverType);
+      }
+      if (
+        restBody.desktopConfig &&
+        (restBody.serverType ?? originalCatalogItem.serverType) !==
+          "desktop_mcp"
+      ) {
+        throw new ApiError(
+          400,
+          "Only a desktop MCP server has a command for devices.",
+        );
+      }
+
       const isAppCatalog = originalCatalogItem.serverType === "app";
       const linkedAppId = isAppCatalog
         ? (await AppModel.getAppIdsByCatalogIds([id])).get(id)
@@ -2022,6 +2044,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      await desktopBridgeControlService.notifyCatalogItemChanged(catalogItem);
       return reply.send(catalogItem);
     },
   );
@@ -2295,6 +2318,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await InternalMcpCatalogModel.findDeleteCascadeSourceIds(id);
       const success = await InternalMcpCatalogModel.delete(id);
       if (success) {
+        await desktopBridgeControlService.notifyCatalogItemChanged(catalogItem);
         await openappaBatteriesService.recompileForCatalog(
           catalogItem.organizationId,
         );
@@ -2365,6 +2389,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       const success = await InternalMcpCatalogModel.delete(catalogItem.id);
       if (success) {
+        await desktopBridgeControlService.notifyCatalogItemChanged(catalogItem);
         await openappaBatteriesService.recompileForCatalog(
           catalogItem.organizationId,
         );
@@ -2439,10 +2464,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const success = await InternalMcpCatalogModel.restore(id);
       // The restored tools rejoin the composed aliases.
-      if (success)
+      if (success) {
+        await desktopBridgeControlService.notifyCatalogItemChanged(catalogItem);
         await openappaBatteriesService.recompileForCatalog(
           catalogItem.organizationId,
         );
+      }
       return reply.send({ success });
     },
   );
@@ -2792,6 +2819,12 @@ async function cascadeReinstallForCatalog(
    */
   override?: { forceAutoRestart?: boolean },
 ): Promise<void> {
+  // A desktop MCP server has no pod and no credential to redo. Its tunnel
+  // clients get the changed config by themselves (notifyCatalogItemChanged),
+  // and a reinstall here would ask every user's computer for its tools and
+  // mark the installation of each offline computer as failed.
+  if (catalogItem.serverType === "desktop_mcp") return;
+
   const installedServers = await McpServerModel.findByCatalogId(catalogItem.id);
   if (installedServers.length === 0) return;
 
@@ -3446,3 +3479,16 @@ const MAX_REGISTRY_QUERY_IDS = 10_000;
  * parses before the combined id check (about 13,000 UUIDs).
  */
 const REGISTRY_QUERY_BODY_LIMIT_BYTES = 512 * 1024;
+
+/**
+ * Desktop MCP is in alpha: a new desktop MCP server needs the deployment's
+ * beta flag (ARCHESTRA_BETA). The items that already are one keep working.
+ */
+function assertDesktopMcpOffered(serverType: string | undefined): void {
+  if (serverType === "desktop_mcp" && !config.beta) {
+    throw new ApiError(
+      403,
+      "Desktop MCP servers are in alpha and need ARCHESTRA_BETA=true.",
+    );
+  }
+}

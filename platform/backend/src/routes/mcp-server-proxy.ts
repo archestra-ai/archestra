@@ -70,6 +70,14 @@ const mcpServerProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "You don't have access to this MCP server, or it doesn't exist.",
         );
       }
+      // A desktop MCP server runs on its owner's computer: an installation
+      // admin who can see another user's installation does not run it there.
+      if (server.serverType === "desktop_mcp" && server.ownerId !== userId) {
+        throw new ApiError(
+          403,
+          "This MCP server runs on another user's computer. Install it to use it on yours.",
+        );
+      }
       const { catalogId } = server;
 
       // Gate tools/call on _meta.ui.visibility: model-only tools are not

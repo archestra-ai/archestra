@@ -24,7 +24,8 @@
  *      Remote catalogs don't pause here: the backend cascade restarts
  *      nothing for them (no pod — it only re-syncs tools), so the form
  *      saves directly ("skip"), or shows "rename" when a rename rides
- *      along.
+ *      along. A desktop MCP server has no pod either — it runs on its
+ *      user's computer — and follows the same rule.
  *
  * `renamed` rides along with the mode so the confirm bar can append the
  * MCP-client tool-list reload warning even when a rename composes with
@@ -39,6 +40,7 @@
  */
 
 import { SERVER_NAME_PLACEHOLDER } from "@archestra/shared";
+import type { CatalogServerType } from "./mcp-server-type";
 
 export type CascadeOutcome = "skip" | "manual" | "auto" | "rename";
 
@@ -57,7 +59,7 @@ export type CascadeDecision = {
 export type CascadeSnapshot = {
   name?: string;
   description?: string | null;
-  serverType?: "local" | "remote" | "builtin";
+  serverType?: CatalogServerType;
   serverUrl?: string | null;
   authMethod?: string;
   authHeaderName?: string;
@@ -172,8 +174,11 @@ export function computeCascadeOutcome(
   // server has no pod: the backend only re-syncs tools and nothing
   // goes offline, so there is nothing to confirm — save directly,
   // unless a rename rides along (connected clients must still reload
-  // the renamed tools).
-  if ((next.serverType ?? prev.serverType) === "remote") {
+  // the renamed tools). The same holds for a desktop MCP server, which
+  // runs on its user's computer: "Save and restart" would promise a
+  // restart nothing here can perform.
+  const serverType = next.serverType ?? prev.serverType;
+  if (serverType === "remote" || serverType === "desktop_mcp") {
     return { mode: renamed ? "rename" : "skip", renamed };
   }
   return { mode: "auto", renamed };

@@ -41,6 +41,7 @@ export * from "./conversation-chat-error";
 export * from "./conversation-compaction";
 export * from "./cost-export";
 export * from "./credential-billing";
+export * from "./desktop-mcp";
 export * from "./enterprise-managed-credentials";
 export * from "./environment";
 export * from "./environment-default-user-limit";

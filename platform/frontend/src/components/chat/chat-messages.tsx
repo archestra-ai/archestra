@@ -92,9 +92,12 @@ import {
 import { isActionAvailableForConversation } from "@/lib/chat/encrypted-chat";
 import { useChatSessionSnapshot } from "@/lib/chat/global-chat.context";
 import {
+  desktopAddPromptCopy,
   hasToolPartsWithAuthErrors,
   isAuthInstructionText,
+  isInstallAuthAction,
   isInstallAuthResolved,
+  isNoDeviceError,
   resolveAssistantTextAuthState,
   resolveToolAuthState,
   type ToolAuthState,
@@ -137,6 +140,7 @@ import { InlineChatError } from "./inline-chat-error";
 import { hasKnowledgeBaseToolCall } from "./knowledge-graph-citations";
 import { McpAppSection, type McpToolOutput } from "./mcp-app-container";
 import { McpInstallDialogs } from "./mcp-install-dialogs";
+import { NoDeviceToolCard } from "./no-device-tool-card";
 import {
   isOpenAppaPolicyChange,
   OpenAppaPolicyChange,
@@ -2044,13 +2048,16 @@ const MessageTool = memo(
       rawOutput,
     });
 
-    const authToolBody = renderToolAuthPart({
-      toolName,
-      authState: toolAuthState,
-      connectedCatalogIds,
-      onInstallMcp,
-      onReauthMcp,
-    });
+    const authToolBody =
+      renderToolAuthPart({
+        toolName,
+        authState: toolAuthState,
+        connectedCatalogIds,
+        onInstallMcp,
+        onReauthMcp,
+      }) ??
+      // A desktop MCP tool with no device to run on: offer the MCP bridge.
+      (isNoDeviceError({ errorText, rawOutput }) ? <NoDeviceToolCard /> : null);
 
     if (getToolShortName(toolName) === TOOL_TODO_WRITE_SHORT_NAME) {
       return (
@@ -2514,6 +2521,15 @@ function authCardProps(params: {
     authState?.kind === "auth-required" &&
     isInstallAuthResolved({ authState, connectedCatalogIds })
   ) {
+    if (authState.action === "add_desktop_mcp_server") {
+      return {
+        ...desktopAddPromptCopy({
+          catalogName: authState.catalogName,
+          resolved: true,
+        }),
+        variant: "success",
+      };
+    }
     return {
       title: "Authentication successful",
       description: <>Connected to &ldquo;{authState.catalogName}&rdquo;.</>,
@@ -2556,6 +2572,19 @@ function authCardProps(params: {
         ),
       };
     case "auth-required": {
+      // A desktop MCP server has no credentials: the user adds it to their
+      // computer, in the registry's dialog for that.
+      if (authState.action === "add_desktop_mcp_server") {
+        return {
+          ...desktopAddPromptCopy({
+            catalogName: authState.catalogName,
+            resolved: false,
+          }),
+          buttonUrl: authState.actionUrl,
+          onAction: onInstall,
+          openInNewTab: true,
+        };
+      }
       const isIdentityProviderConnect =
         authState.action === "connect_identity_provider";
       const providerName = authState.providerId ?? "identity provider";
@@ -2603,9 +2632,7 @@ function resolveAuthActions(params: {
     const { catalogId } = authState;
     return {
       onInstall:
-        authState.action === "install_mcp_credentials" &&
-        onInstallMcp &&
-        catalogId
+        isInstallAuthAction(authState.action) && onInstallMcp && catalogId
           ? () => onInstallMcp(catalogId)
           : undefined,
     };

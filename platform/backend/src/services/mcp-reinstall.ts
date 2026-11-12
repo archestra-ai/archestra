@@ -3,6 +3,7 @@ import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { secretManager } from "@/secrets-manager";
+import { syncDesktopMcpTools } from "@/services/desktop-mcp/desktop-mcp-tools";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -509,6 +510,26 @@ async function syncToolsForServer(
   const tools = options?.getTools
     ? await options.getTools({ server, catalogItem })
     : await McpServerModel.getToolsFromServer(server);
+
+  // The installations of a desktop MCP server run on different computers:
+  // one of them adds to the shared tools, and never rewrites or deletes them.
+  if (catalogItem.serverType === "desktop_mcp") {
+    const { created, unchanged } = await syncDesktopMcpTools({
+      mcpServerId: server.id,
+      catalogItem,
+      tools,
+    });
+    if (created.length > 0) {
+      await refreshMcpSkillMetadata({
+        catalogId: catalogItem.id,
+        mcpServerId: server.id,
+      });
+      trackBackgroundWork(
+        openappaBatteriesService.onCatalogToolsChanged(catalogItem.id),
+      );
+    }
+    return { created, updated: [], unchanged, deleted: [] };
+  }
 
   const toolNamePrefix = catalogItem.name;
   const toolsToSync = tools.map((tool) => ({

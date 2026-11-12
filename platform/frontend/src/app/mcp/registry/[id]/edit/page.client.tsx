@@ -35,6 +35,7 @@ import { EditCatalogContent } from "../../_parts/edit-catalog-dialog";
 import { IdleHibernationSection } from "../../_parts/idle-hibernation-section";
 // SPDX-SnippetEnd
 import type { CatalogItem } from "../../_parts/mcp-server-card";
+import { mcpServerTypeLabel } from "../../_parts/mcp-server-type";
 import {
   SERVER_RULES_LABEL,
   ServerRulesButton,
@@ -63,7 +64,9 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
           <span className="flex min-w-0 items-center gap-2">
             <span className="min-w-0 truncate">Edit {item.name}</span>
             <Badge variant="secondary" className="capitalize font-normal">
-              {item.serverType}
+              {item.serverType === "desktop_mcp"
+                ? mcpServerTypeLabel(item.serverType)
+                : item.serverType}
             </Badge>
           </span>
         ) : (
@@ -125,8 +128,11 @@ function SetupWizard({
 
   // Without a connection the test step's own Install button is the step's
   // single CTA — hide the Next button so the two don't compete.
+  // A desktop MCP installation waits until the MCP bridge on the user's
+  // computer runs the server, which can be later, so Next stays as the way on.
   const { target: testTarget } = useTestConnectionTarget(item);
-  const hideNext = step === "test" && !testTarget;
+  const hideNext =
+    step === "test" && !testTarget && item.serverType !== "desktop_mcp";
 
   const detailHref = `/mcp/registry/${item.id}`;
   // The last step's Guardrails action is the one the server's page and the

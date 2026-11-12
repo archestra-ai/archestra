@@ -31,6 +31,10 @@ inputs:
     description: "Exit with non-zero code if vulnerabilities are found"
     required: false
     default: "true"
+  findings-file:
+    description: "With exit-code, append each image whose scan found vulnerabilities (Scout's exit 2, not an outage or other error) to this file"
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -78,6 +82,7 @@ runs:
         SCOUT_ONLY_SEVERITIES: ${{ inputs.only-severities }}
         SCOUT_ONLY_FIXED: ${{ inputs.only-fixed }}
         SCOUT_EXIT_CODE: ${{ inputs.exit-code }}
+        SCOUT_FINDINGS_FILE: ${{ inputs.findings-file }}
       run: |
         set -euo pipefail
 
@@ -155,6 +160,10 @@ runs:
           echo "::endgroup::"
           if [ "$status" -ne 0 ]; then
             echo "::error::Docker Scout failed for ${images[$index]} (exit ${status})."
+          fi
+          # `--exit-code` makes Scout exit 2 for vulnerabilities only.
+          if [ "$status" -eq 2 ] && [ "${SCOUT_EXIT_CODE}" = "true" ] && [ -n "${SCOUT_FINDINGS_FILE:-}" ]; then
+            echo "${images[$index]}" >> "${SCOUT_FINDINGS_FILE}"
           fi
         done
         exit "$result"

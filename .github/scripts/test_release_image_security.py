@@ -324,7 +324,7 @@ print(json.dumps({'manifests': [
 
 
 class ScannerFailureTests(unittest.TestCase):
-    def scan(self, statuses, platform="linux/arm64", concurrent="false"):
+    def scan(self, statuses, platform="linux/arm64", concurrent="false", findings=None):
         source = (ROOT / ".github/actions/scan-docker-image/action.yml").read_text()
         scanner = textwrap.dedent(source.split("    - name: Docker Scout CVE Check\n", 1)[1].split("      run: |\n", 1)[1])
         with tempfile.TemporaryDirectory() as directory:
@@ -344,6 +344,7 @@ exit(int(json.loads(os.environ['STATUSES'])[sys.argv[2]]))
                     "SCOUT_PLATFORM": platform, "SCOUT_CONCURRENT": concurrent,
                     "SCOUT_ONLY_SEVERITIES": "critical,high", "SCOUT_ONLY_FIXED": "true",
                     "SCOUT_EXIT_CODE": "true", "CALLS": str(calls),
+                    **({"SCOUT_FINDINGS_FILE": str(findings)} if findings else {}),
                     "STATUSES": json.dumps(dict(zip(("registry://image@sha256:first",
                                                      "registry://image@sha256:second"), statuses)))},
                 capture_output=True, text=True)
@@ -361,6 +362,20 @@ exit(int(json.loads(os.environ['STATUSES'])[sys.argv[2]]))
                         self.assertIn("--only-fixed", args)
                         self.assertEqual(args[args.index("--only-severity") + 1], "critical,high")
                         self.assertEqual(args[args.index("--platform") + 1], "linux/arm64")
+
+
+    def test_only_vulnerability_findings_are_recorded_for_the_release_hold(self):
+        # Scout exits 2 for vulnerabilities; auth, network and CLI errors must
+        # not hold a release from its retries.
+        for concurrent in ("false", "true"):
+            for statuses, expected in (((0, 0), []), ((2, 0), ["first"]), ((2, 2), ["first", "second"]),
+                                       ((1, 2), ["second"]), ((1, 23), []), ((137, 0), [])):
+                with self.subTest(statuses=statuses, concurrent=concurrent), tempfile.TemporaryDirectory() as temp:
+                    findings = Path(temp) / "findings"
+                    result, _ = self.scan(statuses, concurrent=concurrent, findings=findings)
+                    self.assertEqual(result.returncode, max(statuses), result.stderr)
+                    recorded = findings.read_text().splitlines() if findings.exists() else []
+                    self.assertEqual(recorded, [f"registry://image@sha256:{name}" for name in expected])
 
 
 class WorkflowContractTests(unittest.TestCase):

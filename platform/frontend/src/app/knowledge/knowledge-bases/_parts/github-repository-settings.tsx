@@ -67,7 +67,7 @@ const LIST_SETTINGS = [
     label: "File Types (optional)",
     placeholder: ".md, .yaml, Dockerfile",
     description:
-      "Use extensions (.md), exact file names (Dockerfile), or * for all text files. Separate entries with commas. Defaults to Markdown and YAML.",
+      "Use extensions (.md), exact file names (Dockerfile), or * for all text files. Add .pdf to index text extracted from PDFs. Separate entries with commas. Defaults to Markdown and YAML.",
   },
   {
     name: "includePaths",

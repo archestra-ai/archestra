@@ -8,7 +8,10 @@ import {
 } from "@/git-hosts/git-host-client";
 import logger from "@/logging";
 import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
-import { firstFileAtEachPath } from "@/services/openappa-github-access";
+import {
+  firstFileAtEachPath,
+  strayGlobMatches,
+} from "@/services/openappa-github-access";
 import { ApiError } from "@/types";
 import type { AppaGithubRepositoryStatus } from "@/types/openappa-github-app-setup";
 
@@ -284,7 +287,10 @@ class OpenAppaGitlab {
     files: { path: string; content: string }[];
     title: string;
     summary: string;
-  }): Promise<{ iid: number; webUrl: string } | null> {
+    /** The policy text being written, for the globs it reads by. */
+    policyPath: string;
+    content: string;
+  }): Promise<{ iid: number; webUrl: string; branch: string } | null> {
     const client = gitClient(params.access);
     const branch = await withGitlabErrors(
       async () => params.ref ?? (await client.defaultBranch(params.repo)),
@@ -293,7 +299,20 @@ class OpenAppaGitlab {
       client.gitlabBranchCommit(params.repo, branch),
     );
     const files = firstFileAtEachPath(params.files);
+    // Files the project holds that the policy's globs would read, and that
+    // were never in the policy, go with the merge request.
+    const remove = strayGlobMatches({
+      content: params.content,
+      policyPath: params.policyPath,
+      paths: (
+        await withGitlabErrors(() => client.listTree(params.repo, baseSha))
+      )
+        .filter((entry) => entry.type === "blob")
+        .map((entry) => entry.path),
+      written: files.map((file) => file.path),
+    });
     const unchanged = await withGitlabErrors(async () => {
+      if (remove.length > 0) return false;
       for (const file of files) {
         const bytes = await client.readFile({
           repo: params.repo,
@@ -306,16 +325,19 @@ class OpenAppaGitlab {
       return true;
     });
     if (unchanged) return null;
-    return this.proposeChange({
-      access: params.access,
-      repo: params.repo,
+    return {
+      ...(await this.proposeChange({
+        access: params.access,
+        repo: params.repo,
+        branch,
+        baseSha,
+        title: params.title,
+        summary: params.summary,
+        upsert: files,
+        delete: remove,
+      })),
       branch,
-      baseSha,
-      title: params.title,
-      summary: params.summary,
-      upsert: files,
-      delete: [],
-    });
+    };
   }
 
   /**

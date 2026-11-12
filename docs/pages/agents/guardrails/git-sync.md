@@ -42,7 +42,7 @@ If GitLab refuses the first commit to a protected branch, setup stops with an er
 
 Before you connect, the dialog checks what the repository holds. Whatever it finds, setup carries your whole policy over: the policy file, every file it includes from its repository such as the MCP servers' files, and its validations. Nothing is lost when you move to another repository.
 
-- **OpenAPPA template**, **Empty repository**, or **Empty project:** setup copies your current policy and the files it reads into it.
+- **OpenAPPA template**, **Empty repository**, or **Empty project:** setup copies your current policy and the files it reads into it. A private repository that still holds the template's example `appa.toml` counts as a template copy, however it was created.
 - **Found appa.toml:** setup opens a pull request, or a merge request on GitLab, that puts your current policy and the files it reads in place of that file. Merge it as it is, or combine the two policies on its branch first. Your current policy stays active until it merges.
 - **No appa.toml:** pick another repository, or set the policy file under **Advanced**.
 - **No access:** the App or token cannot read it. On GitHub, click **Change access** to fix it.

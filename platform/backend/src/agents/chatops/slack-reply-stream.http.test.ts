@@ -1,11 +1,146 @@
 import { WebClient } from "@slack/web-api";
 import { HttpResponse, http } from "msw";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { useMswServer } from "@/test/msw";
+import type {
+  ChatOpsProvider,
+  ChatOpsReplyStream,
+  ChatReplyOptions,
+  IncomingChatMessage,
+} from "@/types";
+import { ChatOpsManager } from "./chatops-manager";
+import SlackProvider from "./slack-provider";
 import { SlackReplyStream } from "./slack-reply-stream";
 
 describe("Slack reply stream HTTP boundary", () => {
   const server = useMswServer();
+
+  test.each([
+    "im",
+    "channel",
+  ])("a delayed start in %s finishes one complete reply with its footer", async (channelType) => {
+    const requests: string[] = [];
+    const messages = new Map<string, { text: string; blocks: unknown[] }>();
+    let releaseStart!: () => void;
+    const startResponse = new Promise<void>((resolve) => {
+      releaseStart = resolve;
+    });
+    server.use(
+      http.post(
+        "https://slack.com/api/:method",
+        async ({ request, params }) => {
+          const method = String(params.method);
+          const body = new URLSearchParams(await request.text());
+          requests.push(method);
+          const chunks = JSON.parse(body.get("chunks") ?? "[]") as {
+            type: string;
+            text?: string;
+          }[];
+          const text = chunks.map((chunk) => chunk.text ?? "").join("");
+          if (method === "chat.startStream") {
+            messages.set("100.2", { text, blocks: [] });
+            await startResponse;
+          } else if (
+            method === "chat.appendStream" ||
+            method === "chat.stopStream"
+          ) {
+            const message = messages.get(body.get("ts") ?? "");
+            if (!message) throw new Error("message_not_found");
+            message.text += text;
+            if (body.has("blocks"))
+              message.blocks = JSON.parse(body.get("blocks") ?? "[]");
+          } else if (method === "chat.postMessage") {
+            messages.set("100.3", {
+              text: body.get("text") ?? "",
+              blocks: JSON.parse(body.get("blocks") ?? "[]"),
+            });
+          } else {
+            throw new Error(`Unexpected Slack method: ${method}`);
+          }
+          return HttpResponse.json({ ok: true, ts: "100.2" });
+        },
+      ),
+    );
+    const provider = new SlackProvider({
+      enabled: true,
+      botToken: "fixture-unused-token",
+    });
+    (provider as unknown as { client: WebClient }).client = new WebClient(
+      "fixture-unused-token",
+      {
+        retryConfig: { retries: 0 },
+      },
+    );
+    // Exercise the actual stream admission and final-delivery decision,
+    // keeping only Slack's HTTP transport controlled.
+    const manager = new ChatOpsManager() as unknown as {
+      openReplyStream(params: {
+        provider: ChatOpsProvider;
+        message: IncomingChatMessage;
+        sendReply: boolean;
+      }): ChatOpsReplyStream;
+      deliverReply(params: {
+        provider: ChatOpsProvider;
+        replyStream: ChatOpsReplyStream;
+        options: ChatReplyOptions;
+      }): Promise<void>;
+    };
+    const message: IncomingChatMessage = {
+      messageId: "100.1",
+      channelId: "C_ORIGINAL",
+      workspaceId: "T_ORIGINAL",
+      senderId: "U_ORIGINAL",
+      senderName: "Synthetic user",
+      text: "Hello",
+      timestamp: new Date(),
+      metadata: {
+        channelType,
+        conversationType: channelType === "im" ? "personal" : "channel",
+        botMentioned: channelType === "channel",
+      },
+    };
+    const stream = manager.openReplyStream({
+      provider,
+      message,
+      sendReply: true,
+    });
+    stream.push({ type: "text-delta", id: "t", delta: "Hello, " });
+    try {
+      await vi.waitFor(() => expect(requests).toEqual(["chat.startStream"]), {
+        timeout: 2500,
+      });
+      stream.push({ type: "text-delta", id: "t", delta: "complete answer." });
+      const delivery = manager.deliverReply({
+        provider,
+        replyStream: stream,
+        options: {
+          originalMessage: message,
+          text: "Hello, complete answer.",
+          footer: "🤖 Synthetic agent",
+        },
+      });
+      releaseStart();
+      await delivery;
+      expect(requests).not.toContain("chat.postMessage");
+      expect(requests.at(-1)).toBe("chat.stopStream");
+      expect([...messages.values()]).toEqual([
+        {
+          text: "Hello, complete answer.",
+          blocks: [
+            {
+              type: "context",
+              elements: [
+                { type: "plain_text", text: "🤖 Synthetic agent", emoji: true },
+              ],
+            },
+          ],
+        },
+      ]);
+    } finally {
+      releaseStart();
+      await stream.abandon({ keepContent: false });
+    }
+  });
 
   test("the Slack SDK sends bounded details on the original stream and never sends result bodies", async () => {
     const requests: { method: string; body: Record<string, string> }[] = [];
@@ -59,6 +194,7 @@ describe("Slack reply stream HTTP boundary", () => {
       toolCallId: "call-2",
       output: { privateResult: "withheld-tool-output" },
     });
+    await vi.waitFor(() => expect(requests).toHaveLength(1), { timeout: 2500 });
     await stream.finish({
       text: "The assignment failed. The search succeeded.",
     });

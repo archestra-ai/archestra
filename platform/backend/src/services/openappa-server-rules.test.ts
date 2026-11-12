@@ -110,6 +110,7 @@ function serveRepository(state: {
     "mcp/helpdesk.toml",
     "mcp/github.toml",
     "mcp/README.toml",
+    "teams/support.toml",
   ];
   const at = (request: Request) =>
     state.files[new URL(request.url).searchParams.get("ref") ?? ""];
@@ -143,6 +144,21 @@ function serveRepository(state: {
             listed.map(([path, text]) => ({
               type: "file",
               name: path.slice(".github/".length),
+              path,
+              sha: createHash("sha1").update(text).digest("hex"),
+            })),
+          );
+    }),
+    http.get(`${REPO}/contents/teams`, ({ request }) => {
+      const listed = Object.entries(at(request) ?? {}).filter(([path]) =>
+        path.startsWith("teams/"),
+      );
+      return listed.length === 0
+        ? new HttpResponse(null, { status: 404 })
+        : HttpResponse.json(
+            listed.map(([path, text]) => ({
+              type: "file",
+              name: path.slice("teams/".length),
               path,
               sha: createHash("sha1").update(text).digest("hex"),
             })),
@@ -2710,4 +2726,81 @@ test("the self-service folder is the deployment's: the servers' files live there
     "appa.toml",
     "mcp/README.md",
   ]);
+});
+
+test("a read lists every rule for the server's tools across the policy, the root's first, with the file each comes from", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const catalog = await InternalMcpCatalogModel.create(
+    {
+      name: "payments_api",
+      serverType: "remote",
+      serverUrl: "https://payments.example.com/mcp",
+      scope: "org",
+    },
+    {
+      organizationId: org.id,
+      initialPermissionGrants: [
+        {
+          subject: { type: "organization", id: "*" },
+          actions: ["read", "use"],
+        },
+      ],
+    },
+  );
+  for (const name of ["refund_payment", "get_invoice", "export_ledger"])
+    await ToolModel.createToolIfNotExists({
+      name: `payments_api__${name}`,
+      description: name,
+      parameters: {},
+      catalogId: catalog.id,
+    });
+  // The root keeps one rule for the server and includes a team's file that
+  // keeps another; the server has no file of its own yet.
+  const team =
+    '[policy]\nversion = 2\n\n[[policy.tool]]\nname = "payments_api__refund_payment"\nrequires = { trust = "trusted" }\ndelta = {}\n\n[[policy.tool]]\nname = "helpdesk__read_ticket"\ndelta = {}\n';
+  await connectApp({ organizationId: org.id });
+  serveRepository({
+    head: FIRST,
+    files: {
+      [FIRST]: {
+        "appa.toml": `include = ["teams/*.toml"]\n\n${RULES}`,
+        "teams/support.toml": team,
+      },
+    },
+  });
+  await syncAppaGithubPolicy(org.id);
+  expect(
+    (await OpenAppaGithubSyncModel.find(org.id))?.lastSyncError,
+  ).toBeNull();
+
+  const read = await getServerRules({
+    organizationId: org.id,
+    userId: admin.id,
+    catalogId: catalog.id,
+  });
+  expect(read).toMatchObject({ content: null, path: "mcp/payments_api.toml" });
+  expect(read.rules).toEqual([
+    {
+      file: "appa.toml",
+      name: "payments_api__export_ledger",
+      rule: { name: "payments_api__export_ledger", delta: {} },
+    },
+    {
+      file: "teams/support.toml",
+      name: "payments_api__refund_payment",
+      rule: {
+        name: "payments_api__refund_payment",
+        requires: { trust: "trusted" },
+        delta: {},
+      },
+    },
+  ]);
+  expect(read.instruction).toContain("other files of the policy keep");
 });

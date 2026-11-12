@@ -1622,17 +1622,23 @@ describe("APPA GitHub sync", () => {
       ),
       contentsOf("example/new-policy", git.files),
     );
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/openappa/github-sync/repository",
-      payload: {
-        owner: "example",
-        name: "new-policy",
-        githubAppConfigId: githubApp.id,
-        interval: "1h",
-        selfService: true,
-      },
-    });
+    // Release 1.4: self-service is the deployment's variable.
+    config.openappa.selfService = "enabled";
+    let response: Awaited<ReturnType<typeof app.inject>>;
+    try {
+      response = await app.inject({
+        method: "POST",
+        url: "/api/openappa/github-sync/repository",
+        payload: {
+          owner: "example",
+          name: "new-policy",
+          githubAppConfigId: githubApp.id,
+          interval: "1h",
+        },
+      });
+    } finally {
+      config.openappa.selfService = "disabled";
+    }
     expect(response.statusCode, response.body).toBe(200);
     // The seed's own glob names no file yet: nothing to carry, nothing refused.
     expect(Object.keys(git.written())).toEqual(["appa.toml"]);

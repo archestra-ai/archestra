@@ -11,6 +11,7 @@ import { port } from "@/models/ports";
 import {
   ApiError,
   type DesktopDevice,
+  type DesktopMcpArguments,
   type InternalMcpCatalog,
   type McpServer,
 } from "@/types";
@@ -35,10 +36,15 @@ class DesktopMcpInstallService {
    * again. Install also clears a Stop the user stored for the MCP server on
    * the Devices tab: the user asked for it to run. Works with no device: the
    * first sync of a new device brings the MCP server.
+   *
+   * `desktopArguments` are the arguments the user adds to the command of the
+   * catalog item. When they are not given, an installation the user has
+   * keeps its arguments.
    */
   async install(params: {
     catalogItem: Pick<InternalMcpCatalog, "id" | "name" | "desktopConfig">;
     userId: string;
+    desktopArguments?: DesktopMcpArguments | null;
   }): Promise<McpServer> {
     const { catalogItem, userId } = params;
     if (
@@ -50,21 +56,27 @@ class DesktopMcpInstallService {
         "This MCP server has no command and no URL, so there is nothing to run on a computer.",
       );
     }
+    const desktopArguments =
+      params.desktopArguments === undefined
+        ? undefined
+        : storedArguments(params.desktopArguments);
+    assertCommandForArguments(catalogItem, desktopArguments);
     const existing = await McpServerModel.getUserPersonalServerForCatalog(
       userId,
       catalogItem.id,
     );
-    const mcpServer =
-      existing ??
-      (await McpServerModel.create({
-        name: catalogItem.name,
-        catalogId: catalogItem.id,
-        serverType: "desktop_mcp",
-        userId,
-        ownerId: userId,
-        scope: "personal",
-        localInstallationStatus: "pending",
-      }));
+    const mcpServer = existing
+      ? ((await this.storeArguments(existing, desktopArguments)) ?? existing)
+      : await McpServerModel.create({
+          name: catalogItem.name,
+          catalogId: catalogItem.id,
+          serverType: "desktop_mcp",
+          userId,
+          ownerId: userId,
+          scope: "personal",
+          localInstallationStatus: "pending",
+          desktopArguments: desktopArguments ?? null,
+        });
     const device = await DesktopDeviceModel.findByUserId(userId);
     if (device) {
       await DesktopDeviceServerModel.saveEnabled({
@@ -75,6 +87,45 @@ class DesktopMcpInstallService {
       await desktopBridgeControlService.notifySync([device.id]);
     }
     return mcpServer;
+  }
+
+  /**
+   * Stores the arguments a user adds to the command of the catalog item, for
+   * the user's own installation, and tells the user's device to get its
+   * config again: the MCP bridge stops the MCP server and starts it with the
+   * new arguments. The installation waits again until its tools are read
+   * from the server that the device started with them.
+   *
+   * Only the owner of the installation changes its arguments; for any other
+   * caller the installation does not exist. Arguments that are the stored
+   * ones change nothing and start nothing.
+   */
+  async updateArguments(params: {
+    mcpServerId: string;
+    userId: string;
+    desktopArguments: DesktopMcpArguments | null;
+  }): Promise<McpServer> {
+    const { mcpServerId, userId } = params;
+    const mcpServer = await McpServerModel.findById(mcpServerId);
+    if (
+      !mcpServer ||
+      mcpServer.serverType !== "desktop_mcp" ||
+      mcpServer.scope !== "personal" ||
+      mcpServer.ownerId !== userId
+    ) {
+      throw new ApiError(404, "MCP server not found");
+    }
+    const desktopArguments = storedArguments(params.desktopArguments);
+    const catalogItem = mcpServer.catalogId
+      ? await InternalMcpCatalogModel.findById(mcpServer.catalogId, {
+          expandSecrets: false,
+        })
+      : null;
+    assertCommandForArguments(catalogItem, desktopArguments);
+    const updated = await this.storeArguments(mcpServer, desktopArguments);
+    if (!updated) return mcpServer;
+    await this.notifyDeviceOfUser(userId);
+    return updated;
   }
 
   /**
@@ -130,6 +181,53 @@ class DesktopMcpInstallService {
         this.inProgress.delete(install.id);
       }
     }
+  }
+
+  /**
+   * Stores other arguments than the installation has. Returns null, and
+   * changes nothing, when they are the stored ones or are not given.
+   *
+   * The MCP server that runs on the device has the arguments from before.
+   * So the installation waits again, the state its device reported for it
+   * is not known any more, and the tools are not read for a short time: the
+   * device needs it to get its config and stop that MCP server. The caller
+   * tells the device to sync.
+   */
+  private async storeArguments(
+    mcpServer: McpServer,
+    desktopArguments: DesktopMcpArguments | null | undefined,
+  ): Promise<McpServer | null> {
+    if (
+      desktopArguments === undefined ||
+      sameArguments(mcpServer.desktopArguments, desktopArguments)
+    ) {
+      return null;
+    }
+    await cacheManager.set(
+      attemptKey(mcpServer.id),
+      true,
+      ARGUMENTS_RESTART_HOLD_MS,
+    );
+    const updated = await McpServerModel.update(mcpServer.id, {
+      desktopArguments,
+      localInstallationStatus: "pending",
+      localInstallationError: null,
+    });
+    if (!updated) throw new ApiError(404, "MCP server not found");
+    const device = mcpServer.ownerId
+      ? await DesktopDeviceModel.findByUserId(mcpServer.ownerId)
+      : null;
+    if (device && mcpServer.catalogId) {
+      await DesktopDeviceServerModel.clearState({
+        deviceId: device.id,
+        catalogId: mcpServer.catalogId,
+      });
+    }
+    const { broadcastMcpInstallationStatus } = await port(
+      "mcpInstallationEvents",
+    );
+    broadcastMcpInstallationStatus(mcpServer.id, "pending", null);
+    return updated;
   }
 
   private async discoverTools(
@@ -214,7 +312,7 @@ class DesktopMcpInstallService {
    * list its tools is not asked again on every poll.
    */
   private async attemptedRecently(attempt: string): Promise<boolean> {
-    const key = `${CacheKey.DesktopMcpInstallAttempt}-${attempt}` as const;
+    const key = attemptKey(attempt);
     if (await cacheManager.get<boolean>(key)) return true;
     await cacheManager.set(key, true, ATTEMPT_INTERVAL_MS);
     return false;
@@ -226,3 +324,50 @@ export const desktopMcpInstallService = new DesktopMcpInstallService();
 // === Internal helpers
 
 const ATTEMPT_INTERVAL_MS = 60_000;
+
+/**
+ * How long the tools of an installation are not read after its arguments
+ * changed. In that time the device gets its config (it is told at once) and
+ * stops the MCP server that has the arguments from before: the MCP bridge
+ * reads its config file again every 2 seconds. Without the wait, the tools
+ * would be read from that MCP server, and the installation would be complete
+ * before the one with the new arguments started.
+ */
+const ARGUMENTS_RESTART_HOLD_MS = 5_000;
+
+function attemptKey(mcpServerId: string) {
+  return `${CacheKey.DesktopMcpInstallAttempt}-${mcpServerId}` as const;
+}
+
+/** No arguments are stored as null, never as an empty list. */
+function storedArguments(
+  desktopArguments: DesktopMcpArguments | null,
+): DesktopMcpArguments | null {
+  return desktopArguments && desktopArguments.length > 0
+    ? desktopArguments
+    : null;
+}
+
+function sameArguments(
+  stored: DesktopMcpArguments | null,
+  given: DesktopMcpArguments | null,
+): boolean {
+  const a = stored ?? [];
+  const b = given ?? [];
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+/**
+ * Arguments go after a command. A catalog item that is stored with a URL has
+ * no command: the device connects to an MCP server that runs already.
+ */
+function assertCommandForArguments(
+  catalogItem: Pick<InternalMcpCatalog, "desktopConfig"> | null,
+  desktopArguments: DesktopMcpArguments | null | undefined,
+): void {
+  if (!desktopArguments || catalogItem?.desktopConfig?.command) return;
+  throw new ApiError(
+    400,
+    "This MCP server has no command, so it takes no arguments.",
+  );
+}

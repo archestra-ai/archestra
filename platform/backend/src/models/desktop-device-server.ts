@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { DesktopDeviceServer, DesktopMcpServerState } from "@/types";
 
@@ -34,6 +34,27 @@ class DesktopDeviceServerModel {
       })
       .returning();
     return row;
+  }
+
+  /**
+   * Forgets the state the tunnel client reported for one MCP server: its
+   * config changed in Archestra, so that state is of a server that the
+   * device is about to stop. The next report of the tunnel client stores the
+   * state again.
+   */
+  static async clearState(params: {
+    deviceId: string;
+    catalogId: string;
+  }): Promise<void> {
+    await db
+      .update(schema.desktopDeviceServersTable)
+      .set({ state: null, lastError: null })
+      .where(
+        and(
+          eq(schema.desktopDeviceServersTable.deviceId, params.deviceId),
+          eq(schema.desktopDeviceServersTable.catalogId, params.catalogId),
+        ),
+      );
   }
 
   /**

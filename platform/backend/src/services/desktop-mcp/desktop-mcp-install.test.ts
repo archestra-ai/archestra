@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import McpServerModel from "@/models/mcp-server";
@@ -400,6 +401,67 @@ describe("desktopMcpInstallService", () => {
       ]);
     } finally {
       await secondClient.stop();
+    }
+  });
+
+  test("after the owner changes the arguments, the tools are read again, and not from the MCP server that still runs with the arguments from before", async ({
+    makeInternalMcpCatalog,
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId);
+    const catalogItem = await makeFilesItem(makeInternalMcpCatalog);
+    const device = await connectTestDevice({
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+    });
+    const installation = await desktopMcpInstallService.install({
+      catalogItem,
+      userId: ctx.user.id,
+    });
+    const serverTools = [{ name: "read_file", description: "Reads a file" }];
+    const asked: string[] = [];
+    // The device reports the MCP server ready the whole time, as a device
+    // does until it got its config and stopped the server.
+    const tunnelClient = runServer({
+      device,
+      channel: catalogItem.id,
+      tools: serverTools,
+      asked,
+    });
+    try {
+      await expect
+        .poll(() => statusOf(installation.id), { timeout: 10_000 })
+        .toBe("success");
+      asked.length = 0;
+
+      const updated = await desktopMcpInstallService.updateArguments({
+        mcpServerId: installation.id,
+        userId: ctx.user.id,
+        desktopArguments: ["--with-list"],
+      });
+
+      expect(updated.localInstallationStatus).toBe("pending");
+      await desktopMcpInstallService.completeWaiting(device.device, [
+        catalogItem.id,
+      ]);
+      expect(await statusOf(installation.id)).toBe("pending");
+      expect(asked).not.toContain("tools/list");
+
+      // The time the device has to stop that MCP server is over; the one it
+      // started with the new arguments has one more tool.
+      serverTools.push({ name: "list_files", description: "Lists files" });
+      await cacheManager.delete(
+        `${CacheKey.DesktopMcpInstallAttempt}-${installation.id}`,
+      );
+      await expect
+        .poll(() => statusOf(installation.id), { timeout: 10_000 })
+        .toBe("success");
+      expect(await gatewayTools(ctx.user.id, installation.id)).toEqual([
+        { name: "files__list_files", description: "Lists files" },
+        { name: "files__read_file", description: "Reads a file" },
+      ]);
+    } finally {
+      await tunnelClient.stop();
     }
   });
 });

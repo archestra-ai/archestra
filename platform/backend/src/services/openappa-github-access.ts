@@ -542,15 +542,23 @@ class OpenAppaRepositoryIncludes {
           gitlabTokenId: source.gitlabTokenId,
         }),
       );
-      const request = await client.gitlabMergeRequest(
-        source.repo,
-        source.setupPullRequestNumber,
-      );
-      // Open, or merged and not pulled yet: the branch still holds the files.
-      sha =
-        request.state === "closed"
-          ? null
-          : await client.gitlabBranchCommit(source.repo, request.sourceBranch);
+      let request: Awaited<ReturnType<typeof client.gitlabMergeRequest>>;
+      try {
+        request = await client.gitlabMergeRequest(
+          source.repo,
+          source.setupPullRequestNumber,
+        );
+      } catch (error) {
+        if (error instanceof GitHostError)
+          throw new ApiError(
+            502,
+            `GitLab returned HTTP ${error.status} for the setup merge request. Check project access and the token.`,
+          );
+        throw error;
+      }
+      // Open, or merged and not pulled yet: the request's head commit holds
+      // the files, also once the merge removed its branch.
+      sha = request.state === "closed" ? null : request.sha;
     } else {
       const { token, api } = await resolveOpenAppaGithubAccess(source, {
         pull_requests: "read",

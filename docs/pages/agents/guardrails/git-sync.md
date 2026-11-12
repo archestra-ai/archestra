@@ -75,7 +75,7 @@ include = [
 ]
 ```
 
-MCP servers whose tools carry the same tool prefix share one rules file, because rules are keyed by tool name. Members' personal copies of a server follow that file and never block a change. A change to a shared file takes edit access to each shared server.
+MCP servers whose tools carry the same tool prefix share one rules file, because rules match tools by name. To change a shared file, you need edit access to each of these servers that is shared with a team or the organization. Members' personal copies of these servers follow the same file. When only personal copies carry the prefix, a change needs edit access to each copy.
 
 Enable it in the Guardrails setting when setting up git sync or afterwards. Can also be controlled with the [`ARCHESTRA_OPENAPPA_SELF_SERVICE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE) env var.
 

@@ -1517,7 +1517,7 @@ test("MCP servers whose tools share a prefix share one rules file: a change take
   await expect(read(pat.id, mixed.id)).rejects.toMatchObject({
     statusCode: 409,
     message:
-      "helpdesk has no rules file: its tools carry other prefixes than helpdesk__: crm__.",
+      "helpdesk has no rules file: some of its tools carry other prefixes than helpdesk__ (crm__).",
   });
 
   const change = {

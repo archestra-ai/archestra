@@ -2844,7 +2844,7 @@ export function rulesFileRefusal(params: {
     ),
   ].sort();
   if (stray.length > 0)
-    return `${catalog.name} has no rules file: its tools carry other prefixes than ${prefix}__: ${stray.join(", ")}.`;
+    return `${catalog.name} has no rules file: some of its tools carry other prefixes than ${prefix}__ (${stray.join(", ")}).`;
   if (
     [...(prefixes.byPrefix.get(prefix) ?? [])].some(
       (id) => id !== catalog.id && prefixes.conflicting.has(id),

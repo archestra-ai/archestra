@@ -7,6 +7,7 @@ import {
   getAgentRuntimeModelCompatibility,
   getAgentRuntimeProviderCompatibility,
   getProvidersWithOptionalApiKey,
+  isCodexRuntimeCommand,
   isProviderApiKeyOptional,
   isSelfHostedProvider,
   isSmallModel,
@@ -160,17 +161,31 @@ describe("getAgentRuntimeModelCompatibility", () => {
         modelId: "claude-sonnet",
       }),
     ).toEqual({ compatible: true });
-    expect(
-      getAgentRuntimeModelCompatibility({
-        inferenceProtocol: "openai_responses",
-        runtimeCommand: ["archestra-codex"],
-        provider: "gemini",
-        modelId: "gemini-2.5-pro",
-      }),
-    ).toMatchObject({
-      compatible: false,
-      message: expect.stringContaining("Codex runtime requires an OpenAI"),
-    });
+    for (const runtimeCommand of [
+      ["archestra-codex"],
+      ["archestra-codex-runtime"],
+    ] as const) {
+      expect(getAgentRuntimeAllowedProtocols(runtimeCommand)).toEqual([
+        "openai_responses",
+        "openai_chat",
+      ]);
+      expect(
+        getAgentRuntimeModelCompatibility({
+          inferenceProtocol: "openai_responses",
+          runtimeCommand,
+          provider: "gemini",
+          modelId: "gemini-2.5-pro",
+        }),
+      ).toMatchObject({
+        compatible: false,
+        message: expect.stringContaining("Codex runtime requires an OpenAI"),
+      });
+    }
+    expect(isCodexRuntimeCommand("archestra-codex")).toBe(true);
+    expect(isCodexRuntimeCommand("archestra-codex-runtime")).toBe(true);
+    expect(isCodexRuntimeCommand("archestra-claude-code")).toBe(false);
+    expect(isCodexRuntimeCommand(null)).toBe(false);
+    expect(isCodexRuntimeCommand(undefined)).toBe(false);
   });
 
   test("allows only Claude Bedrock models for the maintained Claude Code runtime", () => {

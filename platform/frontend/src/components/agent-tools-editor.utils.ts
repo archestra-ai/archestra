@@ -273,7 +273,7 @@ export function isCatalogInAppEnvironment(
  * computer of the person who makes it.
  */
 export function desktopToolsRunNote(name: string): string {
-  return `Runs on the device of the person who uses the agent. Each person links ${name} to their connected device.`;
+  return `Runs on the device of the person who uses the agent. Each person connects ${name} from their linked device.`;
 }
 
 /**
@@ -333,7 +333,7 @@ export function getCatalogAssignmentGate(params: {
       disabled: true,
       unavailable: false,
       disabledReason: params.isDesktop
-        ? "Not linked to a device yet"
+        ? "Not connected from a device yet"
         : "Not installed",
     };
   }

@@ -190,9 +190,9 @@ describe("tool calls on a desktop MCP server", () => {
     const text = (result.content as Array<{ type: string; text: string }>)
       .map((block) => block.text)
       .join("\n");
-    expect(text).toContain('"files" is not linked to your device.');
+    expect(text).toContain('"files" is not connected from your device.');
     expect(text).toMatch(
-      /To link "files" to your device, visit this URL: \S+\/mcp\/registry\?install=/,
+      /To connect "files" from your device, visit this URL: \S+\/mcp\/registry\?install=/,
     );
     expect(text).not.toMatch(/credentials|install it|Authentication required/i);
     expect(ownerCalls).toEqual([]);

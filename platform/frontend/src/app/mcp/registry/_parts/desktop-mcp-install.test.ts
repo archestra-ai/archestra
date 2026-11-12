@@ -6,8 +6,8 @@ import {
   DESKTOP_MCP_NO_TARGET_REASON,
   DESKTOP_MCP_SLOW_AFTER_MS,
   desktopAddAction,
+  desktopConnectActionLabel,
   desktopInstallStateOfRow,
-  desktopLinkActionLabel,
   desktopMcpAddCase,
   desktopMcpProgress,
   desktopMcpStepLabel,
@@ -230,12 +230,12 @@ describe("bulkRemoveCopy", () => {
 
   it("speaks of the viewer's computer when every server is on it", () => {
     const copy = bulkRemoveCopy(["mine", "mine"]);
-    expect(copy.action).toBe("Unlink");
-    expect(copy.title).toBe("Unlink 2 servers from your device?");
+    expect(copy.action).toBe("Disconnect");
+    expect(copy.title).toBe("Disconnect 2 servers from your device?");
     expect(copy.description).toBe(
       "The MCP bridge stops them on your device, and agents lose their tools.",
     );
-    expect(copy.confirm).toBe("Unlink");
+    expect(copy.confirm).toBe("Disconnect");
     expect(copy.verb).toBe("Removed");
     expect(bulkRemoveCopy(["mine"]).description).toBe(
       "The MCP bridge stops it on your device, and agents lose its tools.",
@@ -244,8 +244,8 @@ describe("bulkRemoveCopy", () => {
 
   it('does not say "my computer" when one is on another user\'s computer', () => {
     const copy = bulkRemoveCopy(["mine", "theirs"]);
-    expect(copy.action).toBe("Unlink from devices");
-    expect(copy.title).toBe("Unlink 2 servers from devices?");
+    expect(copy.action).toBe("Disconnect from devices");
+    expect(copy.title).toBe("Disconnect 2 servers from devices?");
     expect(copy.description).toContain("on the device of each user");
   });
 
@@ -311,19 +311,19 @@ describe("hasDesktopTarget", () => {
   });
 });
 
-describe("desktopLinkActionLabel", () => {
+describe("desktopConnectActionLabel", () => {
   it("says that the MCP bridge is set up first when the user has none", () => {
-    expect(desktopLinkActionLabel({ kind: "no-bridge" })).toBe(
-      "Install MCP bridge and link",
+    expect(desktopConnectActionLabel({ kind: "no-bridge" })).toBe(
+      "Install MCP bridge and connect",
     );
   });
 
-  it("says Link when the user has a device, and while that is not known", () => {
+  it("says Connect when the user has a device, and while that is not known", () => {
     expect(
-      desktopLinkActionLabel({ kind: "bridge", device: { name: "laptop" } }),
-    ).toBe("Link");
-    expect(desktopLinkActionLabel({ kind: "loading" })).toBe("Link");
-    expect(desktopLinkActionLabel({ kind: "error" })).toBe("Link");
+      desktopConnectActionLabel({ kind: "bridge", device: { name: "laptop" } }),
+    ).toBe("Connect");
+    expect(desktopConnectActionLabel({ kind: "loading" })).toBe("Connect");
+    expect(desktopConnectActionLabel({ kind: "error" })).toBe("Connect");
   });
 });
 
@@ -476,7 +476,7 @@ describe("desktopMcpStepStatus and desktopMcpStepLabel", () => {
 
   it("names the server where it reads better", () => {
     expect(desktopMcpStepLabel("sending", "MATLAB")).toBe(
-      "Linking your local device",
+      "Checking your linked device",
     );
     expect(desktopMcpStepLabel("starting", "MATLAB")).toBe("Starting MATLAB");
     expect(desktopMcpStepLabel("reading", "MATLAB")).toBe("Reading its tools");
@@ -523,14 +523,14 @@ describe("ownDesktopComputerLine", () => {
 
   it("offers Add while the viewer has not added the server, whoever else has", () => {
     expect(line({})).toEqual({
-      text: "MATLAB is not linked to your device yet.",
+      text: "MATLAB is not connected from your device yet.",
       action: "add",
     });
   });
 
   it("offers nothing for a server with no command and no URL", () => {
     expect(line({ canAdd: false })).toEqual({
-      text: "This server isn't set up yet, so it can't be linked to your device.",
+      text: "This server isn't set up yet, so it can't be connected from your device.",
       action: null,
     });
   });
@@ -581,19 +581,19 @@ describe("desktopRemoveCopy", () => {
   it("says the MCP bridge stops it on the viewer's computer, with no team or organization", () => {
     const copy = desktopRemoveCopy({ name: "MATLAB", mine: true });
     expect(copy).toEqual({
-      title: "Unlink MATLAB from your device?",
+      title: "Disconnect MATLAB from your device?",
       description:
         "The MCP bridge stops MATLAB on your device, and agents lose its tools.",
-      confirm: "Unlink",
-      confirming: "Unlinking...",
+      confirm: "Disconnect",
+      confirming: "Disconnecting...",
     });
     expect(JSON.stringify(copy)).not.toMatch(/team|organization|install/i);
   });
 
   it("speaks of their computer when the row is another user's", () => {
     expect(desktopRemoveCopy({ name: "MATLAB", mine: false })).toMatchObject({
-      title: "Unlink MATLAB from their device?",
-      confirm: "Unlink from their device",
+      title: "Disconnect MATLAB from their device?",
+      confirm: "Disconnect from their device",
     });
   });
 });

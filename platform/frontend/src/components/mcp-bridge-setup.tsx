@@ -184,11 +184,33 @@ export function McpBridgeSetupStatus({
 }) {
   const linked = device?.online === true;
   return (
+    <StepsStatus done={linked}>
+      {linked
+        ? `${device.name} is linked`
+        : device
+          ? `Linking ${device.name}...`
+          : "Waiting for your device..."}
+    </StepsStatus>
+  );
+}
+
+/**
+ * The live line on the left of the footer of a dialog with numbered steps:
+ * a spinner while the steps go on, a check once they are done.
+ */
+export function StepsStatus({
+  done,
+  children,
+}: {
+  done: boolean;
+  children: string;
+}) {
+  return (
     <output
       aria-live="polite"
       className="flex min-w-0 items-center gap-2 self-center text-sm sm:mr-auto"
     >
-      {linked ? (
+      {done ? (
         <CheckCircle2 className="size-4 shrink-0 text-green-600" aria-hidden />
       ) : (
         <Loader2
@@ -197,17 +219,13 @@ export function McpBridgeSetupStatus({
         />
       )}
       <span
-        key={linked ? "linked" : device ? "linking" : "waiting"}
+        key={children}
         className={cn(
           "truncate",
-          linked ? "font-medium" : "text-muted-foreground",
+          done ? "font-medium" : "text-muted-foreground",
         )}
       >
-        {linked
-          ? `${device.name} is linked`
-          : device
-            ? `Linking ${device.name}...`
-            : "Waiting for your device..."}
+        {children}
       </span>
     </output>
   );
@@ -277,8 +295,11 @@ function SignInRequest({
   );
 }
 
-/** One numbered step: the number in a circle, then its content. */
-function SetupStep({
+/**
+ * One numbered step: the number in a circle, then its content. The dialogs
+ * of the MCP bridge and of desktop MCP servers draw their steps with it.
+ */
+export function SetupStep({
   number,
   state,
   multiline = false,

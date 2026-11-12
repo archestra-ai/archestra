@@ -1,18 +1,12 @@
 "use client";
 
-import {
-  CheckCircle2,
-  Circle,
-  Clock,
-  Laptop,
-  Loader2,
-  TriangleAlert,
-  WifiOff,
-} from "lucide-react";
+import { Clock, Laptop, Loader2, TriangleAlert, WifiOff } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   McpBridgeSetup,
   McpBridgeSetupStatus,
+  SetupStep,
+  StepsStatus,
 } from "@/components/mcp-bridge-setup";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -37,6 +31,7 @@ import {
   type DesktopMcpAddCase,
   type DesktopMcpProgress,
   type DesktopMcpProgressHint,
+  desktopConnectActionLabel,
   desktopMcpAddCase,
   desktopMcpProgress,
   desktopMcpStepLabel,
@@ -53,18 +48,20 @@ type Props = {
   catalogItem: CatalogItem;
   isAdding: boolean;
   /**
-   * The button that opened the dialog said already what it does (Link, or
-   * Install MCP bridge and link): the dialog starts at once, with no intro.
+   * The button that opened the dialog said already what it does (Connect,
+   * or Install MCP bridge and connect): the dialog starts at once, with no
+   * intro.
    */
   startAtOnce?: boolean;
 };
 
 /**
- * Adds a desktop MCP catalog item to the user's computer. The installation
- * is always the user's own: the MCP bridge on their computer runs the server.
+ * Connects a desktop MCP server from the user's linked device to the app.
+ * The installation is always the user's own: the MCP bridge on their device
+ * runs the server.
  *
- * With the MCP bridge on a device, the dialog follows the link until the
- * tools are read, then says the server is ready. With none, it creates the
+ * With a linked device, the dialog follows the connection until the tools
+ * are read, then says the server is connected. With none, it creates the
  * installation and shows the MCP bridge setup, the same one as the Device
  * page; once the device is linked it goes on to the same steps.
  *
@@ -77,10 +74,11 @@ export function DesktopMcpInstallDialog(props: Props) {
 }
 
 /**
- * One dialog through the whole link, under one title: the intro, then the
- * steps the device takes, live, then one line that the server is linked.
- * Only its body and footer change, so it does not open again. It can be closed at any time; the row
- * keeps "Waiting for your computer" until the tools are read.
+ * One dialog through the whole connection, under one title: the intro, then
+ * the numbered steps the device takes, live, in the look of the MCP bridge
+ * setup. Only its body and footer change, so it does not open again. It can
+ * be closed at any time; the row keeps "Waiting for your device" until the
+ * tools are read.
  */
 function DesktopMcpAddFlow({
   isOpen,
@@ -165,6 +163,8 @@ function DesktopMcpAddFlow({
         })
       : null;
 
+  const title = `Connect ${name} from your device to ${appName}`;
+  const description = connectDescription({ addCase, appName, name });
   const view: {
     icon: ReactNode;
     title: string;
@@ -187,12 +187,16 @@ function DesktopMcpAddFlow({
     : !progress
       ? {
           icon: <Laptop className="h-5 w-5" />,
-          title: `Link ${name} to your device`,
-          body: (
-            <AddIntro
-              canAdd={canAdd}
-              description={addDescription({ addCase, appName, name })}
+          title,
+          body: canAdd ? (
+            <ProgressSteps
+              name={name}
+              description={description}
+              progress={null}
+              hint={null}
             />
+          ) : (
+            <NotSetUpNotice />
           ),
           footer: (
             <>
@@ -210,55 +214,21 @@ function DesktopMcpAddFlow({
                 disabled={isAdding || !canAdd || addCase.kind === "loading"}
               >
                 {isAdding && <Loader2 className="animate-spin" />}
-                <span>
-                  {addCase.kind === "no-bridge"
-                    ? "Set up the MCP bridge"
-                    : "Link to my device"}
-                </span>
+                <span>{desktopConnectActionLabel(addCase)}</span>
               </Button>
             </>
           ),
         }
-      : progress.done
-        ? {
-            icon: <Laptop className="h-5 w-5" />,
-            title: `Link ${name} to your device`,
-            body: (
-              <ProgressBody name={name} progress={progress}>
-                <output className="flex items-center gap-2 text-sm font-medium">
-                  <CheckCircle2
-                    className="size-4 shrink-0 text-green-600"
-                    aria-hidden
-                  />
-                  <span>{`${name} is linked to your device`}</span>
-                </output>
-              </ProgressBody>
-            ),
-            footer: (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={isCreating}
-                  onClick={() => {
-                    void startChat(catalogItem).then(onClose);
-                  }}
-                >
-                  {isCreating && <Loader2 className="animate-spin" />}
-                  <span>Open chat</span>
-                </Button>
-                <Button type="button" onClick={onClose}>
-                  Done
-                </Button>
-              </>
-            ),
-          }
-        : {
-            icon: <Laptop className="h-5 w-5" />,
-            title: `Link ${name} to your device`,
-            body: (
-              <ProgressBody name={name} progress={progress}>
-                {progress.hint ? (
+      : {
+          icon: <Laptop className="h-5 w-5" />,
+          title,
+          body: (
+            <ProgressSteps
+              name={name}
+              description={description}
+              progress={progress}
+              hint={
+                !progress.done && progress.hint ? (
                   <ProgressHint
                     hint={progress.hint}
                     name={name}
@@ -269,15 +239,37 @@ function DesktopMcpAddFlow({
                       url: reported?.url,
                     })}
                   />
-                ) : null}
-              </ProgressBody>
-            ),
-            footer: (
+                ) : null
+              }
+            />
+          ),
+          footer: progress.done ? (
+            <>
+              <StepsStatus done>{`${name} is connected`}</StepsStatus>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isCreating}
+                onClick={() => {
+                  void startChat(catalogItem).then(onClose);
+                }}
+              >
+                {isCreating && <Loader2 className="animate-spin" />}
+                <span>Open chat</span>
+              </Button>
+              <Button type="button" onClick={onClose}>
+                Done
+              </Button>
+            </>
+          ) : (
+            <>
+              <StepsStatus done={false}>{`Connecting ${name}...`}</StepsStatus>
               <Button type="button" variant="outline" onClick={onClose}>
                 Close
               </Button>
-            ),
-          };
+            </>
+          ),
+        };
 
   return (
     <StandardDialog
@@ -294,7 +286,6 @@ function DesktopMcpAddFlow({
           ? "max-w-3xl"
           : undefined
       }
-      bodyClassName="space-y-4"
       title={
         // Left on a phone too, and clear of the close button.
         <span className="flex items-center gap-2 pr-6 text-left leading-snug">
@@ -309,37 +300,18 @@ function DesktopMcpAddFlow({
   );
 }
 
-function AddIntro({
-  canAdd,
-  description,
-}: {
-  canAdd: boolean;
-  description: string | null;
-}) {
-  if (!canAdd) {
-    return (
-      <InlineNotice variant="warning">
-        <TriangleAlert />
-        <span className="font-medium">Not set up yet</span>
-        <InlineNoticeText>{DESKTOP_MCP_NO_TARGET_REASON}</InlineNoticeText>
-      </InlineNotice>
-    );
-  }
-  if (!description) {
-    return (
-      <div className="space-y-2" aria-busy>
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-2/3" />
-      </div>
-    );
-  }
+function NotSetUpNotice() {
   return (
-    <p className="text-sm text-muted-foreground text-pretty">{description}</p>
+    <InlineNotice variant="warning">
+      <TriangleAlert />
+      <span className="font-medium">Not set up yet</span>
+      <InlineNoticeText>{DESKTOP_MCP_NO_TARGET_REASON}</InlineNoticeText>
+    </InlineNotice>
   );
 }
 
 /** The intro sentence, or null while the viewer's devices load. */
-function addDescription(params: {
+function connectDescription(params: {
   addCase: DesktopMcpAddCase<DesktopDevice>;
   appName: string;
   name: string;
@@ -358,63 +330,72 @@ function addDescription(params: {
 }
 
 /**
- * The steps, and under them one slot for a note or the result. The slot keeps
- * the height of a note, so the dialog does not grow or shrink as the steps
- * move on.
+ * The intro line and the numbered steps, as the MCP bridge setup draws
+ * them: before Connect (`progress` null) the first step is next, then they
+ * follow the device. A note on why it takes long goes under the step it is
+ * about. A skeleton stands for the intro line while the devices load.
  */
-function ProgressBody({
-  name,
-  progress,
-  children,
-}: {
-  name: string;
-  progress: DesktopMcpProgress;
-  children: ReactNode;
-}) {
-  return (
-    <>
-      <ProgressSteps name={name} progress={progress} />
-      <div className="min-h-[4.5rem]">{children}</div>
-    </>
-  );
-}
-
 function ProgressSteps({
   name,
+  description,
   progress,
+  hint,
 }: {
   name: string;
-  progress: DesktopMcpProgress;
+  description: string | null;
+  progress: DesktopMcpProgress | null;
+  hint: ReactNode;
 }) {
   return (
-    <ol className="space-y-2.5 text-sm" aria-live="polite">
-      {DESKTOP_MCP_PROGRESS_STEPS.map((step) => {
-        const status = desktopMcpStepStatus(step, progress);
-        return (
-          <li
-            key={step}
-            className={cn(
-              "flex items-center gap-2.5",
-              status === "upcoming" && "text-muted-foreground",
-              status === "current" && "font-medium",
-            )}
-            aria-current={status === "current" ? "step" : undefined}
-          >
-            {status === "done" ? (
-              <CheckCircle2
-                className="size-4 shrink-0 text-green-600"
-                aria-hidden
-              />
-            ) : status === "current" ? (
-              <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
-            ) : (
-              <Circle className="size-4 shrink-0" aria-hidden />
-            )}
-            <span>{desktopMcpStepLabel(step, name)}</span>
-          </li>
-        );
-      })}
-    </ol>
+    <div className="space-y-5 text-sm">
+      {description ? (
+        <p className="text-muted-foreground text-pretty">{description}</p>
+      ) : (
+        <Skeleton className="h-5 w-2/3" aria-busy />
+      )}
+      <ol className="space-y-[18px]" aria-live="polite">
+        {DESKTOP_MCP_PROGRESS_STEPS.map((step, index) => {
+          const status = progress
+            ? desktopMcpStepStatus(step, progress)
+            : index === 0
+              ? "next"
+              : "upcoming";
+          return (
+            <SetupStep
+              key={step}
+              number={index + 1}
+              state={
+                status === "current"
+                  ? "working"
+                  : status === "next"
+                    ? "current"
+                    : status
+              }
+              multiline
+            >
+              <div
+                className="flex min-w-0 flex-1 flex-col gap-2.5"
+                aria-current={status === "current" ? "step" : undefined}
+              >
+                <p
+                  className={cn(
+                    "pt-[3px]",
+                    status === "current" || status === "next"
+                      ? "font-medium"
+                      : status === "done"
+                        ? "text-foreground/80"
+                        : "text-muted-foreground",
+                  )}
+                >
+                  {desktopMcpStepLabel(step, name)}
+                </p>
+                {status === "current" ? hint : null}
+              </div>
+            </SetupStep>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 
@@ -433,7 +414,7 @@ function ProgressHint({
       ? {
           icon: <WifiOff />,
           title: "Your device is offline.",
-          text: `${name} is linked as soon as it's back.`,
+          text: `${name} connects as soon as it's back.`,
         }
       : hint === "failed"
         ? {

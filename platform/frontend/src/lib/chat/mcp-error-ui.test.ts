@@ -667,16 +667,16 @@ describe("a desktop MCP server that is not on the caller's computer", () => {
       resolved: false,
     });
     expect(prompt).toEqual({
-      title: "Not linked to your device",
+      title: "Not connected from your device",
       description:
-        "\u201cMATLAB\u201d runs on your connected device. Link it to use this tool.",
-      buttonText: "Link to my device",
+        "\u201cMATLAB\u201d runs on your linked device. Connect it to use this tool.",
+      buttonText: "Connect from my device",
     });
     const added = desktopAddPromptCopy({
       catalogName: "MATLAB",
       resolved: true,
     });
-    expect(added.title).toBe("Linked to your device");
+    expect(added.title).toBe("Connected from your device");
     expect(added.buttonText).toBeUndefined();
     for (const copy of [prompt, added]) {
       expect(`${copy.title} ${copy.description}`).not.toMatch(

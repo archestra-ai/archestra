@@ -69,7 +69,7 @@ export function parseAuthRequired(
   // same link, worded as adding it, not as credentials.
   // The older wording stays for errors saved in chat history.
   const desktopMatch = message.match(
-    /"([^"]+)" is not (?:linked to your device|on your computer)/,
+    /"([^"]+)" is not (?:connected from your device|linked to your device|on your computer)/,
   );
   const nameMatch =
     desktopMatch ?? message.match(/Authentication required for "([^"]+)"/);
@@ -370,13 +370,13 @@ export function desktopAddPromptCopy(params: {
   const { catalogName, resolved } = params;
   return resolved
     ? {
-        title: "Linked to your device",
-        description: `\u201c${catalogName}\u201d is linked to your device. Try again once it is ready.`,
+        title: "Connected from your device",
+        description: `\u201c${catalogName}\u201d is connected from your device. Try again once it is ready.`,
       }
     : {
         title: DESKTOP_MCP_COPY.notAdded,
-        description: `\u201c${catalogName}\u201d runs on your connected device. Link it to use this tool.`,
-        buttonText: "Link to my device",
+        description: `\u201c${catalogName}\u201d runs on your linked device. Connect it to use this tool.`,
+        buttonText: "Connect from my device",
       };
 }
 
@@ -466,6 +466,8 @@ const NO_DEVICE_MARKERS = ["No device is linked", "No device is connected"];
 
 const AUTH_REQUIRED_MARKERS = [
   "Authentication required for",
+  "is not connected from your device",
+  // The words of earlier versions, in chats from before.
   "is not linked to your device",
   "is not on your computer",
 ];

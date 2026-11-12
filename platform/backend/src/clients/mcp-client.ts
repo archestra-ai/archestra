@@ -3942,11 +3942,11 @@ class McpClient {
     return {
       type: "auth_required",
       message: formatActionableAuthError({
-        title: `"${catalogDisplayName}" is not linked to your device`,
-        detail: `"${catalogDisplayName}" runs on your own device, and you have not linked it yet.`,
-        actionLabel: `link "${catalogDisplayName}" to your device`,
+        title: `"${catalogDisplayName}" is not connected from your device`,
+        detail: `"${catalogDisplayName}" runs on your own device, and you have not connected it yet.`,
+        actionLabel: `connect "${catalogDisplayName}" from your device`,
         url: addUrl,
-        postAction: `Once "${catalogDisplayName}" is linked to your device, retry this tool call.`,
+        postAction: `Once "${catalogDisplayName}" is connected from your device, retry this tool call.`,
       }),
       catalogId,
       catalogName: catalogDisplayName,

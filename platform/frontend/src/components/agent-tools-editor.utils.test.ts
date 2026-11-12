@@ -88,7 +88,7 @@ describe("getCatalogAssignmentGate", () => {
     });
 
     expect(gate.disabled).toBe(true);
-    expect(gate.disabledReason).toBe("Not linked to a device yet");
+    expect(gate.disabledReason).toBe("Not connected from a device yet");
     expect(gate.unavailable).toBe(false);
   });
 

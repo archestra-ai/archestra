@@ -151,7 +151,7 @@ function ConnectedNextSteps({ deviceName }: { deviceName: string | null }) {
       {servers.length > 0 ? (
         <div className="space-y-1.5">
           <p>
-            <span>The MCP servers you linked start on </span>
+            <span>The MCP servers you connected start on </span>
             <span className="font-medium">{device}</span>
             <span>:</span>
           </p>
@@ -178,7 +178,7 @@ function ConnectedNextSteps({ deviceName }: { deviceName: string | null }) {
         </div>
       ) : (
         <p className="text-muted-foreground">
-          <span>Link MCP servers to your device from the </span>
+          <span>Connect MCP servers from your device in the </span>
           <Link href="/mcp/registry" className="underline">
             MCP registry
           </Link>

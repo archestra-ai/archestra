@@ -961,7 +961,7 @@ function ConnectionTableRow({
     disabledTooltip: canRevoke(server)
       ? undefined
       : desktop
-        ? "Only the person who linked it can unlink it from their device"
+        ? "Only the person who connected it can disconnect it from their device"
         : getRevokeTooltip(server),
     testId: isYou
       ? `${E2eTestId.RevokeCredentialButton}-personal`

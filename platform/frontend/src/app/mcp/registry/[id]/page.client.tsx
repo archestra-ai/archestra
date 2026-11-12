@@ -784,7 +784,7 @@ function CatalogItemDetails({
                         ? getLocalInstallationCopy(item.multitenant === true)
                             .section
                         : variant === "desktop"
-                          ? "Each person links it to their connected device."
+                          ? "Each person connects it from their linked device."
                           : "The credentials this server is used with."
                   }
                 >

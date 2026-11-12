@@ -32,7 +32,7 @@ export function personalConnectionsCopy(params: {
       description: "It runs through the MCP bridge on that device.",
       emptyText: desktopNotSetUp
         ? DESKTOP_MCP_NO_TARGET_REASON
-        : "No one has linked it to their device yet.",
+        : "No one has connected it from their device yet.",
       add: DESKTOP_MCP_COPY.add,
       adding: DESKTOP_MCP_COPY.adding,
     };

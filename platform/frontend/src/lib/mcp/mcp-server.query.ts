@@ -334,7 +334,7 @@ export function useInstallMcpServer() {
           ? boundedErrorMessage.slice(redundantPrefix.length)
           : boundedErrorMessage;
         if (desktop) {
-          toast.error(`Couldn't link ${data.name} to your device`, {
+          toast.error(`Couldn't connect ${data.name} from your device`, {
             description: errorMessage,
           });
           return {
@@ -502,7 +502,7 @@ export function useDeleteMcpServer() {
       invalidateToolAssignmentQueries(queryClient);
       toast.success(
         variables.desktop
-          ? `${variables.name} unlinked from ${variables.desktop === "mine" ? "your" : "their"} device`
+          ? `${variables.name} disconnected from ${variables.desktop === "mine" ? "your" : "their"} device`
           : `Successfully uninstalled ${variables.name}`,
       );
     },
@@ -510,7 +510,7 @@ export function useDeleteMcpServer() {
       console.error("Uninstall error:", error);
       toast.error(
         variables.desktop
-          ? `Couldn't unlink ${variables.name} from ${variables.desktop === "mine" ? "your" : "their"} device`
+          ? `Couldn't disconnect ${variables.name} from ${variables.desktop === "mine" ? "your" : "their"} device`
           : `Failed to uninstall ${variables.name}`,
         { description: error.message },
       );

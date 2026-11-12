@@ -2,7 +2,7 @@ import { DESKTOP_MCP_COPY } from "@/lib/mcp/desktop-mcp";
 
 /** Why "Add to my computer" is not available for a desktop MCP item. */
 export const DESKTOP_MCP_NO_TARGET_REASON =
-  "This server isn't set up yet, so it can't be linked to your device.";
+  "This server isn't set up yet, so it can't be connected from your device.";
 
 /**
  * Where the viewer stands with a desktop MCP catalog item:
@@ -131,7 +131,7 @@ export function desktopMcpAddCase<Device>(devices: {
  * The Link button of a desktop MCP server where it starts the link at once,
  * with no intro: it says whether the MCP bridge is set up first.
  */
-export function desktopLinkActionLabel(
+export function desktopConnectActionLabel(
   addCase: DesktopMcpAddCase<unknown>,
 ): string {
   return addCase.kind === "no-bridge"
@@ -216,7 +216,7 @@ export function desktopMcpStepLabel(
 ): string {
   switch (step) {
     case "sending":
-      return "Linking your local device";
+      return "Checking your linked device";
     case "starting":
       return `Starting ${name}`;
     case "reading":
@@ -249,13 +249,13 @@ export function desktopRemoveCopy(params: { name: string; mine: boolean }): {
   const { name, mine } = params;
   return mine
     ? {
-        title: `Unlink ${name} from your device?`,
+        title: `Disconnect ${name} from your device?`,
         description: `The MCP bridge stops ${name} on your device, and agents lose its tools.`,
         confirm: DESKTOP_MCP_COPY.remove,
         confirming: DESKTOP_MCP_COPY.removing,
       }
     : {
-        title: `Unlink ${name} from their device?`,
+        title: `Disconnect ${name} from their device?`,
         description: `The MCP bridge stops ${name} on their device, and their agents lose its tools.`,
         confirm: DESKTOP_MCP_COPY.removeTheirs,
         confirming: DESKTOP_MCP_COPY.removing,
@@ -339,8 +339,9 @@ export function bulkRemoveCopy(kinds: BulkRemoveKind[]): {
   if (kinds.every((kind) => kind === "mine")) {
     return {
       action: DESKTOP_MCP_COPY.remove,
-      noneReason: "None of the selected servers are linked to your device.",
-      title: `Unlink ${servers} from your device?`,
+      noneReason:
+        "None of the selected servers are connected from your device.",
+      title: `Disconnect ${servers} from your device?`,
       description: `The MCP bridge stops ${them} on your device, and agents lose ${their} tools.`,
       confirm: DESKTOP_MCP_COPY.remove,
       confirming: DESKTOP_MCP_COPY.removing,
@@ -349,11 +350,11 @@ export function bulkRemoveCopy(kinds: BulkRemoveKind[]): {
     };
   }
   return {
-    action: "Unlink from devices",
-    noneReason: "None of the selected servers are linked to a device.",
-    title: `Unlink ${servers} from devices?`,
+    action: "Disconnect from devices",
+    noneReason: "None of the selected servers are connected from a device.",
+    title: `Disconnect ${servers} from devices?`,
     description: `The MCP bridge stops ${them} on the device of ${count === 1 ? "its user" : "each user"}, and agents lose ${their} tools.`,
-    confirm: "Unlink from devices",
+    confirm: "Disconnect from devices",
     confirming: DESKTOP_MCP_COPY.removing,
     verb: "Removed",
     failureVerb: "remove",
@@ -396,7 +397,10 @@ export function ownDesktopComputerLine(params: {
   const { name, installation, canAdd, viewerDeviceName, hasComputer } = params;
   if (!installation) {
     return canAdd
-      ? { text: `${name} is not linked to your device yet.`, action: "add" }
+      ? {
+          text: `${name} is not connected from your device yet.`,
+          action: "add",
+        }
       : { text: DESKTOP_MCP_NO_TARGET_REASON, action: null };
   }
   return {

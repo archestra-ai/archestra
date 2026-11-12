@@ -74,7 +74,7 @@ import {
   useToolsWithAssignments,
 } from "@/lib/tools/tool.query";
 import {
-  desktopLinkActionLabel,
+  desktopConnectActionLabel,
   desktopMcpAddCase,
 } from "./desktop-mcp-install";
 import { DesktopMcpInstallDialog } from "./desktop-mcp-install-dialog";
@@ -333,7 +333,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
               >
                 <span>
                   {isDesktopMcp
-                    ? desktopLinkActionLabel(desktopAddCase)
+                    ? desktopConnectActionLabel(desktopAddCase)
                     : "Install"}
                 </span>
               </Button>

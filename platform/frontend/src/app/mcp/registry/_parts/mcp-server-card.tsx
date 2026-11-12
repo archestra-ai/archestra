@@ -948,7 +948,7 @@ export function McpServerCard({
       size="sm"
       variant="outline"
       className="flex-1"
-      aria-label={`Link ${item.name} to my device`}
+      aria-label={`Connect ${item.name} from my device`}
     >
       <Laptop className="h-4 w-4" />
       {DESKTOP_MCP_COPY.add}

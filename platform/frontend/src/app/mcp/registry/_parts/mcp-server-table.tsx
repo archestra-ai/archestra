@@ -198,10 +198,10 @@ export function McpServerTable({
         const isDesktopMcp = item.serverType === "desktop_mcp";
         return !attention && !getServerInfo(item).installedServer
           ? isDesktopMcp
-            ? "Link it to your device before selecting it"
+            ? "Connect it from your device before selecting it"
             : "Install this server before selecting it"
           : isDesktopMcp
-            ? "Wait until it is linked to your device"
+            ? "Wait until it is connected from your device"
             : "Wait for installation to finish";
       },
     }),

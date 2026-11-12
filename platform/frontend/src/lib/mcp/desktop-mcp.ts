@@ -13,20 +13,21 @@ export type DesktopMcpTargetKind = "command" | "url";
 /**
  * The words a desktop MCP item uses where other items say Install, Uninstall,
  * Installed and Installations: the server is added to the user's own
- * computer, not installed in the app.
+ * computer, not installed in the app. A device is linked to the user's
+ * account; an MCP server is connected from the linked device to the app.
  */
 export const DESKTOP_MCP_COPY = {
-  add: "Link",
-  /** The Link action of a user who has no MCP bridge yet: it sets it up first. */
-  addWithBridge: "Install MCP bridge and link",
-  adding: "Linking...",
-  remove: "Unlink",
-  removeTheirs: "Unlink from their device",
-  removing: "Unlinking...",
-  added: "Linked",
+  add: "Connect",
+  /** The Connect action of a user who has no MCP bridge yet: it sets it up first. */
+  addWithBridge: "Install MCP bridge and connect",
+  adding: "Connecting...",
+  remove: "Disconnect",
+  removeTheirs: "Disconnect from their device",
+  removing: "Disconnecting...",
+  added: "Connected",
   waiting: "Waiting for your device",
   noDevice: "Device not linked",
-  notAdded: "Not linked to your device",
+  notAdded: "Not connected from your device",
   section: "Devices",
 } as const;
 

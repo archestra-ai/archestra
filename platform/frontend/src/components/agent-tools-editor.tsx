@@ -1039,7 +1039,7 @@ function McpServerCard({
       <span className="text-[10px] text-muted-foreground">
         {isDisabled
           ? isDesktopCatalogType(catalog.serverType)
-            ? "Not linked to a device yet"
+            ? "Not connected from a device yet"
             : "Not installed"
           : unavailable
             ? "Not connected"

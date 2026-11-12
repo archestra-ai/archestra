@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Runs whenever an Amp orb starts or wakes: start the dev database that
+# .agents/setup initialised and stopped, so platform/.env's
+# ARCHESTRA_DATABASE_URL answers. `scripts/dev-lite.sh up` starts the servers.
+set -euo pipefail
+
+state_dir="${ARCHESTRA_DEV_LITE_STATE_DIR:-$HOME/.archestra-dev-lite}"
+pgdata="$state_dir/postgres"
+export PATH="/usr/lib/postgresql/18/bin:$PATH"
+
+[ -s "$pgdata/PG_VERSION" ] || exit 0
+pg_ctl -D "$pgdata" status >/dev/null 2>&1 && exit 0
+
+# The same settings as start_postgres in platform/scripts/dev-lite.sh.
+mkdir -p "$state_dir/logs"
+pg_ctl -D "$pgdata" -w -t 8 -l "$state_dir/logs/db.log" -o "-p ${ARCHESTRA_DEV_LITE_DB_PORT:-5432} -k $state_dir \
+  -c listen_addresses=127.0.0.1 -c shared_buffers=${ARCHESTRA_DEV_LITE_PG_SHARED_BUFFERS:-64MB} \
+  -c max_connections=${ARCHESTRA_DEV_LITE_PG_MAX_CONNECTIONS:-60} -c fsync=off -c synchronous_commit=off \
+  -c full_page_writes=off -c log_min_messages=warning -c log_checkpoints=off" start >/dev/null

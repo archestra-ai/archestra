@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+# Prepares an Amp orb for Archestra work. Amp runs this once per fresh orb
+# (and again on a stale snapshot), so every step skips work already done.
+#
+# The orb gets what the lite Agent Runtime image gives a pod
+# (platform/dev/lite-runtime/Dockerfile): CI's Node and pnpm, the Rust
+# toolchain from platform/rust-toolchain.toml, PostgreSQL 18 with pgvector,
+# the frontend's Playwright Chromium, and a JRE with WireMock for the
+# Playwright lite projects. Then `scripts/dev-lite.sh prepare` installs the
+# dependencies and prebuilt native addons, writes platform/.env, and migrates
+# the dev database, as a pod's bootstrap does. PostgreSQL is stopped at the
+# end; .agents/resume starts it again.
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+platform="$repo_root/platform"
+
+# Versions come from the files that pin them for CI and the lite image.
+node_version="$(sed -n 's/^ *node-version: "\(.*\)"$/\1/p' "$repo_root/.github/actions/setup-env/action.yml")"
+pnpm_version="$(sed -n 's/^ *"packageManager": "pnpm@\(.*\)",*$/\1/p' "$platform/package.json")"
+dockerfile="$platform/dev/lite-runtime/Dockerfile"
+wiremock_version="$(sed -n 's/^ARG WIREMOCK_VERSION=//p' "$dockerfile")"
+wiremock_sha256="$(sed -n 's/^ARG WIREMOCK_SHA256=//p' "$dockerfile")"
+pg_major=18
+for pin in node_version pnpm_version wiremock_version wiremock_sha256; do
+  [ -n "${!pin}" ] || { echo "setup: could not read $pin from its pin file" >&2; exit 1; }
+done
+
+node_dir="$HOME/.local/node-v$node_version"
+pg_bin="/usr/lib/postgresql/$pg_major/bin"
+wiremock_jar="$HOME/.local/share/archestra-lite/wiremock-standalone-$wiremock_version.jar"
+export PATH="$node_dir/bin:$HOME/.cargo/bin:$pg_bin:$PATH"
+
+step() {
+  local name="$1" start=$SECONDS
+  shift
+  echo "==> $name"
+  "$@"
+  echo "<== $name ($((SECONDS - start)) s)"
+}
+
+installed() {
+  dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "install ok installed"
+}
+
+apt_packages() {
+  local missing=() pkg
+  for pkg in "postgresql-$pg_major" "postgresql-$pg_major-pgvector" openjdk-21-jre-headless; do
+    installed "$pkg" || missing+=("$pkg")
+  done
+  [ ${#missing[@]} -eq 0 ] && return 0
+  export DEBIAN_FRONTEND=noninteractive
+  if ! installed postgresql-common; then
+    sudo -E apt-get update -qq
+    sudo -E apt-get install -y -qq --no-install-recommends postgresql-common
+  fi
+  # dev-lite.sh runs its own cluster under ~/.archestra-dev-lite; the
+  # package's default cluster would only hold port 5432.
+  sudo sed -i 's/^#\? *create_main_cluster *=.*/create_main_cluster = false/' /etc/postgresql-common/createcluster.conf
+  # PostgreSQL 18 comes from the PGDG repository; the script runs apt-get update.
+  [ -f /etc/apt/sources.list.d/pgdg.sources ] || [ -f /etc/apt/sources.list.d/pgdg.list ] \
+    || sudo -E /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+  sudo -E apt-get install -y -qq --no-install-recommends "${missing[@]}"
+}
+
+node_and_pnpm() {
+  if [ ! -x "$node_dir/bin/node" ]; then
+    local tmp tarball="node-v$node_version-linux-x64.tar.xz"
+    tmp="$(mktemp -d)"
+    curl -fsSL --retry 3 -o "$tmp/$tarball" "https://nodejs.org/dist/v$node_version/$tarball"
+    curl -fsSL --retry 3 -o "$tmp/SHASUMS256.txt" "https://nodejs.org/dist/v$node_version/SHASUMS256.txt"
+    (cd "$tmp" && grep " $tarball\$" SHASUMS256.txt | sha256sum -c --quiet -)
+    mkdir -p "$node_dir"
+    tar -xJf "$tmp/$tarball" -C "$node_dir" --strip-components=1
+    rm -rf "$tmp"
+  fi
+  if [ "$("$node_dir/bin/pnpm" --version 2>/dev/null)" != "$pnpm_version" ]; then
+    npm install --global --silent "pnpm@$pnpm_version"
+  fi
+  echo "node $(node --version), pnpm $(pnpm --version)"
+}
+
+rust_toolchain() {
+  if [ ! -x "$HOME/.cargo/bin/rustup" ]; then
+    curl -fsSL --proto '=https' --tlsv1.2 https://sh.rustup.rs \
+      | sh -s -- -y --quiet --no-modify-path --profile minimal --default-toolchain none
+  fi
+  # Installs the channel, components and targets platform/rust-toolchain.toml
+  # names; already installed ones are skipped.
+  (cd "$platform" && rustup toolchain install --no-self-update)
+  local channel
+  channel="$(sed -n 's/^channel = "\(.*\)"$/\1/p' "$platform/rust-toolchain.toml")"
+  # ai-labs has no toolchain file of its own.
+  rustup default >/dev/null 2>&1 || rustup default "$channel"
+  # Crate sources, including the OpenAPPA git dependency, so a build of a
+  # changed archestra-rs tree starts compiling at once.
+  (cd "$platform/archestra-rs" && cargo fetch --locked --quiet)
+  (cd "$repo_root/ai-labs" && cargo fetch --locked --quiet)
+}
+
+wiremock() {
+  [ -f "$wiremock_jar" ] && return 0
+  mkdir -p "$(dirname "$wiremock_jar")"
+  curl -fsSL --retry 3 -o "$wiremock_jar.tmp" \
+    "https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/$wiremock_version/wiremock-standalone-$wiremock_version.jar"
+  echo "$wiremock_sha256  $wiremock_jar.tmp" | sha256sum -c --quiet -
+  mv -f "$wiremock_jar.tmp" "$wiremock_jar"
+}
+
+# Amp and supervised services start in login shells, which read
+# ~/.bash_profile. Rewrite the block each run so a version bump replaces it.
+login_profile() {
+  local begin="# >>> archestra orb setup >>>" end="# <<< archestra orb setup <<<" tmp
+  tmp="$(mktemp)"
+  if [ -f "$HOME/.bash_profile" ]; then
+    awk -v begin="$begin" -v end="$end" '$0 == begin { skip = 1 } !skip { print } $0 == end { skip = 0 }' \
+      "$HOME/.bash_profile" > "$tmp"
+  fi
+  cat >> "$tmp" <<EOF
+$begin
+export PATH="$node_dir/bin:\$HOME/.cargo/bin:$pg_bin:\$PATH"
+# As in the lite Agent Runtime image: build the backend once (reload after
+# edits) instead of keeping the tsdown watcher resident.
+export ARCHESTRA_DEV_BACKEND_WATCH=false
+export ARCHESTRA_DEV_LITE_WIREMOCK_JAR="$wiremock_jar"
+$end
+EOF
+  mv -f "$tmp" "$HOME/.bash_profile"
+}
+
+prepare_stack() {
+  (cd "$platform" && scripts/dev-lite.sh prepare)
+  # stdout is only download progress bars; failures go to stderr.
+  (cd "$platform" && pnpm --filter @frontend exec playwright install chromium >/dev/null)
+}
+
+# Processes still running when setup exits never reach the snapshot. Stop
+# PostgreSQL cleanly instead of leaving it to be killed (fsync is off).
+stop_postgres() {
+  local pgdata="${ARCHESTRA_DEV_LITE_STATE_DIR:-$HOME/.archestra-dev-lite}/postgres"
+  if pg_ctl -D "$pgdata" status >/dev/null 2>&1; then
+    pg_ctl -D "$pgdata" -m fast -w stop >/dev/null
+  fi
+}
+
+total_start=$SECONDS
+step "apt packages (PostgreSQL $pg_major, pgvector, JRE)" apt_packages
+step "Node $node_version and pnpm $pnpm_version" node_and_pnpm
+step "Rust toolchain" rust_toolchain
+step "WireMock $wiremock_version" wiremock
+step "login shell profile" login_profile
+step "dev-lite prepare and Playwright Chromium" prepare_stack
+step "stop PostgreSQL for the snapshot" stop_postgres
+echo "orb setup finished in $((SECONDS - total_start)) s"

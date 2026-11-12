@@ -51,7 +51,7 @@ describe("POST /api/openappa/github-app/manifest", () => {
       },
     });
 
-  test("the manifest asks for the sync's permissions, and for self-service the policy check's and the branch ruleset's too", async () => {
+  test("the manifest asks for the sync's permissions, and for self-service the policy check's too, never Administration", async () => {
     server.use(
       http.get("https://api.github.com/users/:login", ({ params }) =>
         HttpResponse.json({ login: params.login, type: "Organization" }),
@@ -75,12 +75,9 @@ describe("POST /api/openappa/github-app/manifest", () => {
     };
     expect(await permissions()).toEqual(sync);
     expect(await permissions(false)).toEqual(sync);
-    // Self-service: the policy check (Checks), the branch ruleset (Administration).
-    const selfService = {
-      ...sync,
-      checks: "write",
-      administration: "write",
-    };
+    // Self-service: the policy check (Checks). The branch ruleset that
+    // requires it is the administrator's to import, so no Administration.
+    const selfService = { ...sync, checks: "write" };
     expect(await permissions(true)).toEqual(selfService);
     // The environment variable, while set, decides for every App.
     config.openappa.selfService = "enabled";

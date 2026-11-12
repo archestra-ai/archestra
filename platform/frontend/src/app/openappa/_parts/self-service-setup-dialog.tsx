@@ -1,7 +1,14 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { ArrowLeft, Check, LoaderCircle, RefreshCw } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Download,
+  ExternalLink,
+  LoaderCircle,
+  RefreshCw,
+} from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { SetupStepper } from "@/components/git/git-setup-chrome";
 import { openGithubWindow } from "@/components/github-app-setup/github-app-window";
@@ -34,7 +41,7 @@ const STEPS: { id: Step; label: string }[] = [
   { id: "folder", label: "Folder" },
   { id: "enable", label: "Turn on" },
 ];
-const NEEDED = ["administration", "checks"] as const;
+const NEEDED = ["checks"] as const;
 const DEFAULT_FOLDER = "mcp";
 /**
  * A folder beside the policy file, nested as deep as wanted: segments of
@@ -54,10 +61,10 @@ const GITHUB_WINDOW = "archestra-github-app";
 
 /**
  * Turning self-service on, in the Git sync setup's own steps: the GitHub
- * App's permissions, the folder the servers' files go in, then the switch
- * itself with what it brings, the branch ruleset and the pull request that
- * starts the folder and includes it. Already on, the folder is fixed and
- * the last step brings what is still missing.
+ * App's permission, the folder the servers' files go in, then the switch
+ * itself with what it brings: the pull request that starts the folder and
+ * includes it, and the branch ruleset the administrator imports. Already
+ * on, the folder is fixed and the last step brings what is still missing.
  */
 export function SelfServiceSetupDialog({
   open,
@@ -214,7 +221,7 @@ function headerFor(step: Step, appName: string, githubApp: string | null) {
   if (step === "app")
     return {
       title: "MCP Guardrails Self-Service",
-      description: `${appName} posts the policy check on each pull request and keeps a branch ruleset that requires it. The ${githubApp ? `${githubApp} App` : "GitHub App"} needs two more permissions for that.`,
+      description: `${appName} posts the policy check on each pull request. The ${githubApp ? `${githubApp} App` : "GitHub App"} needs one more permission for that.`,
     };
   if (step === "folder")
     return {
@@ -231,7 +238,6 @@ const PERMISSION_LABELS = {
   contents: "Contents",
   pull_requests: "Pull requests",
   checks: "Checks",
-  administration: "Administration",
 } as const;
 
 /** The App's permissions: what it has, and where to grant the rest. */
@@ -277,15 +283,15 @@ function AppStep({
           index={1}
           title={
             <>
-              Grant <code>Administration</code> and <code>Checks</code>{" "}
-              permissions to the {grants.name} App
+              Grant the <code>Checks</code> permission to the {grants.name} App
             </>
           }
           hint={
             <>
-              Set both to <code>Read and write</code>. Checks posts the verdict
-              on each pull request; Administration makes it required on the
-              branch.
+              Set it to <code>Read and write</code>: the App posts the
+              check&apos;s verdict on each pull request. Making the check
+              required is a branch ruleset you import yourself, so the App needs
+              no Administration.
             </>
           }
           inlineAction
@@ -305,7 +311,7 @@ function AppStep({
         />
         <ManifestRow
           index={2}
-          title="Accept new permissions"
+          title="Accept the new permission"
           hint={null}
           inlineAction
           waiting={false}
@@ -352,7 +358,7 @@ function AppStep({
               missing.map((name) => PERMISSION_LABELS[name]),
               " and ",
             )}
-            . Check again once both are accepted.
+            . Check again once it is accepted.
           </span>
         )}
         <Button
@@ -388,9 +394,10 @@ type Progress = "waiting" | "running" | "done" | "failed";
 /**
  * A step that brings self-service about and what it brings, each with its
  * own progress: `run` (the switch, or a Git sync save that turns it on), the
- * branch ruleset, and the pull request that starts the folder and includes
- * it. Runs once when shown; a failed part offers a retry. The Git sync
- * wizard shows it too, so the dialog stays open on the pull request.
+ * pull request that starts the folder and includes it, and the branch
+ * ruleset, which the administrator imports on GitHub and checks here. Runs
+ * once when shown; a failed part offers a retry. The Git sync wizard shows
+ * it too, so the dialog stays open on the pull request.
  */
 export function SelfServiceOutcomeStep({
   run: first,
@@ -408,7 +415,8 @@ export function SelfServiceOutcomeStep({
   const protection = useAppaRepositoryProtection(false);
   const [switched, setSwitched] = useState<Progress>("waiting");
   const [rules, setRules] = useState<{
-    state: Progress;
+    /** `action`: the administrator imports or edits the ruleset on GitHub. */
+    state: Progress | "action";
     detail?: Protection["branchRules"];
     /** The ruleset's name: the check's, as the protection reports it. */
     name?: string;
@@ -430,15 +438,7 @@ export function SelfServiceOutcomeStep({
       setRules({ state: "running" });
       setInclude({ state: "running" });
       const read = (await refetch()).data ?? null;
-      setRules(
-        read?.branchRules.state === "active"
-          ? { state: "done", detail: read.branchRules, name: read.checkName }
-          : {
-              state: "failed",
-              detail: read?.branchRules,
-              name: read?.checkName,
-            },
-      );
+      setRules(rulesStateOf(read));
       if (
         read?.include.state === "included" ||
         read?.include.state === "pull_open"
@@ -470,6 +470,11 @@ export function SelfServiceOutcomeStep({
       });
     }
   }
+  // The administrator imported or edited the ruleset: read the branch again.
+  async function checkRules() {
+    setRules((current) => ({ ...current, state: "running" }));
+    setRules(rulesStateOf((await refetch()).data ?? null));
+  }
   // Runs once, when the step is shown.
   // biome-ignore lint/correctness/useExhaustiveDependencies: one run per showing
   useEffect(() => {
@@ -480,29 +485,37 @@ export function SelfServiceOutcomeStep({
 
   const rulesLine = (() => {
     const detail = rules.detail;
-    if (rules.state === "done" && detail?.url)
+    const check = rules.name ?? "policy";
+    if (rules.state === "done")
       return (
         <span>
-          Branch ruleset created:{" "}
-          <a
-            href={detail.url}
-            target="_blank"
-            rel="noreferrer"
-            className="font-medium text-foreground underline underline-offset-4"
-          >
-            {rules.name ?? "ruleset"}
-          </a>
+          {detail?.url ? (
+            <a
+              href={detail.url}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-foreground underline underline-offset-4"
+            >
+              Ruleset
+            </a>
+          ) : (
+            <span>A ruleset</span>
+          )}{" "}
+          requires the {check} check on the branch.
         </span>
       );
-    if (rules.state === "failed")
+    if (rules.state === "action")
       return (
-        <span>
-          Branch ruleset not created yet
-          {detail?.detail ? `: ${detail.detail}` : "."}{" "}
-          <span>It is set up at the next sync.</span>
-        </span>
+        <BranchRuleActions
+          rules={detail ?? { state: "error" }}
+          checkName={check}
+          checking={protection.isFetching}
+          onCheckAgain={() => void checkRules()}
+        />
       );
-    return <span>Create the branch ruleset</span>;
+    if (rules.state === "running")
+      return <span>Reading the branch rules…</span>;
+    return <span>Import the branch ruleset on GitHub</span>;
   })();
   const includeLine = (() => {
     const detail = include.detail;
@@ -596,11 +609,128 @@ export function SelfServiceOutcomeStep({
   );
 }
 
+/**
+ * The branch ruleset's state from a protection read: in place, or over to
+ * the administrator, who imports or edits it on GitHub.
+ */
+function rulesStateOf(read: Protection | null): {
+  state: Progress | "action";
+  detail?: Protection["branchRules"];
+  name?: string;
+} {
+  return read?.branchRules.state === "active"
+    ? { state: "done", detail: read.branchRules, name: read.checkName }
+    : { state: "action", detail: read?.branchRules, name: read?.checkName };
+}
+
+/**
+ * What makes the check required to merge: a branch ruleset. Archestra reads
+ * the branch's rules and writes none, so the administrator downloads the
+ * ruleset, imports it on the repository's Rulesets page and checks again.
+ */
+export function BranchRuleActions({
+  rules,
+  checkName,
+  checking,
+  onCheckAgain,
+}: {
+  rules: Protection["branchRules"];
+  checkName: string;
+  checking: boolean;
+  onCheckAgain: () => void;
+}) {
+  const sentence = (() => {
+    switch (rules.state) {
+      case "missing":
+        return (
+          <>
+            Import the branch ruleset on GitHub, so a pull request merges only
+            once the {checkName} check passes: <strong>New ruleset</strong> →{" "}
+            <strong>Import a ruleset</strong>, then <strong>Create</strong>.
+          </>
+        );
+      case "incomplete":
+      case "needs_permission":
+        return <>{rules.detail ?? "The branch ruleset needs a change."}</>;
+      default:
+        return (
+          <>
+            Could not read the branch rules
+            {rules.detail ? `: ${rules.detail}` : "."}
+          </>
+        );
+    }
+  })();
+  const { ruleset, settingsUrl } = rules;
+  return (
+    <span className="block space-y-2">
+      <span className="block">{sentence}</span>
+      <span className="flex flex-wrap items-center gap-2">
+        {ruleset ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            onClick={() => downloadRuleset(ruleset, checkName)}
+          >
+            <Download aria-hidden />
+            <span>Download ruleset</span>
+          </Button>
+        ) : null}
+        {settingsUrl ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            onClick={() => openGithubWindow(settingsUrl, GITHUB_WINDOW)}
+          >
+            <span>Open rulesets</span>
+            <ExternalLink aria-hidden />
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-xs"
+          aria-label="Check the branch rules again"
+          disabled={checking}
+          onClick={onCheckAgain}
+        >
+          <RefreshCw
+            className={cn("size-3.5", checking && "animate-spin")}
+            aria-hidden
+          />
+        </Button>
+      </span>
+    </span>
+  );
+}
+
+/** The ruleset as a file, named after the check, for GitHub's import. */
+function downloadRuleset(ruleset: object, checkName: string) {
+  const name = `${checkName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")}.ruleset.json`;
+  const url = URL.createObjectURL(
+    new Blob([`${JSON.stringify(ruleset, null, 2)}\n`], {
+      type: "application/json",
+    }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function ProgressRow({
   state,
   children,
 }: {
-  state: Progress;
+  state: Progress | "action";
   children: React.ReactNode;
 }) {
   return (
@@ -615,10 +745,12 @@ function ProgressRow({
           className="mt-0.5 size-4 shrink-0 text-emerald-600"
           aria-label="Done"
         />
-      ) : state === "failed" ? (
+      ) : state === "failed" || state === "action" ? (
         <span className="mt-1 flex size-4 shrink-0 items-center justify-center">
           <span className="size-2 rounded-full bg-amber-500" />
-          <span className="sr-only">Failed</span>
+          <span className="sr-only">
+            {state === "failed" ? "Failed" : "Action needed"}
+          </span>
         </span>
       ) : (
         <span className="mt-1 flex size-4 shrink-0 items-center justify-center">

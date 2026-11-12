@@ -51,10 +51,7 @@ import { mapWithConcurrency } from "@/utils/concurrency";
  * App token carries, by GitHub's permission names.
  */
 export type GithubJobPermissions = Partial<
-  Record<
-    "contents" | "pull_requests" | "checks" | "administration",
-    "read" | "write"
-  >
+  Record<"contents" | "pull_requests" | "checks" | "metadata", "read" | "write">
 >;
 
 /**
@@ -79,7 +76,7 @@ function describePermissions(permissions: GithubJobPermissions): string {
     contents: "Contents",
     pull_requests: "Pull requests",
     checks: "Checks",
-    administration: "Administration",
+    metadata: "Metadata",
   };
   return Object.entries(permissions)
     .map(

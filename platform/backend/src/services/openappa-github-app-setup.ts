@@ -560,7 +560,7 @@ type Installation = {
 function manifest(params: {
   appName: string;
   seedsWorkflow: boolean;
-  /** Self-service Guardrails: checks on pull requests and the branch ruleset. */
+  /** Self-service Guardrails: the check on pull requests. */
   selfService: boolean;
 }) {
   const { appName } = params;
@@ -575,15 +575,13 @@ function manifest(params: {
     setup_url: callbackUrl,
     public: false,
     // Contents and pull requests on the policy repository; with self-service,
-    // checks on its pull requests and Administration for the branch ruleset
-    // Archestra keeps. Each job's token carries only its own part; it never
-    // creates repositories.
+    // checks on its pull requests. The branch ruleset that requires the check
+    // is the administrator's to import, so no Administration. Each job's
+    // token carries only its own part; it never creates repositories.
     default_permissions: {
       contents: "write",
       pull_requests: "write",
-      ...(params.selfService
-        ? { checks: "write", administration: "write" }
-        : {}),
+      ...(params.selfService ? { checks: "write" } : {}),
       metadata: "read",
       ...(params.seedsWorkflow ? { workflows: "write" } : {}),
     },

@@ -132,7 +132,7 @@ test("syncs on demand and shows the server's failure while retaining the source"
   expect(toast.success).not.toHaveBeenCalled();
 });
 
-test("shows the repository protection kept for server rules files, with bypass entries", async () => {
+test("shows a branch rule that needs a change, with the ruleset linked and the fix, and offers to finish the setup", async () => {
   server.use(
     http.get(`${url}/protection`, () =>
       HttpResponse.json({
@@ -141,20 +141,29 @@ test("shows the repository protection kept for server rules files, with bypass e
         branchRules: {
           state: "incomplete",
           url: "https://github.com/example/policies/rules/5",
-          bypassActors: 2,
+          settingsUrl: "https://github.com/example/policies/settings/rules",
+          detail:
+            "The rule takes the Guardrails Policy Admission check from any source, so a passing one could be posted with any token. Edit it to take the check from the GitHub App only.",
         },
       }),
     ),
   );
   show();
-  // In the deployment's own name, one sentence, with the ruleset linked.
+  // One sentence, with the ruleset linked and what to change in it.
   expect(
-    await screen.findByText(/Acme AI sets the Self-service branch protection/),
+    await screen.findByText(
+      (_, element) =>
+        element?.tagName === "P" &&
+        /Self-service branch protection ruleset needs a change: The rule takes the Guardrails Policy Admission check from any source/.test(
+          element.textContent ?? "",
+        ),
+    ),
   ).toBeVisible();
   expect(screen.getByRole("link", { name: "ruleset" })).toHaveAttribute(
     "href",
     "https://github.com/example/policies/rules/5",
   );
+  expect(screen.getByRole("button", { name: "Finish setup" })).toBeEnabled();
 });
 
 test("Finish setup lists the permissions an existing GitHub App lacks, with where to grant and accept them", async () => {
@@ -178,7 +187,6 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
           { name: "contents", granted: true },
           { name: "pull_requests", granted: true },
           { name: "checks", granted },
-          { name: "administration", granted },
         ],
       }),
     ),
@@ -188,7 +196,7 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
     await screen.findByText(
       (_, element) =>
         element?.tagName === "P" &&
-        /waits for the GitHub App's Administration permission/.test(
+        /waits for the GitHub App's Checks permission/.test(
           element.textContent ?? "",
         ),
     ),
@@ -201,7 +209,7 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
     await within(dialog).findByText(
       (_, element) =>
         element?.tagName === "SPAN" &&
-        /^Missing: Administration and Checks\./.test(element.textContent ?? ""),
+        /^Missing: Checks\./.test(element.textContent ?? ""),
     ),
   ).toBeVisible();
   expect(
@@ -225,23 +233,58 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
   ).toBeVisible();
 });
 
-test("Enable walks through the App's permissions, the folder, the ruleset and the include pull request; Disable turns it off at once", async () => {
+test("Enable walks through the App's permission, the folder, the include pull request and the ruleset the administrator imports; the card then says what is in place", async () => {
   state = {
     ...state,
     source: { ...source, githubAppConfigId: "app-1", selfService: false },
     selfService: { enabled: false, setting: false, directory: "mcp" },
   };
   let include: Record<string, unknown> = { folder: "mcp", state: "missing" };
+  const ruleset = {
+    name: "Guardrails Policy Admission",
+    target: "branch",
+    source_type: "Repository",
+    source: "example/policies",
+    enforcement: "active",
+    conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
+    bypass_actors: [],
+    rules: [
+      {
+        type: "required_status_checks",
+        parameters: {
+          strict_required_status_checks_policy: false,
+          required_status_checks: [
+            { context: "Guardrails Policy Admission", integration_id: 123 },
+          ],
+        },
+      },
+    ],
+  };
+  let branchRules: Record<string, unknown> = {
+    state: "missing",
+    settingsUrl: "https://github.com/example/policies/settings/rules",
+    ruleset,
+  };
   const protection = vi.fn(() =>
     HttpResponse.json({
       checkName: "Guardrails Policy Admission",
       include,
-      branchRules: {
-        state: "active",
-        url: "https://github.com/example/policies/rules/5",
-      },
+      branchRules,
     }),
   );
+  const opened = vi.spyOn(window, "open").mockImplementation(() => null);
+  const files: Blob[] = [];
+  let downloaded: string | null = null;
+  URL.createObjectURL = vi.fn((blob: Blob | MediaSource) => {
+    files.push(blob as Blob);
+    return "blob:ruleset";
+  });
+  URL.revokeObjectURL = vi.fn();
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    downloaded = this.download;
+  });
   const actions: unknown[] = [];
   server.use(
     http.get(`${url}/app-grants`, () =>
@@ -254,7 +297,6 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
           { name: "contents", granted: true },
           { name: "pull_requests", granted: true },
           { name: "checks", granted: true },
-          { name: "administration", granted: true },
         ],
       }),
     ),
@@ -316,12 +358,9 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
   fireEvent.change(folder, { target: { value: "rules/servers" } });
   fireEvent.click(within(dialog).getByRole("button", { name: "Turn on" }));
 
-  // The switch, the ruleset, then the pull request, each reported.
+  // The switch, the pull request, then the ruleset, each reported.
   expect(
     await within(dialog).findByText("MCP Guardrails Self-Service is on"),
-  ).toBeVisible();
-  expect(
-    await within(dialog).findByText(/Branch ruleset created/),
   ).toBeVisible();
   expect(
     (await within(dialog).findByRole("link", { name: "Pull request #12" }))
@@ -333,6 +372,43 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
     { action: "self_service", enabled: true, directory: "rules/servers" },
     { action: "include_servers" },
   ]);
+  // The ruleset is the administrator's to import: the file, the page, and
+  // a way to check once it is in.
+  expect(
+    await within(dialog).findByText(/Import the branch ruleset on GitHub/),
+  ).toHaveTextContent(
+    "so a pull request merges only once the Guardrails Policy Admission check passes",
+  );
+  fireEvent.click(
+    within(dialog).getByRole("button", { name: "Download ruleset" }),
+  );
+  expect(downloaded).toBe("guardrails-policy-admission.ruleset.json");
+  expect(JSON.parse(await (files[0] as Blob).text())).toEqual(ruleset);
+  fireEvent.click(
+    within(dialog).getByRole("button", { name: "Open rulesets" }),
+  );
+  expect(opened).toHaveBeenCalledWith(
+    "https://github.com/example/policies/settings/rules",
+    "archestra-github-app",
+  );
+  branchRules = {
+    state: "active",
+    url: "https://github.com/example/policies/rules/5",
+  };
+  fireEvent.click(
+    within(dialog).getByRole("button", {
+      name: "Check the branch rules again",
+    }),
+  );
+  expect(
+    await within(dialog).findByText(
+      /requires the Guardrails Policy Admission check on the branch/,
+    ),
+  ).toBeVisible();
+  expect(within(dialog).getByRole("link", { name: "Ruleset" })).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/rules/5",
+  );
   fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
@@ -407,8 +483,10 @@ test("locks self-service while the environment variable sets it, naming the vari
   ).toBeEnabled();
   // In force: the protection shows all the same.
   expect(
-    await screen.findByText(/sets the Self-service branch protection/),
-  ).toBeVisible();
+    await screen.findByText(/No branch ruleset requires the/),
+  ).toHaveTextContent(
+    "No branch ruleset requires the Guardrails Policy Admission check yet. Import it with Finish setup.",
+  );
 });
 
 test("self-service needs a GitHub App: a source without one cannot enable it", async () => {
@@ -777,7 +855,7 @@ test("editing an App-backed source keeps its repository and only warns about mis
     await within(dialog).findByText("Git sync saved and the policy pulled"),
   ).toBeVisible();
   expect(
-    await within(dialog).findByText(/Branch ruleset created/),
+    await within(dialog).findByText(/requires the .* check on the branch/),
   ).toBeVisible();
   expect(await within(dialog).findByText(/already includes/)).toHaveTextContent(
     "appa.toml already includes mcp/*.toml.",
@@ -1189,7 +1267,6 @@ test("links the pull request that includes the servers' folder while it waits, a
           { name: "contents", granted: true },
           { name: "pull_requests", granted: true },
           { name: "checks", granted: true },
-          { name: "administration", granted: true },
         ],
       }),
     ),

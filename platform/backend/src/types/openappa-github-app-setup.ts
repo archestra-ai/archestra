@@ -30,8 +30,8 @@ export const StartAppaGithubAppSchema = z.object({
   githubUrl: GithubUrlSchema,
   owner: GithubLoginSchema,
   /**
-   * Ask for the Checks and Administration permissions too, for self-service
-   * Guardrails. ARCHESTRA_OPENAPPA_SELF_SERVICE, while set, decides instead.
+   * Ask for the Checks permission too, for self-service Guardrails.
+   * ARCHESTRA_OPENAPPA_SELF_SERVICE, while set, decides instead.
    */
   selfService: z.boolean().optional(),
 });

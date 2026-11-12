@@ -3,7 +3,7 @@ title: Git Sync
 description: Keep the Guardrails policy in a GitHub or GitLab repository and review every change there
 order: 2
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-11-10
+lastUpdated: 2026-11-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -26,7 +26,7 @@ When setup is done, the card on **Settings → Guardrails** shows **Connected**.
 3. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with no keys to copy. Install it on the policy repository only.
 4. Choose the repository and click **Connect repository**. To change the **Branch**, **Policy file** (`appa.toml`), **Validations folder** (`traces`), or **Sync schedule**, open **Advanced** first.
 
-The App needs **Read & write** on Contents and Pull requests, and on Workflows too on GitHub Enterprise Server. Self-service adds Checks and Administration. If repository rules block the first commit, setup opens a pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass.
+The App needs **Read & write** on Contents and Pull requests, and on Workflows too on GitHub Enterprise Server. Self-service adds Checks. If repository rules block the first commit, setup opens a pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass.
 
 ### GitLab
 
@@ -82,4 +82,9 @@ Enable it in the Guardrails setting when setting up git sync or afterwards. Can 
 ### The Check and the Ruleset
 
 - **The check**, `Check OpenAPPA Guardrails` pull request check. It fails when the policy update author lacks required permissions or if the update would make the effective policy invalid. [`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME) env var allows to set custom name for this check.
-- **The ruleset**, the branch ruleset to keep the check required in order to merge a pull request introducing policy updates.
+- **The ruleset**, a branch ruleset that requires the check, so a pull request with policy updates merges only once the check passes. You import it yourself: click **Download ruleset** in the self-service setup, open the repository's **Settings → Rules → Rulesets** on GitHub, choose **New ruleset → Import a ruleset**, pick the file, and click **Create**. Archestra reads the branch's rules and shows whether the ruleset is missing, needs a change, or is in place. It writes no rules, so the App needs no Administration permission.
+
+What to know:
+
+- Turning self-service off leaves the ruleset in place. Archestra posts the check as skipped until you remove the rule, and the Git sync card names the rule.
+- Moving Git sync to another repository or branch, or stopping it, is refused while the rule is still there. Remove the rule first.

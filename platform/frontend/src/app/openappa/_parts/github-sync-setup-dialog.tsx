@@ -197,8 +197,8 @@ export function GithubSyncSetupDialog({
     account: string;
   } | null>(null);
   const [chosenRepo, setRepo] = useState(editing?.repo ?? "");
-  // Self-service for the servers' editors: the App then also gets Checks and
-  // Administration. The environment variable, while set, decides instead.
+  // Self-service for the servers' editors: the App then also gets Checks.
+  // The environment variable, while set, decides instead.
   const [chosenSelfService, setSelfService] = useState(
     editing?.selfService ?? false,
   );
@@ -223,7 +223,7 @@ export function GithubSyncSetupDialog({
     editing?.interval ?? DEFAULT_INTERVAL,
   );
   // With self-service on, the connect step stays open on what the save
-  // brought: the ruleset and the include pull request.
+  // brought: the include pull request, and the ruleset to import.
   const [outcome, setOutcome] = useState<(() => Promise<unknown>) | null>(null);
   const [pullRequest, setPullRequest] = useState<{
     repo: string;
@@ -557,7 +557,7 @@ export function GithubSyncSetupDialog({
           ) : (
             <span>
               {" "}
-              Additional GitHub App permissions are added to ensure the related
+              An additional GitHub App permission is added to ensure the related
               pull requests are checked.{" "}
             </span>
           )}
@@ -998,7 +998,7 @@ export function GithubSyncSetupDialog({
               permissions={[
                 "Contents",
                 "Pull requests",
-                ...(selfService ? ["Checks", "Administration"] : []),
+                ...(selfService ? ["Checks"] : []),
                 ...(github?.dotCom ? [] : ["Workflows"]),
               ].map((name) => ({ name, access: "Read & write" }))}
             />

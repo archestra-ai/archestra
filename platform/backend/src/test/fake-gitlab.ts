@@ -81,6 +81,14 @@ export class FakeGitlab {
     return sha ? Object.fromEntries(project.commits.get(sha) ?? []) : {};
   }
 
+  /** Remove a merge request's source branch, as GitLab does after a merge. */
+  deleteSourceBranch(path: string, iid: number) {
+    const project = this.mustProject(path);
+    const request = project.mergeRequests.find((entry) => entry.iid === iid);
+    if (!request) throw new Error(`No merge request !${iid}`);
+    project.branches.delete(request.sourceBranch);
+  }
+
   /** Merge a merge request: its branch's files land on the target branch. */
   merge(path: string, iid: number) {
     const project = this.mustProject(path);

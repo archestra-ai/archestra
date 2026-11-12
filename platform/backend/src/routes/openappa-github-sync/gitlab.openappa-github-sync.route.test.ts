@@ -309,7 +309,18 @@ describe("APPA GitLab sync", () => {
       errors: [],
       included: [{ path: "rules/current.toml", sha256: expect.any(String) }],
     });
+    // Merged, its branch removed, not pulled yet: still read, at its head.
     gitlab.merge(repo, 1);
+    gitlab.deleteSourceBranch(repo, 1);
+    expect(
+      await openappaRepositoryIncludes.expand({
+        organizationId,
+        content: root,
+      }),
+    ).toMatchObject({
+      errors: [],
+      included: [{ path: "rules/current.toml", sha256: expect.any(String) }],
+    });
     await syncAppaGithubPolicy(organizationId);
     const files = gitlab.files(repo, "main");
     expect(files).toMatchObject({

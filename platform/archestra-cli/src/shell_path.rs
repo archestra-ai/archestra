@@ -40,15 +40,15 @@ impl Added {
     pub fn message(&self) -> String {
         match self {
             Self::AlreadyOnPath => "The `archestra` command is on your PATH.".to_owned(),
+            // No path: the terminal says it in plain words. The file is in
+            // the log of the MCP bridge.
             #[cfg(unix)]
-            Self::StartupFile(path) => format!(
-                "The `archestra` command is on the PATH of each new terminal (two lines in {}).",
-                path.display()
-            ),
-            #[cfg(windows)]
-            Self::UserPath => {
-                "The `archestra` command is on the PATH of each new terminal.".to_owned()
+            Self::StartupFile(path) => {
+                tracing::info!(file = %path.display(), "put the `archestra` command on the PATH");
+                "The `archestra` command works in each new terminal.".to_owned()
             }
+            #[cfg(windows)]
+            Self::UserPath => "The `archestra` command works in each new terminal.".to_owned(),
         }
     }
 }

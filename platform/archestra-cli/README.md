@@ -176,20 +176,74 @@ The second line has the time of the last good sync of this run. It is `Config: s
 
 ## Release
 
-The program has its own version (`version` in `Cargo.toml`) and its own release track, `archestra-cli-v<version>`. It ships inside the platform image, so it is released and approved with Archestra, but its version moves only when the program changes.
+The program is a file. Archestra serves one file for each system and CPU. The release process answers one question: where does Archestra get that file?
 
 ```
-PR changes the program   →  PR check: the version must be new
-merge to main            →  .github/workflows/build-archestra-cli.yml builds the six files and publishes archestra-cli-v<version>
-lock PR (opened by CI)   →  release.lock.json pins the version, the URL and the SHA-256 of each file
-platform image build     →  a Dockerfile stage downloads the pinned files, checks each SHA-256, and writes manifest.json
+ your laptop      Tilt builds the file from your code
+ staging          the file is in the platform image
+ customers        the file is in the platform image
 ```
 
-- **Change the program:** bump `version` in `Cargo.toml` in the same pull request. The check `.github/scripts/archestra-cli-version-check.py` fails when a file that goes into the binary changed and the version is released already. Changes to `*.md`, `tests/**` and `release.lock.json` need no bump. A new compiler in `platform/rust-toolchain.toml` needs none either: the devices get no update for a program that did not change.
-- **The lock file** `release.lock.json` decides what each image serves. A maintainer merges the lock PR. With an empty lock (`"version": null`) the image has no program, and the download answers "not found".
-- **In the image** the files are in `/app/archestra-cli/` with `manifest.json` (`{ "version": "…" }`). Archestra reads the version from there and computes each SHA-256 from the file that it serves.
-- **Not signed yet.** macOS and Windows builds have no code signature; see the Update section for what follows from that.
-- **Stable lines:** nothing builds from a `release/X.Y` branch. A fix reaches a stable line as a release from `main` plus a backport of the lock PR.
+### The steps
+
+```
+ 1. A pull request changes the program. You set a new version by hand.
+        │ merge
+        ▼
+ 2. CI builds the six files and stores them on GitHub as archestra-cli-v<version>.
+        │
+        ▼
+ 3. CI opens a second pull request, the lock: "use <version>". A maintainer merges it.
+        │
+        ▼
+ 4. Each platform image that is built after that contains <version>.
+```
+
+- **Version:** `version` in `Cargo.toml`. It is a name for one set of files. It is not the version of Archestra.
+- **When to change it:** in each pull request that changes the binary. A check fails if you forget. Changes to `*.md`, `tests/**`, `release.lock.json` and `platform/rust-toolchain.toml` need no new version.
+- **Step 2 ships to nobody.** It only stores the files. The workflow is `.github/workflows/build-archestra-cli.yml`.
+- **The lock** is `release.lock.json`: the version, the URL, and the SHA-256 of each file. A stage of `platform/Dockerfile` downloads the files, checks each SHA-256, and puts them in `/app/archestra-cli/` with `manifest.json`.
+
+### Why the lock is a second pull request
+
+The lock holds the SHA-256 of each file. The files do not exist before step 2. CI does not build them in the first pull request, for three reasons:
+
+- A pull request branch is not `main`: its files can be different from the released files.
+- Six builds on three systems for each push are expensive.
+- Code that is not reviewed must not publish.
+
+### Before the lock is merged
+
+- Images contain the version before it. Nothing breaks.
+- Devices see no update.
+- The backend has the new code already. So the backend must always work with the program before it.
+- If nobody merges the lock, the new program does not ship. Nothing gives an alarm.
+
+### Who gets a new program, and when
+
+| Who | When |
+| --- | --- |
+| Staging | Soon after the lock is merged: staging follows `main`. |
+| Customers | With the next Archestra release. The release contains the version that the lock names on that day. |
+| A device | At its next sync, if Archestra serves a file with another SHA-256. See [Update](#update). |
+
+- No change of the program means no new file and no update, for any number of Archestra releases.
+- The program has no release candidates of its own. An Archestra release candidate is the test of the program in it.
+- Nothing builds from a `release/X.Y` branch. A fix gets to a stable line as a release from `main` and a backport of the lock.
+
+### The first release
+
+1. Merge the pull request that adds the feature. The workflow starts by itself.
+2. CI publishes `archestra-cli-v0.1.0` and opens the lock pull request.
+3. Merge the lock pull request.
+
+Before step 3 the lock is empty (`"version": null`): images have no program, and the install command answers "not found". If step 2 fails, nothing is published and nothing breaks; correct the workflow and it runs again.
+
+### Not done yet
+
+- **No code signature** on macOS and Windows. For this reason macOS does not update by itself.
+- **Linux does not update by itself:** systemd stops the new program together with the MCP bridge that it replaces.
+- **The lock pull request is merged by hand.**
 
 ## Develop
 

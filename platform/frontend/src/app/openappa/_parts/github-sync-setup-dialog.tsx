@@ -828,38 +828,6 @@ export function GithubSyncSetupDialog({
         <div className="space-y-5">
           {selfServiceChoice}
           {selfService ? (
-            // Under the self-service checkbox's text, on its left edge.
-            <div className="flex items-start gap-3 pl-7">
-              <Checkbox
-                id="github-sync-self-service-auto-merge"
-                className="mt-0.5"
-                checked={autoMerge}
-                disabled={!!autoMergeEnvironment}
-                onCheckedChange={(checked) => setAutoMerge(checked === true)}
-              />
-              <div className="space-y-1">
-                <Label htmlFor="github-sync-self-service-auto-merge">
-                  Auto-merge pull requests
-                </Label>
-                <FieldDescription>
-                  Merge each MCP server&apos;s rules pull request as soon as its
-                  policy check passes, so MCP owners need no access to the
-                  repository.
-                </FieldDescription>
-                {autoMergeEnvironment ? (
-                  <FieldDescription>
-                    Set with{" "}
-                    <code className="font-mono">
-                      {autoMergeEnvironment.variable}=
-                      {autoMergeEnvironment.value}
-                    </code>
-                    . Unset the environment variable to choose here.
-                  </FieldDescription>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-          {selfService ? (
             // Under the checkbox's text, on its left edge.
             <div className="space-y-2 pl-7">
               <Label htmlFor="github-sync-self-service-folder">
@@ -893,6 +861,38 @@ export function GithubSyncSetupDialog({
                   Wildcards and <code>..</code> are not allowed.
                 </p>
               )}
+            </div>
+          ) : null}
+          {selfService ? (
+            // After the folder, at the same level as the self-service choice.
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="github-sync-self-service-auto-merge"
+                className="mt-0.5"
+                checked={autoMerge}
+                disabled={!!autoMergeEnvironment}
+                onCheckedChange={(checked) => setAutoMerge(checked === true)}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="github-sync-self-service-auto-merge">
+                  Auto-merge pull requests
+                </Label>
+                <FieldDescription>
+                  Merge each MCP server&apos;s rules pull request as soon as its
+                  policy check passes, so MCP owners need no access to the
+                  repository.
+                </FieldDescription>
+                {autoMergeEnvironment ? (
+                  <FieldDescription>
+                    Set with{" "}
+                    <code className="font-mono">
+                      {autoMergeEnvironment.variable}=
+                      {autoMergeEnvironment.value}
+                    </code>
+                    . Unset the environment variable to choose here.
+                  </FieldDescription>
+                ) : null}
+              </div>
             </div>
           ) : null}
         </div>

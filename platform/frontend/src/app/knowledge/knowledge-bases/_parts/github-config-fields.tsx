@@ -293,7 +293,8 @@ export function GithubConfigFields({
                 <FormDescription>
                   Comma-separated extensions or file names to index when
                   repository files are enabled, such as .md or Dockerfile. Use *
-                  for every text file. Defaults to Markdown and YAML.
+                  for every text file. Add .pdf to index text extracted from
+                  PDFs. Defaults to Markdown and YAML.
                 </FormDescription>
                 <FormControl>
                   <Input placeholder=".md, .yaml, Dockerfile" {...field} />

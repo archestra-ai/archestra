@@ -543,12 +543,15 @@ class OpenAppaRepositoryIncludes {
   private async pendingSetupCommit(
     source: RepositorySource & { setupPullRequestNumber: number },
   ): Promise<string | null> {
-    const key = `${source.repo}#${source.setupPullRequestNumber}`;
+    const key = setupCommitKey({
+      organizationId: source.organizationId,
+      host: source.gitlabTokenId ? "gitlab" : "github",
+      repo: source.repo,
+      number: source.setupPullRequestNumber,
+    });
     const cached = this.pendingSetups.get(key);
     if (cached !== undefined) return cached;
-    const kept = await cacheManager.get<string>(
-      setupCommitKey(source.repo, source.setupPullRequestNumber),
-    );
+    const kept = await cacheManager.get<string>(key);
     if (typeof kept !== "string" || !/^[a-f0-9]{40}$/.test(kept)) return null;
     const state = source.gitlabTokenId
       ? await this.gitlabSetupState(source)
@@ -759,14 +762,12 @@ export function templateExampleBlob(): string {
  * in the shared cache until the request is long merged: what a pending read
  * reads, whatever the request's branch holds later.
  */
-export async function rememberSetupCommit(params: {
-  repo: string;
-  number: number;
-  sha: string;
-}): Promise<void> {
+export async function rememberSetupCommit(
+  params: SetupRequest & { sha: string },
+): Promise<void> {
   try {
     await cacheManager.set(
-      setupCommitKey(params.repo, params.number),
+      setupCommitKey(params),
       params.sha,
       SETUP_COMMIT_TTL,
     );
@@ -780,9 +781,24 @@ export async function rememberSetupCommit(params: {
   }
 }
 
-function setupCommitKey(repo: string, number: number): AllowedCacheKey {
+/** A setup request: one organization's, on one host, by repository and number. */
+type SetupRequest = {
+  organizationId: string;
+  host: "github" | "gitlab";
+  repo: string;
+  number: number;
+};
+
+function setupCommitKey(request: SetupRequest): AllowedCacheKey {
   return `${CacheKey.OpenAppaPolicyCheck}-setup-${createHash("sha256")
-    .update(JSON.stringify([repo.toLowerCase(), number]))
+    .update(
+      JSON.stringify([
+        request.organizationId,
+        request.host,
+        request.repo.toLowerCase(),
+        request.number,
+      ]),
+    )
     .digest("hex")}`;
 }
 

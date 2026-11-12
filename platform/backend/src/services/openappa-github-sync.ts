@@ -299,7 +299,8 @@ export async function createAppaGithubRepository(params: {
   // including comes along with the files already in it.
   const transfer = await collectSetupTransfer({
     organizationId: params.organizationId,
-    policy: { content: seed },
+    seed,
+    current: policy.content,
   });
 
   let created: {
@@ -484,6 +485,8 @@ export async function createAppaGithubRepository(params: {
   await OpenAppaGithubSyncModel.save(params.organizationId, source);
   if (setupPullRequestNumber && setupCommit)
     await rememberSetupCommit({
+      organizationId: params.organizationId,
+      host: "github",
       repo,
       number: setupPullRequestNumber,
       sha: setupCommit,
@@ -591,6 +594,8 @@ async function proposeSetupPullRequest(params: {
   await OpenAppaGithubSyncModel.save(params.organizationId, source);
   if (setupPullRequestNumber && setupCommit)
     await rememberSetupCommit({
+      organizationId: params.organizationId,
+      host: "github",
       repo,
       number: setupPullRequestNumber,
       sha: setupCommit,
@@ -637,7 +642,8 @@ async function createAppaGitlabProject(params: {
     params.validationDirectory ?? VALIDATION_DIRECTORY;
   const transfer = await collectSetupTransfer({
     organizationId: params.organizationId,
-    policy,
+    seed: policy.content,
+    current: policy.content,
   });
   const repo = params.owner ? `${params.owner}/${params.name}` : params.name;
   let seeded: {
@@ -734,6 +740,8 @@ async function createAppaGitlabProject(params: {
   await OpenAppaGithubSyncModel.save(params.organizationId, source);
   if (seeded.setupPullRequestNumber && seeded.setupCommit)
     await rememberSetupCommit({
+      organizationId: params.organizationId,
+      host: "gitlab",
       repo: seeded.repo,
       number: seeded.setupPullRequestNumber,
       sha: seeded.setupCommit,
@@ -2267,10 +2275,14 @@ type SetupTransfer = {
 
 async function collectSetupTransfer(params: {
   organizationId: string;
-  policy: { content: string };
+  /** The policy text setup writes, whose include list decides what comes along. */
+  seed: string;
+  /** The current policy, whose own includes must be readable; an entry only the seed adds has no files to carry yet. */
+  current: string;
 }): Promise<SetupTransfer> {
   const { organizationId } = params;
-  const entries = repositoryIncludePaths(params.policy.content);
+  const entries = repositoryIncludePaths(params.seed);
+  const required = new Set(repositoryIncludePaths(params.current));
   const [current, suite] = await Promise.all([
     OpenAppaGithubSyncModel.find(organizationId),
     OpenAppaPolicyTestsModel.find(organizationId),
@@ -2282,12 +2294,13 @@ async function collectSetupTransfer(params: {
       ? { ...current, repo: current.repo, sourceCommit: current.sourceCommit }
       : null;
   const includes = new Map<string, string>();
-  if (entries.length > 0) {
-    if (!accepted)
-      throw new ApiError(
-        409,
-        `The current policy includes ${entries[0]} from its repository, and Git sync has accepted no commit to copy it from. Connect the repository that holds it, or remove the include, before setting up another repository.`,
-      );
+  const missing = entries.find((entry) => required.has(entry));
+  if (!accepted && missing !== undefined)
+    throw new ApiError(
+      409,
+      `The current policy includes ${missing} from its repository, and Git sync has accepted no commit to copy it from. Connect the repository that holds it, or remove the include, before setting up another repository.`,
+    );
+  if (entries.length > 0 && accepted) {
     for (const [path, text] of await openappaRepositoryIncludes.read({
       source: accepted,
       commit: accepted.sourceCommit,

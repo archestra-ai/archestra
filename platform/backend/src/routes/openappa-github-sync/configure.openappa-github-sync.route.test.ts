@@ -1570,6 +1570,73 @@ describe("APPA GitHub sync", () => {
     });
   });
 
+  test("a first repository with self-service on seeds the policy with the servers' include, with no commit accepted yet", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const installationId = randomUUID();
+    const secret = await secretManager().createSecret(
+      { apiToken: privateKey },
+      "test-first-app",
+    );
+    const githubApp = await GithubAppConfigModel.create({
+      organizationId,
+      name: "Policy App",
+      githubUrl: "https://api.github.com",
+      appId: "123",
+      installationId,
+      secretId: secret.id,
+    });
+    const git = fakeGitData("example/new-policy", {
+      head: { "appa.toml": "# The template's example\n" },
+    });
+    server.use(
+      http.post(
+        `https://api.github.com/app/installations/${installationId}/access_tokens`,
+        () =>
+          HttpResponse.json({
+            token: "test-installation-token",
+            expires_at: new Date(Date.now() + 3600000).toISOString(),
+          }),
+      ),
+      http.post(
+        "https://api.github.com/repos/archestra-ai/openappa-config/generate",
+        () =>
+          HttpResponse.json(
+            { full_name: "example/new-policy", default_branch: "main" },
+            { status: 201 },
+          ),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/new-policy/commits/main",
+        () => HttpResponse.json({ sha: commit }),
+      ),
+      contentsOf("example/new-policy", git.files),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/repository",
+      payload: {
+        owner: "example",
+        name: "new-policy",
+        githubAppConfigId: githubApp.id,
+        interval: "1h",
+        selfService: true,
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    // The seed's own glob names no file yet: nothing to carry, nothing refused.
+    expect(Object.keys(git.written())).toEqual(["appa.toml"]);
+    expect(git.written()["appa.toml"]).toContain('"mcp/*.toml"');
+    expect(response.json().source).toMatchObject({
+      repo: "example/new-policy",
+      sourceCommit: commit,
+      lastSyncError: null,
+    });
+  });
+
   test("a policy that reads repository files no commit was accepted for is not moved, and nothing is created", async () => {
     const root = `include = ["teams/ops.toml"]\n\n${policy}`;
     // Kept as the latest revision without a source: nowhere to read teams/ops.toml from.

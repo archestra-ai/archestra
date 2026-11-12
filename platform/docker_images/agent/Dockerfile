@@ -355,14 +355,14 @@ ARG TARGETARCH
 ENV GROK_DISABLE_AUTOUPDATER=1
 USER root
 RUN case "$TARGETARCH" in \
-      amd64) grok_arch=x64; checksum=0d0d4b65d97a882275f30de724f3f360b0c6a0e352ec7d816028105880149f4c ;; \
-      arm64) grok_arch=arm64; checksum=dc757c4ec56413259f0848424b52f1c907d385924202fec95d692a982c3b033a ;; \
+      amd64) grok_arch=x64; checksum=93e7d0274631b7741bacd46acb6dd8608a27b7092e601b8723183e81dc98f7fa ;; \
+      arm64) grok_arch=arm64; checksum=df946f1f130c81538abdd414845358dccd6a769e33280d5cbec9e2dd4c2c8b33 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /tmp/grok /opt/grok/bin \
  && cd /tmp/grok \
- && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.74" \
- && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.74.tgz" \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.77" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.77.tgz" \
  && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
  && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
  && chmod 0755 /opt/grok/bin/grok \
@@ -390,8 +390,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /tmp/kimi \
  && cd /tmp/kimi \
- && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.4.1)" kimi-code.tgz \
- && echo "cf4a72dc0c5b57dca4381dcf821d858b27196cccbb5d20171f829bd727f28619a4fa5f711fc1fdada6a456f0863182d5c711101a2b502dc80e87c7252d56144f  kimi-code.tgz" | sha512sum -c - \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.5.0)" kimi-code.tgz \
+ && echo "018b93e1f5bba73640ab12080e3c7eca92c936800bd3b359094c8f0e57ff26b8322ab8b7e5e56af660ee8687bfc515fbc0d1cbfb57d7f87d038ffac1dc7d3862  kimi-code.tgz" | sha512sum -c - \
  && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
  && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
  && cd / && rm -rf /tmp/kimi /root/.npm \

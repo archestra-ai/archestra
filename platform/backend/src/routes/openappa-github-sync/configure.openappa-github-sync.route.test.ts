@@ -1129,18 +1129,25 @@ describe("APPA GitHub sync", () => {
       contentsOf("example/new-policy", git.files),
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/openappa/github-sync/repository",
-      payload: {
-        owner: "example",
-        name: "new-policy",
-        githubAppConfigId: githubApp.id,
-        interval: "1h",
-        replace: true,
-        selfService: true,
-      },
-    });
+    // Release 1.4: self-service is the deployment's variable, on for every
+    // GitHub App source.
+    config.openappa.selfService = "enabled";
+    let response: Awaited<ReturnType<typeof app.inject>>;
+    try {
+      response = await app.inject({
+        method: "POST",
+        url: "/api/openappa/github-sync/repository",
+        payload: {
+          owner: "example",
+          name: "new-policy",
+          githubAppConfigId: githubApp.id,
+          interval: "1h",
+          replace: true,
+        },
+      });
+    } finally {
+      config.openappa.selfService = "disabled";
+    }
     expect(response.statusCode, response.body).toBe(200);
     // Every included file and validation, at its place beside appa.toml at
     // the root, the servers' file the seed starts including among them; a

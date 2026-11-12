@@ -8,6 +8,7 @@ import {
 } from "@/git-hosts/git-host-client";
 import logger from "@/logging";
 import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
+import { firstFileAtEachPath } from "@/services/openappa-github-access";
 import { ApiError } from "@/types";
 import type { AppaGithubRepositoryStatus } from "@/types/openappa-github-app-setup";
 
@@ -291,10 +292,7 @@ class OpenAppaGitlab {
     const baseSha = await withGitlabErrors(() =>
       client.gitlabBranchCommit(params.repo, branch),
     );
-    // The first file at a path wins: the policy comes first.
-    const files = [
-      ...new Map(params.files.map((file) => [file.path, file])).values(),
-    ];
+    const files = firstFileAtEachPath(params.files);
     const unchanged = await withGitlabErrors(async () => {
       for (const file of files) {
         const bytes = await client.readFile({
@@ -438,12 +436,7 @@ class OpenAppaGitlab {
     const template = OPENAPPA_TEMPLATE.files.map((file) =>
       file.path === "appa.toml" ? { ...file, content: params.policy } : file,
     );
-    // The first file at a path wins: the template, with the policy, comes first.
-    const files = [
-      ...new Map(
-        [...template, ...params.transferred].map((file) => [file.path, file]),
-      ).values(),
-    ];
+    const files = firstFileAtEachPath([...template, ...params.transferred]);
     try {
       await params.client.commitGitlabFiles({
         repo: params.repo,

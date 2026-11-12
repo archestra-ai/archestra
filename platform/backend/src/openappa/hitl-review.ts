@@ -16,11 +16,13 @@ import {
 } from "./hitl-review-overview";
 import { summarizeHitlReview } from "./hitl-review-summary";
 import {
+  acceptedScope,
   displayedReview,
   formatArgumentLines,
   parseReviewedArguments,
   reviewedToolLabel,
 } from "./review-display";
+import type { ReviewScopeItem } from "./review-scope";
 import type { OpenAppaSession } from "./service";
 
 type HitlRuling = "approve" | "deny" | "none";
@@ -160,6 +162,13 @@ export function closureFromReviewOutcome(
 type PendingHitlReview = {
   offerId: string;
   text: string;
+  /**
+   * What approving accepts, `null` when unknown. Absent only on a review
+   * staged before scope was stored, whose coverage is read from `text`.
+   */
+  scope?: ReviewScopeItem[] | null;
+  /** The ruling authority's own hint to the reviewer. */
+  hint?: string;
   tool?: string;
   arguments?: string;
   remedyArguments?: Record<string, unknown>;
@@ -509,7 +518,7 @@ export async function getHitlAskUserArguments(params: {
   if (params.presentation !== "form" || !review.tool) return card;
   const shown = displayedReview(review);
   const args = parseReviewedArguments(shown.arguments);
-  const accepted = acceptedCoverage(shown.text);
+  const accepted = acceptedOf(shown);
   // Grok's MCP form removes line breaks and renders Markdown literally.
   // Flow YAML keeps complete typed values (including multiline strings) on a
   // single logical line, while the client wraps to the actual terminal width.
@@ -542,9 +551,8 @@ export async function getHitlAskUserArguments(params: {
 /**
  * The review as one card: the call by the name the user knows it under, its
  * arguments as named values, and what an approval accepts besides the
- * person's attention, such as a wider audience. Where the coverage is not in
- * the shape read here, the full text is shown and nothing it covers is left
- * out.
+ * person's attention, such as a wider audience. Where the coverage is
+ * unknown, the full text is shown and nothing it covers is left out.
  */
 function buildHitlAskUserCard(staged: PendingHitlReview): HitlAskUserArguments {
   const review = displayedReview(staged);
@@ -577,7 +585,7 @@ function buildHitlAskUserCard(staged: PendingHitlReview): HitlAskUserArguments {
     };
   }
   const args = withoutProxyCopies(review.tool, parsed ?? {});
-  const accepted = acceptedCoverage(review.text);
+  const accepted = acceptedOf(review);
   const called = callPreview(review.tool, args);
   // A call that says nothing about itself shows its tool's description.
   const described =
@@ -597,7 +605,15 @@ function buildHitlAskUserCard(staged: PendingHitlReview): HitlAskUserArguments {
         "\n\n",
       ),
     shortQuestion: `Approve the ${preview.subject}?`,
-    callPreview: previewText({ preview, accepted, summary: review.summary }),
+    callPreview: previewText({
+      preview,
+      accepted,
+      summary: review.summary,
+      // A review staged before scope was stored keeps the preview it had.
+      ...(review.scope === null
+        ? { reviewText: formatReviewQuestion(review.text) }
+        : {}),
+    }),
     // Grok's preview is plain text and wraps to the actual terminal width.
     // Generate it from the reviewed data; stripping Markdown from the other
     // preview would also strip literal payload characters and retain its wraps.
@@ -1167,10 +1183,14 @@ function approvalQuestion(params: {
 
 /**
  * What an approval accepts besides the person's attention, or undefined when
- * the review text's coverage is not in the shape read here.
+ * that is unknown and the review text must be shown.
  */
-function acceptedCoverage(text: string): string[] | undefined {
-  return reviewCoverage(text)?.filter(
+function acceptedOf(review: PendingHitlReview): string[] | undefined {
+  if (review.scope !== undefined)
+    return acceptedScope(review.scope ?? undefined);
+  // A review staged before scope was stored: its card, still answerable for
+  // HITL_QUESTION_TTL_MS after a deploy, read the coverage from the text.
+  return reviewCoverage(review.text)?.filter(
     (line) => !line.startsWith("attention: "),
   );
 }
@@ -1221,6 +1241,8 @@ function previewText(params: {
   preview: CallPreview;
   accepted: string[] | undefined;
   summary?: string;
+  /** The whole review, for a review whose coverage is unknown. */
+  reviewText?: string;
 }): string {
   const { subject, summary, body } = params.preview;
   const accepted = params.accepted ?? [];
@@ -1234,6 +1256,9 @@ function previewText(params: {
     heading.join("\n"),
     ...summaryBlock(params.summary).map(escapeMarkdown),
     ...body,
+    ...(params.reviewText === undefined
+      ? []
+      : [`Policy review:\n${codeBlock(wrapCode(params.reviewText))}`]),
     ...(accepted.length > 0
       ? [
           [

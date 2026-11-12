@@ -24,6 +24,7 @@ import {
   previousHitlCardAnswer,
   renderHitlReviewText,
 } from "./hitl-review-overview";
+import type { ReviewScopeItem } from "./review-scope";
 import type { OpenAppaSession } from "./service";
 
 vi.mock("@/logging");
@@ -268,6 +269,7 @@ describe("hitlReviewCard", () => {
     tool?: string;
     arguments?: string;
     text: string;
+    scope?: ReviewScopeItem[] | null;
     summary?: string;
     toolDescription?: string;
     inspected?: boolean;
@@ -787,7 +789,36 @@ describe("hitlReviewCard", () => {
       renderHitlReviewText({ tool: "Bash", arguments: "{}", text }),
     ).toContain("### Policy review (authoritative)\n");
   });
+
+  test("shows a typed scope as the text it prints", () => {
+    const call = { tool: "Bash", arguments: "{}", text: COVERAGE };
+    expect(cardFor({ ...call, scope: [ATTENTION, PUBLIC] })).toEqual(
+      cardFor(call),
+    );
+  });
+
+  test("shows a review joining several authorities in full", () => {
+    const text = `${COVERAGE}\n\nWhat this ruling would cover:\n  - only d may send\n`;
+    const { card } = cardFor({
+      tool: "Bash",
+      arguments: "{}",
+      text,
+      scope: null,
+    });
+    expect(previewOf(card, "Allow")).toContain("- only d may send");
+  });
 });
+
+const ATTENTION: ReviewScopeItem = {
+  kind: "attention",
+  mark: "human-approval",
+  text: "attention: human-approval",
+};
+const PUBLIC: ReviewScopeItem = {
+  kind: "requirement",
+  requirement: { type: "public_audience" },
+  text: "the readers must be the public audience",
+};
 
 describe("previousHitlCardAnswer", () => {
   test("reads Deny and Inspect details, and asks again instead of granting Approve", () => {
@@ -858,6 +889,23 @@ describe("renderHitlReviewText", () => {
     expect(text).toContain("C:\\\\Temp\\\\note.txt");
     expect(text).toContain("\\u001b");
     expect(text).toContain("escaped");
+  });
+
+  test("shows a typed scope with the authority's hint and without the attention", () => {
+    const call = { tool: "Bash", arguments: "{}" };
+    expect(
+      renderHitlReviewText({
+        ...call,
+        text: COVERAGE,
+        scope: [ATTENTION, PUBLIC],
+        hint: "Check the recipient.",
+      }),
+    ).toBe(
+      renderHitlReviewText({
+        ...call,
+        text: "Check the recipient.\n\nWhat this ruling would cover:\n  - the readers must be the public audience\n",
+      }),
+    );
   });
 
   test("leaves out a derived transfer mode only for the Archestra tool that derives it", () => {

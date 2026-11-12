@@ -504,6 +504,7 @@ export async function createAppaGithubRepository(params: {
     await rememberSetupCommit({
       organizationId: params.organizationId,
       host: "github",
+      api,
       repo,
       number: setupPullRequestNumber,
       sha: setupCommit,
@@ -609,6 +610,7 @@ async function proposeSetupPullRequest(params: {
     await rememberSetupCommit({
       organizationId: params.organizationId,
       host: "github",
+      api,
       repo,
       number: setupPullRequestNumber,
       sha: setupCommit,
@@ -753,6 +755,7 @@ async function createAppaGitlabProject(params: {
     await rememberSetupCommit({
       organizationId: params.organizationId,
       host: "gitlab",
+      api: access.host.apiUrl,
       repo: seeded.repo,
       number: seeded.setupPullRequestNumber,
       sha: seeded.setupCommit,

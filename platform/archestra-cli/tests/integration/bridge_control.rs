@@ -74,6 +74,7 @@ async fn a_start_with_no_connection_runs_the_servers_of_the_config_file() {
         url: None,
         config_path: dir.config_path(),
         open_browser: false,
+        setup_code: None,
     })
     .await
     .expect("prepare");

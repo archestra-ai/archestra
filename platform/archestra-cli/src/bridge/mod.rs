@@ -142,6 +142,9 @@ pub struct StartOptions {
     pub config_path: PathBuf,
     /// Open the approval page in the browser. The URL is printed always.
     pub open_browser: bool,
+    /// From the command of a setup dialog in Archestra, which then approves
+    /// the sign-in in place: no approval page is opened.
+    pub setup_code: Option<String>,
 }
 
 /// What [`prepare`] made ready.
@@ -196,7 +199,8 @@ pub async fn prepare(options: &StartOptions) -> Result<Prepared, BridgeError> {
             if !config::is_http_url(&base_url) {
                 return Err(BridgeError::InvalidUrl);
             }
-            let control_plane = sign_in::sign_in(&http, &base_url, options.open_browser).await?;
+            let control_plane =
+                sign_in::sign_in(&http, &base_url, &sign_in_options(options)).await?;
             let config = Config::new(control_plane);
             config.save(path)?;
             info!(path = %path.display(), "signed in; wrote the config file");
@@ -209,8 +213,12 @@ pub async fn prepare(options: &StartOptions) -> Result<Prepared, BridgeError> {
         // The terminal says it in plain words: the sign-in prints that the
         // device is not authorized.
         info!("Archestra rejected the device key; signing in again");
-        config.control_plane =
-            sign_in::sign_in(&http, &config.control_plane.base_url, options.open_browser).await?;
+        config.control_plane = sign_in::sign_in(
+            &http,
+            &config.control_plane.base_url,
+            &sign_in_options(options),
+        )
+        .await?;
         config.save(path)?;
         synced = sync_at_start(&http, &config.control_plane, path).await?;
     }
@@ -234,6 +242,13 @@ pub async fn prepare(options: &StartOptions) -> Result<Prepared, BridgeError> {
             config,
         },
     })
+}
+
+fn sign_in_options(options: &StartOptions) -> sign_in::SignInOptions<'_> {
+    sign_in::SignInOptions {
+        open_browser: options.open_browser,
+        setup_code: options.setup_code.as_deref(),
+    }
 }
 
 /// How the sync of [`prepare`] ended.

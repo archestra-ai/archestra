@@ -27,34 +27,60 @@ pub enum SignInError {
     NoTunnelId,
 }
 
-/// Runs the sign-in at `base_url`. It prints the approval URL, and opens it in
-/// the browser when `open_browser` is set. It returns when the user approves.
+/// How the sign-in asks for the approval.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct SignInOptions<'a> {
+    /// Open the approval page in the browser. The URL is printed always.
+    pub open_browser: bool,
+    /// From the command of a setup dialog in Archestra.
+    pub setup_code: Option<&'a str>,
+}
+
+/// After this long with no answer in the setup dialog, the approval page is
+/// offered as well: the dialog may be closed.
+const APPROVAL_PAGE_FALLBACK_AFTER: Duration = Duration::from_secs(60);
+
+/// Runs the sign-in at `base_url`. With a setup code that Archestra knows,
+/// the user approves in the setup dialog the command came from, and no
+/// browser page opens. Else it prints the approval URL and opens it in the
+/// browser when `open_browser` is set. It returns when the user approves.
 pub(crate) async fn sign_in(
     http: &reqwest::Client,
     base_url: &str,
-    open_browser: bool,
+    options: &SignInOptions<'_>,
 ) -> Result<ControlPlaneConfig, SignInError> {
-    let start =
-        control_plane::start_sign_in(http, base_url, &device_name(), std::env::consts::OS).await?;
+    let start = control_plane::start_sign_in(
+        http,
+        base_url,
+        &device_name(),
+        std::env::consts::OS,
+        options.setup_code,
+    )
+    .await?;
     let approval_url = format!("{base_url}{}", start.verification_path);
 
-    println!("This device is not authorized. Approve it in the browser:");
-    println!("  {approval_url}");
     println!(
-        "Make sure the code {} matches the code in the browser.",
-        start.user_code
+        "{}",
+        approval_text(&start.user_code, &approval_url, start.approve_in_archestra)
     );
-    if open_browser && !open_url(&approval_url) {
+    if !start.approve_in_archestra && options.open_browser && !open_url(&approval_url) {
         warn!("could not open the browser; open the URL by hand");
     }
 
     let interval = poll_interval(start.interval);
+    let started = tokio::time::Instant::now();
+    let mut offered_the_page = !start.approve_in_archestra;
     loop {
         tokio::time::sleep(interval).await;
         let SignInPoll { status, tunnel_id } =
             control_plane::poll_sign_in(http, base_url, &start.device_code).await?;
         match status {
-            SignInStatus::Pending => {}
+            SignInStatus::Pending => {
+                if !offered_the_page && started.elapsed() >= APPROVAL_PAGE_FALLBACK_AFTER {
+                    offered_the_page = true;
+                    println!("{}", fallback_text(&approval_url));
+                }
+            }
             SignInStatus::Denied => return Err(SignInError::Denied),
             SignInStatus::Expired => return Err(SignInError::Expired),
             SignInStatus::Approved => {
@@ -69,6 +95,29 @@ pub(crate) async fn sign_in(
             }
         }
     }
+}
+
+/// What the terminal says while the sign-in waits for the user.
+fn approval_text(user_code: &str, approval_url: &str, approve_in_archestra: bool) -> String {
+    if approve_in_archestra {
+        format!(
+            "Approve this device in Archestra, in the window where you copied this command.\n\
+             Make sure the code there is {user_code}.\n\
+             \n\
+             Waiting for approval..."
+        )
+    } else {
+        format!(
+            "This device is not authorized. Approve it in the browser:\n\
+             {approval_url}\n\
+             Make sure the code {user_code} matches the code in the browser."
+        )
+    }
+}
+
+/// The approval page, for a user who closed the setup dialog.
+fn fallback_text(approval_url: &str) -> String {
+    format!("Or approve it here: {approval_url}")
 }
 
 fn poll_interval(seconds: f64) -> Duration {
@@ -107,6 +156,27 @@ mod tests {
         assert_eq!(short_hostname("build-7.corp.example.com"), "build-7");
         assert_eq!(short_hostname("MBP-0142"), "MBP-0142");
         assert_eq!(short_hostname(""), "unknown-device");
+    }
+
+    #[test]
+    fn the_terminal_names_where_to_approve() {
+        let url = "https://archestra.example.com/devices/approve?request=r1";
+        let in_archestra = approval_text("ABCD-1234", url, true);
+        assert_eq!(
+            in_archestra,
+            "Approve this device in Archestra, in the window where you copied this command.\n\
+             Make sure the code there is ABCD-1234.\n\
+             \n\
+             Waiting for approval..."
+        );
+        // No page to open: the setup dialog shows the request.
+        assert!(!in_archestra.contains(url));
+
+        let in_browser = approval_text("ABCD-1234", url, false);
+        assert!(in_browser.contains(url));
+        assert!(in_browser.contains("Make sure the code ABCD-1234 matches"));
+
+        assert_eq!(fallback_text(url), format!("Or approve it here: {url}"));
     }
 
     #[test]

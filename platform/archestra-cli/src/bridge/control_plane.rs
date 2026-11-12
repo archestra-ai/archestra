@@ -445,6 +445,10 @@ pub(crate) struct SignInStart {
     pub verification_path: String,
     /// Seconds between two polls for the result.
     pub interval: f64,
+    /// The setup code was known: the setup dialog in Archestra shows the
+    /// request, so no approval page is opened.
+    #[serde(default)]
+    pub approve_in_archestra: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -469,8 +473,12 @@ pub(crate) async fn start_sign_in(
     base_url: &str,
     device_name: &str,
     platform: &str,
+    setup_code: Option<&str>,
 ) -> Result<SignInStart, ControlPlaneError> {
-    let body = json!({ "deviceName": device_name, "platform": platform });
+    let mut body = json!({ "deviceName": device_name, "platform": platform });
+    if let Some(setup_code) = setup_code {
+        body["setupCode"] = json!(setup_code);
+    }
     post_json(
         http,
         format!("{base_url}/api/desktop-devices/sign-in"),
@@ -781,6 +789,8 @@ mod tests {
         .expect("decodes");
         assert_eq!(start.device_code, "code");
         assert_eq!(start.verification_path, "/devices/approve?id=s1");
+        // An older Archestra sends no such field: the approval page, as before.
+        assert!(!start.approve_in_archestra);
         assert!((start.interval - 2.0).abs() < f64::EPSILON);
 
         let poll: SignInPoll =

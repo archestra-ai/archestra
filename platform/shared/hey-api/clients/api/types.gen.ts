@@ -57340,6 +57340,7 @@ export type StartDesktopDeviceSignInData = {
     body: {
         deviceName: string;
         platform: 'macos' | 'linux' | 'windows';
+        setupCode?: string;
     };
     path?: never;
     query?: never;
@@ -57425,10 +57426,190 @@ export type StartDesktopDeviceSignInResponses = {
         verificationPath: string;
         expiresAt: string;
         interval: number;
+        approveInArchestra: boolean;
     };
 };
 
 export type StartDesktopDeviceSignInResponse = StartDesktopDeviceSignInResponses[keyof StartDesktopDeviceSignInResponses];
+
+export type CreateDesktopDeviceSetupCodeData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/desktop-devices/setup-codes';
+};
+
+export type CreateDesktopDeviceSetupCodeErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateDesktopDeviceSetupCodeError = CreateDesktopDeviceSetupCodeErrors[keyof CreateDesktopDeviceSetupCodeErrors];
+
+export type CreateDesktopDeviceSetupCodeResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        setupCode: string;
+        expiresAt: string;
+    };
+};
+
+export type CreateDesktopDeviceSetupCodeResponse = CreateDesktopDeviceSetupCodeResponses[keyof CreateDesktopDeviceSetupCodeResponses];
+
+export type GetDesktopDeviceSetupSignInData = {
+    body?: never;
+    path: {
+        setupCode: string;
+    };
+    query?: never;
+    url: '/api/desktop-devices/setup-codes/{setupCode}/sign-in';
+};
+
+export type GetDesktopDeviceSetupSignInErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDesktopDeviceSetupSignInError = GetDesktopDeviceSetupSignInErrors[keyof GetDesktopDeviceSetupSignInErrors];
+
+export type GetDesktopDeviceSetupSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        deviceName: string;
+        platform: 'macos' | 'linux' | 'windows';
+        userCode: string;
+        expiresAt: string;
+    } | null;
+};
+
+export type GetDesktopDeviceSetupSignInResponse = GetDesktopDeviceSetupSignInResponses[keyof GetDesktopDeviceSetupSignInResponses];
 
 export type PollDesktopDeviceSignInData = {
     body: {

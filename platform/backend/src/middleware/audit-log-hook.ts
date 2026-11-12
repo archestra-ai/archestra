@@ -366,6 +366,9 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   // ephemeral connection-setup render tickets (installer secrets), incoming-email
   // subscription config, oauth grant runtime (tokens are runtime state).
   { kind: "prefix", value: "/api/connection-setups" },
+  // A setup code only lets the MCP bridge setup dialog find the sign-in that
+  // its command starts; the approval itself is audited.
+  { kind: "exact", value: "/api/desktop-devices/setup-codes" },
   { kind: "prefix", value: "/api/incoming-email" },
   { kind: "exact", value: "/api/oauth/initiate" },
   { kind: "exact", value: "/api/oauth/callback" },

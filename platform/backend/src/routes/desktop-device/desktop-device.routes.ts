@@ -5,6 +5,7 @@ import { isRateLimited } from "@/agents/utils";
 import { CacheKey } from "@/cache-manager";
 import DesktopDeviceModel from "@/models/desktop-device";
 import {
+  DESKTOP_DEVICE_SETUP_CODES_PATH,
   DESKTOP_DEVICE_SIGN_IN_PATH,
   DESKTOP_DEVICES_PATH,
 } from "@/routes/route-paths";
@@ -172,6 +173,8 @@ const desktopDeviceRoutes: FastifyPluginAsyncZod = async (fastify) => {
           /** Hostname of the computer, shown on the approval page. */
           deviceName: z.string().trim().min(1).max(64),
           platform: ConnectionSetupPlatformSchema,
+          /** From the command of a setup dialog, which then approves it. */
+          setupCode: SetupCodeSchema.optional(),
         }),
         response: constructResponseSchema(
           z.object({
@@ -181,6 +184,8 @@ const desktopDeviceRoutes: FastifyPluginAsyncZod = async (fastify) => {
             verificationPath: z.string(),
             expiresAt: z.string(),
             interval: z.number(),
+            /** The setup dialog shows the request: no approval page needed. */
+            approveInArchestra: z.boolean(),
           }),
         ),
       },
@@ -189,6 +194,58 @@ const desktopDeviceRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await rateLimit({ ip: request.ip, action: "start", maxRequests: 10 });
       reply.header("Cache-Control", "no-store");
       return desktopDeviceSignInService.start(request.body);
+    },
+  );
+
+  fastify.post(
+    DESKTOP_DEVICE_SETUP_CODES_PATH,
+    {
+      schema: {
+        operationId: RouteId.CreateDesktopDeviceSetupCode,
+        description:
+          "A setup code for the MCP bridge setup dialog of the signed-in user. Its command carries the code, and the dialog then shows the sign-in that the command starts.",
+        tags: ["Desktop Devices"],
+        response: constructResponseSchema(
+          z.object({ setupCode: z.string(), expiresAt: z.string() }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      reply.header("Cache-Control", "no-store");
+      return desktopDeviceSignInService.createSetupCode({
+        userId: request.user.id,
+      });
+    },
+  );
+
+  fastify.get(
+    `${DESKTOP_DEVICE_SETUP_CODES_PATH}/:setupCode/sign-in`,
+    {
+      schema: {
+        operationId: RouteId.GetDesktopDeviceSetupSignIn,
+        description:
+          "The sign-in that the command of this setup code started, for the signed-in user who got the code. Null while there is none.",
+        tags: ["Desktop Devices"],
+        params: z.object({ setupCode: SetupCodeSchema }),
+        response: constructResponseSchema(
+          z
+            .object({
+              id: z.string(),
+              deviceName: z.string(),
+              platform: ConnectionSetupPlatformSchema,
+              userCode: z.string(),
+              expiresAt: z.string(),
+            })
+            .nullable(),
+        ),
+      },
+    },
+    async (request, reply) => {
+      reply.header("Cache-Control", "no-store");
+      return desktopDeviceSignInService.pendingForSetupCode({
+        setupCode: request.params.setupCode,
+        userId: request.user.id,
+      });
     },
   );
 
@@ -275,6 +332,9 @@ export default desktopDeviceRoutes;
 // === Internal helpers
 
 const SignInIdSchema = z.object({ id: z.string().regex(/^[a-f0-9]{48}$/) });
+
+/** 16 random bytes, base64url. */
+const SetupCodeSchema = z.string().regex(/^[A-Za-z0-9_-]{22}$/);
 
 const DesktopDeviceViewSchema = z.object({
   id: z.string(),

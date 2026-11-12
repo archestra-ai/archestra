@@ -45,6 +45,27 @@ describe("bridgeCommand", () => {
     );
   });
 
+  it("passes the setup code of the dialog to the program", () => {
+    expect(
+      bridgeCommand(
+        "https://archestra.example.com/v1",
+        false,
+        "AbCdEfGhIjKlMnOpQrStUv",
+      ),
+    ).toContain(
+      "./archestra bridge start --url https://archestra.example.com --setup-code AbCdEfGhIjKlMnOpQrStUv",
+    );
+    expect(
+      bridgeCommand(
+        "https://archestra.example.com/v1",
+        true,
+        "AbCdEfGhIjKlMnOpQrStUv",
+      ),
+    ).toContain(
+      ".\\archestra.exe bridge start --url https://archestra.example.com --setup-code AbCdEfGhIjKlMnOpQrStUv }",
+    );
+  });
+
   it("keeps a base URL that has no /v1", () => {
     expect(bridgeCommand("http://localhost:3000", false)).toContain(
       "--url http://localhost:3000",

@@ -51,6 +51,7 @@ async fn run_with_auto_update(
         url: Some(mock.base_url.clone()),
         config_path: dir.config_path(),
         open_browser: false,
+        setup_code: None,
     })
     .await
     .expect("prepare");

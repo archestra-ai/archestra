@@ -627,6 +627,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // Any signed-in user may approve a sign-in for, see, and remove their own device.
   [RouteId.GetDesktopDeviceSignIn]: {},
   [RouteId.DecideDesktopDeviceSignIn]: {},
+  [RouteId.CreateDesktopDeviceSetupCode]: {},
+  [RouteId.GetDesktopDeviceSetupSignIn]: {},
   [RouteId.GetDesktopDevices]: {},
   [RouteId.DeleteDesktopDevice]: {},
   [RouteId.UpdateDesktopDeviceServer]: {},

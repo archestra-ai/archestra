@@ -20,24 +20,32 @@
  *   stops it before it copies itself there. No progress bar: it makes the
  *   download of PowerShell 5.1 many times slower.
  * - Each line is short, so the command reads well where it wraps in a dialog.
+ * - `setupCode`, from the setup dialog that shows the command: the program
+ *   sends it with its sign-in, and the dialog approves that sign-in in place,
+ *   so no approval page opens.
  */
-export function bridgeCommand(baseUrl: string, windows: boolean): string {
+export function bridgeCommand(
+  baseUrl: string,
+  windows: boolean,
+  setupCode?: string,
+): string {
   const origin = baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
   const download = `${origin}/api/archestra-cli`;
+  const start = `bridge start --url ${origin}${setupCode ? ` --setup-code ${setupCode}` : ""}`;
   if (windows) {
     return (
       `$ProgressPreference = 'SilentlyContinue'; \`\n` +
       `  $arch = $env:PROCESSOR_ARCHITECTURE; \`\n` +
       `  irm "${download}/windows-$arch" \`\n` +
       `    -OutFile archestra.exe; \`\n` +
-      `  if ($?) { .\\archestra.exe bridge start --url ${origin} }`
+      `  if ($?) { .\\archestra.exe ${start} }`
     );
   }
   return (
     `curl -fsSL -o archestra \\\n` +
     `  "${download}/$(uname -s)-$(uname -m)" \\\n` +
     `  && chmod +x archestra \\\n` +
-    `  && ./archestra bridge start --url ${origin}`
+    `  && ./archestra ${start}`
   );
 }
 

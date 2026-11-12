@@ -55,6 +55,9 @@ Options:
   --no-tray         Do not show the tray icon.
   --foreground      Run in this terminal, not in the background.
   --no-open         Print the approval URL; do not open the browser.
+  --setup-code <code>
+                    From the setup dialog in Archestra, which shows the
+                    approval: no browser page opens.
   --background      Run in this process. The OS sets it.
   -h, --help        Show this text.
 
@@ -302,6 +305,13 @@ fn parse_bridge_start(mut arguments: impl Iterator<Item = String>) -> Result<Inv
             "--no-tray" => args.no_tray = true,
             "--foreground" => args.foreground = true,
             "--no-open" => args.no_open = true,
+            "--setup-code" => {
+                args.setup_code = Some(
+                    arguments
+                        .next()
+                        .ok_or(CliError::MissingValue("--setup-code"))?,
+                );
+            }
             "--background" => args.background = true,
             "-h" | "--help" => return Ok(Invocation::Help(Help::BridgeStart)),
             _ => {
@@ -356,6 +366,8 @@ mod tests {
                 "--foreground",
                 "--no-open",
                 "--background",
+                "--setup-code",
+                "AbCdEfGhIjKlMnOpQrStUv",
             ]),
             Ok(Invocation::Run(Command::BridgeStart(StartArgs {
                 url: Some("https://archestra.example.com".to_owned()),
@@ -364,7 +376,12 @@ mod tests {
                 foreground: true,
                 no_open: true,
                 background: true,
+                setup_code: Some("AbCdEfGhIjKlMnOpQrStUv".to_owned()),
             })))
+        );
+        assert_eq!(
+            parse_strs(&["bridge", "start", "--setup-code"]),
+            Err(CliError::MissingValue("--setup-code"))
         );
     }
 

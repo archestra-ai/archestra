@@ -27,6 +27,8 @@ pub struct StartArgs {
     /// Run in this terminal, not in the background.
     pub foreground: bool,
     pub no_open: bool,
+    /// From the command of a setup dialog in Archestra.
+    pub setup_code: Option<String>,
     /// This process is the MCP bridge in the background: the OS sets it.
     pub background: bool,
 }
@@ -87,6 +89,7 @@ pub fn run(args: StartArgs) -> Result<ExitCode, StartError> {
         url: args.url,
         config_path: config_path.clone(),
         open_browser: !args.no_open,
+        setup_code: args.setup_code,
     }))?;
     info!(config = %config_path.display(), "the config file is ready");
 

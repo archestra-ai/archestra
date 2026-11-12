@@ -1183,6 +1183,8 @@ export const RouteId = {
   PollDesktopDeviceSignIn: "pollDesktopDeviceSignIn",
   GetDesktopDeviceSignIn: "getDesktopDeviceSignIn",
   DecideDesktopDeviceSignIn: "decideDesktopDeviceSignIn",
+  CreateDesktopDeviceSetupCode: "createDesktopDeviceSetupCode",
+  GetDesktopDeviceSetupSignIn: "getDesktopDeviceSetupSignIn",
   // Tunnel endpoints the tunnel client calls (OpenAI tunnel-client wire protocol)
   GetDesktopTunnel: "getDesktopTunnel",
   PollDesktopTunnel: "pollDesktopTunnel",

@@ -19,6 +19,9 @@ import { Button } from "@/components/ui/button";
 import { copyToClipboard } from "@/lib/clipboard";
 import {
   type DesktopDevice,
+  useDecideDesktopDeviceSignIn,
+  useDesktopDeviceSetupCode,
+  useDesktopDeviceSetupSignIn,
   useDesktopDevices,
 } from "@/lib/desktop-device.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -34,6 +37,11 @@ import { cn } from "@/lib/utils/tailwind";
  * look and move the same. {@link McpBridgeSetupStatus} goes in the footer of
  * the dialog around it.
  *
+ * The command carries a setup code: the program sends it with its sign-in,
+ * and step 2 here shows that sign-in with Approve and Deny, so no approval
+ * page opens in another tab. Without a code (it could not be had) the
+ * program opens the approval page, as before.
+ *
  * `device` is the user's device once it is linked, null before. The caller
  * reads it live (`useDesktopDevices`), so the steps turn done by themselves.
  */
@@ -43,16 +51,31 @@ export function McpBridgeSetup({ device }: { device: DesktopDevice | null }) {
   const baseUrl = useConnectionBaseUrl(organization?.connectionBaseUrls);
   const [windows, setWindows] = useState(false);
   useEffect(() => setWindows(detectPlatform() === "windows"), []);
-  const command = bridgeCommand(baseUrl, windows);
+  const { data: setupCode } = useDesktopDeviceSetupCode({
+    enabled: device === null,
+  });
+  const command = bridgeCommand(baseUrl, windows, setupCode ?? undefined);
+  const { data: request } = useDesktopDeviceSetupSignIn({
+    setupCode,
+    enabled: device === null,
+  });
+  const decide = useDecideDesktopDeviceSignIn(request?.id ?? "");
+  // The answer the user gave to the request that is shown, by its id: a
+  // command run again starts a new request, which needs a new answer.
+  const [answer, setAnswer] = useState<{
+    id: string;
+    decision: "approve" | "deny";
+  } | null>(null);
+  const answered = request && answer?.id === request.id ? answer : null;
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
     const timer = setTimeout(() => setCopied(false), 1600);
     return () => clearTimeout(timer);
   }, [copied]);
-  // The page cannot see the approval: all three steps are done together,
-  // once the device is linked.
   const done = device !== null;
+  const approved = done || answered?.decision === "approve";
+  const commandRan = approved || Boolean(request);
 
   return (
     <div className="space-y-5 text-sm">
@@ -60,10 +83,10 @@ export function McpBridgeSetup({ device }: { device: DesktopDevice | null }) {
         {`Connect your device to ${appName}, so it can use MCP servers running there.`}
       </p>
       <ol className="space-y-[18px]">
-        <SetupStep number={1} state={done ? "done" : "current"}>
+        <SetupStep number={1} state={commandRan ? "done" : "current"}>
           <div className="flex min-w-0 flex-1 flex-col gap-2.5">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pt-[3px]">
-              <p className={done ? "text-foreground/80" : "font-medium"}>
+              <p className={commandRan ? "text-foreground/80" : "font-medium"}>
                 {`Run the command to install the ${appName} CLI.`}
               </p>
               <TextButton
@@ -98,13 +121,48 @@ export function McpBridgeSetup({ device }: { device: DesktopDevice | null }) {
             </p>
           </div>
         </SetupStep>
-        <SetupStep number={2} state={done ? "done" : "upcoming"}>
-          <p className="text-foreground/80">
-            Approve your device on the browser page it opens.
-          </p>
+        <SetupStep
+          number={2}
+          state={approved ? "done" : request ? "current" : "upcoming"}
+          multiline={Boolean(request) && !approved}
+        >
+          <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+            <p
+              className={cn(
+                request && !approved
+                  ? "pt-[3px] font-medium"
+                  : "text-foreground/80",
+              )}
+            >
+              {setupCode
+                ? "Approve your device here."
+                : "Approve your device on the browser page it opens."}
+            </p>
+            {request && !approved ? (
+              <SignInRequest
+                deviceName={request.deviceName}
+                userCode={request.userCode}
+                denied={answered?.decision === "deny"}
+                pending={decide.isPending}
+                onDecide={(decision) => {
+                  decide.mutate(
+                    { decision },
+                    {
+                      onSuccess: () => setAnswer({ id: request.id, decision }),
+                    },
+                  );
+                }}
+              />
+            ) : null}
+          </div>
         </SetupStep>
-        <SetupStep number={3} state={done ? "done" : "upcoming"}>
-          <p className="text-foreground/80">
+        <SetupStep
+          number={3}
+          state={done ? "done" : approved ? "current" : "upcoming"}
+        >
+          <p
+            className={approved && !done ? "font-medium" : "text-foreground/80"}
+          >
             The MCP bridge will run in the background.
           </p>
         </SetupStep>
@@ -148,14 +206,81 @@ export function McpBridgeSetupStatus({
   );
 }
 
+/**
+ * The sign-in that the command started, in step 2: which device, the code to
+ * compare with the terminal, and the answer.
+ */
+function SignInRequest({
+  deviceName,
+  userCode,
+  denied,
+  pending,
+  onDecide,
+}: {
+  deviceName: string;
+  userCode: string;
+  denied: boolean;
+  pending: boolean;
+  onDecide: (decision: "approve" | "deny") => void;
+}) {
+  if (denied) {
+    return (
+      <p className="text-muted-foreground">
+        {`You denied ${deviceName}. To link a device, run the command again.`}
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border bg-background px-4 py-3.5">
+      <Laptop className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <p className="font-medium">
+          <span>{deviceName}</span>
+          <span> wants to link</span>
+        </p>
+        <p className="text-muted-foreground">
+          <span>Make sure your terminal shows the code </span>
+          <span className="font-mono font-medium text-foreground">
+            {userCode}
+          </span>
+          <span>.</span>
+        </p>
+      </div>
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={pending}
+          onClick={() => onDecide("deny")}
+        >
+          Deny
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          disabled={pending}
+          onClick={() => onDecide("approve")}
+        >
+          {pending ? <Loader2 className="animate-spin" /> : null}
+          <span>Approve</span>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /** One numbered step: the number in a circle, then its content. */
 function SetupStep({
   number,
   state,
+  multiline = false,
   children,
 }: {
   number: number;
   state: "current" | "upcoming" | "done";
+  /** Holds more than one line: the circle stays at its top. */
+  multiline?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -163,7 +288,7 @@ function SetupStep({
       className={cn(
         "flex gap-3.5",
         // A one-line step centres its text on the circle.
-        number > 1 && "items-center",
+        number > 1 && !multiline && "items-center",
       )}
     >
       <span

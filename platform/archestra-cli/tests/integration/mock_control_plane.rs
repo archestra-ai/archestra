@@ -498,6 +498,10 @@ async fn response(
 }
 
 async fn sign_in_start(State(inner): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
+    // A setup code is known to the mock when it has the right shape.
+    let approve_in_archestra = body["setupCode"]
+        .as_str()
+        .is_some_and(|code| code.len() == 22);
     inner
         .lock()
         .expect("the mock state")
@@ -510,6 +514,7 @@ async fn sign_in_start(State(inner): State<Shared>, Json(body): Json<Value>) -> 
         "verificationPath": "/devices/approve?id=signin-1",
         "expiresAt": "2026-11-10T12:10:00Z",
         "interval": 0,
+        "approveInArchestra": approve_in_archestra,
     }))
 }
 

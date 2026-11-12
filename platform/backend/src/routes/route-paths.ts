@@ -43,6 +43,7 @@ export const DESKTOP_TUNNEL_PREFIX = "/v1/tunnels";
 export const ARCHESTRA_CLI_DOWNLOAD_PREFIX = "/api/archestra-cli";
 export const DESKTOP_DEVICES_PATH = "/api/desktop-devices";
 export const DESKTOP_DEVICE_SIGN_IN_PATH = `${DESKTOP_DEVICES_PATH}/sign-in`;
+export const DESKTOP_DEVICE_SETUP_CODES_PATH = `${DESKTOP_DEVICES_PATH}/setup-codes`;
 export const MODEL_ROUTER_PREFIX = `${PROXY_API_PREFIX}/model-router`;
 export const UNIFIED_MODEL_PREFIX = `${PROXY_API_PREFIX}/unified-model`;
 

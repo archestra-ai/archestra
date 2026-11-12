@@ -18,6 +18,7 @@ fn options(mock: &MockControlPlane, dir: &TestDir) -> StartOptions {
         url: Some(format!("{}/", mock.base_url)),
         config_path: dir.config_path(),
         open_browser: false,
+        setup_code: None,
     }
 }
 
@@ -108,6 +109,31 @@ async fn the_first_run_signs_in_and_syncs_the_config_file() {
     assert_eq!(starts[0]["platform"], json!(std::env::consts::OS));
     let device_name = starts[0]["deviceName"].as_str().expect("deviceName");
     assert!(!device_name.is_empty() && !device_name.contains('.'));
+}
+
+#[tokio::test]
+async fn a_setup_code_goes_with_the_sign_in_for_the_dialog_to_approve() {
+    let mock = MockControlPlane::start().await;
+    let dir = TestDir::new();
+    let with_code = StartOptions {
+        setup_code: Some("AbCdEfGhIjKlMnOpQrStUv".to_owned()),
+        ..options(&mock, &dir)
+    };
+
+    archestra_cli::bridge::prepare(&with_code)
+        .await
+        .expect("signs in");
+
+    let starts = mock.sign_in_starts();
+    assert_eq!(starts.len(), 1);
+    assert_eq!(starts[0]["setupCode"], json!("AbCdEfGhIjKlMnOpQrStUv"));
+    // With no setup code, the request has none.
+    let mock = MockControlPlane::start().await;
+    let dir = TestDir::new();
+    archestra_cli::bridge::prepare(&options(&mock, &dir))
+        .await
+        .expect("signs in");
+    assert!(mock.sign_in_starts()[0].get("setupCode").is_none());
 }
 
 #[tokio::test]

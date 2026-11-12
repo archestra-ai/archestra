@@ -18,15 +18,30 @@ import type { AppaGithubRepositoryStatus } from "@/types/openappa-github-app-set
  * template since GitLab can't copy a GitHub template.
  */
 class OpenAppaGitlab {
-  /** The policy file at the source's ref, and the commit it was read at. */
+  /**
+   * The policy file at the source's ref, and the commit it was read at; or,
+   * while the setup merge request that carries the policy is not merged, its
+   * state.
+   */
   async readPolicy(params: {
     access: GitAccess;
     repo: string;
     ref: string | null;
     path: string;
-  }): Promise<{ pending: null; commitSha: string; content: string }> {
+    setupMergeRequest?: number | null;
+  }): Promise<
+    | { pending: "open" | "closed" }
+    | { pending: null; commitSha: string; content: string }
+  > {
     const client = gitClient(params.access);
     return withGitlabErrors(async () => {
+      if (params.setupMergeRequest) {
+        const request = await client.gitlabMergeRequest(
+          params.repo,
+          params.setupMergeRequest,
+        );
+        if (request.state !== "merged") return { pending: request.state };
+      }
       const commitSha = await client.resolveCommit(params.repo, params.ref);
       if (!/^[a-f0-9]{40}$/.test(commitSha))
         throw new ApiError(400, "GitLab returned an invalid commit");
@@ -198,6 +213,8 @@ class OpenAppaGitlab {
     namespace: string | null;
     name: string;
     policy: string;
+    /** What the policy reads beside itself, carried over from its repository. */
+    transferred: { path: string; content: string }[];
   }): Promise<{ repo: string; branch: string }> {
     const client = gitClient(params.access);
     return withGitlabErrors(async () => {
@@ -223,6 +240,7 @@ class OpenAppaGitlab {
         repo: project.path_with_namespace,
         branch: project.default_branch || "main",
         policy: params.policy,
+        transferred: params.transferred,
       });
       return { repo: project.path_with_namespace, ...seeded };
     });
@@ -233,6 +251,7 @@ class OpenAppaGitlab {
     access: GitAccess;
     repo: string;
     policy: string;
+    transferred: { path: string; content: string }[];
   }): Promise<{ branch: string }> {
     const client = gitClient(params.access);
     return withGitlabErrors(async () => {
@@ -244,7 +263,58 @@ class OpenAppaGitlab {
         repo: params.repo,
         branch: project.default_branch || "main",
         policy: params.policy,
+        transferred: params.transferred,
       });
+    });
+  }
+
+  /**
+   * Propose the current policy and what it reads beside itself to a project
+   * that already holds a policy: one commit on a new branch from `ref` (the
+   * default branch unless given) and a merge request into it. Null when the
+   * project already holds every file as given, so there is nothing to merge.
+   */
+  async proposeSetup(params: {
+    access: GitAccess;
+    repo: string;
+    ref: string | null;
+    files: { path: string; content: string }[];
+    title: string;
+    summary: string;
+  }): Promise<{ iid: number; webUrl: string } | null> {
+    const client = gitClient(params.access);
+    const branch = await withGitlabErrors(
+      async () => params.ref ?? (await client.defaultBranch(params.repo)),
+    );
+    const baseSha = await withGitlabErrors(() =>
+      client.gitlabBranchCommit(params.repo, branch),
+    );
+    // The first file at a path wins: the policy comes first.
+    const files = [
+      ...new Map(params.files.map((file) => [file.path, file])).values(),
+    ];
+    const unchanged = await withGitlabErrors(async () => {
+      for (const file of files) {
+        const bytes = await client.readFile({
+          repo: params.repo,
+          ref: baseSha,
+          path: file.path,
+          maxBytes: POLICY_MAX_BYTES,
+        });
+        if (!bytes || !bytes.equals(Buffer.from(file.content))) return false;
+      }
+      return true;
+    });
+    if (unchanged) return null;
+    return this.proposeChange({
+      access: params.access,
+      repo: params.repo,
+      branch,
+      baseSha,
+      title: params.title,
+      summary: params.summary,
+      upsert: files,
+      delete: [],
     });
   }
 
@@ -361,10 +431,17 @@ class OpenAppaGitlab {
     repo: string;
     branch: string;
     policy: string;
+    transferred: { path: string; content: string }[];
   }): Promise<{ branch: string }> {
-    const files = OPENAPPA_TEMPLATE.files.map((file) =>
+    const template = OPENAPPA_TEMPLATE.files.map((file) =>
       file.path === "appa.toml" ? { ...file, content: params.policy } : file,
     );
+    // The first file at a path wins: the template, with the policy, comes first.
+    const files = [
+      ...new Map(
+        [...template, ...params.transferred].map((file) => [file.path, file]),
+      ).values(),
+    ];
     try {
       await params.client.commitGitlabFiles({
         repo: params.repo,

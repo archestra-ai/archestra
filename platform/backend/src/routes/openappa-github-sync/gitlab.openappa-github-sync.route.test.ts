@@ -93,12 +93,14 @@ describe("APPA GitLab sync", () => {
     );
   });
 
-  test("connects an existing project that already holds a policy", async () => {
-    const pulled = `${initialPolicy()}\n# Kept in GitLab\n`;
+  test("proposes the current policy to a project that already holds one, and pulls what the merge lands", async () => {
+    const theirs = `${initialPolicy()}\n# Kept in GitLab\n`;
+    const repo = "platform/security/existing";
     gitlab.addProject({
-      path: "platform/security/existing",
-      files: { "guardrails/appa.toml": pulled },
+      path: repo,
+      files: { "guardrails/appa.toml": theirs },
     });
+    const local = await guardrailsPolicyService.get(organizationId);
 
     const response = await app.inject({
       method: "POST",
@@ -113,9 +115,96 @@ describe("APPA GitLab sync", () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().source).toMatchObject({
+      repo,
+      path: "guardrails/appa.toml",
+      setupPullRequestNumber: 1,
+      sourceCommit: null,
+      lastSyncError: null,
+    });
+    // Neither policy changes until the merge request merges.
     expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
-      pulled,
+      local.content,
+    );
+    expect(gitlab.files(repo, "main")["guardrails/appa.toml"]).toBe(theirs);
+
+    gitlab.merge(repo, 1);
+    await syncAppaGithubPolicy(organizationId);
+
+    expect(gitlab.files(repo, "main")["guardrails/appa.toml"]).toBe(
+      local.content,
+    );
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      setupPullRequestNumber: null,
+      lastSyncError: null,
+    });
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      local.content,
+    );
+  });
+
+  test("a new project gets the files the synced policy reads and its validations", async () => {
+    const root =
+      'include = ["rules/*.toml"]\n\n[policy]\nversion = 2\n\n[[policy.tool]]\nname = "read"\ndelta = {}\n';
+    const ledger =
+      '[policy]\nversion = 2\n\n[[policy.tool]]\nname = "ledger__export"\ndelta = {}\n';
+    const trace = "# A refund that must be refused\n";
+    gitlab.addGroup("platform");
+    gitlab.addProject({
+      path: "platform/old",
+      files: {
+        "appa.toml": root,
+        "rules/ledger.toml": ledger,
+        "rules/README.md": "# Not a rules file\n",
+        "traces/refund.appa": trace,
+      },
+    });
+    // Synced from the old project: the files are read at its accepted commit.
+    await OpenAppaGithubSyncModel.save(organizationId, {
+      repo: "platform/old",
+      ref: "main",
+      path: "appa.toml",
+      interval: "1h",
+      githubPatId: null,
+      githubAppConfigId: null,
+      gitlabTokenId,
+    });
+    await syncAppaGithubPolicy(organizationId);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      lastSyncError: null,
+      sourceCommit: expect.stringMatching(/^[a-f0-9]{40}$/),
+    });
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      root,
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/repository",
+      payload: {
+        owner: "platform",
+        name: "policies",
+        gitlabTokenId,
+        interval: "1h",
+        replace: true,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const files = gitlab.files("platform/policies", "main");
+    expect(files).toMatchObject({
+      "appa.toml": root,
+      "rules/ledger.toml": ledger,
+      "traces/refund.appa": trace,
+    });
+    expect(files["rules/README.md"]).toBeUndefined();
+    expect(response.json().source).toMatchObject({
+      repo: "platform/policies",
+      lastSyncError: null,
+    });
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      root,
     );
   });
 

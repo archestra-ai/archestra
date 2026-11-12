@@ -306,6 +306,15 @@ export async function createAppaGithubRepository(params: {
       400,
       "The current policy exceeds the 1 MiB Git sync limit",
     );
+  // A policy kept elsewhere than appa.toml on the default branch is never a fresh copy.
+  const validationDirectory =
+    params.validationDirectory ?? VALIDATION_DIRECTORY;
+  // Everything the policy reads from its repository is read before anything
+  // is written, so a transfer that cannot be complete creates nothing.
+  const transfer = await collectSetupTransfer({
+    organizationId: params.organizationId,
+    policy,
+  });
 
   let created: {
     full_name?: string;
@@ -315,9 +324,6 @@ export async function createAppaGithubRepository(params: {
   const repo = `${params.owner}/${params.name}`;
   let setupPullRequestNumber: number | undefined;
   let seededEmpty = false;
-  // A policy kept elsewhere than appa.toml on the default branch is never a fresh copy.
-  const validationDirectory =
-    params.validationDirectory ?? VALIDATION_DIRECTORY;
   const custom =
     params.existing &&
     (!!params.ref ||
@@ -335,6 +341,10 @@ export async function createAppaGithubRepository(params: {
       repo,
       token,
       policy: seed,
+      transferred: transferredFiles(transfer, {
+        path: "appa.toml",
+        validationDirectory,
+      }),
     });
     created = { full_name: repo, default_branch: seeded.branch, private: true };
     setupPullRequestNumber = seeded.setupPullRequestNumber;
@@ -351,19 +361,21 @@ export async function createAppaGithubRepository(params: {
       });
     } catch (error) {
       if (error !== notTemplate) throw error;
-      // A repository that already holds a policy becomes the policy source.
-      return connectAppaGithubRepository({
+      // A repository that already holds a policy keeps it until the pull
+      // request that carries the current policy and its files is merged.
+      return proposeSetupPullRequest({
         organizationId: params.organizationId,
-        userId: params.userId,
-        replace: params.replace,
+        api,
+        repo,
+        token,
+        ref: params.ref ?? null,
+        path: params.path ?? "appa.toml",
+        seed,
+        transfer,
+        policy,
         source: {
-          repo,
-          ref: params.ref ?? null,
-          path: params.path ?? "appa.toml",
           interval: params.interval,
-          githubPatId: null,
           githubAppConfigId,
-          gitlabTokenId: null,
           // Kept even before the folder exists: validations run once it does.
           validationDirectory,
         },
@@ -412,95 +424,29 @@ export async function createAppaGithubRepository(params: {
   if (!seededEmpty)
     try {
       const base = `${api}/repos/${repo}`;
-      const existing = await githubSetupRead<{ sha?: string }>({
-        url: `${base}/contents/appa.toml?ref=${encodeURIComponent(created.default_branch)}`,
+      const branch = created.default_branch;
+      // The template's own example is replaced in one commit with the current
+      // policy and what it reads beside it; identical bytes need no commit.
+      const outcome = await commitSetupFiles({
+        base,
         token,
+        branch,
+        parent: await branchHead({ base, token, branch, setup: true }),
+        files: [
+          { path: "appa.toml", content: seed },
+          ...transferredFiles(transfer, {
+            path: "appa.toml",
+            validationDirectory,
+          }),
+        ],
+        message: "Seed current OpenAPPA policy",
+        pull: {
+          title: "Seed current OpenAPPA policy",
+          body: setupPullBody(transfer, false),
+        },
+        direct: true,
       });
-      if (!existing.sha || !/^[a-f0-9]{40}$/.test(existing.sha))
-        throw new ApiError(502, "The template has no appa.toml file");
-      // Identical template bytes need no PR: GitHub cannot open an empty diff.
-      const bytes = Buffer.from(seed);
-      const policyBlob = createHash("sha1")
-        .update(`blob ${bytes.length}\0`)
-        .update(bytes)
-        .digest("hex");
-      if (existing.sha !== policyBlob) {
-        let requiresPullRequest = false;
-        try {
-          await githubJson({
-            url: `${base}/contents/appa.toml`,
-            token,
-            method: "PUT",
-            body: {
-              message: "Seed current OpenAPPA policy",
-              content: bytes.toString("base64"),
-              sha: existing.sha,
-              branch: created.default_branch,
-            },
-            errors: withGithubMessage((status, message) => {
-              if (
-                [403, 409, 422].includes(status) &&
-                REPOSITORY_RULES.test(message ?? "")
-              )
-                return new GithubRepositoryRulesError();
-              return new ApiError(
-                502,
-                `GitHub returned HTTP ${status} while committing the initial policy. Check repository access and App permissions.`,
-              );
-            }),
-          });
-        } catch (error) {
-          if (!(error instanceof GithubRepositoryRulesError)) throw error;
-          requiresPullRequest = true;
-        }
-        if (requiresPullRequest) {
-          const branch = await githubSetupRead<{ object?: { sha?: string } }>({
-            url: `${base}/git/ref/heads/${created.default_branch.split("/").map(encodeURIComponent).join("/")}`,
-            token,
-          });
-          const sha = branch.object?.sha;
-          if (!sha || !/^[a-f0-9]{40}$/.test(sha))
-            throw new ApiError(
-              502,
-              "GitHub returned an invalid default branch",
-            );
-          const head = `archestra/openappa-setup-${randomUUID()}`;
-          await githubJson({
-            url: `${base}/git/refs`,
-            token,
-            method: "POST",
-            body: { ref: `refs/heads/${head}`, sha },
-            errors: githubSyncErrors,
-          });
-          await githubJson({
-            url: `${base}/contents/appa.toml`,
-            token,
-            method: "PUT",
-            body: {
-              message: "Seed current OpenAPPA policy",
-              content: bytes.toString("base64"),
-              sha: existing.sha,
-              branch: head,
-            },
-            errors: githubSyncErrors,
-          });
-          const pull = await githubJson<{ number?: number }>({
-            url: `${base}/pulls`,
-            token,
-            method: "POST",
-            errors: githubSyncErrors,
-            body: {
-              title: "Seed current OpenAPPA policy",
-              body: "Review and merge this pull request to finish GitHub policy sync setup. Your current policy stays active until this pull request is merged.",
-              head,
-              base: created.default_branch,
-            },
-          });
-          if (!Number.isSafeInteger(pull.number) || (pull.number ?? 0) <= 0)
-            throw new ApiError(502, "GitHub returned an invalid pull request");
-          setupPullRequestNumber = pull.number;
-        }
-      }
+      setupPullRequestNumber = outcome.setupPullRequestNumber;
     } catch (error) {
       if (error instanceof ApiError)
         throw new ApiError(
@@ -536,9 +482,98 @@ export async function createAppaGithubRepository(params: {
 }
 
 /**
+ * An existing repository that already holds a policy at `path`: the current
+ * policy and what it reads beside it go in as a pull request against the
+ * branch, so the repository's own policy is replaced only by a merge, and the
+ * current one stays in force until then. The merging user combines the two
+ * where they want both. A repository whose files already match connects
+ * without a pull request.
+ */
+async function proposeSetupPullRequest(params: {
+  organizationId: string;
+  api: string;
+  repo: string;
+  token: string;
+  ref: string | null;
+  path: string;
+  seed: string;
+  transfer: SetupTransfer;
+  policy: { revision: number };
+  source: Pick<
+    AppaGithubSource,
+    "interval" | "githubAppConfigId" | "validationDirectory"
+  >;
+}) {
+  const { api, repo, token, path } = params;
+  const base = `${api}/repos/${repo}`;
+  let setupPullRequestNumber: number | undefined;
+  try {
+    const branch = params.ref ?? (await defaultBranch({ token, base }));
+    const outcome = await commitSetupFiles({
+      base,
+      token,
+      branch,
+      parent: await branchHead({ base, token, branch }),
+      files: [
+        { path, content: params.seed },
+        ...transferredFiles(params.transfer, {
+          path,
+          validationDirectory:
+            params.source.validationDirectory ?? VALIDATION_DIRECTORY,
+        }),
+      ],
+      message: "Seed current OpenAPPA policy",
+      pull: {
+        title: "Seed current OpenAPPA policy",
+        body: setupPullBody(params.transfer, true),
+      },
+      direct: false,
+    });
+    setupPullRequestNumber = outcome.setupPullRequestNumber;
+  } catch (error) {
+    if (error instanceof ApiError)
+      throw new ApiError(
+        error.statusCode,
+        `Repository ${repo} holds a policy, but the pull request carrying the current one failed: ${error.message}`,
+      );
+    throw error;
+  }
+  if (
+    (await guardrailsPolicyService.get(params.organizationId)).revision !==
+    params.policy.revision
+  )
+    throw new ApiError(
+      409,
+      `The policy changed while proposing it to ${repo}. Review the repository and connect it manually.`,
+    );
+  const source = {
+    ...params.source,
+    repo,
+    ref: params.ref,
+    path,
+    githubPatId: null,
+    gitlabTokenId: null,
+    setupPullRequestNumber,
+  };
+  await beforeSourceChange(params.organizationId, source);
+  await OpenAppaGithubSyncModel.save(params.organizationId, source);
+  await syncAppaGithubPolicy(params.organizationId);
+  const row = await OpenAppaGithubSyncModel.find(params.organizationId);
+  if (row?.lastSyncError) {
+    await OpenAppaGithubSyncModel.setInterval(params.organizationId, null);
+    throw new ApiError(
+      400,
+      `Could not connect ${repo}: ${row.lastSyncError} The current policy is unchanged.`,
+    );
+  }
+  return getAppaGithubSync(params.organizationId);
+}
+
+/**
  * The GitLab side of creating a policy repository: a new private project (or
  * an existing empty one) seeded from the bundled template, or an existing
- * project that already holds a policy connected as the source.
+ * project that already holds a policy, proposed the current one as a merge
+ * request.
  */
 async function createAppaGitlabProject(params: {
   organizationId: string;
@@ -562,8 +597,17 @@ async function createAppaGitlabProject(params: {
     throw new ApiError(400, "The current policy exceeds the 1 MiB sync limit");
   const validationDirectory =
     params.validationDirectory ?? VALIDATION_DIRECTORY;
+  const transfer = await collectSetupTransfer({
+    organizationId: params.organizationId,
+    policy,
+  });
   const repo = params.owner ? `${params.owner}/${params.name}` : params.name;
-  let seeded: { repo: string; branch: string };
+  let seeded: {
+    repo: string;
+    branch: string | null;
+    path?: string;
+    setupPullRequestNumber?: number;
+  };
   if (params.existing) {
     const status = await openappaGitlab.repositoryStatus({
       access,
@@ -572,36 +616,50 @@ async function createAppaGitlabProject(params: {
       path: params.path ?? "appa.toml",
       validationDirectory,
     });
-    if (status.status !== "empty")
-      return connectAppaGithubRepository({
-        organizationId: params.organizationId,
-        userId: params.userId,
-        replace: params.replace,
-        source: {
-          repo,
-          ref: params.ref ?? null,
-          path: params.path ?? "appa.toml",
-          interval: params.interval,
-          githubPatId: null,
-          githubAppConfigId: null,
-          gitlabTokenId: params.gitlabTokenId,
-          validationDirectory,
-        },
-      });
-    seeded = {
-      repo,
-      ...(await openappaGitlab.seedExisting({
+    if (status.status !== "empty") {
+      // A project that already holds a policy keeps it until the merge
+      // request that carries the current policy and its files is merged.
+      const path = params.path ?? "appa.toml";
+      const proposed = await openappaGitlab.proposeSetup({
         access,
         repo,
-        policy: policy.content,
-      })),
-    };
+        ref: params.ref ?? null,
+        files: [
+          { path, content: policy.content },
+          ...transferredFiles(transfer, { path, validationDirectory }),
+        ],
+        title: "Seed current OpenAPPA policy",
+        summary: setupPullBody(transfer, true),
+      });
+      seeded = {
+        repo,
+        branch: params.ref ?? null,
+        path,
+        setupPullRequestNumber: proposed?.iid,
+      };
+    } else
+      seeded = {
+        repo,
+        ...(await openappaGitlab.seedExisting({
+          access,
+          repo,
+          policy: policy.content,
+          transferred: transferredFiles(transfer, {
+            path: "appa.toml",
+            validationDirectory,
+          }),
+        })),
+      };
   } else {
     seeded = await openappaGitlab.createProject({
       access,
       namespace: params.owner || null,
       name: params.name,
       policy: policy.content,
+      transferred: transferredFiles(transfer, {
+        path: "appa.toml",
+        validationDirectory,
+      }),
     });
   }
   if (
@@ -615,16 +673,25 @@ async function createAppaGitlabProject(params: {
   const source = {
     repo: seeded.repo,
     ref: seeded.branch,
-    path: "appa.toml",
+    path: seeded.path ?? "appa.toml",
     interval: params.interval,
     githubPatId: null,
     githubAppConfigId: null,
     gitlabTokenId: params.gitlabTokenId,
     validationDirectory,
+    setupPullRequestNumber: seeded.setupPullRequestNumber,
   };
   await beforeSourceChange(params.organizationId, source);
   await OpenAppaGithubSyncModel.save(params.organizationId, source);
   await syncAppaGithubPolicy(params.organizationId);
+  const row = await OpenAppaGithubSyncModel.find(params.organizationId);
+  if (seeded.setupPullRequestNumber !== undefined && row?.lastSyncError) {
+    await OpenAppaGithubSyncModel.setInterval(params.organizationId, null);
+    throw new ApiError(
+      400,
+      `Could not connect ${repo}: ${row.lastSyncError} The current policy is unchanged.`,
+    );
+  }
   return getAppaGithubSync(params.organizationId);
 }
 
@@ -719,6 +786,7 @@ export async function syncAppaGithubPolicy(organizationId: string) {
           repo,
           ref: row.ref,
           path,
+          setupMergeRequest: row.setupPullRequestNumber,
         })
       : await readGithubPolicy({ row, repo, path });
     if (read.pending) {
@@ -728,7 +796,7 @@ export async function syncAppaGithubPolicy(organizationId: string) {
         outcome: {
           error:
             read.pending === "closed"
-              ? `The initial policy pull request was closed without merging. Reopen and merge it to finish setup, or stop syncing to keep managing the policy locally.`
+              ? `The initial policy ${row.gitlabTokenId ? "merge request" : "pull request"} was closed without merging. Reopen and merge it to finish setup, or stop syncing to keep managing the policy locally.`
               : null,
         },
       });
@@ -1953,12 +2021,6 @@ function assertEnabled() {
       "Enable OpenAPPA on the server before configuring Git sync",
     );
 }
-class GithubRepositoryRulesError extends ApiError {
-  constructor() {
-    super(409, "GitHub repository rules block the initial policy commit");
-  }
-}
-
 async function recoverPristineTemplateRepository(params: {
   api: string;
   repo: string;
@@ -2018,6 +2080,7 @@ async function seedEmptyRepository(params: {
   repo: string;
   token: string;
   policy: string;
+  transferred: SetupFile[];
 }): Promise<{ branch: string; setupPullRequestNumber?: number }> {
   const { token } = params;
   const base = `${params.api}/repos/${params.repo}`;
@@ -2043,12 +2106,178 @@ async function seedEmptyRepository(params: {
   const parent = initial.commit?.sha;
   if (!branch || !parent || !/^[a-f0-9]{40}$/.test(parent))
     throw new ApiError(502, "GitHub returned an unexpected repository");
+  const message = "Add the OpenAPPA template and current policy";
+  const { setupPullRequestNumber } = await commitSetupFiles({
+    base,
+    token,
+    branch,
+    parent,
+    files: [...rest, ...params.transferred],
+    message,
+    pull: { title: message, body: setupPullBody(params.transferred, false) },
+    direct: true,
+  });
+  return { branch, setupPullRequestNumber };
+}
+
+/** A file setup writes into the policy repository, by its path there. */
+type SetupFile = { path: string; content: string };
+
+/**
+ * What the current policy reads beside itself in its repository, read at the
+ * commit Git sync accepted so a new repository composes the same policy:
+ * every file its `include` list names (a glob's matches with it), and the
+ * validations in the validation folder. Without a connected repository the
+ * validations are the ones kept locally.
+ */
+type SetupTransfer = {
+  /** By include entry, as the policy names it. */
+  includes: Map<string, string>;
+  /** By file name, each placed in the validation folder. */
+  validations: SetupFile[];
+};
+
+async function collectSetupTransfer(params: {
+  organizationId: string;
+  policy: { content: string };
+}): Promise<SetupTransfer> {
+  const { organizationId } = params;
+  const entries = repositoryIncludePaths(params.policy.content);
+  const [current, suite] = await Promise.all([
+    OpenAppaGithubSyncModel.find(organizationId),
+    OpenAppaPolicyTestsModel.find(organizationId),
+  ]);
+  // The commit the files are read at, as a composition reads them: kept
+  // after a disconnect, until another source replaces it.
+  const accepted =
+    current?.repo && current.sourceCommit
+      ? { ...current, repo: current.repo, sourceCommit: current.sourceCommit }
+      : null;
+  const includes = new Map<string, string>();
+  if (entries.length > 0) {
+    if (!accepted)
+      throw new ApiError(
+        409,
+        `The current policy includes ${entries[0]} from its repository, and Git sync has accepted no commit to copy it from. Connect the repository that holds it, or remove the include, before setting up another repository.`,
+      );
+    for (const [path, text] of await openappaRepositoryIncludes.read({
+      source: accepted,
+      commit: accepted.sourceCommit,
+      paths: entries,
+    }))
+      includes.set(path, text);
+  }
+  const validations: SetupFile[] = [];
+  if (accepted?.interval) {
+    const directory = suite?.directory ?? VALIDATION_DIRECTORY;
+    for (const file of await loadAppaGithubPolicyTests({
+      source: accepted,
+      directory,
+      allowEmpty: true,
+    }))
+      validations.push({
+        path: file.path.slice(directory.length + 1),
+        content: file.content,
+      });
+  } else {
+    for (const file of suite?.files ?? []) {
+      const name = file.path.slice(file.path.lastIndexOf("/") + 1);
+      if (validations.some((kept) => kept.path === name))
+        throw new ApiError(
+          400,
+          `Two validations are both named ${name}. Rename one before setting up the repository.`,
+        );
+      validations.push({ path: name, content: file.content });
+    }
+  }
+  return { includes, validations };
+}
+
+/** The transfer's files at their paths beside the policy file at `path`. */
+function transferredFiles(
+  transfer: SetupTransfer,
+  target: { path: string; validationDirectory: string },
+): SetupFile[] {
+  return [
+    ...[...transfer.includes].map(([entry, content]) => ({
+      path: repositoryPath({ path: target.path }, entry),
+      content,
+    })),
+    ...transfer.validations.map((file) => ({
+      path: `${target.validationDirectory}/${file.path}`,
+      content: file.content,
+    })),
+  ];
+}
+
+/** What the setup pull request tells its reviewer. */
+function setupPullBody(
+  transfer: SetupTransfer | SetupFile[],
+  existing: boolean,
+): string {
+  const carried = Array.isArray(transfer)
+    ? transfer.length
+    : transfer.includes.size + transfer.validations.length;
+  const files =
+    carried === 0
+      ? ""
+      : ` It also carries ${carried === 1 ? "the file" : `the ${carried} files`} the policy reads beside itself.`;
+  return existing
+    ? `This pull request puts your current OpenAPPA policy in place of the one in this repository.${files} Merge it as it is, or change this branch first to combine the two. Your current policy stays active until this pull request is merged.`
+    : `Review and merge this pull request to finish GitHub policy sync setup.${files} Your current policy stays active until this pull request is merged.`;
+}
+
+/** The commit a branch points at; `setup` waits for a repository GitHub is still creating. */
+async function branchHead(params: {
+  base: string;
+  token: string;
+  branch: string;
+  setup?: boolean;
+}): Promise<string> {
+  const request = {
+    url: `${params.base}/git/ref/heads/${params.branch.split("/").map(encodeURIComponent).join("/")}`,
+    token: params.token,
+  };
+  const ref = params.setup
+    ? await githubSetupRead<{ object?: { sha?: string } }>(request)
+    : await githubJson<{ object?: { sha?: string } }>({
+        ...request,
+        errors: githubSyncErrors,
+      });
+  const sha = ref.object?.sha;
+  if (!sha || !/^[a-f0-9]{40}$/.test(sha))
+    throw new ApiError(502, "GitHub returned an invalid branch");
+  return sha;
+}
+
+/**
+ * One commit on top of `parent` that writes `files`, advanced onto `branch`
+ * when `direct`, else proposed as a pull request against it; rules that
+ * protect the branch turn a direct write into the pull request too. An App
+ * without the Workflows permission gets everything but the validation
+ * workflow. Files that leave the tree as it is make no commit at all.
+ */
+async function commitSetupFiles(params: {
+  base: string;
+  token: string;
+  branch: string;
+  parent: string;
+  files: SetupFile[];
+  message: string;
+  pull: { title: string; body: string };
+  direct: boolean;
+}): Promise<{ setupPullRequestNumber?: number }> {
+  const { base, token, branch, parent } = params;
+  // The first file at a path wins: the policy comes first.
+  const files = [
+    ...new Map(params.files.map((file) => [file.path, file])).values(),
+  ];
   const parentCommit = await githubJson<{ tree?: { sha?: string } }>({
     url: `${base}/git/commits/${parent}`,
     token,
     errors: githubSyncErrors,
   });
-  const commitFiles = async (entries: typeof rest) => {
+  const commitFiles = async (entries: SetupFile[]) => {
     const tree = await githubJson<{ sha: string }>({
       url: `${base}/git/trees`,
       token,
@@ -2064,20 +2293,41 @@ async function seedEmptyRepository(params: {
       },
       errors: githubSyncErrors,
     });
+    // Identical bytes make the same tree: nothing to commit, and GitHub
+    // cannot open a pull request with an empty diff.
+    if (tree.sha === parentCommit.tree?.sha) return null;
     return githubJson<{ sha: string }>({
       url: `${base}/git/commits`,
       token,
       method: "POST",
-      body: {
-        message: "Add the OpenAPPA template and current policy",
-        tree: tree.sha,
-        parents: [parent],
-      },
+      body: { message: params.message, tree: tree.sha, parents: [parent] },
       errors: githubSyncErrors,
     });
   };
+  const propose = async (sha: string) => {
+    const head = `archestra/openappa-setup-${randomUUID()}`;
+    await githubJson({
+      url: `${base}/git/refs`,
+      token,
+      method: "POST",
+      body: { ref: `refs/heads/${head}`, sha },
+      errors: githubSyncErrors,
+    });
+    const pull = await githubJson<{ number?: number }>({
+      url: `${base}/pulls`,
+      token,
+      method: "POST",
+      errors: githubSyncErrors,
+      body: { ...params.pull, head, base: branch },
+    });
+    if (!Number.isSafeInteger(pull.number) || (pull.number ?? 0) <= 0)
+      throw new ApiError(502, "GitHub returned an invalid pull request");
+    return { setupPullRequestNumber: pull.number };
+  };
+  let commit = await commitFiles(files);
+  if (!commit) return {};
+  if (!params.direct) return propose(commit.sha);
   let outcome: "rules" | "workflow" | null = null;
-  let commit = await commitFiles(rest);
   const advance = (sha: string) =>
     githubJson({
       url: `${base}/git/refs/heads/${branch.split("/").map(encodeURIComponent).join("/")}`,
@@ -2097,7 +2347,7 @@ async function seedEmptyRepository(params: {
           outcome = "rules";
         return new ApiError(
           502,
-          `GitHub returned HTTP ${status} while writing the template. Check repository access and App permissions.`,
+          `GitHub returned HTTP ${status} while committing the initial policy. Check repository access and App permissions.`,
         );
       }),
     });
@@ -2105,41 +2355,20 @@ async function seedEmptyRepository(params: {
     outcome = null;
     try {
       await advance(commit.sha);
-      return { branch };
+      return {};
     } catch (error) {
       if (outcome === "workflow" && attempt === 0) {
         commit = await commitFiles(
-          rest.filter((file) => !file.path.startsWith(".github/")),
+          files.filter((file) => !file.path.startsWith(".github/")),
         );
+        if (!commit) return {};
         continue;
       }
       if (outcome !== "rules") throw error;
-      const head = `archestra/openappa-setup-${randomUUID()}`;
-      await githubJson({
-        url: `${base}/git/refs`,
-        token,
-        method: "POST",
-        body: { ref: `refs/heads/${head}`, sha: commit.sha },
-        errors: githubSyncErrors,
-      });
-      const pull = await githubJson<{ number?: number }>({
-        url: `${base}/pulls`,
-        token,
-        method: "POST",
-        errors: githubSyncErrors,
-        body: {
-          title: "Add the OpenAPPA template and current policy",
-          body: "Review and merge this pull request to finish GitHub policy sync setup. Your current policy stays active until this pull request is merged.",
-          head,
-          base: branch,
-        },
-      });
-      if (!Number.isSafeInteger(pull.number) || (pull.number ?? 0) <= 0)
-        throw new ApiError(502, "GitHub returned an invalid pull request");
-      return { branch, setupPullRequestNumber: pull.number };
+      return propose(commit.sha);
     }
   }
-  throw new ApiError(502, "GitHub didn't accept the template");
+  throw new ApiError(502, "GitHub didn't accept the initial policy");
 }
 /** Where the template keeps policy validations; also the default elsewhere. */
 const VALIDATION_DIRECTORY = "traces";

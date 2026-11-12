@@ -2034,8 +2034,11 @@ describe("APPA GitHub sync", () => {
   test("auto-merge takes self-service, is off by default, is saved by the action and audited, and the environment variable locks it", async () => {
     const status = () =>
       app.inject({ method: "GET", url: "/api/openappa/github-sync" });
-    // A source without self-service: auto-merge has nothing to merge.
-    await configure();
+    // A source without self-service: auto-merge has nothing to merge, and a
+    // save that asks for it alone keeps it off.
+    expect(
+      (await configure({ ...source, selfServiceAutoMerge: true })).statusCode,
+    ).toBe(200);
     expect((await status()).json().selfService).toMatchObject({
       autoMerge: { enabled: false, setting: false },
     });
@@ -2044,7 +2047,9 @@ describe("APPA GitHub sync", () => {
       enabled: true,
     });
     expect(refused.statusCode).toBe(409);
-    expect(refused.json().error.message).toMatch(/needs self-service/);
+    expect(refused.json().error.message).toMatch(
+      /needs MCP Guardrails Self-Service/,
+    );
 
     const { privateKey } = generateKeyPairSync("rsa", {
       modulusLength: 2048,

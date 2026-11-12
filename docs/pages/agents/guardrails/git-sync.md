@@ -88,6 +88,6 @@ MCP owners need no access to the policy repository: the GitHub App merges their 
 
 - The policy check is the only gate. A pull request merges within about a minute of its check passing, and Git sync then applies it.
 - Only rules pull requests opened from Archestra for an MCP server merge this way. Pull requests people open on GitHub keep the repository's own review.
-- If another branch rule blocks the merge, the pull request stays open for people to merge. The App tries again every 15 minutes.
+- If another branch rule blocks the merge, the pull request stays open for people to merge. The App tries again a minute later, then every 15 minutes.
 
 The [`ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE) env var sets it for the whole deployment.

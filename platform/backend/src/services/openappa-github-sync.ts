@@ -293,7 +293,10 @@ export async function createAppaGithubRepository(params: {
     );
   const selfService = params.selfService ?? false;
   const selfServiceDirectory = params.selfServiceDirectory ?? "mcp";
-  const selfServiceAutoMerge = params.selfServiceAutoMerge ?? false;
+  // Auto-merge rides on self-service: saved off with it, so turning
+  // self-service on later merges nothing nobody asked for.
+  const selfServiceAutoMerge =
+    selfService && (params.selfServiceAutoMerge ?? false);
   if (selfService) checkSelfServiceDirectory(selfServiceDirectory, params);
   if (
     !(await userHasPermission(
@@ -906,6 +909,13 @@ async function setSelfService(params: {
         : "OpenAPPA self-service Guardrails turned off",
     );
   }
+  // Auto-merge rides on self-service: off together, so the next turn on
+  // merges nothing nobody asked for.
+  if (!params.enabled && params.row.selfServiceAutoMerge)
+    await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(
+      params.organizationId,
+      false,
+    );
   if (params.enabled) {
     if (params.row.repo)
       await forgetRefusedChecks(params.organizationId, params.row.repo);
@@ -939,8 +949,19 @@ async function setSelfServiceAutoMerge(params: {
   if (params.enabled && !selfServiceActive(params.row))
     throw new ApiError(
       409,
-      "Auto-merge needs self-service: turn on self-service for the policy repository first.",
+      "Auto-merge needs MCP Guardrails Self-Service in force: a syncing GitHub App source with self-service on.",
     );
+  // The App may just have been granted what it lacked: the next minute's
+  // round tries the merge rather than waiting out the hold.
+  if (params.enabled && params.row.repo)
+    await cacheManager
+      .delete(heldMergesKey(params.organizationId, params.row.repo))
+      .catch((err) =>
+        logger.warn(
+          { organizationId: params.organizationId, err },
+          "OpenAPPA could not forget a held merge",
+        ),
+      );
   if (state.setting === params.enabled) return;
   await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(
     params.organizationId,
@@ -1250,8 +1271,11 @@ const REFUSED_TTL = 10 * TimeInMs.Minute;
 const RECHECK_AUTHORSHIP = 15 * TimeInMs.Minute;
 
 /**
- * How long a self-served pull request GitHub refused to merge is left to
- * people before the App tries again at the same head.
+ * How long a self-served pull request GitHub refused to merge twice is left
+ * to people before the App tries again at the same head. The first refusal
+ * is tried again the next minute: a check just posted can take GitHub a
+ * moment to count against the branch rules. The same hold applies to a
+ * repository whose App cannot merge at all.
  */
 const RETRY_REFUSED_MERGE = 15 * TimeInMs.Minute;
 
@@ -1284,8 +1308,9 @@ type CheckedResult = {
    * deployment's App for a member who may change them.
    */
   judged: Verdict & { governed: string[]; selfServed: boolean };
-  /** When GitHub last refused to merge it at this head, under auto-merge. */
+  /** When GitHub last refused to merge it at this head, under auto-merge, and how often. */
   mergeRefusedAt?: number;
+  mergeRefusals?: number;
 };
 
 /** One check's outcome as stored. */
@@ -1429,7 +1454,10 @@ async function checkAppaGithubPullRequests(organizationId: string) {
       policy,
       judged,
       ...(previous?.mergeRefusedAt !== undefined
-        ? { mergeRefusedAt: previous.mergeRefusedAt }
+        ? {
+            mergeRefusedAt: previous.mergeRefusedAt,
+            mergeRefusals: previous.mergeRefusals ?? 1,
+          }
         : {}),
     };
     // A changed deployment that leaves the outcome as posted posts nothing.
@@ -1483,7 +1511,8 @@ class AutoMerger {
 
   /**
    * Merge a pull request whose check passed when it is self-served, unless
-   * GitHub refused it at this head less than fifteen minutes ago.
+   * GitHub refused it at this head: once, it is tried again the next
+   * minute; more than once, fifteen minutes later.
    */
   async mergeIfDue(params: {
     pull: CheckedPull;
@@ -1499,7 +1528,8 @@ class AutoMerger {
       !pull.ref ||
       !isServerRulesBranch(pull.ref) ||
       (result.mergeRefusedAt !== undefined &&
-        Date.now() - result.mergeRefusedAt < RETRY_REFUSED_MERGE)
+        Date.now() - result.mergeRefusedAt <
+          ((result.mergeRefusals ?? 1) > 1 ? RETRY_REFUSED_MERGE : 0))
     )
       return;
     const { organizationId, repo } = this.source;
@@ -1517,8 +1547,14 @@ class AutoMerger {
         { organizationId, repo, number: pull.number },
         "OpenAPPA merged a self-served Guardrails rules pull request",
       );
-      // A pull applies the merge now rather than at the next schedule.
-      await OpenAppaGithubSyncModel.enqueue(organizationId);
+      // A pull applies the merge now rather than at the next schedule; one
+      // that cannot be queued waits for the schedule.
+      await OpenAppaGithubSyncModel.enqueue(organizationId).catch((err) =>
+        logger.warn(
+          { organizationId, err },
+          "OpenAPPA could not queue the pull that applies a merged rules pull request",
+        ),
+      );
       const deleted = await githubFetch({
         url: `${access.base}/git/refs/heads/${pull.ref}`,
         token: access.token,
@@ -1531,9 +1567,10 @@ class AutoMerger {
         );
       return;
     }
-    if ([405, 409, 422].includes(merged.status)) {
-      // Another rule blocks it, its head moved, or it cannot merge cleanly:
-      // people take it from here, and the App tries again in a while.
+    if ([403, 404, 405, 409, 422].includes(merged.status)) {
+      // Another rule blocks it, its head moved, it cannot merge cleanly, or
+      // the App may not merge here: people take it from here, and the App
+      // tries again in a while.
       logger.warn(
         {
           organizationId,
@@ -1542,10 +1579,18 @@ class AutoMerger {
           status: merged.status,
           message: "message" in merged ? merged.message : undefined,
         },
-        "GitHub refused to merge a self-served Guardrails rules pull request; it is left for people, and tried again in fifteen minutes",
+        "GitHub refused to merge a self-served Guardrails rules pull request; it is left for people, and tried again later",
       );
       await cacheManager
-        .set(params.key, { ...result, mergeRefusedAt: Date.now() }, CHECKED_TTL)
+        .set(
+          params.key,
+          {
+            ...result,
+            mergeRefusedAt: Date.now(),
+            mergeRefusals: (result.mergeRefusals ?? 0) + 1,
+          },
+          CHECKED_TTL,
+        )
         .catch((err) =>
           logger.warn(
             { organizationId, err },
@@ -1567,7 +1612,19 @@ class AutoMerger {
   }
 
   private async resolveAccess() {
-    const { organizationId } = this.source;
+    const { organizationId, repo } = this.source;
+    const held = heldMergesKey(organizationId, repo);
+    // A repository the App cannot merge in is not asked again every minute.
+    if (await cacheManager.get(held).catch(() => null)) return null;
+    const hold = () =>
+      cacheManager
+        .set(held, true, RETRY_REFUSED_MERGE)
+        .catch((err) =>
+          logger.warn(
+            { organizationId, err },
+            "OpenAPPA could not record a held merge",
+          ),
+        );
     try {
       const { token, api } = await resolveOpenAppaGithubAccess(this.source, {
         contents: "write",
@@ -1592,20 +1649,27 @@ class AutoMerger {
               : null;
       if (!method) {
         logger.warn(
-          { organizationId, repo: this.source.repo },
+          { organizationId, repo },
           "The policy repository allows no merge method; self-served pull requests are left for people",
         );
+        await hold();
         return null;
       }
       return { token, base, method };
     } catch (error) {
       logger.warn(
-        { organizationId, error },
+        { organizationId, repo, error },
         "OpenAPPA cannot merge self-served pull requests: the GitHub App needs Contents and Pull requests write",
       );
+      await hold();
       return null;
     }
   }
+}
+
+/** The key under which a repository the App cannot merge in waits fifteen minutes. */
+function heldMergesKey(organizationId: string, repo: string) {
+  return checkKey("merge", organizationId, repo);
 }
 
 /** The key under which a refused round of checks waits ten minutes. */
@@ -1629,7 +1693,7 @@ async function forgetRefusedChecks(organizationId: string, repo: string) {
 }
 
 /** A shared cache key for the policy check, from its parts. */
-function checkKey(kind: "checked" | "refused", ...parts: string[]) {
+function checkKey(kind: "checked" | "refused" | "merge", ...parts: string[]) {
   return `${CacheKey.OpenAppaPolicyCheck}-${kind}-${createHash("sha256")
     .update(JSON.stringify(parts))
     .digest("hex")}` as const;
@@ -2266,6 +2330,16 @@ async function saveSource(params: {
   userId: string;
   source: AppaGithubSource & { setupPullRequestNumber?: number };
 }) {
+  // Auto-merge rides on self-service, and both take a GitHub App: a source
+  // saved without either keeps auto-merge off, so a later switch on merges
+  // nothing nobody asked for.
+  params.source = {
+    ...params.source,
+    selfServiceAutoMerge:
+      params.source.selfService &&
+      !!params.source.githubAppConfigId &&
+      params.source.selfServiceAutoMerge,
+  };
   if (
     (params.source.githubPatId ||
       params.source.githubAppConfigId ||

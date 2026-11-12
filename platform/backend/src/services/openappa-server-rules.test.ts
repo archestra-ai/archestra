@@ -2407,9 +2407,38 @@ test("with auto-merge on, a self-served pull request whose check passes is merge
   });
   await checkDueAppaGithubSyncs();
   expect(merges).toHaveLength(1);
+
+  // The environment variable decides over the saved setting, either way.
+  config.openappa.selfServiceAutoMerge = "enabled";
+  try {
+    await checkDueAppaGithubSyncs();
+    expect(merges).toHaveLength(2);
+    await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
+    config.openappa.selfServiceAutoMerge = "disabled";
+    await checkDueAppaGithubSyncs();
+    expect(merges).toHaveLength(2);
+  } finally {
+    delete config.openappa.selfServiceAutoMerge;
+  }
+
+  // Self-service off takes auto-merge with it: on again starts without it.
+  await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service",
+    enabled: false,
+  });
+  await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service",
+    enabled: true,
+  });
+  expect((await getAppaGithubSync(org.id)).selfService.autoMerge).toEqual({
+    enabled: false,
+    setting: false,
+  });
 });
 
-test("a self-served pull request GitHub refuses to merge is logged and left for people, and tried again fifteen minutes later, not the next minute", async ({
+test("a self-served pull request GitHub refuses to merge is logged and left for people: tried once more the next minute, then fifteen minutes later; an App that cannot merge is not asked again every minute", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -2440,18 +2469,69 @@ test("a self-served pull request GitHub refuses to merge is logged and left for 
   );
   expect(await queuedSyncs()).toHaveLength(0);
 
-  // The next minute leaves it alone.
+  // A check just posted can take GitHub a moment to count: the next minute
+  // tries once more. Refused again, the pull request is left alone.
   await checkDueAppaGithubSyncs();
-  expect(merges).toHaveLength(1);
+  expect(merges).toHaveLength(2);
+  await checkDueAppaGithubSyncs();
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(2);
 
   // Fifteen minutes on, it is tried again, and merges.
   merge.status = 200;
   const now = Date.now();
   const later = vi.spyOn(Date, "now").mockReturnValue(now + 16 * 60_000);
   await checkDueAppaGithubSyncs();
-  later.mockRestore();
-  expect(merges).toHaveLength(2);
+  expect(merges).toHaveLength(3);
   expect(await queuedSyncs()).toHaveLength(1);
+
+  // An App without the permission to merge: one warning, then the
+  // repository is left alone for fifteen minutes rather than asked again
+  // every minute; turning auto-merge on again asks at once. The pull
+  // request's own hold has passed by then.
+  later.mockReturnValue(now + 40 * 60_000);
+  server.use(
+    http.put(`${REPO}/pulls/:number/merge`, () =>
+      HttpResponse.json(
+        { message: "Resource not accessible by integration" },
+        { status: 403 },
+      ),
+    ),
+    http.get(REPO, () =>
+      HttpResponse.json({
+        default_branch: "main",
+        allow_merge_commit: false,
+        allow_squash_merge: false,
+        allow_rebase_merge: false,
+      }),
+    ),
+  );
+  warn.mockClear();
+  await checkDueAppaGithubSyncs();
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(3);
+  expect(
+    warn.mock.calls.filter(([, message]) =>
+      String(message).includes("allows no merge method"),
+    ),
+  ).toHaveLength(1);
+  await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service_auto_merge",
+    enabled: false,
+  });
+  await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service_auto_merge",
+    enabled: true,
+  });
+  await checkDueAppaGithubSyncs();
+  later.mockRestore();
+  expect(
+    warn.mock.calls.filter(([, message]) =>
+      String(message).includes("allows no merge method"),
+    ),
+  ).toHaveLength(2);
 });
 
 test("a policy in a folder of a repository that holds other work gets the same one-rule ruleset, and a pull request that changes no policy file gets the check as skipped at once", async ({

@@ -2411,13 +2411,15 @@ test("the policy check asks for edit access to each shared server a rules file g
   await makeTeamMember(payments.id, bea.id);
   const cody = await makeUser({ email: "cody@example.com" });
   await makeMember(cody.id, org.id);
+  // Every member may open Payments API in the registry; payments_api only
+  // its team's members.
   const servers = [
-    { name: "payments_api", scope: "org", editors: payments.id },
-    { name: "Payments API", scope: "org", editors: billing.id },
+    { name: "payments_api", scope: "org", editors: payments.id, open: false },
+    { name: "Payments API", scope: "org", editors: billing.id, open: true },
     // Cody's personal copy: it follows the file, and gates nothing.
-    { name: "payments_api", scope: "personal", editors: null },
+    { name: "payments_api", scope: "personal", editors: null, open: false },
   ] as const;
-  for (const { name, scope, editors } of servers) {
+  for (const { name, scope, editors, open } of servers) {
     const catalog = await InternalMcpCatalogModel.create(
       {
         name,
@@ -2434,6 +2436,17 @@ test("the policy check asks for edit access to each shared server a rules file g
                 subject: { type: "team", id: editors },
                 actions: ["read", "use", "update"],
               },
+              ...(open
+                ? [
+                    {
+                      subject: {
+                        type: "organization" as const,
+                        id: "*" as const,
+                      },
+                      actions: ["read" as const, "use" as const],
+                    },
+                  ]
+                : []),
             ]
           : undefined,
       },
@@ -2474,6 +2487,8 @@ test("the policy check asks for edit access to each shared server a rules file g
   });
   // Opened by the App for Pat, who may edit both shared servers; for Bea,
   // who may edit payments_api only; and for Cody, who owns only the copy.
+  // Everyone who reads the repository reads a check's summary, so it names
+  // only the servers the requester may open in the registry.
   const requesters = { 1: pat.email, 2: bea.email, 3: cody.email };
   const runs: Array<{
     head_sha: string;
@@ -2521,7 +2536,7 @@ test("the policy check asks for edit access to each shared server a rules file g
     conclusion: "failure",
     title: "The requester may not change these rules",
     summary:
-      "cody@example.com may not change mcp/payments_api.toml: that takes edit access to the MCP servers Payments API and payments_api in the MCP registry.",
+      "cody@example.com may not change mcp/payments_api.toml: that takes edit access to the MCP server Payments API and an MCP server they cannot see in the MCP registry.",
   });
 });
 

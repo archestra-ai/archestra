@@ -1690,7 +1690,13 @@ async function judgeGithubPull(params: {
         outcome: {
           accepted: false,
           title: "The requester may not change these rules",
-          reason: `${email} may not change ${file.path}: that takes edit access to the MCP server${refused.length > 1 ? "s" : ""} ${listedNames(refused.map((server) => server.name))} in the MCP registry.`,
+          reason: `${email} may not change ${file.path}: that takes edit access to ${await ownersAsNamedFor(
+            {
+              organizationId: source.organizationId,
+              userId,
+              servers: refused,
+            },
+          )} in the MCP registry.`,
         },
       };
   }
@@ -2893,6 +2899,46 @@ export function listedNames(names: readonly string[]): string {
   return names.length <= 1
     ? (names[0] ?? "")
     : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
+
+/**
+ * Owners as a check summary names them: by name when the member may open
+ * them in the MCP registry, counted otherwise, since everyone who reads the
+ * repository reads the summary.
+ */
+async function ownersAsNamedFor(params: {
+  organizationId: string;
+  userId: string;
+  servers: readonly RulesFileServer[];
+}): Promise<string> {
+  const permissions = await port("scopedPermissions");
+  const readable = await Promise.all(
+    params.servers.map((server) =>
+      permissions.allows({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        resource: "mcpRegistry",
+        scope: server.id,
+        action: "read",
+      }),
+    ),
+  );
+  const named = params.servers
+    .filter((_, index) => readable[index])
+    .map((server) => server.name);
+  const unseen = params.servers.length - named.length;
+  return listedNames([
+    ...(named.length === 0
+      ? []
+      : [`the MCP server${named.length > 1 ? "s" : ""} ${listedNames(named)}`]),
+    ...(unseen === 0
+      ? []
+      : [
+          unseen === 1
+            ? "an MCP server they cannot see"
+            : `${unseen} MCP servers they cannot see`,
+        ]),
+  ]);
 }
 
 /** The owners of a rules file a member may not edit in the MCP registry. */

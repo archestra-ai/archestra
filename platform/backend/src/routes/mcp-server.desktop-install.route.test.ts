@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { auth as betterAuth } from "@/auth/better-auth";
@@ -564,13 +565,18 @@ describe("desktop MCP installations", () => {
       expect((await stored(installation.id)).desktopArguments).toEqual(["--a"]);
     });
 
-    test("the audit record holds the arguments before and after", async () => {
+    test("the audit record shows that the arguments changed, and does not hold them", async () => {
       const installation = (
-        await install({ desktopArguments: ["--a"] })
+        await install({ desktopArguments: ["--token", "secret-of-the-user"] })
       ).json();
 
-      await setArguments(installation.id, ["--b"]);
+      await setArguments(installation.id, ["--token", "another-secret"]);
+      // The stored arguments again: nothing is updated, no record.
+      await setArguments(installation.id, ["--token", "another-secret"]);
+      await setArguments(installation.id, []);
 
+      const hash = (values: string[]) =>
+        createHash("sha256").update(JSON.stringify(values)).digest("hex");
       await vi.waitFor(async () => {
         const rows = await db
           .select()
@@ -580,14 +586,27 @@ describe("desktop MCP installations", () => {
               eq(schema.auditLogsTable.resourceId, installation.id),
               eq(schema.auditLogsTable.action, "mcpServer.updated"),
             ),
-          );
-        expect(rows).toHaveLength(1);
+          )
+          .orderBy(schema.auditLogsTable.occurredAt);
+        expect(rows).toHaveLength(2);
         expect(rows[0]).toMatchObject({
           outcome: "success",
           resourceType: "mcpServer",
-          before: { id: installation.id, desktopArguments: ["--a"] },
-          after: { id: installation.id, desktopArguments: ["--b"] },
+          before: {
+            id: installation.id,
+            desktopArgumentCount: 2,
+            desktopArgumentsHash: hash(["--token", "secret-of-the-user"]),
+          },
+          after: {
+            id: installation.id,
+            desktopArgumentCount: 2,
+            desktopArgumentsHash: hash(["--token", "another-secret"]),
+          },
         });
+        expect(rows[1]).toMatchObject({
+          after: { desktopArgumentCount: 0, desktopArgumentsHash: null },
+        });
+        expect(JSON.stringify(rows)).not.toContain("secret");
       });
     });
   });

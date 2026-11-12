@@ -132,7 +132,8 @@ export function desktopMcpArgumentsError(values: string[]): string | null {
  * refused (a toast says why) and the dialog stays for another try.
  *
  * `desktopArguments` are what the caller adds to the command of the item.
- * They are sent only when given: an item with no command takes none.
+ * They are sent only when given: an item with no command takes none, and
+ * an installation the caller has already keeps its arguments.
  */
 export async function addDesktopMcpServer<Server>(params: {
   install: (body: {

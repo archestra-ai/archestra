@@ -440,7 +440,8 @@ describe("desktopMcpInstallService", () => {
         desktopArguments: ["--with-list"],
       });
 
-      expect(updated.localInstallationStatus).toBe("pending");
+      expect(updated.changed).toBe(true);
+      expect(updated.mcpServer.localInstallationStatus).toBe("pending");
       await desktopMcpInstallService.completeWaiting(device.device, [
         catalogItem.id,
       ]);

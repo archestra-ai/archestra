@@ -98,13 +98,13 @@ class DesktopMcpInstallService {
    *
    * Only the owner of the installation changes its arguments; for any other
    * caller the installation does not exist. Arguments that are the stored
-   * ones change nothing and start nothing.
+   * ones change nothing and start nothing: `changed` is then false.
    */
   async updateArguments(params: {
     mcpServerId: string;
     userId: string;
     desktopArguments: DesktopMcpArguments | null;
-  }): Promise<McpServer> {
+  }): Promise<{ mcpServer: McpServer; changed: boolean }> {
     const { mcpServerId, userId } = params;
     const mcpServer = await McpServerModel.findById(mcpServerId);
     if (
@@ -123,9 +123,9 @@ class DesktopMcpInstallService {
       : null;
     assertCommandForArguments(catalogItem, desktopArguments);
     const updated = await this.storeArguments(mcpServer, desktopArguments);
-    if (!updated) return mcpServer;
+    if (!updated) return { mcpServer, changed: false };
     await this.notifyDeviceOfUser(userId);
-    return updated;
+    return { mcpServer: updated, changed: true };
   }
 
   /**

@@ -16,6 +16,7 @@ import {
   grantsAudience,
   HEADER_NAME_REGEX,
   HEADER_NAME_VALIDATION_MESSAGE,
+  isCodexRuntimeCommand,
   MAX_PASSTHROUGH_HEADERS,
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
@@ -1887,7 +1888,7 @@ export function AgentForm({
     [availableApiKeys, llmApiKeyId],
   );
   const requiredSubscriptionKind =
-    !agent && runtime?.command?.[0] === "archestra-codex"
+    !agent && isCodexRuntimeCommand(runtime?.command?.[0])
       ? "chatgpt"
       : undefined;
   const requiredSubscription = requiredSubscriptionKind

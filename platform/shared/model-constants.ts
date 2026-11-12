@@ -515,14 +515,14 @@ export function isModelRouterSupportedProvider(
 export function getAgentRuntimeAllowedProtocols(
   runtimeCommand?: readonly string[] | null,
 ): readonly ("openai_responses" | "openai_chat" | "anthropic")[] {
-  switch (runtimeCommand?.[0]) {
-    case "archestra-claude-code":
-      return ["anthropic"];
-    case "archestra-codex":
-      return ["openai_responses", "openai_chat"];
-    default:
-      return ["openai_responses", "openai_chat", "anthropic"];
+  const command = runtimeCommand?.[0];
+  if (command === "archestra-claude-code") {
+    return ["anthropic"];
   }
+  if (isCodexRuntimeCommand(command)) {
+    return ["openai_responses", "openai_chat"];
+  }
+  return ["openai_responses", "openai_chat", "anthropic"];
 }
 
 /**
@@ -557,7 +557,7 @@ export function getAgentRuntimeProviderCompatibility(params: {
       message: `The maintained Claude Code runtime requires an Anthropic model or a Claude model on AWS Bedrock, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
     };
   }
-  if (runtimeCommand === "archestra-codex" && params.provider !== "openai") {
+  if (isCodexRuntimeCommand(runtimeCommand) && params.provider !== "openai") {
     return {
       compatible: false,
       message: `The maintained Codex runtime requires an OpenAI model, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
@@ -629,6 +629,11 @@ export function getAgentRuntimeModelCompatibility(params: {
 /** Whether a runtime command invokes the maintained Claude Code runtime. */
 export function isClaudeCodeRuntimeCommand(command?: string | null): boolean {
   return command === "archestra-claude-code";
+}
+
+/** Whether a runtime command invokes the maintained Codex runtime. */
+export function isCodexRuntimeCommand(command?: string | null): boolean {
+  return command === "archestra-codex" || command === "archestra-codex-runtime";
 }
 
 /**

@@ -41,6 +41,7 @@ import {
   OpenAIResponseAdapter,
   OpenAIStreamAdapter,
 } from "./openai";
+import { withSystemForDeveloperRole } from "./openai-translator-utils";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 import { subscriptionAuthRequiredCode } from "./subscription-auth-error";
 
@@ -349,8 +350,9 @@ export const xaiAdapterFactory: LLMProvider<
 
   async execute(client: unknown, request: XaiRequest): Promise<XaiResponse> {
     const xaiClient = client as OpenAIProvider;
+    const normalized = withSystemForDeveloperRole(request);
     const xaiRequest = {
-      ...request,
+      ...normalized,
       stream: false,
     } as unknown as ChatCompletionCreateParamsNonStreaming;
 
@@ -364,8 +366,9 @@ export const xaiAdapterFactory: LLMProvider<
     request: XaiRequest,
   ): Promise<AsyncIterable<XaiStreamChunk>> {
     const xaiClient = client as OpenAIProvider;
+    const normalized = withSystemForDeveloperRole(request);
     const xaiRequest = {
-      ...request,
+      ...normalized,
       stream: true,
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;

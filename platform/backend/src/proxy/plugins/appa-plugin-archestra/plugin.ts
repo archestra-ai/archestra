@@ -9,6 +9,7 @@ import {
   OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   PROXY_STAMPED_TOOL_ARGUMENTS,
   SELF_FORK_TOOL_NAME,
+  type SupportedProviderDiscriminator,
   slugify,
   TimeInMs,
   TOOL_ASK_USER_SHORT_NAME,
@@ -7188,15 +7189,82 @@ function deliverReturnContract(params: {
   }
 }
 
+type NativeAppaGuidanceWire =
+  | "anthropic:messages"
+  | "openai:responses"
+  | "openai:chatCompletions"
+  | "chatCompletions:noDeveloper";
+
+/**
+ * Governed Chat Completions providers that reject `role: "developer"` and must
+ * receive OpenAPPA guidance in the leading `system` prompt or last `user` turn.
+ * All other governed interaction types fall back to `appaWireFamily`.
+ */
+const CHAT_COMPLETIONS_NO_DEVELOPER: ReadonlySet<SupportedProviderDiscriminator> =
+  new Set(["xai:chatCompletions"]);
+
+function nativeAppaGuidanceWire(
+  interactionType: string,
+): NativeAppaGuidanceWire | undefined {
+  if (
+    CHAT_COMPLETIONS_NO_DEVELOPER.has(
+      interactionType as SupportedProviderDiscriminator,
+    )
+  ) {
+    return "chatCompletions:noDeveloper";
+  }
+  return appaWireFamily(interactionType);
+}
+
+function mergeLeadingSystemMessage(request: unknown, contract: string): void {
+  if (!isRecord(request) || !Array.isArray(request.messages)) return;
+  if (leadingSystemCarries(request.messages, contract)) return;
+  const first = leadingSystemMessage(request.messages);
+  if (!first) {
+    request.messages.unshift({ role: "system", content: contract });
+    return;
+  }
+  if (typeof first.content === "string" && first.content.length > 0) {
+    first.content = `${first.content}\n\n${contract}`;
+  } else if (Array.isArray(first.content)) {
+    first.content.push({ type: "text", text: contract });
+  } else {
+    first.content = contract;
+  }
+}
+
+function leadingSystemMessage(
+  messages: unknown[],
+): Record<string, unknown> | undefined {
+  const [first] = messages;
+  return isRecord(first) &&
+    (first.role === "system" || first.role === "developer")
+    ? first
+    : undefined;
+}
+
+function leadingSystemCarries(messages: unknown[], contract: string): boolean {
+  const first = leadingSystemMessage(messages);
+  if (typeof first?.content === "string")
+    return first.content.includes(contract);
+  return (
+    Array.isArray(first?.content) &&
+    first.content.some(
+      (part) =>
+        isRecord(part) && part.type === "text" && part.text === contract,
+    )
+  );
+}
+
 function requestCarriesInstruction(params: {
   request: unknown;
   interactionType: string;
   text: string;
 }): boolean {
   const { request, text } = params;
-  const interactionType = appaWireFamily(params.interactionType);
-  if (!isRecord(request)) return false;
-  if (interactionType === "openai:responses") {
+  const wire = nativeAppaGuidanceWire(params.interactionType);
+  if (!wire || !isRecord(request)) return false;
+  if (wire === "openai:responses") {
     return (
       Array.isArray(request.input) &&
       request.input.some(
@@ -7213,7 +7281,7 @@ function requestCarriesInstruction(params: {
       )
     );
   }
-  if (interactionType === "openai:chatCompletions") {
+  if (wire === "openai:chatCompletions") {
     return (
       Array.isArray(request.messages) &&
       request.messages.some(
@@ -7224,7 +7292,13 @@ function requestCarriesInstruction(params: {
       )
     );
   }
-  if (interactionType === "anthropic:messages") {
+  if (wire === "chatCompletions:noDeveloper") {
+    return (
+      Array.isArray(request.messages) &&
+      leadingSystemCarries(request.messages, text)
+    );
+  }
+  if (wire === "anthropic:messages") {
     if (Array.isArray(request.system)) {
       return request.system.some(
         (block) =>
@@ -7251,16 +7325,23 @@ function insertRequestGuidance(params: {
   onContinue?: "skip";
 }): void {
   const { request, guidance } = params;
-  const interactionType = appaWireFamily(params.interactionType);
+  const wire = nativeAppaGuidanceWire(params.interactionType);
+  if (!wire) return;
   if (
-    interactionType !== "openai:responses" ||
+    wire !== "openai:responses" ||
     !isRecord(request) ||
     !Array.isArray(request.input)
   ) {
     appendQuestionContinuation({ ...params, scope: "request" });
     return;
   }
-  if (requestCarriesInstruction({ request, interactionType, text: guidance })) {
+  if (
+    requestCarriesInstruction({
+      request,
+      interactionType: params.interactionType,
+      text: guidance,
+    })
+  ) {
     return;
   }
   const input = request.input;
@@ -7294,14 +7375,16 @@ function appendQuestionContinuation(params: {
   onContinue?: "skip" | "turn";
 }): void {
   const guidance = params.guidance ?? QUESTION_CONTINUATION_GUIDANCE;
-  const interactionType = appaWireFamily(params.interactionType);
-  if (!isRecord(params.request)) return;
+  const wire = nativeAppaGuidanceWire(params.interactionType);
+  if (!wire || !isRecord(params.request)) return;
   if (params.onContinue === "skip") return;
   if (params.onContinue === "turn") {
-    appendToLastUserTurn(params.request, guidance);
+    appendToLastUserTurn(params.request, guidance, {
+      plainText: wire === "chatCompletions:noDeveloper",
+    });
     return;
   }
-  if (interactionType === "openai:responses") {
+  if (wire === "openai:responses") {
     let input: unknown[];
     if (typeof params.request.input === "string") {
       input = [
@@ -7340,7 +7423,7 @@ function appendQuestionContinuation(params: {
     }
     return;
   }
-  if (interactionType === "openai:chatCompletions") {
+  if (wire === "openai:chatCompletions") {
     const messages = params.request.messages;
     if (!Array.isArray(messages)) return;
     if (
@@ -7359,7 +7442,18 @@ function appendQuestionContinuation(params: {
     });
     return;
   }
-  if (interactionType === "anthropic:messages") {
+  if (wire === "chatCompletions:noDeveloper") {
+    // xAI Chat Completions rejects `developer`; fixed guidance merges into the
+    // leading `system` prompt and transient turn guidance trails in the user
+    // turn after the cached prefix.
+    if (params.scope === "request") {
+      mergeLeadingSystemMessage(params.request, guidance);
+      return;
+    }
+    appendToLastUserTurn(params.request, guidance, { plainText: true });
+    return;
+  }
+  if (wire === "anthropic:messages") {
     // Keep transient guidance after the cached prefix. Changing system would
     // invalidate all cached messages, including signed thinking blocks.
     if (params.scope !== "request") {
@@ -7384,18 +7478,28 @@ function appendQuestionContinuation(params: {
   }
 }
 
-/** Adds turn guidance without placing user text after native SDK control frames. */
+/** Adds turn guidance without placing user text before leading system prompts or after native SDK control frames. */
 function appendToLastUserTurn(
   request: Record<string, unknown>,
   text: string,
+  options?: { plainText?: boolean },
 ): void {
   const messages = request.messages;
   if (!Array.isArray(messages)) return;
+  let conversationStart = 0;
+  while (
+    conversationStart < messages.length &&
+    isRecord(messages[conversationStart]) &&
+    (messages[conversationStart].role === "system" ||
+      messages[conversationStart].role === "developer")
+  ) {
+    conversationStart++;
+  }
   let index = messages.length - 1;
   // Native SDKs can end a turn with system control messages. They must remain
   // last (or immediately before an assistant); they are not conversation turns.
   while (
-    index >= 0 &&
+    index >= conversationStart &&
     isRecord(messages[index]) &&
     messages[index].role === "system"
   )
@@ -7404,17 +7508,23 @@ function appendToLastUserTurn(
   if (!isRecord(last) || last.role !== "user") {
     messages.splice(index + 1, 0, {
       role: "user",
-      content: [{ type: "text", text }],
+      content: options?.plainText ? text : [{ type: "text", text }],
     });
     return;
   }
   if (last.content === text) return;
-  if (typeof last.content === "string")
+  if (typeof last.content === "string") {
+    if (options?.plainText) {
+      if (last.content.includes(text)) return;
+      last.content =
+        last.content.length > 0 ? `${last.content}\n\n${text}` : text;
+      return;
+    }
     last.content = [
       { type: "text", text: last.content },
       { type: "text", text },
     ];
-  else if (Array.isArray(last.content)) {
+  } else if (Array.isArray(last.content)) {
     if (
       !last.content.some(
         (block) =>
@@ -7422,7 +7532,9 @@ function appendToLastUserTurn(
       )
     )
       last.content.push({ type: "text", text });
-  } else last.content = [{ type: "text", text }];
+  } else {
+    last.content = options?.plainText ? text : [{ type: "text", text }];
+  }
 }
 
 /** Prevents Codex from converting a required HITL workflow step into prose. */

@@ -1,5 +1,6 @@
 "use client";
 
+import { isCodexRuntimeCommand } from "@archestra/shared";
 import Link from "next/link";
 import { useState } from "react";
 import { agentEditHref } from "@/components/agent-pages/agent-page-config";
@@ -30,7 +31,7 @@ export function AgentSavedSetupBanner({
   const { data: agent } = useProfile(agentId);
   const runtime = agent?.runtime;
   const preflight = useAgentRuntimePreflight(agentId, !!runtime);
-  const isCodex = runtime?.command?.[0] === "archestra-codex";
+  const isCodex = isCodexRuntimeCommand(runtime?.command?.[0]);
   const keyPermission = useHasPermissions({ llmProviderApiKey: ["read"] });
   const keys = useAvailableLlmProviderApiKeys({
     enabled: isCodex && keyPermission.data === true,

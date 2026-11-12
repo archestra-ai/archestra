@@ -10,7 +10,10 @@ import {
   WifiOff,
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { McpBridgeSetup } from "@/components/mcp-bridge-setup";
+import {
+  McpBridgeSetup,
+  McpBridgeSetupStatus,
+} from "@/components/mcp-bridge-setup";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -173,9 +176,12 @@ function DesktopMcpAddFlow({
         title: "Set up the MCP bridge",
         body: <McpBridgeSetup device={null} />,
         footer: (
-          <Button type="button" variant="outline" onClick={onClose}>
-            Close
-          </Button>
+          <>
+            <McpBridgeSetupStatus device={null} />
+            <Button type="button" variant="outline" onClick={onClose}>
+              Close
+            </Button>
+          </>
         ),
       }
     : !progress

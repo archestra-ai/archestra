@@ -402,17 +402,15 @@ export function SetupActionRow({ children }: { children: React.ReactNode }) {
 export function SetupNextSteps({
   children,
   platformControl,
-  title = "When it finishes",
 }: {
   children: ReactNode;
   platformControl?: ReactNode;
-  title?: string;
 }) {
   return (
     <div className="@container mt-4 px-1 text-xs text-muted-foreground">
       <div className="grid gap-x-8 gap-y-2 @xl:grid-cols-[minmax(0,1fr)_auto]">
         <div>
-          <p className="font-semibold text-foreground">{title}</p>
+          <p className="font-semibold text-foreground">When it finishes</p>
           {children}
         </div>
         {platformControl ?? (

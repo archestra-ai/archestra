@@ -59,6 +59,7 @@ import {
   setOAuthTeamId,
 } from "@/lib/auth/oauth-session";
 import { useDesktopDevices } from "@/lib/desktop-device.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { addDesktopMcpServer, DESKTOP_MCP_COPY } from "@/lib/mcp/desktop-mcp";
 import {
   useInstallMcpServer,
@@ -203,6 +204,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
       dontShowToast: true,
     });
 
+  const appName = useAppName();
   const isDesktopMcp = item.serverType === "desktop_mcp";
   // Whether the user has the MCP bridge: it names the button of a desktop
   // MCP server.
@@ -300,10 +302,19 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
     installMutation.isPending ||
     status === "pending" ||
     status === "discovering-tools";
+  // A desktop MCP server added earlier that no device runs: no device is
+  // linked (any more, whatever an earlier device read). It shows the same
+  // empty state as before Connect, and its button picks the installation up.
+  const desktopNoDevice =
+    isDesktopMcp &&
+    Boolean(target) &&
+    !installMutation.isPending &&
+    desktopAddCase.kind === "no-bridge" &&
+    (status === "pending" || status === "success");
 
   return (
     <div className="space-y-4">
-      {!target && !isInstalling ? (
+      {(!target && !isInstalling) || desktopNoDevice ? (
         // A desktop MCP server is added to the user's own computer: the tools
         // are read once the MCP bridge there runs the server.
         <Empty className="border py-12">
@@ -313,7 +324,11 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
             </EmptyMedia>
             <EmptyDescription>
               {isDesktopMcp
-                ? `${item.name} is a desktop MCP running on your device.`
+                ? `${item.name} is a desktop MCP running on your device.${
+                    desktopAddCase.kind === "no-bridge"
+                      ? ` ${appName} needs an MCP bridge on your device to use it.`
+                      : ""
+                  }`
                 : "Create a connection to verify the server is reachable and discover its tools."}
             </EmptyDescription>
           </EmptyHeader>
@@ -329,7 +344,14 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
             ) : (
               <Button
                 size="sm"
-                onClick={startInstall}
+                onClick={() => {
+                  if (desktopNoDevice) {
+                    setFollowDesktopInstall(true);
+                    setOpenDialog("desktop");
+                    return;
+                  }
+                  startInstall();
+                }}
                 disabled={
                   isInstalling ||
                   (isDesktopMcp && desktopAddCase.kind === "loading")
@@ -352,22 +374,14 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
       ) : isDesktopMcp &&
         target &&
         !installMutation.isPending &&
-        (status === "pending" ||
-          (status === "success" && desktopAddCase.kind === "no-bridge")) ? (
-        // Added, and no device runs it: no device is linked (any more,
-        // whatever an earlier device read), or the device has not run it
-        // yet. The same empty state as before Connect, and its button picks
-        // the connection up again.
+        status === "pending" ? (
+        // Added, and the linked device has not run it yet.
         <Empty className="border py-12">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <Laptop />
             </EmptyMedia>
-            <EmptyDescription>
-              {desktopAddCase.kind === "no-bridge"
-                ? "No device is linked"
-                : DESKTOP_MCP_COPY.waiting}
-            </EmptyDescription>
+            <EmptyDescription>{DESKTOP_MCP_COPY.waiting}</EmptyDescription>
           </EmptyHeader>
           <EmptyContent className="flex-row justify-center">
             <Button
@@ -377,9 +391,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
                 setOpenDialog("desktop");
               }}
             >
-              <span>
-                {desktopAddCase.kind === "no-bridge" ? "Link" : "Show progress"}
-              </span>
+              <span>Show progress</span>
             </Button>
           </EmptyContent>
         </Empty>

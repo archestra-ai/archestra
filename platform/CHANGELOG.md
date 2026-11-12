@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.4.29](https://github.com/archestra-ai/archestra/compare/platform-v1.4.28...platform-v1.4.29) (2026-11-12)
+
+
+### Features
+
+* **guardrails:** carry the policy's files when Git sync moves to another repository, and propose over an existing policy [1.4] ([#10623](https://github.com/archestra-ai/archestra/issues/10623)) ([b7e250e](https://github.com/archestra-ai/archestra/commit/b7e250e42622ca1fed1910a091fd886e62eaa205))
+* **guardrails:** MCP Guardrails Self-Service in the Git sync repository [1.4] ([#10599](https://github.com/archestra-ai/archestra/issues/10599)) ([ba00652](https://github.com/archestra-ai/archestra/commit/ba00652563d407a99dc479786ea2965be3dde4d3))
+
+
+### Bug Fixes
+
+* **agent-runtime:** fix xAI developer role and Codex runtime wrapper (backport release/1.4) ([#10610](https://github.com/archestra-ai/archestra/issues/10610)) ([a7434eb](https://github.com/archestra-ai/archestra/commit/a7434eb472504ba489f7d3769230255bf17491d1))
+* **backend:** name the host of failed outbound calls and stop calling them database outages (backport release/1.4) ([#10626](https://github.com/archestra-ai/archestra/issues/10626)) ([07933d6](https://github.com/archestra-ai/archestra/commit/07933d66c45f1856481bab3b8b43ab62e87b48fb))
+* **guardrails:** keep session trust when run_command reads a saved tool result (backport release/1.4) ([#10601](https://github.com/archestra-ai/archestra/issues/10601)) ([b2f2d93](https://github.com/archestra-ai/archestra/commit/b2f2d93866d738747ab62cf603c5a8e2fb15d991))
+* **knowledge:** extract text from PDFs indexed by the GitHub connector (backport release/1.4) ([#10629](https://github.com/archestra-ai/archestra/issues/10629)) ([4ce730a](https://github.com/archestra-ai/archestra/commit/4ce730aebc66e266fcb6853d80eb9bdf17021b05))
+* **logging:** withhold failed-query values wherever they appear in metadata-only logs (backport release/1.4) ([#10628](https://github.com/archestra-ai/archestra/issues/10628)) ([961a819](https://github.com/archestra-ai/archestra/commit/961a81912d4b0a8daa3eafe394719eaa25000616))
+* **openappa:** draw the full Appa mark in Claude Code's terminal (backport release/1.4) ([#10627](https://github.com/archestra-ai/archestra/issues/10627)) ([629334a](https://github.com/archestra-ai/archestra/commit/629334add1f2e8004c3a71cbcfd0ddc2406d5f4d))
+
 ## [1.4.28](https://github.com/archestra-ai/archestra/compare/platform-v1.4.27...platform-v1.4.28) (2026-11-11)
 
 

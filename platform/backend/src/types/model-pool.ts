@@ -15,7 +15,10 @@ export const SelectModelPoolMemberSchema = createSelectSchema(
 
 export const SelectModelPoolSchema = createSelectSchema(
   schema.modelPoolsTable,
-  { retrySettings: ModelPoolRetrySettingsSchema.nullable() },
+  {
+    retrySettings: ModelPoolRetrySettingsSchema.nullable(),
+    routingStrategy: z.enum(["weighted", "least-tokens"]),
+  },
 ).extend({
   members: z.array(SelectModelPoolMemberSchema),
   /** Virtual keys that may call the pool by its name. */
@@ -42,6 +45,7 @@ export const ModelPoolMemberInputSchema = z.object({
 });
 
 export const ModelPoolInputSchema = z.object({
+  routingStrategy: z.enum(["weighted", "least-tokens"]).optional(),
   name: z.string().trim().min(1).max(512),
   members: z.array(ModelPoolMemberInputSchema).min(1).max(50),
   // Null keeps the default; omitted keeps the pool's current value.

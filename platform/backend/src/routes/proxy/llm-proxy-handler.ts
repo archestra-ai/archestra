@@ -88,6 +88,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import type { LimitViolationResponse } from "@/models/limit";
+import ModelPoolUsageModel from "@/models/model-pool-usage";
 import ProxyRequestContextModel, {
   type ProxyRequestState,
 } from "@/models/proxy-request-context";
@@ -5633,6 +5634,28 @@ async function persistProxyInteraction({
       : record,
     encryptedChat.kind === "encrypt" ? encryptedChat.audit : null,
   );
+  if (
+    upstreamAttempt?.trackPoolUsage &&
+    record.modelPoolId &&
+    record.providerApiKeyId &&
+    record.model
+  ) {
+    try {
+      await ModelPoolUsageModel.record({
+        poolId: record.modelPoolId,
+        providerApiKeyId: record.providerApiKeyId,
+        modelId: upstreamAttempt.poolUsageModelId ?? record.model,
+        tokens:
+          (record.inputTokensEstimated ? 0 : (record.inputTokens ?? 0)) +
+          (record.outputTokens ?? 0) +
+          (record.cacheReadTokens ?? 0) +
+          (record.cacheWriteTokens ?? 0),
+      });
+    } catch (error) {
+      // Never turn an already answered inference into a client retry.
+      logger.error({ err: error }, "Unable to record model pool routing usage");
+    }
+  }
   try {
     await throughput?.settleSpend(
       record.cost,

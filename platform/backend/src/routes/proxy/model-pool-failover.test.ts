@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import config from "@/config";
 import { ModelPoolModel } from "@/models";
+import ModelPoolUsageModel from "@/models/model-pool-usage";
 import { beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { ApiError } from "@/types";
@@ -187,6 +188,7 @@ describe("planModelPool", () => {
     expect(plan).toEqual({
       poolId: pool.id,
       poolName: "glm-5",
+      routingStrategy: "weighted",
       members: [
         expect.objectContaining({
           providerApiKeyId: zai.id,
@@ -546,6 +548,41 @@ describe("openThroughModelPool", () => {
       if (error) throw error;
       return `answer from ${key}`;
     },
+  });
+
+  test("least-token mode reselects within the first order without changing weighted affinity", async () => {
+    const sameOrder = {
+      ...plan,
+      routingStrategy: "least-tokens" as const,
+      members: plan.members.map((member) => ({ ...member, priority: 1 })),
+    };
+    await ModelPoolUsageModel.record({
+      poolId: plan.poolId,
+      ...plan.members[0],
+      tokens: 100,
+    });
+    const run = (selected: ModelPoolPlan) =>
+      openThroughModelPool({
+        plan: selected,
+        attempt: {},
+        ...openKey(() => null),
+        isRetryable: () => false,
+        shouldContinue: () => true,
+        prepareFailedAttempt: async () => async () => {},
+      });
+    expect(await run(sameOrder)).toBe(`answer from ${keyB}`);
+    await ModelPoolUsageModel.record({
+      poolId: plan.poolId,
+      ...plan.members[1],
+      tokens: 200,
+    });
+    expect(await run(sameOrder)).toBe(`answer from ${keyA}`);
+    expect(await run({ ...sameOrder, members: plan.members })).toBe(
+      `answer from ${keyA}`,
+    );
+    expect(await run({ ...sameOrder, routingStrategy: "weighted" })).toBe(
+      `answer from ${keyA}`,
+    );
   });
 
   test("configured retry backoff doubles with jitter and caps each wait", async () => {

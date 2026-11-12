@@ -22,6 +22,7 @@ import db, { schema } from "@/database";
 import { ModelModel, ModelPoolModel, VirtualApiKeyModel } from "@/models";
 import LimitModel from "@/models/limit";
 import LlmThroughputModel from "@/models/llm-throughput";
+import ModelPoolUsageModel from "@/models/model-pool-usage";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
@@ -271,6 +272,82 @@ describe("Model pools - LLM Proxy", () => {
         }
       });
     }
+
+    test(`least-token strategy records actual completions and routes the next call to the unused member (stream: ${stream})`, async ({
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const keys = await Promise.all(
+        ["sk-one", "sk-two"].map(async (apiKey) =>
+          makeLlmProviderApiKey(
+            proxy.organizationId,
+            (await makeSecret({ secret: { apiKey } })).id,
+            { provider: "openai" },
+          ),
+        ),
+      );
+      const { value: token, virtualKey } = await VirtualApiKeyModel.create({
+        name: "least-tokens-key",
+        providerApiKeys: [{ provider: "openai", providerApiKeyId: keys[0].id }],
+      });
+      const pool = await ModelPoolModel.create({
+        organizationId: proxy.organizationId,
+        input: {
+          name: "gpt-4o-mini",
+          routingStrategy: "least-tokens",
+          members: keys.map((key) => ({
+            providerApiKeyId: key.id,
+            modelId: "gpt-4o-mini",
+            priority: 1,
+            weight: 1,
+            enabled: true,
+          })),
+        },
+      });
+      await ModelPoolModel.setPoolsForVirtualApiKey({
+        organizationId: proxy.organizationId,
+        virtualApiKeyId: virtualKey.id,
+        poolIds: [pool.id],
+      });
+      const selected: string[] = [];
+      for (let i = 0; i < 2; i++) {
+        const response = await app.inject({
+          method: "POST",
+          url: `/v1/openai/${proxy.id}/chat/completions`,
+          headers: { authorization: `Bearer ${token}` },
+          payload: {
+            model: "gpt-4o-mini",
+            stream,
+            messages: [{ role: "user", content: "Hello" }],
+          },
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        selected.push(String(response.headers["x-archestra-provider-key"]));
+      }
+      expect(new Set(selected)).toEqual(new Set(keys.map((key) => key.id)));
+      const records = await db.select().from(schema.interactionsTable);
+      expect(records).toHaveLength(2);
+      const counters = await ModelPoolUsageModel.read(
+        pool.id,
+        pool.members.map((member) => ({ ...member, memberId: member.id })),
+      );
+      for (const member of pool.members) {
+        const record = records.find(
+          (row) => row.providerApiKeyId === member.providerApiKeyId,
+        );
+        expect(counters.get(member.id)).toBe(
+          (record?.inputTokens ?? 0) +
+            (record?.outputTokens ?? 0) +
+            (record?.cacheReadTokens ?? 0) +
+            (record?.cacheWriteTokens ?? 0),
+        );
+      }
+      expect(
+        records.every(
+          (row) => (row.inputTokens ?? 0) + (row.outputTokens ?? 0) > 0,
+        ),
+      ).toBe(true);
+    });
 
     test(`answers from the next member when the pinned one is rate limited (stream: ${stream})`, async ({
       makeSecret,

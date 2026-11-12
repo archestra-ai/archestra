@@ -134,12 +134,19 @@ function fakeGitData(
 }
 
 /** GitHub's contents API over `files`: folders list their direct files, files answer raw or with their blob id. */
-function contentsOf(repo: string, files: () => Record<string, string>) {
+function contentsOf(
+  repo: string,
+  files: () => Record<string, string>,
+  /** The refs the files are served at; any unless given. */
+  refs?: () => string[],
+) {
   const prefix = `https://api.github.com/repos/${repo}/contents/`;
   return http.get(
     ({ request }) => request.url.startsWith(prefix),
     ({ request }) => {
       const url = new URL(request.url);
+      if (refs && !refs().includes(url.searchParams.get("ref") ?? ""))
+        return new HttpResponse(null, { status: 404 });
       const path = decodeURIComponent(
         url.pathname.slice(`/repos/${repo}/contents/`.length),
       );
@@ -1231,7 +1238,10 @@ describe("APPA GitHub sync", () => {
         "https://api.github.com/repos/example/other-policy/commits/main",
         () => HttpResponse.json({ sha: commit }),
       ),
-      contentsOf("example/other-policy", git.files),
+      // Before the merge the files exist at the request's commit only.
+      contentsOf("example/other-policy", git.files, () =>
+        pull.merged ? [commit, SETUP_COMMIT] : [SETUP_COMMIT],
+      ),
     );
     const response = await app.inject({
       method: "POST",

@@ -14,6 +14,7 @@ import {
   includesServerRules,
   includesServerRulesFolder,
   parsePolicyToml,
+  repositoryIncludePaths,
   serverRulesFolderOf,
   serverRulesInclude,
   serverRulesPath,
@@ -85,6 +86,15 @@ export async function getServerRules(params: Caller & { catalogId: string }) {
     organizationId: params.organizationId,
     path: server.path,
   });
+  // Every rule for this server's tools, wherever the policy keeps it: the
+  // root's own, then each repository file the root includes, the server's
+  // own file among them. A change still goes to the server's own file.
+  const rules = await serverRulesAcross({
+    organizationId: params.organizationId,
+    root: root.content,
+    rootPath: source?.path ?? "appa.toml",
+    prefix: server.prefix,
+  });
   return {
     mcpServer: {
       id: server.id,
@@ -111,14 +121,15 @@ export async function getServerRules(params: Caller & { catalogId: string }) {
     rootRules: rootToolRules(root.content)
       .filter((rule) => governsServerTool(server.prefix, rule))
       .map((rule) => rule.name),
+    rules,
     organizationHelpers: organizationHelpers(root.content),
     instruction: !repositoryView(source)
       ? "Git sync is not set up, so server rules cannot be proposed. Tell the user an administrator sets it up under Settings → Guardrails."
       : !server.canEdit
         ? "The user may read these rules but not propose a change: that takes edit access to this MCP server in the MCP registry."
         : accepted === null
-          ? "This server has no rules file yet. Start from `starter`, which lists every tool with the organization's defaults; write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees."
-          : "To change these rules, write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees.",
+          ? `This server has no rules file of its own yet${rules.length > 0 ? "; `rules` lists the rules other files of the policy keep for its tools, which stay where they are" : ""}. Start from \`starter\`, which lists every tool with the organization's defaults; write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees.`
+          : "`rules` lists every rule for this server's tools across the policy, with the file each comes from; only the server's own file at `path` is changed here. To change it, write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees.",
     expectedCommit: source?.sourceCommit ?? null,
   };
 }
@@ -418,6 +429,39 @@ async function checkedChange(
       ...validation,
     },
   };
+}
+
+/**
+ * Every `[[policy.tool]]` rule for the server's tools across the policy:
+ * the root's first, which win, then each repository file the root includes
+ * (a glob's matches with it), as merged at the accepted commit. A file that
+ * cannot be read, or no accepted commit yet, leaves the root's rules alone.
+ */
+async function serverRulesAcross(params: {
+  organizationId: string;
+  root: string;
+  rootPath: string;
+  prefix: string;
+}): Promise<
+  Array<{ file: string; name: string; rule: Record<string, unknown> }>
+> {
+  const files = new Map<string, string>([[params.rootPath, params.root]]);
+  const entries = repositoryIncludePaths(params.root);
+  if (entries.length > 0)
+    try {
+      for (const [path, text] of await openappaRepositoryIncludes.readAccepted({
+        organizationId: params.organizationId,
+        paths: entries,
+      }))
+        files.set(path, text);
+    } catch (error) {
+      if (!(error instanceof ApiError && error.statusCode === 409)) throw error;
+    }
+  return [...files].flatMap(([file, text]) =>
+    rootToolRules(text)
+      .filter((rule) => governsServerTool(params.prefix, rule))
+      .map((rule) => ({ file, name: String(rule.name), rule })),
+  );
 }
 
 /** The root's own `[[policy.tool]]` entries, `server` qualifier included. */

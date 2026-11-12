@@ -396,7 +396,7 @@ class OpenAppaRepositoryIncludes {
     defaultTtl: 60_000,
   });
   /** The setup request's head commit, by repository and number, for a minute. */
-  private readonly pendingSetups = new LRUCacheManager<string | null>({
+  private readonly pendingSetups = new LRUCacheManager<string>({
     maxSize: 64,
     defaultTtl: 60_000,
   });
@@ -546,10 +546,11 @@ class OpenAppaRepositoryIncludes {
         source.repo,
         source.setupPullRequestNumber,
       );
+      // Open, or merged and not pulled yet: the branch still holds the files.
       sha =
-        request.state === "open"
-          ? await client.gitlabBranchCommit(source.repo, request.sourceBranch)
-          : null;
+        request.state === "closed"
+          ? null
+          : await client.gitlabBranchCommit(source.repo, request.sourceBranch);
     } else {
       const { token, api } = await resolveOpenAppaGithubAccess(source, {
         pull_requests: "read",
@@ -568,13 +569,16 @@ class OpenAppaRepositoryIncludes {
         merged?: boolean;
         head?: { sha?: string };
       };
+      // Open, or merged and not pulled yet: the head still holds the files.
       sha =
-        pull.state === "open" && pull.merged !== true
+        pull.state === "open" || pull.merged === true
           ? (pull.head?.sha ?? null)
           : null;
     }
-    if (sha !== null && !/^[a-f0-9]{40}$/.test(sha))
+    if (sha === null) return null;
+    if (!/^[a-f0-9]{40}$/.test(sha))
       throw new ApiError(502, "The setup request names an invalid commit");
+    // A request closed unmerged is not remembered: reopened, it reads again.
     this.pendingSetups.set(key, sha);
     return sha;
   }

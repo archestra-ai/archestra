@@ -21,7 +21,7 @@ When setup is done, the card on **Settings → Guardrails** shows **Connected**.
 
 1. Enter the **GitHub URL**, either GitHub.com or your GitHub Enterprise Server address, and the **Organization**. Then choose one:
    - **Start fresh:** click **Create on GitHub** to create a private repository from the [OpenAPPA template](https://github.com/archestra-ai/openappa-config). On GitHub Enterprise Server, create an empty private repository instead, and setup adds the OpenAPPA files.
-   - **Use an existing repository:** one that already holds an OpenAPPA policy.
+   - **Use an existing repository:** one that already holds an OpenAPPA policy. Setup proposes your current policy to it in a pull request.
 2. **MCP Guardrails Self-Service:** tick it to let [MCP owners manage their servers' Guardrails](#mcp-guardrails-self-service), and pick the folder their policy files go to, `mcp` unless you change it. You can turn it on later too.
 3. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with no keys to copy. Install it on the policy repository only.
 4. Choose the repository and click **Connect repository**. To change the **Branch**, **Policy file** (`appa.toml`), **Validations folder** (`traces`), or **Sync schedule**, open **Advanced** first.
@@ -35,16 +35,16 @@ Git sync works with gitlab.com and self-managed GitLab, through an access token 
 1. Pick a saved token, or click [**Add a GitLab token**](/docs/agents/skills/importing#private-repositories).
 2. Choose the policy project. To change the branch, policy file, validations folder, or schedule, open **Advanced** first.
    - **New project:** pick a **Group**, or **Your namespace** for your own account, and enter a **Project name**. Click **Create project**. Setup creates a private project with your current policy.
-   - **Existing project:** pick it and click **Connect project**.
+   - **Existing project:** pick it and click **Connect project**. A project that already holds a policy gets your current policy as a merge request.
 
 If GitLab refuses the first commit to a protected branch, setup stops with an error. Use a token with the Maintainer role, or allow the first push to that branch.
 
 ## Repository Checks
 
-Before you connect, the dialog checks what the repository holds:
+Before you connect, the dialog checks what the repository holds. Whatever it finds, setup carries your whole policy over: the policy file, every file it includes from its repository such as the MCP servers' files, and its validations. Nothing is lost when you move to another repository.
 
-- **OpenAPPA template**, **Empty repository**, or **Empty project:** setup copies your current policy into it.
-- **Found appa.toml:** that file replaces your current policy.
+- **OpenAPPA template**, **Empty repository**, or **Empty project:** setup copies your current policy and the files it reads into it.
+- **Found appa.toml:** setup opens a pull request, or a merge request on GitLab, that puts your current policy and the files it reads in place of that file. Merge it as it is, or combine the two policies on its branch first. Your current policy stays active until it merges.
 - **No appa.toml:** pick another repository, or set the policy file under **Advanced**.
 - **No access:** the App or token cannot read it. On GitHub, click **Change access** to fix it.
 

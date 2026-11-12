@@ -2902,11 +2902,11 @@ export function listedNames(names: readonly string[]): string {
 }
 
 /**
- * Owners as a check summary names them: by name when the member may open
- * them in the MCP registry, counted otherwise, since everyone who reads the
- * repository reads the summary.
+ * Owners as a check summary or pull request body names them: by name when
+ * the member may open them in the MCP registry, counted otherwise, since
+ * everyone who reads the repository reads both.
  */
-async function ownersAsNamedFor(params: {
+export async function ownersAsNamedFor(params: {
   organizationId: string;
   userId: string;
   servers: readonly RulesFileServer[];
@@ -2927,18 +2927,17 @@ async function ownersAsNamedFor(params: {
     .filter((_, index) => readable[index])
     .map((server) => server.name);
   const unseen = params.servers.length - named.length;
-  return listedNames([
-    ...(named.length === 0
-      ? []
-      : [`the MCP server${named.length > 1 ? "s" : ""} ${listedNames(named)}`]),
-    ...(unseen === 0
+  const hidden =
+    unseen === 0
       ? []
       : [
           unseen === 1
             ? "an MCP server they cannot see"
             : `${unseen} MCP servers they cannot see`,
-        ]),
-  ]);
+        ];
+  if (named.length === 0) return listedNames(hidden);
+  const items = [...named, ...hidden];
+  return `the MCP server${items.length > 1 ? "s" : ""} ${listedNames(items)}`;
 }
 
 /** The owners of a rules file a member may not edit in the MCP registry. */

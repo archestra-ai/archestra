@@ -36,6 +36,7 @@ import {
 } from "@/services/openappa-github-access";
 import {
   listedNames,
+  ownersAsNamedFor,
   ownersNotEditable,
   POLICY_CHECK_NAME,
   rulesFileRefusal,
@@ -225,7 +226,7 @@ export async function proposeServerRulesChange(
   const body = [
     params.summary.trim(),
     "",
-    `Requested in ${archestraMcpBranding.appName} by ${requester?.name ?? "a user"}${requester?.email ? ` (${requester.email})` : ""}, who may edit the MCP server${change.server.owners.length > 1 ? "s" : ""} ${listedNames(change.server.owners.map((owner) => owner.name))} in the MCP registry.`,
+    `Requested in ${archestraMcpBranding.appName} by ${requester?.name ?? "a user"}${requester?.email ? ` (${requester.email})` : ""}, who may edit ${await ownersAsNamedFor({ organizationId: params.organizationId, userId: params.userId, servers: change.server.owners })} in the MCP registry.`,
     `This changes \`${change.server.path}\`${change.rootChanged ? `, and adds \`${change.include}\` to \`${change.source.path}\`'s include list, so every MCP server's own rules file applies from then on` : ""}. It applies once merged and pulled by Git sync.`,
   ].join("\n");
   const files = [

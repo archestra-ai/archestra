@@ -2536,7 +2536,7 @@ test("the policy check asks for edit access to each shared server a rules file g
     conclusion: "failure",
     title: "The requester may not change these rules",
     summary:
-      "cody@example.com may not change mcp/payments_api.toml: that takes edit access to the MCP server Payments API and an MCP server they cannot see in the MCP registry.",
+      "cody@example.com may not change mcp/payments_api.toml: that takes edit access to the MCP servers Payments API and an MCP server they cannot see in the MCP registry.",
   });
 });
 

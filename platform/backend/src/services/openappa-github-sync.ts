@@ -434,14 +434,14 @@ export async function createAppaGithubRepository(params: {
         branch,
         parent,
         files,
-        remove: hasRepositoryIncludeGlob(seed)
-          ? strayGlobMatches({
-              content: seed,
-              policyPath: "appa.toml",
-              paths: await blobPaths({ base, token, commit: parent }),
-              written: files.map((file) => file.path),
-            })
-          : [],
+        remove: await strayFilesToRemove({
+          base,
+          token,
+          commit: parent,
+          content: seed,
+          policyPath: "appa.toml",
+          files,
+        }),
         message: "Seed current OpenAPPA policy",
         pull: {
           title: "Seed current OpenAPPA policy",
@@ -547,14 +547,14 @@ async function proposeSetupPullRequest(params: {
       files,
       // Files the repository holds that the policy's globs would read, and
       // that were never in the policy, go in the same commit.
-      remove: hasRepositoryIncludeGlob(params.seed)
-        ? strayGlobMatches({
-            content: params.seed,
-            policyPath: path,
-            paths: await blobPaths({ base, token, commit: parent }),
-            written: files.map((file) => file.path),
-          })
-        : [],
+      remove: await strayFilesToRemove({
+        base,
+        token,
+        commit: parent,
+        content: params.seed,
+        policyPath: path,
+        files,
+      }),
       message: "Seed current OpenAPPA policy",
       pull: {
         title: "Seed current OpenAPPA policy",
@@ -2397,15 +2397,18 @@ async function branchHead(params: {
   return sha;
 }
 
-/** Every file the repository holds at `commit`. */
-async function blobPaths(params: {
+/** An entry of the repository's tree: a file, a link or a folder, with its mode. */
+type TreeEntry = { path: string; type: string; mode?: string };
+
+/** Everything the repository holds at `commit`, with each entry's mode. */
+async function treeEntries(params: {
   base: string;
   token: string;
   commit: string;
-}): Promise<string[]> {
+}): Promise<TreeEntry[]> {
   const tree = await githubJson<{
     truncated?: boolean;
-    tree?: Array<{ path?: string; type?: string }>;
+    tree?: Array<{ path?: string; type?: string; mode?: string }>;
   }>({
     url: `${params.base}/git/trees/${params.commit}?recursive=1`,
     token: params.token,
@@ -2417,9 +2420,53 @@ async function blobPaths(params: {
       "The repository holds too many files to read in one pass",
     );
   return (tree.tree ?? []).flatMap((entry) =>
-    entry.type === "blob" && entry.path ? [entry.path] : [],
+    entry.path && entry.type
+      ? [{ path: entry.path, type: entry.type, mode: entry.mode }]
+      : [],
   );
 }
+
+/**
+ * What setup removes from a repository whose policy includes globs: the
+ * files those globs would read that it does not write. A path among the
+ * written or removed ones that is not a regular file, a symbolic link or a
+ * folder, is refused, as any proposal refuses it.
+ */
+async function strayFilesToRemove(params: {
+  base: string;
+  token: string;
+  commit: string;
+  content: string;
+  policyPath: string;
+  files: SetupFile[];
+}): Promise<string[]> {
+  if (!hasRepositoryIncludeGlob(params.content)) return [];
+  const entries = await treeEntries(params);
+  const remove = strayGlobMatches({
+    content: params.content,
+    policyPath: params.policyPath,
+    paths: entries
+      .filter((entry) => entry.type === "blob")
+      .map((entry) => entry.path),
+    written: params.files.map((file) => file.path),
+  });
+  const byPath = new Map(entries.map((entry) => [entry.path, entry]));
+  for (const path of [...params.files.map((file) => file.path), ...remove]) {
+    const entry = byPath.get(path);
+    if (
+      entry &&
+      (entry.type !== "blob" ||
+        (entry.mode !== undefined && !REGULAR_FILE_MODES.has(entry.mode)))
+    )
+      throw new ApiError(
+        400,
+        `${path} is not a regular file in the repository`,
+      );
+  }
+  return remove;
+}
+
+const REGULAR_FILE_MODES = new Set(["100644", "100755"]);
 
 /**
  * One commit on top of `parent` that writes `files`, advanced onto `branch`

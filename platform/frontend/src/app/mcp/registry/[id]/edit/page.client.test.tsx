@@ -6,11 +6,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
+import { useAppaSelfService } from "@/lib/openappa-github-sync.query";
 import { McpCatalogItemEditPage } from "./page.client";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/openappa-github-sync.query");
 vi.mock("@/app/openappa/_parts/openappa-chat-button", () => ({
   OpenAppaChatButton: ({ children }: { children: React.ReactNode }) => (
     <a href="/coverage-review">{children}</a>
@@ -71,6 +73,7 @@ describe("McpCatalogItemEditPage", () => {
       isPending: false,
     } as unknown as ReturnType<typeof useInternalMcpCatalogItem>);
     canReadGuardrails(true);
+    selfService(false);
   });
 
   function canReadGuardrails(data: boolean) {
@@ -78,6 +81,14 @@ describe("McpCatalogItemEditPage", () => {
       data,
       isPending: false,
     } as ReturnType<typeof useHasPermissions>);
+  }
+
+  /** MCP Guardrails Self-Service on or off, or `undefined` while still loading. */
+  function selfService(enabled: boolean | undefined) {
+    vi.mocked(useAppaSelfService).mockReturnValue({
+      data: enabled === undefined ? undefined : { enabled },
+      isPending: enabled === undefined,
+    } as ReturnType<typeof useAppaSelfService>);
   }
 
   function onToolsStepWithGuardrails() {
@@ -122,18 +133,24 @@ describe("McpCatalogItemEditPage", () => {
     );
   });
 
-  it("sends a server editor without a Guardrails permission to the server's own rules", () => {
+  it("sends every editor to the server's own rules while self-service is on, Guardrails permission or not", () => {
     onToolsStepWithGuardrails();
+    selfService(true);
+
+    const { unmount } = render(<McpCatalogItemEditPage id="server-1" />);
+    expect(
+      screen.getByRole("link", { name: "Configure Guardrails with agent" }),
+    ).toHaveAttribute("href", "/server-rules");
+    unmount();
+
     canReadGuardrails(false);
-
     render(<McpCatalogItemEditPage id="server-1" />);
-
     expect(
       screen.getByRole("link", { name: "Configure Guardrails with agent" }),
     ).toHaveAttribute("href", "/server-rules");
   });
 
-  it("keeps the coverage review for anyone who may read the Guardrails policy", () => {
+  it("keeps the coverage review for a Guardrails policy reader while self-service is off", () => {
     onToolsStepWithGuardrails();
 
     render(<McpCatalogItemEditPage id="server-1" />);
@@ -141,5 +158,28 @@ describe("McpCatalogItemEditPage", () => {
     expect(
       screen.getByRole("link", { name: "Configure Guardrails with agent" }),
     ).toHaveAttribute("href", "/coverage-review");
+  });
+
+  it("offers no Guardrails launch to an editor without the permission while self-service is off", () => {
+    onToolsStepWithGuardrails();
+    canReadGuardrails(false);
+
+    render(<McpCatalogItemEditPage id="server-1" />);
+
+    expect(
+      screen.queryByRole("link", { name: "Configure Guardrails with agent" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows no Guardrails launch until the self-service state is known", () => {
+    onToolsStepWithGuardrails();
+    selfService(undefined);
+
+    render(<McpCatalogItemEditPage id="server-1" />);
+
+    expect(
+      screen.queryByRole("link", { name: "Configure Guardrails with agent" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Finish" })).toBeInTheDocument();
   });
 });

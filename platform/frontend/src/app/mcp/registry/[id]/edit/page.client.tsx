@@ -22,6 +22,7 @@ import { WizardFooter } from "@/components/wizard-footer";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
+import { useAppaSelfService } from "@/lib/openappa-github-sync.query";
 import { useCanModifyCatalogItem } from "../../_parts/catalog-edit-access";
 import {
   SETUP_STEPS,
@@ -130,13 +131,22 @@ function SetupWizard({
 
   const detailHref = `/mcp/registry/${item.id}`;
   const openappaEnabled = useFeature("openappaEnabled") === true;
-  // An editor of this server who holds no Guardrails permission configures
-  // its Guardrails through the server's own rules file in the policy
-  // repository; everyone else reviews the whole policy's coverage of it.
+  // Which Guardrails launch the last step offers. While MCP Guardrails
+  // Self-Service is on, every editor of this server configures its Guardrails
+  // through the server's own rules file in the policy repository, Guardrails
+  // permission or not: a change through the whole policy would land in the
+  // root policy file instead. While it is off, whoever may read the
+  // Guardrails policy reviews the whole policy's coverage of the server, and
+  // other editors get no launch. Nothing shows until the self-service state
+  // is known, so the wrong launch never flashes first.
   const { canModify } = useCanModifyCatalogItem(item);
+  const selfService = useAppaSelfService(openappaEnabled);
   const guardrailsRead = useHasPermissions({ guardrailsPolicy: ["read"] });
-  const serverRulesOnly =
-    canModify && !guardrailsRead.isPending && !guardrailsRead.data;
+  const serverRules = canModify && selfService.data?.enabled === true;
+  const coverageReview =
+    selfService.data?.enabled === false &&
+    !guardrailsRead.isPending &&
+    guardrailsRead.data === true;
   // Which of the configuration step's two submit buttons asked for the save
   // in flight: "Save" finishes on the server's page (one field changed is one
   // save, not a walk through the remaining steps), "Save & Continue" moves on
@@ -283,13 +293,13 @@ function SetupWizard({
             )
           ) : (
             <div className="flex items-center gap-2">
-              {openappaEnabled && serverRulesOnly && (
+              {openappaEnabled && serverRules && (
                 <ServerRulesButton variant="outline" size="sm" catalog={item}>
                   <AppaKeeperIcon />
                   <span>Configure Guardrails with agent</span>
                 </ServerRulesButton>
               )}
-              {openappaEnabled && !serverRulesOnly && (
+              {openappaEnabled && coverageReview && (
                 <OpenAppaChatButton
                   variant="outline"
                   size="sm"

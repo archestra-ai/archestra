@@ -283,7 +283,9 @@ function AppStep({
           }
           hint={
             <>
-              Set both to <code>Read and write</code>
+              Set both to <code>Read and write</code>. Checks posts the verdict
+              on each pull request; Administration makes it required on the
+              branch.
             </>
           }
           inlineAction

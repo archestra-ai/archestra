@@ -22,10 +22,7 @@ import { beforeEach, describe, expect, test } from "@/test";
 import { createAgentServer } from "./utils";
 
 type ListHandler = (request: unknown) => Promise<ListToolsResult>;
-type SearchResult = {
-  tools: Array<{ toolName: string }>;
-  nextOffset: number | null;
-};
+type SearchResult = { tools: Array<{ toolName: string }> };
 
 const READ = IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES.map((shortName) =>
   archestraMcpBranding.getToolName(shortName),
@@ -80,20 +77,21 @@ async function listed(params: {
   return response.tools.map((tool) => tool.name);
 }
 
-/** Every tool the search offers for the Guardrails query, page by page. */
+/**
+ * Which of the policy tools the search offers, one exact query per name:
+ * release 1.4's search has no pages, and the Guardrails tools outnumber one.
+ */
 async function searched(context: ArchestraContext): Promise<string[]> {
   const names: string[] = [];
-  let offset: number | null = 0;
-  while (offset !== null) {
+  for (const name of [...READ, ...WRITE]) {
     const result = await executeArchestraTool(
       archestraMcpBranding.getToolName("search_tools"),
-      { query: "guardrails|openappa", mode: "regex", limit: 20, offset },
+      { query: `^${name}$`, mode: "regex", limit: 5 },
       context,
     );
     expect(result.isError).toBeFalsy();
     const page = result.structuredContent as SearchResult;
-    names.push(...page.tools.map((tool) => tool.toolName));
-    offset = page.nextOffset;
+    if (page.tools.some((tool) => tool.toolName === name)) names.push(name);
   }
   return names;
 }

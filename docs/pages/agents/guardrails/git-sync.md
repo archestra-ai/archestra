@@ -81,3 +81,13 @@ Enable it in the Guardrails setting when setting up git sync or afterwards. Can 
 
 - **The check**, `Check OpenAPPA Guardrails` pull request check. It fails when the policy update author lacks required permissions or if the update would make the effective policy invalid. [`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME) env var allows to set custom name for this check.
 - **The ruleset**, the branch ruleset to keep the check required in order to merge a pull request introducing policy updates.
+
+### Auto-merge
+
+MCP owners need no access to the policy repository: the GitHub App merges their pull requests itself. Turn on **Auto-merge pull requests** under **MCP Guardrails Self-Service** in the Git sync card, or in the Self-service step of Git sync setup.
+
+- The policy check is the only gate. A pull request merges within about a minute of its check passing, and Git sync then applies it.
+- Only rules pull requests opened from Archestra for an MCP server merge this way. Pull requests people open on GitHub keep the repository's own review.
+- If another branch rule blocks the merge, the pull request stays open for people to merge. The App tries again every 15 minutes.
+
+The [`ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE) env var sets it for the whole deployment.

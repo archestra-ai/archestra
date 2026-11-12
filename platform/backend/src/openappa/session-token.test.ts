@@ -218,6 +218,17 @@ describe("session receipt restore", () => {
     );
   });
 
+  test("draws the second sprite row under the label in the terminal layout", () => {
+    const receipt = formatSessionReceipt("AAA-AAAA", "terminal");
+    expect(receipt).toBe(
+      `${MARK_TOP}  protected session AAA-AAAA\n${MARK_BOTTOM}`,
+    );
+    expect(stripSessionReceipts(`${receipt}\n\nhello`)).toEqual({
+      text: "hello",
+      codes: ["AAA-AAAA"],
+    });
+  });
+
   test("strips legacy two-line and Markdown-collapsed receipt layouts", () => {
     const topLabel = `${MARK_TOP}  protected session AAA-AAAA\n${MARK_BOTTOM}`;
     const collapsedTopLabel = `${MARK_TOP}  protected session EEE-EEEE ${MARK_BOTTOM}`;

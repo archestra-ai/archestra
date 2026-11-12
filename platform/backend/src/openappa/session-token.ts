@@ -13,12 +13,29 @@ export function mintReceiptCode(): string {
   return encodeCrockford35(first35Bits(randomBytes(5)));
 }
 
-export function formatSessionReceipt(code: string): string {
-  return `${MARK_TOP}  protected session ${code}`;
+/**
+ * How a receipt is drawn. `inline` is the crown alone on the label's line:
+ * Markdown webviews join a second line onto the first, or split the sprite
+ * at their line height. `terminal` adds the sprite's second row under the
+ * label for a client that prints each line in a monospace grid, where the
+ * crown alone reads as a cut-off logo.
+ */
+export type SessionReceiptLayout = "inline" | "terminal";
+
+export function formatSessionReceipt(
+  code: string,
+  layout: SessionReceiptLayout = "inline",
+): string {
+  const label = `${MARK_TOP}  protected session ${code}`;
+  return layout === "terminal" ? `${label}\n${MARK_BOTTOM}` : label;
 }
 
-export function appendSessionReceipt(text: string, code: string): string {
-  return `${formatSessionReceipt(code)}\n\n${text}`;
+export function appendSessionReceipt(
+  text: string,
+  code: string,
+  layout?: SessionReceiptLayout,
+): string {
+  return `${formatSessionReceipt(code, layout)}\n\n${text}`;
 }
 
 export function stripSessionReceipts(text: string): {

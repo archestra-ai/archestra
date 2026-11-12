@@ -2,7 +2,10 @@ import logger from "@/logging";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import { appendChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import { wrapCompactionResponse } from "@/openappa/compaction-carrier";
-import { formatSessionReceipt } from "@/openappa/session-token";
+import {
+  formatSessionReceipt,
+  type SessionReceiptLayout,
+} from "@/openappa/session-token";
 import {
   type AppaWireFamily,
   appendChildTrajectoryReceiptToResponse,
@@ -15,6 +18,7 @@ import {
   type AppaChildTrajectoryReceiptOutput,
 } from "@/proxy/plugins/appa-plugin-archestra/types";
 import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
+import { getHeaderValue } from "@/routes/proxy/utils/headers/meta-header";
 import type { LLMStreamAdapter } from "@/types";
 import { asRecord } from "@/utils/as-record";
 import { trackBackgroundWork } from "@/utils/background-work";
@@ -75,12 +79,14 @@ export class OpenappaReceipts {
         sessionId: session.session_id,
       });
       if (receipt && (receipt.receiptIssuedAt == null || clientCompaction)) {
+        const layout = sessionReceiptLayout(context.headers);
         sessionReceipt = {
           family,
           organizationId: context.organizationId,
           sessionId: session.session_id,
           code: receipt.token,
-          footer: formatSessionReceipt(receipt.token),
+          layout,
+          footer: formatSessionReceipt(receipt.token, layout),
         };
       }
     }
@@ -175,6 +181,7 @@ export class OpenappaReceipts {
         family: this.session.family,
         response: outbound,
         code: this.session.code,
+        layout: this.session.layout,
       });
       if (appended) markSessionReceiptIssued(this.session);
     }
@@ -187,6 +194,7 @@ type SessionReceipt = {
   organizationId: string;
   sessionId: string;
   code: string;
+  layout: SessionReceiptLayout;
   footer: string;
 };
 
@@ -208,6 +216,24 @@ function markSessionReceiptIssued(receipt: SessionReceipt): void {
     }),
   );
 }
+
+/**
+ * The terminal layout is for Claude Code's CLI, which names its entrypoint in
+ * its User-Agent: `claude-cli/2.1.322 (external, cli)`. Its other entrypoints
+ * (`claude-vscode`, `sdk-cli`, ...) and every other client get the inline
+ * layout, which survives Markdown rendering.
+ */
+function sessionReceiptLayout(
+  headers: LlmProxyRequestContext["headers"],
+): SessionReceiptLayout {
+  const match = getHeaderValue(headers, "user-agent")?.match(
+    CLAUDE_CLI_USER_AGENT,
+  );
+  const entrypoints = match?.[1]?.split(",").map((part) => part.trim());
+  return entrypoints?.includes("cli") ? "terminal" : "inline";
+}
+
+const CLAUDE_CLI_USER_AGENT = /^claude-cli\/\S+\s+\(([^)]*)\)/i;
 
 /**
  * Claude Code's next-prompt suggestion: after an answer, it asks the model

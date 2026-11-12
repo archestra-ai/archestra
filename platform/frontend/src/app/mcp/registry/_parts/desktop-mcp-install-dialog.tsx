@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, Laptop, Loader2, TriangleAlert, WifiOff } from "lucide-react";
+import { Clock, Laptop, Loader2, TriangleAlert } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   McpBridgeSetup,
@@ -175,9 +175,7 @@ function DesktopMcpAddFlow({
     added && !added.bridgeSetup
       ? desktopMcpProgress({
           installStatus,
-          device: device
-            ? { online: device.online, serverState: reported?.state }
-            : null,
+          device: device ? { serverState: reported?.state } : null,
           elapsedMs,
         })
       : null;
@@ -429,25 +427,19 @@ function ProgressHint({
   startError: string | null;
 }) {
   const notice: { icon: ReactNode; title: string; text: string } =
-    hint === "offline"
+    hint === "failed"
       ? {
-          icon: <WifiOff />,
-          title: "Your device is offline.",
-          text: `${name} connects as soon as it's back.`,
+          icon: <Clock />,
+          title: `${name} hasn't started yet.`,
+          text: startError
+            ? `${startError} The MCP bridge keeps trying.`
+            : "The MCP bridge keeps trying.",
         }
-      : hint === "failed"
-        ? {
-            icon: <Clock />,
-            title: `${name} hasn't started yet.`,
-            text: startError
-              ? `${startError} The MCP bridge keeps trying.`
-              : "The MCP bridge keeps trying.",
-          }
-        : {
-            icon: <Clock />,
-            title: "This is taking a little longer.",
-            text: `You can close this window. ${name} keeps getting ready in the background.`,
-          };
+      : {
+          icon: <Clock />,
+          title: "This is taking a little longer.",
+          text: `You can close this window. ${name} keeps getting ready in the background.`,
+        };
   return (
     <InlineNotice variant="neutral">
       {notice.icon}

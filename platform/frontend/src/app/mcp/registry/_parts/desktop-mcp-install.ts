@@ -152,12 +152,13 @@ export const DESKTOP_MCP_PROGRESS_STEPS: DesktopMcpProgressStep[] = [
 ];
 
 /**
- * A calm note under the steps when the computer is not getting there:
- * - `offline`: the computer is off or asleep;
+ * A calm note under the steps when the device is not getting there:
  * - `failed`: the MCP bridge reported that the server did not start;
- * - `slow`: none of the two, but it takes longer than it should.
+ * - `slow`: it did not, but it takes longer than it should. A device that
+ *   is offline gets no note of its own: it is often only between two polls
+ *   right after it was linked.
  */
-export type DesktopMcpProgressHint = "offline" | "failed" | "slow";
+export type DesktopMcpProgressHint = "failed" | "slow";
 
 export type DesktopMcpProgress =
   | { done: true }
@@ -173,8 +174,8 @@ export const DESKTOP_MCP_SLOW_AFTER_MS = 30_000;
 /**
  * Where an Add stands, from what Archestra and the MCP bridge report:
  * - the installation status, `success` once the tools are read;
- * - the computer: online or not, and the state it reports for the server
- *   (null when the computer reported nothing for it yet);
+ * - the state the device reports for the server (null when it reported
+ *   nothing for it yet);
  * - the time since Add, for the note that it takes long.
  *
  * The step only moves forward: once the MCP bridge reports the server
@@ -183,10 +184,7 @@ export const DESKTOP_MCP_SLOW_AFTER_MS = 30_000;
  */
 export function desktopMcpProgress(params: {
   installStatus: string | null | undefined;
-  device: {
-    online: boolean;
-    serverState: string | null | undefined;
-  } | null;
+  device: { serverState: string | null | undefined } | null;
   elapsedMs: number;
 }): DesktopMcpProgress {
   const { installStatus, device, elapsedMs } = params;
@@ -201,13 +199,11 @@ export function desktopMcpProgress(params: {
         : "sending";
 
   const hint: DesktopMcpProgressHint | null =
-    device && !device.online
-      ? "offline"
-      : serverState === "failed" || installStatus === "error"
-        ? "failed"
-        : elapsedMs >= DESKTOP_MCP_SLOW_AFTER_MS
-          ? "slow"
-          : null;
+    serverState === "failed" || installStatus === "error"
+      ? "failed"
+      : elapsedMs >= DESKTOP_MCP_SLOW_AFTER_MS
+        ? "slow"
+        : null;
 
   return { done: false, step, hint };
 }

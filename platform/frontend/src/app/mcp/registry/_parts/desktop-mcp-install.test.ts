@@ -373,17 +373,14 @@ describe("desktopMcpAddCase", () => {
 });
 
 describe("desktopMcpProgress", () => {
-  const online = (serverState: string | null) => ({
-    online: true,
-    serverState,
-  });
+  const reporting = (serverState: string | null) => ({ serverState });
 
   it("sends to the computer until the MCP bridge reports the server", () => {
     for (const serverState of [null, "stopped", "no_command"]) {
       expect(
         desktopMcpProgress({
           installStatus: "pending",
-          device: online(serverState),
+          device: reporting(serverState),
           elapsedMs: 1_000,
         }),
       ).toEqual({ done: false, step: "sending", hint: null });
@@ -394,21 +391,21 @@ describe("desktopMcpProgress", () => {
     expect(
       desktopMcpProgress({
         installStatus: "pending",
-        device: online("starting"),
+        device: reporting("starting"),
         elapsedMs: 1_000,
       }),
     ).toEqual({ done: false, step: "starting", hint: null });
     expect(
       desktopMcpProgress({
         installStatus: "discovering-tools",
-        device: online("starting"),
+        device: reporting("starting"),
         elapsedMs: 1_000,
       }),
     ).toEqual({ done: false, step: "reading", hint: null });
     expect(
       desktopMcpProgress({
         installStatus: "success",
-        device: online("running"),
+        device: reporting("running"),
         elapsedMs: 1_000,
       }),
     ).toEqual({ done: true });
@@ -420,27 +417,34 @@ describe("desktopMcpProgress", () => {
     expect(
       desktopMcpProgress({
         installStatus: "pending",
-        device: online("running"),
+        device: reporting("running"),
         elapsedMs: 5_000,
       }),
     ).toEqual({ done: false, step: "reading", hint: null });
   });
 
-  it("says the computer is offline before anything else", () => {
+  it("gives a device that reported nothing yet only the note that it takes long", () => {
     expect(
       desktopMcpProgress({
         installStatus: "pending",
-        device: { online: false, serverState: null },
+        device: { serverState: null },
+        elapsedMs: 1_000,
+      }),
+    ).toEqual({ done: false, step: "sending", hint: null });
+    expect(
+      desktopMcpProgress({
+        installStatus: "pending",
+        device: { serverState: null },
         elapsedMs: DESKTOP_MCP_SLOW_AFTER_MS * 2,
       }),
-    ).toEqual({ done: false, step: "sending", hint: "offline" });
+    ).toEqual({ done: false, step: "sending", hint: "slow" });
   });
 
   it("says the server did not start when the MCP bridge reports a failure", () => {
     expect(
       desktopMcpProgress({
         installStatus: "pending",
-        device: online("failed"),
+        device: reporting("failed"),
         elapsedMs: 1_000,
       }),
     ).toEqual({ done: false, step: "starting", hint: "failed" });
@@ -450,7 +454,7 @@ describe("desktopMcpProgress", () => {
     const at = (elapsedMs: number) =>
       desktopMcpProgress({
         installStatus: "pending",
-        device: online("starting"),
+        device: reporting("starting"),
         elapsedMs,
       });
     expect(at(DESKTOP_MCP_SLOW_AFTER_MS - 1)).toMatchObject({ hint: null });

@@ -205,6 +205,12 @@ export const AppaGithubSyncActionSchema = z.discriminatedUnion("action", [
    * policy file, in the caller's name, when the file lacks it and none waits.
    */
   z.object({ action: z.literal("include_servers") }).strict(),
+  /**
+   * Bring the repository's protection in line now, as each sync does: the
+   * branch ruleset that requires the policy check, once the GitHub App may
+   * keep it. Finish setup runs it rather than waiting for the next sync.
+   */
+  z.object({ action: z.literal("protect") }).strict(),
 ]);
 /** Whether the caller's organization lets server editors change their own rules now. */
 export const AppaSelfServiceAvailabilitySchema = z.object({

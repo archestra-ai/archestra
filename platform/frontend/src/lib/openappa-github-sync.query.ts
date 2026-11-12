@@ -153,6 +153,8 @@ export function useUpdateAppaGithubSync() {
       client.invalidateQueries({ queryKey: appaSelfServiceQueryKey });
     },
     onSuccess: (data, body, context) => {
+      // The setup dialog reports the protection it brought in line.
+      if (body.action === "protect") return;
       if (body.action === "include_servers") {
         toast.success(
           "Pull request opened. Merge it so the servers' files apply.",

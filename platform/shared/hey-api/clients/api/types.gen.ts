@@ -100465,6 +100465,8 @@ export type UpdateAppaGithubSyncData = {
         interval: '15m' | '1h' | '1d';
     } | {
         action: 'include_servers';
+    } | {
+        action: 'protect';
     };
     path?: never;
     query?: never;

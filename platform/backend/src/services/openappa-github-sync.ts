@@ -616,7 +616,7 @@ async function createAppaGitlabProject(params: {
 
 export async function updateAppaGithubSync(params: {
   organizationId: string;
-  action: "sync" | "disconnect" | "schedule";
+  action: "sync" | "disconnect" | "schedule" | "protect";
   interval?: AppaGithubSource["interval"];
 }) {
   assertEnabled();
@@ -625,6 +625,8 @@ export async function updateAppaGithubSync(params: {
     throw new ApiError(409, "Connect a GitHub source first");
   if (params.action === "sync")
     await syncAppaGithubPolicy(params.organizationId);
+  else if (params.action === "protect")
+    await maintainRepositoryProtection(params.organizationId);
   else {
     // A stopped sync posts no check, so the ruleset that requires it goes too.
     if (params.action === "disconnect" && selfServiceActive(row))

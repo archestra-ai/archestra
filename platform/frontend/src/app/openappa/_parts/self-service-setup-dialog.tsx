@@ -59,6 +59,7 @@ export function SelfServiceSetupDialog({
     grants.data?.permissions.find((entry) => entry.name === name)?.granted ===
     true;
   const ready = NEEDED.every(granted);
+  const update = useUpdateAppaGithubSync();
   const policyFile = policyPath.slice(policyPath.lastIndexOf("/") + 1);
   const header = headerFor(step, appName, grants.data?.name ?? null);
   return (
@@ -118,12 +119,13 @@ export function SelfServiceSetupDialog({
       ) : null}
       {step === "enable" ? (
         <SelfServiceOutcomeStep
-          // The deployment's variable is the switch: nothing to turn on here.
-          run={() => Promise.resolve()}
+          // The deployment's variable is the switch; the first step brings
+          // the repository's protection in line now, as the next sync would.
+          run={() => update.mutateAsync({ action: "protect" })}
           labels={{
             pending: "MCP Guardrails Self-Service is on",
             done: "MCP Guardrails Self-Service is on",
-            failed: "Could not read MCP Guardrails Self-Service",
+            failed: "Could not set up MCP Guardrails Self-Service",
           }}
           directory={directory}
           policyFile={policyFile}

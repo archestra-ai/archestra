@@ -1760,9 +1760,15 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
     message: expect.stringContaining("MCP Guardrails Self-Service is off"),
   });
 
-  // On, by the deployment's variable: the next sync brings the ruleset, and
-  // the checks with it.
+  // On, by the deployment's variable: Finish setup brings the ruleset at
+  // once, the next sync keeps it, and the checks come with it.
   config.openappa.selfService = "enabled";
+  await updateAppaGithubSync({ organizationId: org.id, action: "protect" });
+  expect(calls).toEqual(["POST rulesets"]);
+  listed = [
+    { id: 5, name: CHECK, source_type: "Repository" },
+    { id: 7, name: "Release rules", source_type: "Repository" },
+  ];
   await syncAppaGithubPolicy(org.id);
   expect((await getAppaGithubSync(org.id)).selfService).toEqual(
     selfServiceSetting(true),

@@ -319,14 +319,16 @@ test("Finish setup walks through the App's permissions, the ruleset and the incl
     http.patch(url, async ({ request }) => {
       const body = (await request.json()) as { action: string };
       actions.push(body);
-      include = {
-        folder: "rules/servers",
-        state: "pull_open",
-        pull: {
-          number: 12,
-          url: "https://github.com/example/policies/pull/12",
-        },
-      };
+      // Only the include step opens the pull request; protect keeps the ruleset.
+      if (body.action === "include_servers")
+        include = {
+          folder: "rules/servers",
+          state: "pull_open",
+          pull: {
+            number: 12,
+            url: "https://github.com/example/policies/pull/12",
+          },
+        };
       return HttpResponse.json(state);
     }),
   );
@@ -363,7 +365,10 @@ test("Finish setup walks through the App's permissions, the ruleset and the incl
   ).toHaveTextContent(
     "Pull request #12 opened. Merge it and re-sync to apply the new settings.",
   );
-  expect(actions).toEqual([{ action: "include_servers" }]);
+  expect(actions).toEqual([
+    { action: "protect" },
+    { action: "include_servers" },
+  ]);
   fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),

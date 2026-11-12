@@ -40,6 +40,8 @@ class OpenAppaGitlab {
           params.repo,
           params.setupMergeRequest,
         );
+        // The client reads GitLab's states as open, merged or closed, so an
+        // unmerged request is pending as open or closed, like a GitHub one.
         if (request.state !== "merged") return { pending: request.state };
       }
       const commitSha = await client.resolveCommit(params.repo, params.ref);

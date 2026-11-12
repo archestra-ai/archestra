@@ -1,6 +1,8 @@
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import { afterEach, describe, expect, test, vi } from "vitest";
-
+import config from "@/config";
 import {
+  getDatabaseOutageErrorCode,
   getDbResourceExhaustionErrorCode,
   getTransientDbErrorCode,
   installDbErrorSafetyNet,
@@ -761,5 +763,64 @@ describe("installDbErrorSafetyNet", () => {
     installDbErrorSafetyNet();
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
+  });
+});
+
+describe("getDatabaseOutageErrorCode", () => {
+  const timeout = () =>
+    Object.assign(new Error("Request timed out"), { code: "ETIMEDOUT" });
+
+  test("does not call a bare socket timeout from another client a database outage", () => {
+    expect(getDatabaseOutageErrorCode(timeout())).toBeNull();
+    expect(
+      getDatabaseOutageErrorCode(new Error("request failed: ECONNRESET")),
+    ).toBeNull();
+  });
+
+  test("reports the same timeout once the ORM or the pool raised it", async () => {
+    expect(
+      getDatabaseOutageErrorCode(
+        new DrizzleQueryError("select 1", [], timeout()),
+      ),
+    ).toBe("ETIMEDOUT");
+
+    const queryFailure = timeout();
+    const connectFailure = timeout();
+    const pool = {
+      query: vi.fn().mockRejectedValue(queryFailure),
+      connect: vi.fn().mockRejectedValue(connectFailure),
+    };
+    wrapPoolWithRetry(pool);
+    await expect(
+      withDbRetry(() => pool.query("select 1") as Promise<unknown>, {
+        maxRetries: 0,
+      }),
+    ).rejects.toBe(queryFailure);
+    await expect(pool.connect()).rejects.toBe(connectFailure);
+
+    expect(getDatabaseOutageErrorCode(queryFailure)).toBe("ETIMEDOUT");
+    expect(getDatabaseOutageErrorCode(connectFailure)).toBe("ETIMEDOUT");
+  });
+
+  test("reports a connection failure whose target is the database", () => {
+    const databaseHost = new URL(config.database.url).hostname;
+    expect(
+      getDatabaseOutageErrorCode(
+        new Error(`getaddrinfo EAI_AGAIN ${databaseHost}`),
+      ),
+    ).toBe("EAI_AGAIN");
+  });
+
+  test("reports SQLSTATE connection codes and the PostgreSQL client's own wording without provenance", () => {
+    expect(
+      getDatabaseOutageErrorCode(
+        Object.assign(new Error("terminating connection"), { code: "57P01" }),
+      ),
+    ).toBe("57P01");
+    expect(
+      getDatabaseOutageErrorCode(
+        new Error("timeout exceeded when trying to connect"),
+      ),
+    ).toBe("pool_connect_timeout");
   });
 });

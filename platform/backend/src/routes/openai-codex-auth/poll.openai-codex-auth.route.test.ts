@@ -106,7 +106,7 @@ describe("POST /api/openai-codex-auth/device/poll", () => {
     expect(response.statusCode).toBe(503);
     expect(response.json().error).toEqual({
       message:
-        "Could not connect to an upstream service. Check the service URL and network access, then retry.",
+        "Could not connect to an upstream service (ETIMEDOUT). Check the service URL and network access, then retry.",
       type: "api_service_unavailable_error",
     });
   });

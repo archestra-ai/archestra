@@ -6,15 +6,18 @@ import {
 } from "fastify-type-provider-zod";
 import config from "@/config";
 import {
+  getDatabaseOutageErrorCode,
   getDbResourceExhaustionErrorCode,
   getNonDatabaseConnectionTarget,
-  getTransientDbErrorCode,
   isDbStatementTimeoutError,
 } from "@/database/retry";
 import { ApiError } from "@/types";
 import { FAILED_QUERY_CLIENT_MESSAGE, hasFailedQueryText } from "@/utils/db";
 import { incomingRequestAbortTracker } from "@/utils/incoming-request-abort";
-import { isFetchConnectivityError } from "@/utils/network-errors";
+import {
+  getNetworkErrorCode,
+  isFetchConnectivityError,
+} from "@/utils/network-errors";
 import { captureServerException } from "./exception-capture";
 
 export function handleServerError(
@@ -171,20 +174,19 @@ export function handleServerError(
 
   // Native HTTP fetch errors and connection failures to a host other than
   // the database share socket codes with database connections. Preserve
-  // their known origin before the broader database errno matching.
-  const outboundTarget = getNonDatabaseConnectionTarget(error);
+  // their known origin before the broader database errno matching. A proxy
+  // relay already chose its status from the same transport failure, which it
+  // keeps as `cause`; leave that status alone.
+  const isUpstreamRelay = error instanceof ApiError && error.upstream === true;
+  const outboundTarget = isUpstreamRelay
+    ? null
+    : getNonDatabaseConnectionTarget(error);
   if (outboundTarget || isFetchConnectivityError(error)) {
-    this.log.warn(
-      { ...requestContext, statusCode: 503, outboundTarget },
-      "HTTP 503 upstream service unavailable",
-    );
-    return reply.status(503).send({
-      error: {
-        message: outboundTarget
-          ? `Could not connect to ${outboundTarget}. Check that the network egress policy allows this host and that the service is reachable, then retry.`
-          : "Could not connect to an upstream service. Check the service URL and network access, then retry.",
-        type: "api_service_unavailable_error",
-      },
+    return replyUpstreamUnavailable.call(this, {
+      reply,
+      requestContext,
+      outboundTarget,
+      errorCode: getNetworkErrorCode(error),
     });
   }
 
@@ -193,8 +195,9 @@ export function handleServerError(
   // survived the retry budget are availability incidents, not bugs in
   // whichever route happened to be in flight. Respond with a retryable
   // 503 instead of a 500, and group them in error tracking by root
-  // cause rather than by the query text the ORM wraps them in.
-  const transientDbErrorCode = getTransientDbErrorCode(error);
+  // cause rather than by the query text the ORM wraps them in. A bare
+  // socket errno counts only when the database client raised it.
+  const transientDbErrorCode = getDatabaseOutageErrorCode(error);
   if (transientDbErrorCode) {
     this.log.error(
       {
@@ -273,6 +276,21 @@ export function handleServerError(
           "Could not connect to the model provider. Check its base URL and network access, then retry.",
         type: "api_service_unavailable_error",
       },
+    });
+  }
+
+  // Any other connection failure or timeout came from an outbound client
+  // that named no endpoint. It is not a database outage (that needs the
+  // database client's provenance, above), so report it as an upstream one.
+  // An ApiError keeps the status its route chose.
+  const unattributedNetworkErrorCode =
+    error instanceof ApiError ? null : getNetworkErrorCode(error);
+  if (unattributedNetworkErrorCode) {
+    return replyUpstreamUnavailable.call(this, {
+      reply,
+      requestContext,
+      outboundTarget: null,
+      errorCode: unattributedNetworkErrorCode,
     });
   }
 
@@ -361,6 +379,35 @@ export function handleServerError(
         ? FAILED_QUERY_CLIENT_MESSAGE
         : message,
       type: "api_internal_server_error",
+    },
+  });
+}
+
+/**
+ * Answer a request whose outbound connection failed with a retryable 503 that
+ * names the host the backend could not reach and the error code, when known.
+ */
+function replyUpstreamUnavailable(
+  this: FastifyInstance,
+  params: {
+    reply: FastifyReply;
+    requestContext: ReturnType<typeof buildRequestErrorContext>;
+    outboundTarget: string | null;
+    errorCode: string | null;
+  },
+) {
+  const { reply, requestContext, outboundTarget, errorCode } = params;
+  this.log.warn(
+    { ...requestContext, statusCode: 503, outboundTarget, errorCode },
+    "HTTP 503 upstream service unavailable",
+  );
+  const code = errorCode ? ` (${errorCode})` : "";
+  return reply.status(503).send({
+    error: {
+      message: outboundTarget
+        ? `Could not connect to ${outboundTarget}${code}. Check that the network egress policy allows this host and that the service is reachable, then retry.`
+        : `Could not connect to an upstream service${code}. Check the service URL and network access, then retry.`,
+      type: "api_service_unavailable_error",
     },
   });
 }

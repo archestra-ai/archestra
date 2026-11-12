@@ -8,6 +8,7 @@
  * @see https://neon.com/guides/building-resilient-applications-with-postgres
  */
 import { isIP } from "node:net";
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import config from "@/config";
 import logger from "@/logging";
 import { getConnectionFailureTarget } from "@/utils/network-errors";
@@ -260,9 +261,9 @@ export function getDbResourceExhaustionErrorCode(
  * (e.g. "EAI_AGAIN", "ECONNREFUSED", "pool_connect_timeout", or a SQLSTATE
  * connection code). Returns null for non-transient errors.
  *
- * Used to fingerprint transient connectivity failures in error tracking so
- * one outage groups into one issue per root cause instead of one issue per
- * query that happened to be in flight.
+ * It does not know which connection failed: to report a failed request as a
+ * database outage, use {@link getDatabaseOutageErrorCode}.
+ * @public — exported for testability
  */
 export function getTransientDbErrorCode(
   error: unknown,
@@ -307,6 +308,24 @@ export function getTransientDbErrorCode(
 }
 
 /**
+ * The code to report a failed request under as a database outage, or null
+ * when the failure is not one.
+ *
+ * {@link getTransientDbErrorCode} answers "would retrying this database call
+ * help?" and matches bare socket errnos (`ETIMEDOUT`, `ECONNRESET`, …) that
+ * any network client raises. Calling a failure a database outage needs more:
+ * the error must come from the database client (see
+ * {@link isDatabaseClientError}). Only a SQLSTATE connection code or the
+ * PostgreSQL client's own wording names the database by itself.
+ */
+export function getDatabaseOutageErrorCode(error: unknown): string | null {
+  const code = getTransientDbErrorCode(error);
+  if (!code) return null;
+  if (!PROVENANCE_REQUIRED_CODES.has(code)) return code;
+  return isDatabaseClientError(error) ? code : null;
+}
+
+/**
  * Name the endpoint a connection failure was dialing when it is clearly not
  * the database, e.g. `api.example.com` or `203.0.113.10:443`. Returns null
  * when the failure names no target or the target may be the database.
@@ -343,6 +362,64 @@ export function getNonDatabaseConnectionTarget(error: unknown): string | null {
     return `${label}:${target.port}`;
   }
   return null;
+}
+
+/**
+ * Codes that {@link getTransientDbErrorCode} derives from text or errnos any
+ * network client can produce, so they name a database outage only when the
+ * error comes from the database client.
+ */
+const PROVENANCE_REQUIRED_CODES = new Set<string>([
+  ...TRANSIENT_NETWORK_CODES,
+  "timeout_expired",
+]);
+
+/** Errors the database pool rejected with (see {@link wrapPoolWithRetry}). */
+const databaseClientErrors = new WeakSet<object>();
+
+/** How the ORM begins the message of a failed query. */
+const FAILED_QUERY_PREFIX = "Failed query:";
+
+function markRejectionAsDatabaseError<T>(promise: Promise<T>): Promise<T> {
+  return promise.catch((error: unknown) => {
+    if (typeof error === "object" && error !== null) {
+      databaseClientErrors.add(error);
+    }
+    throw error;
+  });
+}
+
+/**
+ * Whether an error comes from the database client: the ORM's failed-query
+ * wrapper, a rejection of the database pool, or a connection failure whose
+ * target is the database. Walks causes and AggregateError members.
+ */
+function isDatabaseClientError(error: unknown): boolean {
+  if (
+    getConnectionFailureTarget(error) &&
+    !getNonDatabaseConnectionTarget(error)
+  ) {
+    return true;
+  }
+  return hasDatabaseClientOrigin(error, 0);
+}
+
+function hasDatabaseClientOrigin(error: unknown, depth: number): boolean {
+  if (!(error instanceof Error) || depth > MAX_CAUSE_DEPTH) return false;
+  if (
+    databaseClientErrors.has(error) ||
+    error instanceof DrizzleQueryError ||
+    error.message.includes(FAILED_QUERY_PREFIX)
+  ) {
+    return true;
+  }
+  if (
+    error instanceof AggregateError &&
+    error.errors.some((member) => hasDatabaseClientOrigin(member, depth + 1))
+  ) {
+    return true;
+  }
+  return hasDatabaseClientOrigin(error.cause, depth + 1);
 }
 
 /**
@@ -445,11 +522,15 @@ const RETRY_WRAPPED = Symbol("retryWrapped");
  * Transaction queries (via a checked-out PoolClient) are NOT affected by this
  * wrapper; callers should use {@link withDbRetry} around the entire transaction.
  *
+ * What `query()` and `connect()` reject with is marked as coming from the
+ * database (see {@link getDatabaseOutageErrorCode}).
+ *
  * Calling this function multiple times on the same pool is a no-op (guarded
  * by a Symbol marker to prevent compounding retries).
  */
 export function wrapPoolWithRetry(pool: {
   query: (...args: unknown[]) => unknown;
+  connect?: (...args: unknown[]) => unknown;
 }): void {
   if ((pool as Record<symbol, unknown>)[RETRY_WRAPPED]) return;
 
@@ -467,10 +548,27 @@ export function wrapPoolWithRetry(pool: {
     // a deadlock victim. Repeating that statement cannot duplicate a commit.
     // Do not enable this for transaction callbacks: they may perform external
     // work that PostgreSQL cannot roll back.
-    return withDbRetry(() => originalQuery(...args) as Promise<unknown>, {
-      retryDeadlocks: isAutocommitStatement(args[0]),
-    });
+    return markRejectionAsDatabaseError(
+      withDbRetry(() => originalQuery(...args) as Promise<unknown>, {
+        retryDeadlocks: isAutocommitStatement(args[0]),
+      }),
+    );
   }) as typeof pool.query;
+
+  // Transactions check out a client with connect(). A connection that cannot
+  // be opened rejects with a bare socket error, so mark where it came from.
+  // pg-pool's own query() calls connect() with a callback: leave that alone.
+  if (typeof pool.connect === "function") {
+    const originalConnect = pool.connect.bind(pool);
+    pool.connect = ((...args: unknown[]) => {
+      if (typeof args[args.length - 1] === "function") {
+        return originalConnect(...args);
+      }
+      return markRejectionAsDatabaseError(
+        originalConnect(...args) as Promise<unknown>,
+      );
+    }) as typeof pool.connect;
+  }
 
   (pool as Record<symbol, unknown>)[RETRY_WRAPPED] = true;
 }

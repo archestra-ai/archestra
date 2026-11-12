@@ -18,6 +18,7 @@ import OrganizationModel from "@/models/organization";
 import { rewriteConnectionProxySetupUrl } from "@/services/connection-proxy-setup-context";
 import type { ApiError } from "@/types";
 import { incomingRequestAbortTracker } from "@/utils/incoming-request-abort";
+import { outboundRequestTargets } from "@/utils/network-errors";
 import { registerLlmProxyDenialLog } from "./observability/llm-proxy-denial";
 import { handleServerError } from "./server/error-handler";
 import { registerLlmProxyDrain } from "./server/llm-proxy-drain";
@@ -31,6 +32,8 @@ type BrowserApiRequest = FastifyRequest & {
 
 /** Sets up logging, Zod validation, response serialization, and shared hooks. */
 export const createFastifyInstance = () => {
+  // Lets the error handler name the host of a failed outbound request.
+  outboundRequestTargets.install();
   const fastify = Fastify({
     loggerInstance: logger,
     logController: new LogController({ disableRequestLogging: true }),

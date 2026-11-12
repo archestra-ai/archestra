@@ -371,6 +371,7 @@ jobs:
           image: ${{ steps.release-scan.outputs.amd64 }}
           platform: linux/amd64
           exit-code: "true"
+          findings-file: ${{ runner.temp }}/release-scan-findings
 
       - name: Scan release arm64 bytes before tagging
         if: ${{ startsWith(inputs.checkout_ref, 'platform-v') && !inputs.amd64_only }}
@@ -379,6 +380,35 @@ jobs:
           image: ${{ steps.release-scan.outputs.arm64 }}
           platform: linux/arm64
           exit-code: "true"
+          findings-file: ${{ runner.temp }}/release-scan-findings
+
+      # A release promotes the exact bytes its merge queue scanned and never
+      # rebuilds them, so vulnerabilities found in them since (a newly
+      # published CVE) fail every later recovery of the version the same way.
+      # Tell Release Please, which then holds the draft from those recoveries
+      # (release-finalize.py record-hold). Other failures are left to retry.
+      - name: Keep the release scan's findings
+        id: release-findings
+        if: ${{ failure() && startsWith(inputs.checkout_ref, 'platform-v') }}
+        shell: bash
+        env:
+          FINDINGS: ${{ runner.temp }}/release-scan-findings
+          IMAGE_NAME: ${{ inputs.image_name }}
+        run: |
+          [ -s "$FINDINGS" ] || exit 0
+          mkdir -p "$RUNNER_TEMP/release-findings"
+          jq -Rn --arg image "$IMAGE_NAME" '{image: $image, references: [inputs | select(length > 0)]}' \
+            < "$FINDINGS" > "$RUNNER_TEMP/release-findings/$IMAGE_NAME.json"
+          echo "found=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the release scan's findings
+        if: ${{ failure() && steps.release-findings.outputs.found == 'true' }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: release-scan-findings-${{ inputs.image_name }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-findings/*
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Create manifest list and push
         working-directory: /tmp/digests

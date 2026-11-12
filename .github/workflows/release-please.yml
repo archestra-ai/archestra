@@ -16,6 +16,10 @@ on:
         description: "Tiny scratch-image fixture artifact from this branch's PR workflow"
         type: string
         default: ""
+      retry-held-release:
+        description: "Recover this branch's draft release although a scan found vulnerabilities in its bytes (scans the same bytes again)"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -45,6 +49,7 @@ jobs:
       platform_version: ${{ steps.resolve-release.outputs.version }}
       platform_tag_name: ${{ steps.resolve-release.outputs.tag_name }}
       platform_checkout_ref: ${{ steps.resolve-release.outputs.checkout_ref }}
+      platform_release_sha: ${{ steps.resolve-release.outputs.release_sha }}
       platform_previous_version: ${{ steps.previous-release.outputs.version }}
     steps:
       - name: Checkout repository
@@ -130,12 +135,33 @@ jobs:
       # feature rejects that ("state cannot be changed when release is immutable", HTTP
       # 422), which is what previously failed the release-please job and silently skipped
       # every downstream image/chart publish job.
-      #
+      - name: Generate a publisher token
+        if: ${{ !inputs.handoff-fixture }}
+        id: publisher-token
+        uses: ./.github/actions/github-app-token
+        with:
+          owner: archestra-ai
+          repositories: release-publisher
+          permission-actions: read # Read the publisher's runs.
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       # Draft releases don't create the underlying git tag, but downstream build jobs
       # check out the tag ref (checkout_ref) and release-please needs the tag to exist
       # when calculating the next version (otherwise it creates bogus PRs with stale
       # versions). Resolve a just-created release or an interrupted matching draft before
       # creating that tag ourselves, pinned to the release commit.
+      #
+      # A draft stays a draft while its publish request waits for approval, and
+      # until release-finalize.yml publishes it after the request succeeds, so
+      # every push to the branch in that time finds it. A recovery promotes the
+      # exact bytes the queue scanned again; it never rebuilds. Recover only when
+      # that can help (release-finalize.py recovery-hold): not while the
+      # publisher has an open or a successful request for the version (a
+      # duplicate request, which the version's concurrency group cancels), not
+      # once the queue's scan evidence has expired, and not after a release scan
+      # found vulnerabilities in those bytes (hold-rejected-release). The last two
+      # would fail every push the same way; the job summary lists the ways out.
       - name: Resolve release to publish or recover
         if: ${{ !inputs.handoff-fixture }}
         id: resolve-release
@@ -147,6 +173,9 @@ jobs:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
           REQUESTED_VERSION: ${{ steps.policy.outputs.requested }}
+          PUBLISHER_REPOSITORY: archestra-ai/release-publisher
+          PUBLISHER_TOKEN: ${{ steps.publisher-token.outputs.token }}
+          RETRY_HELD: ${{ inputs.retry-held-release }}
         run: |
           if [ "$ACTION_RELEASE_CREATED" = "true" ] && [ "$ACTION_VERSION" != "$REQUESTED_VERSION" ]; then
             echo "::error::Release-please produced a version other than the merged manifest."
@@ -162,12 +191,21 @@ jobs:
             RELEASE_SHA=$ACTION_RELEASE_SHA
           else
             EXPECTED_TAG=platform-v${REQUESTED_VERSION}
-            if RELEASE=$(gh release view "$EXPECTED_TAG" --json isDraft,targetCommitish 2>/dev/null); then
+            if RELEASE=$(gh release view "$EXPECTED_TAG" --json isDraft,targetCommitish,createdAt 2>/dev/null); then
               if [ "$(jq -r .isDraft <<<"$RELEASE")" = true ]; then
-                SHOULD_PUBLISH=true
-                TAG_NAME=$EXPECTED_TAG
-                RELEASE_SHA=$(jq -r .targetCommitish <<<"$RELEASE")
-                echo "Recovering draft release ${TAG_NAME}"
+                # An unreadable state recovers as before rather than strand the draft.
+                HOLD=$(VERSION=$REQUESTED_VERSION RELEASE_SHA=$(jq -r .targetCommitish <<<"$RELEASE") \
+                  DRAFT_CREATED_AT=$(jq -r .createdAt <<<"$RELEASE") \
+                  python3 .github/scripts/release-finalize.py recovery-hold) \
+                  || { echo "::warning::Could not check whether ${EXPECTED_TAG} needs recovering; recovering it anyway"; HOLD=''; }
+                if [ -n "$HOLD" ]; then
+                  echo "::notice::${HOLD}"
+                else
+                  SHOULD_PUBLISH=true
+                  TAG_NAME=$EXPECTED_TAG
+                  RELEASE_SHA=$(jq -r .targetCommitish <<<"$RELEASE")
+                  echo "Recovering draft release ${TAG_NAME}"
+                fi
               fi
             fi
           fi
@@ -466,6 +504,53 @@ jobs:
       previous_version: ${{ needs.release-please.outputs.platform_previous_version }}
       push_image: true
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
+
+  # A release scan that finds vulnerabilities in the exact bytes this run
+  # promoted (build-native-multi-arch-image.yml keeps a release-scan-findings
+  # artifact) would fail every later recovery of the version the same way:
+  # recovery never rebuilds. Keep a release-held-<version>-<sha> artifact so
+  # later pushes skip recovering the draft (release-finalize.py recovery-hold)
+  # instead of failing each one; its summary lists the ways out.
+  hold-rejected-release:
+    name: Hold a release whose bytes fail the scan
+    needs:
+      - release-please
+      - build-and-push-mcp-server-docker-image
+      - build-and-push-agent-catalog-images
+      - build-and-push-p4-shim-docker-image
+      - build-and-push-sandbox-base-docker-image
+      - build-and-push-platform-docker-image
+    if: ${{ always() && needs.release-please.outputs.platform_should_publish == 'true' && contains(needs.*.result, 'failure') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # Check out the hold policy script.
+      actions: read # List this run's artifacts.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Collect the release scan's findings
+        id: hold
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.release-please.outputs.platform_version }}
+          RELEASE_SHA: ${{ needs.release-please.outputs.platform_release_sha }}
+          HOLD_DIR: ${{ runner.temp }}/release-held
+        run: python3 .github/scripts/release-finalize.py record-hold
+
+      - name: Hold the draft from later recoveries
+        if: ${{ steps.hold.outputs.name != '' }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: ${{ steps.hold.outputs.name }}
+          path: ${{ runner.temp }}/release-held/held.json
+          if-no-files-found: error
+          overwrite: true
 
   publish-platform-helm-chart:
     name: Package platform Helm chart

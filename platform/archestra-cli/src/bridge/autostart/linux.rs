@@ -10,8 +10,6 @@
 //!   XDG autostart entry `~/.config/autostart/archestra-mcp-bridge.desktop`
 //!   is there.
 //!
-//! Linux has no tray icon: the Device tab shows the state.
-//!
 //! [`install_and_start`] and [`stop_bridge`] start and stop the MCP bridge,
 //! [`add_to_login`] and [`remove_from_login`] change only the start at login,
 //! and [`stop_and_remove`] removes all of it. The parts take the home folder,

@@ -7,10 +7,11 @@ use std::time::Duration;
 
 use archestra_cli::bridge::config::{CommandEntry, Config, McpConfig, ServerUrlEntry};
 use archestra_cli::bridge::{
-    Backoff, BridgeHandle, BridgeState, BridgeStatus, RunOptions, ServerState, SyncState, Timings,
+    Backoff, BridgeState, BridgeStatus, RunOptions, ServerState, SyncState, Timings,
 };
 use serde_json::{Value, json};
 use tempfile::TempDir;
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
 use crate::mock_control_plane::MockControlPlane;
@@ -100,10 +101,10 @@ pub fn url_entry(channel: &str, url: &str) -> ServerUrlEntry {
     }
 }
 
-/// The run loop of the tunnel client, with no tray and no autostart.
+/// The run loop of the tunnel client, with no autostart.
 /// Dropping it stops the client and its MCP servers.
 pub struct Bridge {
-    pub handle: BridgeHandle,
+    state: watch::Receiver<BridgeState>,
     task: JoinHandle<()>,
 }
 
@@ -138,17 +139,18 @@ impl Bridge {
 
     /// Starts the run loop on a config file that is there already.
     pub fn run(options: RunOptions) -> Self {
-        let (mut bridge, handle) = archestra_cli::bridge::Bridge::new(options);
+        let mut bridge = archestra_cli::bridge::Bridge::new(options);
+        let state = bridge.state();
         let task = tokio::spawn(async move {
             bridge.run().await.expect("the run loop starts");
             // Keep the state open after the loop ends (signed out).
             std::future::pending::<()>().await;
         });
-        Self { handle, task }
+        Self { state, task }
     }
 
     pub fn state(&self) -> BridgeState {
-        self.handle.state.borrow().clone()
+        self.state.borrow().clone()
     }
 
     /// Waits until the state passes the check, and gives that state.
@@ -157,7 +159,7 @@ impl Bridge {
         what: &str,
         check: impl FnMut(&BridgeState) -> bool,
     ) -> BridgeState {
-        tokio::time::timeout(Duration::from_secs(30), self.handle.state.wait_for(check))
+        tokio::time::timeout(Duration::from_secs(30), self.state.wait_for(check))
             .await
             .unwrap_or_else(|_| panic!("timed out waiting for the state: {what}"))
             .expect("the run loop is there")

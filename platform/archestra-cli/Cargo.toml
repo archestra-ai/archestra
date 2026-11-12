@@ -6,7 +6,7 @@
 
 [package]
 name = "archestra_cli"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 publish = false
 
@@ -54,49 +54,20 @@ tracing-subscriber = { version = "0.3", default-features = false, features = [
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1", features = ["process", "stdio", "system"] }
 
-# Windows: the Run key, the tray icon (Shell_NotifyIcon), the job object that
-# ends the process tree of an MCP server, and the stop request to the MCP
-# bridge. The platform bindings only, no GUI crate; the version is the one that
-# tokio already brings.
+# Windows: the Run key, the `Path` value of the user, the job object that ends
+# the process tree of an MCP server, the stop request to the MCP bridge, and
+# the browser for the sign-in (ShellExecute). The platform bindings only; the
+# version is the one that tokio already brings.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
-    "Win32_Graphics_Gdi",
     "Win32_Security",
     "Win32_System_Console",
     "Win32_System_JobObjects",
-    "Win32_System_LibraryLoader",
     "Win32_System_Registry",
     "Win32_System_Threading",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
-] }
-
-# The tray icon: AppKit bindings, macOS only. Linux builds and runs with no GUI
-# libraries: it has no tray icon.
-[target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = [
-    "std",
-    "objc2-core-foundation",
-    "NSApplication",
-    "NSButton",
-    "NSControl",
-    "NSImage",
-    "NSMenu",
-    "NSMenuItem",
-    "NSResponder",
-    "NSRunningApplication",
-    "NSStatusBar",
-    "NSStatusBarButton",
-    "NSStatusItem",
-    "NSView",
-] }
-objc2-foundation = { version = "0.3", default-features = false, features = [
-    "std",
-    "NSDate",
-    "NSString",
-    "NSTimer",
 ] }
 
 [dev-dependencies]

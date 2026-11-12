@@ -14,9 +14,9 @@
 //! [`stop_running`] asks the MCP bridge to stop and waits until the lock is
 //! free: on Linux with SIGTERM, on Windows with the named event
 //! `Local\ArchestraMcpBridgeStop` that the MCP bridge waits for. Both are
-//! normal ends: the MCP bridge stops its MCP servers and removes its tray
-//! icon. A Windows MCP bridge that does not stop in time is terminated; its
-//! job objects then end the MCP servers.
+//! normal ends: the MCP bridge stops its MCP servers. A Windows MCP bridge
+//! that does not stop in time is terminated; its job objects then end the MCP
+//! servers.
 
 use std::fs::{self, File, TryLockError};
 use std::io;

@@ -55,7 +55,7 @@ async fn run_with_auto_update(
     })
     .await
     .expect("prepare");
-    let (mut bridge, _handle) = Bridge::new(RunOptions {
+    let mut bridge = Bridge::new(RunOptions {
         config_path: dir.config_path(),
         control_plane: prepared.config.control_plane,
         timings: timings(),

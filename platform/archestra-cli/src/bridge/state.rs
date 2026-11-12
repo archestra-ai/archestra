@@ -1,5 +1,5 @@
-//! The state of the tunnel client: what the tray menu shows and what the
-//! tunnel client reports to Archestra.
+//! The state of the tunnel client: what it reports to Archestra and writes to
+//! the state file.
 
 use std::time::SystemTime;
 

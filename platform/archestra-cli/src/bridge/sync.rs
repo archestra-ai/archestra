@@ -2,10 +2,10 @@
 //! config file from it.
 //!
 //! The tunnel client syncs when it starts, when Archestra says that the
-//! config changed, when the user asks in the tray menu, and at a regular
-//! interval. A sync writes the file only when Archestra has other MCP entries
-//! than the file; the supervisor of the MCP servers reads the file after each
-//! write. If a sync fails, the file and the MCP servers stay as they are.
+//! config changed, and at a regular interval. A sync writes the file only
+//! when Archestra has other MCP entries than the file; the supervisor of the
+//! MCP servers reads the file after each write. If a sync fails, the file and
+//! the MCP servers stay as they are.
 
 use std::path::Path;
 use std::time::{Duration, SystemTime};

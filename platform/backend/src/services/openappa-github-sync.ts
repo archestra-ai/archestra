@@ -453,7 +453,7 @@ export async function createAppaGithubRepository(params: {
         branch,
         parent,
         files,
-        remove: await strayFilesToRemove({
+        remove: await regularStrayFilesToRemove({
           base,
           token,
           commit: parent,
@@ -560,7 +560,7 @@ async function proposeSetupPullRequest(params: {
       files,
       // Files the repository holds that the policy's globs would read, and
       // that were never in the policy, go in the same commit.
-      remove: await strayFilesToRemove({
+      remove: await regularStrayFilesToRemove({
         base,
         token,
         commit: parent,
@@ -2400,23 +2400,96 @@ async function strayFilesToRemove(params: {
       .map((entry) => entry.path),
     written: params.files.map((file) => file.path),
   });
-  const byPath = new Map(entries.map((entry) => [entry.path, entry]));
-  for (const path of [...params.files.map((file) => file.path), ...remove]) {
-    const entry = byPath.get(path);
-    if (
-      entry &&
-      (entry.type !== "blob" ||
-        (entry.mode !== undefined && !REGULAR_FILE_MODES.has(entry.mode)))
-    )
-      throw new ApiError(
-        400,
-        `${path} is not a regular file in the repository`,
-      );
-  }
   return remove;
 }
 
+/**
+ * Refuse a setup write or removal at a path that is not a regular file, or
+ * under a folder that is not a folder: a symbolic link or a submodule there
+ * is left alone, as any proposal leaves it. Only the trees along the paths
+ * are read, so a large repository costs a few small reads, and a path that
+ * does not exist yet is fine: setup creates it.
+ */
+async function assertRegularSetupPaths(params: {
+  base: string;
+  token: string;
+  commit: string;
+  paths: string[];
+}): Promise<void> {
+  const trees = new Map<string, TreeEntry[] & { sha?: string }[]>();
+  const read = async (sha: string) => {
+    const cached = trees.get(sha);
+    if (cached) return cached;
+    const tree = await githubJson<{
+      truncated?: boolean;
+      tree?: Array<{
+        path?: string;
+        type?: string;
+        mode?: string;
+        sha?: string;
+      }>;
+    }>({
+      url: `${params.base}/git/trees/${sha}`,
+      token: params.token,
+      errors: githubSyncErrors,
+    });
+    const entries = (tree.tree ?? []).flatMap((entry) =>
+      entry.path && entry.type
+        ? [
+            {
+              path: entry.path,
+              type: entry.type,
+              mode: entry.mode,
+              sha: entry.sha,
+            },
+          ]
+        : [],
+    );
+    trees.set(sha, entries);
+    return entries;
+  };
+  for (const path of new Set(params.paths)) {
+    const segments = path.split("/");
+    let sha = params.commit;
+    for (const [index, segment] of segments.entries()) {
+      const entry = (await read(sha)).find((item) => item.path === segment);
+      if (!entry) break;
+      const last = index === segments.length - 1;
+      const regular = last
+        ? entry.type === "blob" &&
+          (entry.mode === undefined || REGULAR_FILE_MODES.has(entry.mode))
+        : entry.type === "tree";
+      if (!regular)
+        throw new ApiError(
+          400,
+          `${path} is not a regular file in the repository`,
+        );
+      if (last || !entry.sha) break;
+      sha = entry.sha;
+    }
+  }
+}
+
 const REGULAR_FILE_MODES = new Set(["100644", "100755"]);
+
+/** The stray files to remove, once every written and removed path is checked. */
+async function regularStrayFilesToRemove(params: {
+  base: string;
+  token: string;
+  commit: string;
+  content: string;
+  policyPath: string;
+  files: SetupFile[];
+}): Promise<string[]> {
+  const remove = await strayFilesToRemove(params);
+  await assertRegularSetupPaths({
+    base: params.base,
+    token: params.token,
+    commit: params.commit,
+    paths: [...params.files.map((file) => file.path), ...remove],
+  });
+  return remove;
+}
 
 /**
  * One commit on top of `parent` that writes `files`, advanced onto `branch`

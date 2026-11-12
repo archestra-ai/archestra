@@ -65,21 +65,60 @@ function fakeGitData(
   const base = `https://api.github.com/repos/${repo}`;
   const written: Record<string, string>[] = [];
   const removed: string[][] = [];
-  const state = { commits: 0, treeReads: 0 };
+  const state = { commits: 0, treeReads: 0, recursiveReads: 0 };
   server.use(
     http.get(`${base}/git/commits/:sha`, () =>
       HttpResponse.json({ tree: { sha: HEAD_TREE } }),
     ),
     // The head's files, as setup lists them before writing over them.
-    http.get(`${base}/git/trees/:sha`, () => {
+    // The head's tree: the whole of it when asked recursively, else one
+    // tree's entries, the root's for the commit or any folder's by its id.
+    http.get(`${base}/git/trees/:sha`, ({ request, params }) => {
       state.treeReads++;
+      const mode = (path: string) =>
+        options.symlinks?.includes(path) ? "120000" : "100644";
+      if (new URL(request.url).searchParams.get("recursive")) {
+        state.recursiveReads++;
+        return HttpResponse.json({
+          truncated: false,
+          tree: Object.keys(options.head).map((path) => ({
+            path,
+            type: "blob",
+            mode: mode(path),
+          })),
+        });
+      }
+      const folderId = (folder: string) =>
+        createHash("sha1").update(`tree ${folder}`).digest("hex");
+      const folders = new Set<string>();
+      for (const path of Object.keys(options.head)) {
+        const parts = path.split("/");
+        for (let index = 1; index < parts.length; index++)
+          folders.add(parts.slice(0, index).join("/"));
+      }
+      const at =
+        [...folders].find((folder) => folderId(folder) === params.sha) ?? "";
+      const prefix = at ? `${at}/` : "";
+      const direct = (path: string) =>
+        path.startsWith(prefix) && !path.slice(prefix.length).includes("/");
       return HttpResponse.json({
         truncated: false,
-        tree: Object.keys(options.head).map((path) => ({
-          path,
-          type: "blob",
-          mode: options.symlinks?.includes(path) ? "120000" : "100644",
-        })),
+        tree: [
+          ...[...folders].filter(direct).map((folder) => ({
+            path: folder.slice(prefix.length),
+            type: "tree",
+            mode: "040000",
+            sha: folderId(folder),
+          })),
+          ...Object.keys(options.head)
+            .filter(direct)
+            .map((path) => ({
+              path: path.slice(prefix.length),
+              type: "blob",
+              mode: mode(path),
+              sha: blobSha(options.head[path] as string),
+            })),
+        ],
       });
     }),
     http.post(`${base}/git/trees`, async ({ request }) => {
@@ -995,8 +1034,9 @@ describe("APPA GitHub sync", () => {
     expect(response.statusCode, response.body).toBe(200);
     // The current policy is proposed over the repository's, never pulled over.
     expect(git.written()).toEqual({ "appa.toml": current });
-    // A policy with no include glob needs no look at the repository's tree.
-    expect(git.state.treeReads).toBe(0);
+    // A policy with no include glob needs no listing of the whole tree, only
+    // the trees along the paths it writes.
+    expect(git.state.recursiveReads).toBe(0);
     expect(response.json()).toMatchObject({
       validationDirectory: "checks",
       source: {
@@ -1360,6 +1400,69 @@ describe("APPA GitHub sync", () => {
     expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
       root,
     );
+  });
+
+  test("a repository whose policy file is a symbolic link is refused, with no include glob to list a tree for", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const installationId = randomUUID();
+    const secret = await secretManager().createSecret(
+      { apiToken: privateKey },
+      "test-linked-policy-app",
+    );
+    const githubApp = await GithubAppConfigModel.create({
+      organizationId,
+      name: "Policy App",
+      githubUrl: "https://api.github.com",
+      appId: "123",
+      installationId,
+      secretId: secret.id,
+    });
+    const git = fakeGitData("example/other-policy", {
+      head: { "appa.toml": "policies/prod.toml", "policies/prod.toml": policy },
+      symlinks: ["appa.toml"],
+    });
+    server.use(
+      http.post(
+        `https://api.github.com/app/installations/${installationId}/access_tokens`,
+        () =>
+          HttpResponse.json({
+            token: "test-installation-token",
+            expires_at: new Date(Date.now() + 3600000).toISOString(),
+          }),
+      ),
+      http.get("https://api.github.com/repos/example/other-policy", () =>
+        HttpResponse.json({ default_branch: "main" }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/commits",
+        () => HttpResponse.json([{ sha: commit }]),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/git/ref/heads/main",
+        () => HttpResponse.json({ object: { sha: commit } }),
+      ),
+      contentsOf("example/other-policy", git.files),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/repository",
+      payload: {
+        owner: "example",
+        name: "other-policy",
+        githubAppConfigId: githubApp.id,
+        interval: "1h",
+        existing: true,
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("not a regular file");
+    expect(git.state.commits).toBe(0);
+    expect(git.state.recursiveReads).toBe(0);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toBeNull();
   });
 
   test("a repository whose included folder holds a symbolic link is refused, as any proposal is, and nothing is written", async () => {

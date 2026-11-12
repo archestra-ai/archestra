@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.5.0-rc.31](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.30...platform-v1.5.0-rc.31) (2026-11-12)
+
+
+### Features
+
+* **connect:** add page visibility setting ([#10536](https://github.com/archestra-ai/archestra/issues/10536)) ([da03b50](https://github.com/archestra-ai/archestra/commit/da03b50633186224ff7de96c71e55f9975fcdd4a))
+* **guardrails:** carry the policy's files when Git sync moves to another repository, and propose over an existing policy ([#10622](https://github.com/archestra-ai/archestra/issues/10622)) ([65767dd](https://github.com/archestra-ai/archestra/commit/65767ddd4bc383febf608fce9e08edae9fe9b03e))
+* **openappa:** read approval cards' scope from the typed review ([#10604](https://github.com/archestra-ai/archestra/issues/10604)) ([fcaf154](https://github.com/archestra-ai/archestra/commit/fcaf154bc05cb52c8ae51c3c9226012016ebabf9))
+
+
+### Bug Fixes
+
+* **agent-runtime:** fix Grok, Kimi Code, and load-balanced router runtime execution ([#10603](https://github.com/archestra-ai/archestra/issues/10603)) ([5385165](https://github.com/archestra-ai/archestra/commit/53851658c4f50771888e54f8328ac570e45e5bae))
+* avoid full agent hydration in subroute access checks ([#10609](https://github.com/archestra-ai/archestra/issues/10609)) ([a658189](https://github.com/archestra-ai/archestra/commit/a6581892775d5cc7d6281a5ef00bfb639cee5c99))
+* **backend:** name the host of failed outbound calls and stop calling them database outages ([#10620](https://github.com/archestra-ai/archestra/issues/10620)) ([0817300](https://github.com/archestra-ai/archestra/commit/08173002629e3764deb0bd6f20715b26f37268b8))
+* **knowledge:** extract text from PDFs indexed by the GitHub connector ([#10617](https://github.com/archestra-ai/archestra/issues/10617)) ([aa761d1](https://github.com/archestra-ai/archestra/commit/aa761d15d2055f6e8e436605689e6a37476dfb77))
+* **logging:** withhold failed-query values wherever they appear in metadata-only logs ([#10618](https://github.com/archestra-ai/archestra/issues/10618)) ([3c46991](https://github.com/archestra-ai/archestra/commit/3c469918e3a74c7c9bbf2db1b3cb5bcdb174a756))
+* **openappa:** draw the full Appa mark in Claude Code's terminal ([#10619](https://github.com/archestra-ai/archestra/issues/10619)) ([3e3c59f](https://github.com/archestra-ai/archestra/commit/3e3c59fcf7948a71bc1d142dcfc58fc7ef2d9ab8))
+
+
+### Miscellaneous Chores
+
+* update client versions ([#10606](https://github.com/archestra-ai/archestra/issues/10606)) ([5f31c6a](https://github.com/archestra-ai/archestra/commit/5f31c6af4087b71df5cfca3029a742b3759f2eb9))
+
 ## [1.5.0-rc.30](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.29...platform-v1.5.0-rc.30) (2026-11-11)
 
 

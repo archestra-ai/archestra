@@ -243,6 +243,8 @@ describe("APPA GitLab sync", () => {
     } finally {
       config.openappa.selfService = "disabled";
     }
+  });
+
   test("a project's own files the policy's globs would read go out with the merge request", async () => {
     const root =
       'include = ["rules/*.toml"]\n\n[policy]\nversion = 2\n\n[[policy.tool]]\nname = "read"\ndelta = {}\n';

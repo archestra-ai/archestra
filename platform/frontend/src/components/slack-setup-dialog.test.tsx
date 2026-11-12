@@ -38,7 +38,7 @@ beforeEach(() => {
   vi.mocked(useAppName).mockReturnValue("Archestra");
   vi.mocked(usePublicBaseUrl).mockReturnValue("https://app.example.com");
   vi.mocked(useOrganization).mockReturnValue({
-    data: null,
+    data: undefined,
   } as ReturnType<typeof useOrganization>);
   class MockObserver {
     observe() {}

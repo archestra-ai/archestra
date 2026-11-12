@@ -2398,7 +2398,7 @@ async function branchHead(params: {
 }
 
 /** An entry of the repository's tree: a file, a link or a folder, with its mode. */
-type TreeEntry = { path: string; type: string; mode?: string };
+type TreeEntry = { path: string; type: string; mode?: string; sha?: string };
 
 /** Everything the repository holds at `commit`, with each entry's mode. */
 async function treeEntries(params: {
@@ -2466,7 +2466,7 @@ async function assertRegularSetupPaths(params: {
   commit: string;
   paths: string[];
 }): Promise<void> {
-  const trees = new Map<string, TreeEntry[] & { sha?: string }[]>();
+  const trees = new Map<string, TreeEntry[]>();
   const read = async (sha: string) => {
     const cached = trees.get(sha);
     if (cached) return cached;

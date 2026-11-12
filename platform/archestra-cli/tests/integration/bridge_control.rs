@@ -95,8 +95,7 @@ async fn a_start_with_no_connection_runs_the_servers_of_the_config_file() {
     server_pid(&dir, None).await;
     bridge.wait_for_status(BridgeStatus::Disconnected).await;
 
-    // What the tray menu shows: the sync failed, and the time of the last
-    // good sync.
+    // The state: the sync failed, and the time of the last good sync.
     let state = bridge.state();
     assert!(state.sync.failed);
     assert_eq!(state.sync.synced_at, config.last_sync());
@@ -235,8 +234,7 @@ async fn a_sync_that_fails_keeps_the_file_and_the_servers() {
         )
     );
 
-    // What the tray menu shows: the sync failed, and the time of the last
-    // good sync.
+    // The state: the sync failed, and the time of the last good sync.
     let state = bridge.state();
     assert!(state.sync.failed);
     assert_eq!(state.sync.synced_at, synced_at);
@@ -280,8 +278,8 @@ async fn a_sync_with_no_change_keeps_the_file_and_sends_no_state_report() {
     let response = mock.control("bridge/sync", Value::Null).await;
     assert_eq!(response["result"], json!({}), "{response}");
 
-    // What the tray menu shows is the time of this sync. The file keeps the
-    // time of the sync that changed it.
+    // The state has the time of this sync. The file keeps the time of the
+    // sync that changed it.
     let state = bridge.state();
     assert!(!state.sync.failed);
     assert!(state.sync.synced_at > first);
@@ -363,29 +361,6 @@ async fn the_client_syncs_at_the_interval_with_no_request() {
     })
     .await
     .expect("more syncs come");
-}
-
-#[tokio::test]
-async fn the_tray_menu_can_ask_for_a_sync() {
-    let mock = MockControlPlane::start().await;
-    let dir = TestDir::new();
-    let mut bridge = Bridge::start(&mock, &dir, no_servers());
-
-    mock.set_catalog_items(json!([command_item(FILES, &dir.stdio_command())]));
-    bridge.handle.sync_now();
-    bridge
-        .wait_for_server_state(FILES, &ServerState::Running)
-        .await;
-    let synced = bridge.state().sync;
-    assert!(!synced.failed);
-    assert!(synced.synced_at.is_some());
-
-    mock.fail_tunnel_data(Some(StatusCode::BAD_GATEWAY));
-    bridge.handle.sync_now();
-    let failed = bridge
-        .wait_for_state("a failed sync", |state| state.sync.failed)
-        .await;
-    assert_eq!(failed.sync.synced_at, synced.synced_at);
 }
 
 #[tokio::test]
@@ -646,7 +621,7 @@ async fn a_server_that_cannot_start_is_reported_as_failed_with_the_reason() {
         .expect("an error text");
     assert!(error.starts_with("the request failed: "), "{error}");
 
-    // The state for the tray menu has the same.
+    // The state has the same.
     bridge
         .wait_for_state("failed servers", |state| {
             state
@@ -667,7 +642,7 @@ async fn a_change_after_a_report_that_failed_sends_the_full_state_again() {
         commands: vec![command_entry(NOT_CONFIGURED, "")],
         server_urls: Vec::new(),
     };
-    let bridge = Bridge::start(&mock, &dir, mcp);
+    let _bridge = Bridge::start(&mock, &dir, mcp);
     mock.wait_until_no_state_report_failures().await;
 
     // A change: a sync brings one more MCP server.
@@ -675,7 +650,7 @@ async fn a_change_after_a_report_that_failed_sends_the_full_state_again() {
         {"id": NOT_CONFIGURED, "name": "no command yet", "enabled": true},
         command_item(FILES, &dir.stdio_command()),
     ]));
-    bridge.handle.sync_now();
+    mock.control("bridge/sync", Value::Null).await;
     let report = mock.state_report_with(FILES, "running").await;
     assert_eq!(
         report["servers"],

@@ -509,20 +509,20 @@ mod tests {
     #[test]
     fn the_message_is_short_names_no_path_and_names_the_status_command() {
         let message = started_message(Started {
-            where_it_runs: "Its icon in the menu bar shows its status.",
+            where_it_runs: "The Device tab in Archestra shows its status.",
             at_login: true,
         });
         assert_eq!(
             message,
             "Setup is done. The MCP bridge runs in the background.\n\
-             Its icon in the menu bar shows its status.\n\
+             The Device tab in Archestra shows its status.\n\
              To check it later, open a new terminal and run: archestra bridge status\n\
              You can go back to Archestra."
         );
         assert!(!message.contains(".archestra"));
 
         let message = started_message(Started {
-            where_it_runs: "Its icon in the menu bar shows its status.",
+            where_it_runs: "The Device tab in Archestra shows its status.",
             at_login: false,
         });
         assert!(message.contains("\nIt does not start again when you log in.\n"));

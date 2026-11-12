@@ -1,7 +1,8 @@
-//! The state file: the MCP bridge writes the state of each MCP server to
-//! `state.json`, beside its config file, so that `archestra bridge status`
-//! (another process) can show it. The file is of the last MCP bridge that
-//! ran: a reader uses it only while the MCP bridge runs.
+//! The state file: the MCP bridge writes the state of each MCP server, and
+//! the update that waits, to `state.json`, beside its config file, so that
+//! `archestra bridge status` (another process) can show them. The file is of
+//! the last MCP bridge that ran: a reader uses it only while the MCP bridge
+//! runs.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -20,6 +21,9 @@ pub struct StateFile {
     /// `None` until the MCP bridge applied the config file one time: the
     /// states of the MCP servers are not known before that.
     pub servers: Option<Vec<ServerLine>>,
+    /// Archestra serves another program than the one that runs. `None` also
+    /// for a file with no such entry: the one of an older program.
+    pub update: Option<UpdateLine>,
 }
 
 /// One MCP server of the config file, in the order of the file.
@@ -31,6 +35,15 @@ pub struct ServerLine {
     pub state: String,
     /// Why the MCP server failed.
     pub error: Option<String>,
+}
+
+/// The program that Archestra serves, when it is not the one that runs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdateLine {
+    /// The version of that program, when Archestra knows it.
+    pub version: Option<String>,
+    /// Archestra lets the MCP bridge update itself.
+    pub auto: bool,
 }
 
 impl StateFile {
@@ -46,7 +59,11 @@ impl StateFile {
                 })
                 .collect()
         });
-        Self { servers }
+        let update = state.update.as_ref().map(|update| UpdateLine {
+            version: update.version.clone(),
+            auto: update.auto,
+        });
+        Self { servers, update }
     }
 }
 
@@ -67,9 +84,9 @@ fn write(path: &Path, file: &StateFile) -> io::Result<()> {
 }
 
 /// Writes the state file at once, and again each time the state of an MCP
-/// server changes. It waits `delay` after a change, so that changes that
-/// come together make one write. It does not return while the tunnel client
-/// runs.
+/// server or the update changes. It waits `delay` after a change, so that
+/// changes that come together make one write. It does not return while the
+/// tunnel client runs.
 pub(crate) async fn write_loop(
     path: &Path,
     mut state: watch::Receiver<BridgeState>,
@@ -99,7 +116,7 @@ pub(crate) async fn write_loop(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bridge::state::{ServerState, ServerStatus, SyncState};
+    use crate::bridge::state::{ServerState, ServerStatus, SyncState, Update};
 
     #[tokio::test]
     async fn the_file_follows_the_states_of_the_mcp_servers() {
@@ -112,7 +129,14 @@ mod tests {
         });
 
         // At the start the states are not known.
-        wait_for(&path, &StateFile { servers: None }).await;
+        wait_for(
+            &path,
+            &StateFile {
+                servers: None,
+                update: None,
+            },
+        )
+        .await;
 
         tx.send_modify(|state| {
             state.config_loads = 1;
@@ -130,10 +154,20 @@ mod tests {
                     },
                 },
             ];
+            // A sync showed that Archestra serves another program.
+            state.update = Some(Update {
+                version: Some("0.2.0".to_owned()),
+                sha256: "aa".to_owned(),
+                auto: true,
+            });
         });
         wait_for(
             &path,
             &StateFile {
+                update: Some(UpdateLine {
+                    version: Some("0.2.0".to_owned()),
+                    auto: true,
+                }),
                 servers: Some(vec![
                     ServerLine {
                         name: "local-chrome".to_owned(),
@@ -154,6 +188,20 @@ mod tests {
         writer
             .await
             .expect("the writer ends with the tunnel client");
+    }
+
+    #[test]
+    fn a_file_of_an_older_program_has_no_update() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("state.json");
+        std::fs::write(&path, r#"{"servers": []}"#).expect("write");
+        assert_eq!(
+            read(&path),
+            Some(StateFile {
+                servers: Some(Vec::new()),
+                update: None,
+            })
+        );
     }
 
     async fn wait_for(path: &Path, expected: &StateFile) {

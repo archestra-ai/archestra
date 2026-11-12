@@ -1,5 +1,12 @@
 {
-  "files": {},
-  "url": null,
-  "version": null
+  "files": {
+    "archestra-darwin-arm64": "79b6484aba0d0dd00d9f2068c21630bbad08de1bc0bf6197c182b4a5305a95d1",
+    "archestra-darwin-x86_64": "43bfe2dca8f696ed13c0548b6eb8654ca449a6eb067e8d89726dd5599833bb0d",
+    "archestra-linux-arm64": "a52dffdcceead8c88e63a1724bd36dc00e1cd33899ce6f909b09d3488598251e",
+    "archestra-linux-x86_64": "64632cd09762d9e16eba86169b6e7d521faf1c39fe0c5d150ed11e7acf9de33e",
+    "archestra-windows-arm64.exe": "dd8eac9127b57a5437b53d3db6d43fd9ddcc5ad4f08de4aa160e28fcfc76235c",
+    "archestra-windows-x86_64.exe": "37f0969f1d9ad25994af4749d3846a13afd8999716780127b95731cd1aa53d71"
+  },
+  "url": "https://github.com/archestra-ai/archestra/releases/download/archestra-cli-v0.1.0",
+  "version": "0.1.0"
 }

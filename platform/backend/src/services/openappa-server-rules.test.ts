@@ -1,6 +1,7 @@
 import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
+import { cacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema } from "@/database";
 import GithubAppConfigModel from "@/models/github-app-config";
@@ -1812,6 +1813,21 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
     state: "active",
     url: "https://github.com/example/policies/rules/5",
   });
+  // A shared cache that misses and then refuses the write leaves the live
+  // read to answer, as the in-memory cache it replaced did.
+  const cacheGet = vi
+    .spyOn(cacheManager, "get")
+    .mockResolvedValueOnce(undefined);
+  const cacheSet = vi
+    .spyOn(cacheManager, "set")
+    .mockRejectedValueOnce(new Error("cache down"));
+  expect((await getRepositoryProtection(org.id))?.branchRules).toEqual({
+    state: "active",
+    url: "https://github.com/example/policies/rules/5",
+  });
+  expect(cacheSet).toHaveBeenCalledTimes(1);
+  cacheGet.mockRestore();
+  cacheSet.mockRestore();
   // The ruleset alone is not the whole setup: until the accepted policy
   // includes the servers' folder, the registry offers nothing and the
   // Keeper's tools point at Finish setup.

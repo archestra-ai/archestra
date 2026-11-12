@@ -7,11 +7,7 @@ import {
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
-import {
-  type AllowedCacheKey,
-  CacheKey,
-  cacheManager,
-} from "@/cache-manager";
+import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config, {
   OPENAPPA_SELF_SERVICE_DIRECTORY_VARIABLE,
   OPENAPPA_SELF_SERVICE_VARIABLE,
@@ -2452,15 +2448,27 @@ async function cachedProtection(
   return hit ? hit.protection : undefined;
 }
 
+/**
+ * Best effort, as the in-memory cache it replaces was: a write the cache
+ * refuses leaves the next read to go to the repository, and never fails
+ * the read, the protect action or the sync that applied the protection.
+ */
 async function rememberProtection(
   organizationId: string,
   protection: RepositoryProtection | null,
 ) {
-  await cacheManager.set(
-    checkKey("protection", organizationId),
-    { protection },
-    PROTECTION_TTL,
-  );
+  try {
+    await cacheManager.set(
+      checkKey("protection", organizationId),
+      { protection },
+      PROTECTION_TTL,
+    );
+  } catch (error) {
+    logger.warn(
+      { organizationId, error },
+      "OpenAPPA could not cache the policy repository's protection",
+    );
+  }
 }
 
 /**

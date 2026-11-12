@@ -483,7 +483,7 @@ jobs:
     uses: ./.github/workflows/on-pull-requests-dagger-sdk.yml
 
   platform-rust-checks:
-    name: Platform Rust Checks (runner)
+    name: Platform Rust Checks
     needs: [dagger-sdk-integration, changed-inputs]
     # Skips only when the classification succeeded, found no Rust input, and
     # the Dagger SDK integration this job enforces passed. Any other outcome
@@ -549,37 +549,6 @@ jobs:
           cargo check --workspace --locked
           cargo test --workspace --locked
           cargo check --workspace --locked --target x86_64-unknown-linux-musl
-
-  # Always report the required context on merge groups, even when the Rust
-  # runner has no changed inputs. A job-level conditional can omit its check
-  # record entirely, leaving the queue waiting for a result that never arrives.
-  platform-rust-checks-gate:
-    name: Platform Rust Checks
-    runs-on: ubuntu-latest
-    if: always() && github.event_name == 'merge_group'
-    needs: [changed-inputs, dagger-sdk-integration, platform-rust-checks]
-    permissions: {}
-    steps:
-      - name: Check Rust validation results
-        env:
-          INPUTS_RESULT: ${{ needs.changed-inputs.result }}
-          RUN_RUST: ${{ needs.changed-inputs.outputs.platform_rust }}
-          DAGGER_RESULT: ${{ needs.dagger-sdk-integration.result }}
-          RUST_RESULT: ${{ needs.platform-rust-checks.result }}
-        run: |
-          if [ "$DAGGER_RESULT" != "success" ]; then
-            echo "::error::Dagger SDK integration did not succeed (result: $DAGGER_RESULT)."
-            exit 1
-          fi
-          if [ "$INPUTS_RESULT" = "success" ] && [ "$RUN_RUST" = "false" ] && [ "$RUST_RESULT" = "skipped" ]; then
-            echo "No platform Rust inputs changed; Rust runner skipped and Dagger SDK integration passed."
-            exit 0
-          fi
-          if [ "$RUST_RESULT" != "success" ]; then
-            echo "::error::Platform Rust validation did not succeed (result: $RUST_RESULT)."
-            exit 1
-          fi
-          echo "Platform Rust validation passed."
 
   # The only job that exercises the REAL OpenAPPA runtime: the NAPI bridge, its
   # decisions, and the PostgreSQL ledger they are recorded in. Every suite above

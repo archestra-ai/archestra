@@ -49,7 +49,7 @@ function fakeGitData(
   repo: string,
   options: {
     head: Record<string, string>;
-    advance?: () => HttpResponse | undefined;
+    advance?: () => Response | undefined;
   },
 ) {
   const base = `https://api.github.com/repos/${repo}`;

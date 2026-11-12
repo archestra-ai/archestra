@@ -21,6 +21,7 @@ import {
   getAppaGithubSync,
   getAppaSelfService,
   getRepositoryProtection,
+  rulesFileRefusal,
   syncAppaGithubPolicy,
   updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
@@ -2402,6 +2403,33 @@ test("the policy check judges who asked for a pull request Archestra opened, rea
   // Nothing moved: nothing is posted again.
   await checkDueAppaGithubSyncs();
   expect(runs).toHaveLength(6);
+});
+
+test("under white-labeling, a server named like the built-in tools' default name has no rules file either", () => {
+  const fullWhiteLabeling = config.enterpriseFeatures.fullWhiteLabeling;
+  config.enterpriseFeatures.fullWhiteLabeling = true;
+  archestraMcpBranding.syncFromOrganization({
+    appName: "Acme Hub",
+    iconLogo: null,
+  });
+  try {
+    expect(archestraMcpBranding.serverName).not.toBe("archestra");
+    const catalog = { id: "legacy-catalog", name: "Archestra" };
+    expect(
+      rulesFileRefusal({
+        catalog,
+        tools: ["archestra__custom"],
+        prefixes: {
+          byCatalog: new Map([[catalog.id, new Set(["archestra"])]]),
+          byPrefix: new Map([["archestra", new Set([catalog.id])]]),
+          conflicting: new Set(),
+        },
+      }),
+    ).toContain("of the built-in");
+  } finally {
+    config.enterpriseFeatures.fullWhiteLabeling = fullWhiteLabeling;
+    archestraMcpBranding.syncFromOrganization(null);
+  }
 });
 
 test("the policy check asks for edit access to each shared server a rules file governs; a member's personal copy changes nothing", async ({

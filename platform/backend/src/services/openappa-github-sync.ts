@@ -2873,12 +2873,13 @@ export function rulesFileRefusal(params: {
 
 /**
  * Whether a prefix is the built-in tools' own: their catalog carries it, or it
- * is their name. A catalog that predates the name check can still carry it,
- * and a rules file for it would govern the built-in tools too.
+ * is one of their names (a white-labeled deployment's, and the default name
+ * they still answer to). A catalog that predates the name check can still
+ * carry it, and a rules file for it would govern the built-in tools too.
  */
 function governsBuiltInTools(prefix: string, prefixes: ToolPrefixes): boolean {
   return (
-    prefix === archestraMcpBranding.serverName ||
+    archestraMcpBranding.allowedServerNames.includes(prefix) ||
     [...(prefixes.byPrefix.get(prefix) ?? [])].some(isBuiltInCatalogId)
   );
 }

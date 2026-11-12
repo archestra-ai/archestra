@@ -1,10 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { CacheKey, cacheManager } from "@/cache-manager";
+import { vi } from "vitest";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
+import DesktopDeviceServerModel from "@/models/desktop-device-server";
 import McpServerModel from "@/models/mcp-server";
 import ToolModel from "@/models/tool";
 import desktopTunnelRoutes from "@/routes/desktop-tunnel/desktop-tunnel.routes";
+import { DESKTOP_BRIDGE_CHANNEL } from "@/services/desktop-mcp/desktop-bridge-control";
 import { reloadToolsForServer } from "@/services/mcp-reinstall";
 import { describe, expect, type TestFixtures, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -27,17 +30,22 @@ describe("desktopMcpInstallService", () => {
 
   type ToolSpec = { name: string; description: string };
 
-  /** A tunnel client whose MCP server on the channel offers these tools. */
+  /**
+   * A tunnel client whose MCP server on the channel offers these tools. With
+   * `ready: false` its polls name no channel ready: only what the test does
+   * itself can complete an installation.
+   */
   function runServer(params: {
     device: TestDevice;
     channel: string;
     tools: ToolSpec[] | (() => never);
     asked?: string[];
+    ready?: boolean;
   }) {
     return runTestTunnelClient({
       app: ctx.app,
       device: params.device,
-      readyChannels: [params.channel],
+      readyChannels: params.ready === false ? [] : [params.channel],
       answer: ({ channel, method }) => {
         if (channel === params.channel) params.asked?.push(method);
         if (method === "initialize") {
@@ -60,6 +68,38 @@ describe("desktopMcpInstallService", () => {
         return {};
       },
     });
+  }
+
+  /** The state report of the tunnel client for one MCP server. */
+  async function report(
+    device: TestDevice,
+    channel: string,
+    state: "starting" | "running" | "failed",
+  ) {
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: `/v1/tunnels/${device.tunnelId}/response`,
+      headers: device.headers,
+      payload: {
+        request_id: randomUUID(),
+        channel: DESKTOP_BRIDGE_CHANNEL,
+        resp_code: 200,
+        resp_type: "jsonrpc_notify",
+        resp_json: {
+          jsonrpc: "2.0",
+          method: "bridge/state",
+          params: { servers: [{ channel, state, error: null }] },
+        },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+  }
+
+  async function storedState(device: TestDevice, catalogId: string) {
+    const rows = await DesktopDeviceServerModel.findByDeviceId(
+      device.device.id,
+    );
+    return rows.find((row) => row.catalogId === catalogId)?.state ?? null;
   }
 
   async function makeFilesItem(
@@ -404,65 +444,305 @@ describe("desktopMcpInstallService", () => {
     }
   });
 
-  test("after the owner changes the arguments, the tools are read again, and not from the MCP server that still runs with the arguments from before", async ({
-    makeInternalMcpCatalog,
-    makeMember,
-  }) => {
-    await makeMember(ctx.user.id, ctx.organizationId);
-    const catalogItem = await makeFilesItem(makeInternalMcpCatalog);
-    const device = await connectTestDevice({
-      organizationId: ctx.organizationId,
-      userId: ctx.user.id,
+  describe("the order of the poll and the state report of a first installation", () => {
+    const tools = [{ name: "read_file", description: "Reads a file" }];
+
+    async function waitingInstallation(
+      makeInternalMcpCatalog: TestFixtures["makeInternalMcpCatalog"],
+      makeMember: TestFixtures["makeMember"],
+    ) {
+      await makeMember(ctx.user.id, ctx.organizationId);
+      const catalogItem = await makeFilesItem(makeInternalMcpCatalog);
+      const device = await connectTestDevice({
+        organizationId: ctx.organizationId,
+        userId: ctx.user.id,
+      });
+      const installation = await desktopMcpInstallService.install({
+        catalogItem,
+        userId: ctx.user.id,
+      });
+      return { catalogItem, device, installation };
+    }
+
+    test("the report that the MCP server runs completes the installation, with no poll that names it ready", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+    }) => {
+      const { catalogItem, device, installation } = await waitingInstallation(
+        makeInternalMcpCatalog,
+        makeMember,
+      );
+      const tunnelClient = runServer({
+        device,
+        channel: catalogItem.id,
+        tools,
+        ready: false,
+      });
+      try {
+        // The tools are read through the tunnel: the device must be online.
+        await waitUntilOnline(device.device.id);
+        await report(device, catalogItem.id, "starting");
+        expect(await statusOf(installation.id)).toBe("pending");
+
+        await report(device, catalogItem.id, "running");
+
+        await expect
+          .poll(() => statusOf(installation.id), { timeout: 10_000 })
+          .toBe("success");
+        expect(await gatewayTools(ctx.user.id, installation.id)).toEqual([
+          { name: "files__read_file", description: "Reads a file" },
+        ]);
+      } finally {
+        await tunnelClient.stop();
+      }
     });
-    const installation = await desktopMcpInstallService.install({
-      catalogItem,
-      userId: ctx.user.id,
+
+    test("a poll that names it ready before the report came waits for the report, and uses up no attempt", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+    }) => {
+      const { catalogItem, device, installation } = await waitingInstallation(
+        makeInternalMcpCatalog,
+        makeMember,
+      );
+      const asked: string[] = [];
+      const tunnelClient = runServer({
+        device,
+        channel: catalogItem.id,
+        tools,
+        asked,
+        ready: false,
+      });
+      try {
+        // The tools are read through the tunnel: the device must be online.
+        await waitUntilOnline(device.device.id);
+        await report(device, catalogItem.id, "starting");
+        // What a poll with the channel ready does.
+        await desktopMcpInstallService.completeWaiting(device.device, [
+          catalogItem.id,
+        ]);
+        expect(await statusOf(installation.id)).toBe("pending");
+        expect(asked).toEqual([]);
+
+        // Were the poll counted as an attempt, this one would wait a minute.
+        await report(device, catalogItem.id, "running");
+
+        await expect
+          .poll(() => statusOf(installation.id), { timeout: 10_000 })
+          .toBe("success");
+      } finally {
+        await tunnelClient.stop();
+      }
     });
-    const serverTools = [{ name: "read_file", description: "Reads a file" }];
-    const asked: string[] = [];
-    // The device reports the MCP server ready the whole time, as a device
-    // does until it got its config and stopped the server.
-    const tunnelClient = runServer({
-      device,
-      channel: catalogItem.id,
-      tools: serverTools,
-      asked,
+
+    test("a poll that names it ready completes the installation when no state is stored, and when the stored one is running", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+    }) => {
+      const { catalogItem, device, installation } = await waitingInstallation(
+        makeInternalMcpCatalog,
+        makeMember,
+      );
+      const tunnelClient = runServer({
+        device,
+        channel: catalogItem.id,
+        tools,
+        ready: false,
+      });
+      try {
+        // The tools are read through the tunnel: the device must be online.
+        await waitUntilOnline(device.device.id);
+        expect(await storedState(device, catalogItem.id)).toBeNull();
+        await desktopMcpInstallService.completeWaiting(device.device, [
+          catalogItem.id,
+        ]);
+        expect(await statusOf(installation.id)).toBe("success");
+
+        // The user disconnects it and connects it again: the state from
+        // before is still stored.
+        await McpServerModel.delete(installation.id);
+        await report(device, catalogItem.id, "running");
+        const again = await desktopMcpInstallService.install({
+          catalogItem,
+          userId: ctx.user.id,
+        });
+        expect(again.id).not.toBe(installation.id);
+        await desktopMcpInstallService.completeWaiting(device.device, [
+          catalogItem.id,
+        ]);
+        expect(await statusOf(again.id)).toBe("success");
+      } finally {
+        await tunnelClient.stop();
+      }
     });
-    try {
+
+    test("a report that the MCP server failed, or that it starts, names no installation to complete", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+    }) => {
+      const { catalogItem, device, installation } = await waitingInstallation(
+        makeInternalMcpCatalog,
+        makeMember,
+      );
+      const completed = vi.spyOn(
+        desktopMcpInstallService,
+        "completeReadyChannels",
+      );
+
+      try {
+        await report(device, catalogItem.id, "failed");
+        await report(device, catalogItem.id, "starting");
+
+        expect(completed.mock.calls.map(([, channels]) => channels)).toEqual([
+          [],
+          [],
+        ]);
+        expect(await statusOf(installation.id)).toBe("pending");
+      } finally {
+        completed.mockRestore();
+      }
+    });
+  });
+
+  describe("a change of the arguments", () => {
+    async function completeInstallation(
+      params: {
+        makeInternalMcpCatalog: TestFixtures["makeInternalMcpCatalog"];
+        makeMember: TestFixtures["makeMember"];
+        programVersion?: string;
+      },
+      serverTools: ToolSpec[],
+      asked: string[],
+    ) {
+      await params.makeMember(ctx.user.id, ctx.organizationId);
+      const catalogItem = await makeFilesItem(params.makeInternalMcpCatalog);
+      const device = await connectTestDevice({
+        organizationId: ctx.organizationId,
+        userId: ctx.user.id,
+        programVersion: params.programVersion,
+      });
+      const installation = await desktopMcpInstallService.install({
+        catalogItem,
+        userId: ctx.user.id,
+      });
+      // The device names the MCP server ready with each poll, as a device
+      // does until it got its config and stopped the server.
+      const tunnelClient = runServer({
+        device,
+        channel: catalogItem.id,
+        tools: serverTools,
+        asked,
+      });
+      await waitUntilOnline(device.device.id);
+      await report(device, catalogItem.id, "running");
       await expect
         .poll(() => statusOf(installation.id), { timeout: 10_000 })
         .toBe("success");
       asked.length = 0;
-
-      const updated = await desktopMcpInstallService.updateArguments({
-        mcpServerId: installation.id,
-        userId: ctx.user.id,
-        desktopArguments: ["--with-list"],
-      });
-
-      expect(updated.changed).toBe(true);
-      expect(updated.mcpServer.localInstallationStatus).toBe("pending");
-      await desktopMcpInstallService.completeWaiting(device.device, [
-        catalogItem.id,
-      ]);
-      expect(await statusOf(installation.id)).toBe("pending");
-      expect(asked).not.toContain("tools/list");
-
-      // The time the device has to stop that MCP server is over; the one it
-      // started with the new arguments has one more tool.
-      serverTools.push({ name: "list_files", description: "Lists files" });
-      await cacheManager.delete(
-        `${CacheKey.DesktopMcpInstallAttempt}-${installation.id}`,
-      );
-      await expect
-        .poll(() => statusOf(installation.id), { timeout: 10_000 })
-        .toBe("success");
-      expect(await gatewayTools(ctx.user.id, installation.id)).toEqual([
-        { name: "files__list_files", description: "Lists files" },
-        { name: "files__read_file", description: "Reads a file" },
-      ]);
-    } finally {
-      await tunnelClient.stop();
+      return { catalogItem, device, installation, tunnelClient };
     }
+
+    test("the tools are read again when the device reports that the MCP server runs, not from the one that still runs with the arguments from before", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+    }) => {
+      const serverTools = [{ name: "read_file", description: "Reads a file" }];
+      const asked: string[] = [];
+      const { catalogItem, device, installation, tunnelClient } =
+        await completeInstallation(
+          { makeInternalMcpCatalog, makeMember, programVersion: "0.1.2" },
+          serverTools,
+          asked,
+        );
+      try {
+        const updated = await desktopMcpInstallService.updateArguments({
+          mcpServerId: installation.id,
+          userId: ctx.user.id,
+          desktopArguments: ["--with-list"],
+        });
+
+        expect(updated.changed).toBe(true);
+        expect(updated.mcpServer.localInstallationStatus).toBe("pending");
+        expect(await storedState(device, catalogItem.id)).toBe("starting");
+        // The polls of the device still name the old MCP server ready.
+        await desktopMcpInstallService.completeWaiting(device.device, [
+          catalogItem.id,
+        ]);
+        expect(await statusOf(installation.id)).toBe("pending");
+        expect(asked).not.toContain("tools/list");
+
+        // The device got its config: it stops the MCP server, starts it with
+        // the new arguments, and reports each step. The new one has one more
+        // tool.
+        serverTools.push({ name: "list_files", description: "Lists files" });
+        await report(device, catalogItem.id, "starting");
+        expect(await statusOf(installation.id)).toBe("pending");
+        await report(device, catalogItem.id, "running");
+
+        // At once, though the tools were read less than a minute ago.
+        await expect
+          .poll(() => statusOf(installation.id), { timeout: 10_000 })
+          .toBe("success");
+        expect(await gatewayTools(ctx.user.id, installation.id)).toEqual([
+          { name: "files__list_files", description: "Lists files" },
+          { name: "files__read_file", description: "Reads a file" },
+        ]);
+      } finally {
+        await tunnelClient.stop();
+      }
+    });
+
+    async function expectStoredAndNothingElse(
+      fixtures: {
+        makeInternalMcpCatalog: TestFixtures["makeInternalMcpCatalog"];
+        makeMember: TestFixtures["makeMember"];
+      },
+      programVersion: string | undefined,
+    ) {
+      const asked: string[] = [];
+      const { catalogItem, device, installation, tunnelClient } =
+        await completeInstallation(
+          { ...fixtures, programVersion },
+          [{ name: "read_file", description: "Reads a file" }],
+          asked,
+        );
+      try {
+        const updated = await desktopMcpInstallService.updateArguments({
+          mcpServerId: installation.id,
+          userId: ctx.user.id,
+          desktopArguments: ["--with-list"],
+        });
+
+        expect(updated.changed).toBe(true);
+        expect(updated.mcpServer).toMatchObject({
+          desktopArguments: ["--with-list"],
+          localInstallationStatus: "success",
+        });
+        expect(await storedState(device, catalogItem.id)).toBe("running");
+        expect(asked).not.toContain("tools/list");
+      } finally {
+        await tunnelClient.stop();
+      }
+    }
+
+    test("a device whose program is from before the arguments starts nothing again: they are stored and the installation stays complete", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+    }) => {
+      await expectStoredAndNothingElse(
+        { makeInternalMcpCatalog, makeMember },
+        "0.1.0",
+      );
+    });
+
+    test("so does a device that reported no version of its program", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+    }) => {
+      await expectStoredAndNothingElse(
+        { makeInternalMcpCatalog, makeMember },
+        undefined,
+      );
+    });
   });
 });

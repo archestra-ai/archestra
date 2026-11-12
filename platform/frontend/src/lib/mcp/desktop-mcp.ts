@@ -1,4 +1,9 @@
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DESKTOP_MCP_ARGUMENTS_MIN_PROGRAM_VERSION,
+  programAppliesDesktopMcpArguments,
+} from "@archestra/shared";
+import { programUpdateInstruction } from "./mcp-bridge-command";
 
 type DesktopDevice =
   archestraApiTypes.GetDesktopDevicesResponses["200"][number];
@@ -122,6 +127,76 @@ export function desktopMcpArgumentsError(values: string[]): string | null {
     return `Use at most ${DESKTOP_MCP_ARGUMENTS_MAX_TOTAL_LENGTH} characters in all arguments together.`;
   }
   return null;
+}
+
+/**
+ * What a dialog says about arguments when the viewer's device cannot apply
+ * them. The text is in three parts, so the dialog can show a command as
+ * code; `command` is null when there is none to run.
+ */
+export interface DesktopArgumentsProgramNotice {
+  title: string;
+  text: { before: string; command: string | null; after: string };
+}
+
+/**
+ * The notice for a viewer whose device runs a program from before the
+ * arguments: its MCP bridge starts the command with none of them. The
+ * arguments are stored all the same, and apply once the device runs a newer
+ * program. Null when there is nothing to say:
+ * - the viewer has no device;
+ * - the device was linked a moment ago and has not reported yet, so its
+ *   version is not known;
+ * - the program of the device applies arguments.
+ *
+ * The notice names `archestra update` only when the deployment serves a
+ * program that applies arguments: with an older one served, the command
+ * would get that older one again.
+ */
+export function desktopArgumentsProgramNotice(params: {
+  device:
+    | Pick<
+        DesktopDevice,
+        | "name"
+        | "platform"
+        | "lastPolledAt"
+        | "programVersion"
+        | "programUpdate"
+        | "programAutoUpdate"
+      >
+    | null
+    | undefined;
+  appName: string;
+}): DesktopArgumentsProgramNotice | null {
+  const { device, appName } = params;
+  if (!device || device.lastPolledAt === null) return null;
+  if (programAppliesDesktopMcpArguments(device.programVersion)) return null;
+
+  const title = "Arguments need a newer version of the MCP bridge";
+  const needs = `${
+    device.programVersion
+      ? `The MCP bridge on ${device.name} is version ${device.programVersion}.`
+      : `The MCP bridge on ${device.name} did not report its version.`
+  } Arguments need version ${DESKTOP_MCP_ARGUMENTS_MIN_PROGRAM_VERSION} or newer.`;
+  if (programAppliesDesktopMcpArguments(device.programUpdate?.version)) {
+    const update = programUpdateInstruction(device);
+    return {
+      title,
+      text: {
+        before: `${needs} ${update.before}`,
+        command: update.command,
+        after: `${update.after} Arguments are saved and apply after the update.`,
+      },
+    };
+  }
+  return {
+    title,
+    text: {
+      before: `${needs} ${appName} does not offer that version yet. Arguments are saved and apply once the device has it.`,
+      command: null,
+      after: "",
+    },
+  };
 }
 
 /**

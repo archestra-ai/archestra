@@ -8,8 +8,15 @@ import {
 } from "@/components/container-deployment-fields.utils";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import { useUpdateDesktopMcpArguments } from "@/lib/desktop-device.query";
-import { desktopMcpArgumentsError } from "@/lib/mcp/desktop-mcp";
+import {
+  useDesktopDevices,
+  useUpdateDesktopMcpArguments,
+} from "@/lib/desktop-device.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import {
+  desktopArgumentsProgramNotice,
+  desktopMcpArgumentsError,
+} from "@/lib/mcp/desktop-mcp";
 import { DesktopMcpArgumentsFields } from "./desktop-mcp-arguments-fields";
 import { desktopArgumentsChanged } from "./desktop-mcp-install";
 
@@ -18,6 +25,11 @@ import { desktopArgumentsChanged } from "./desktop-mcp-install";
  * server they connected. A save stores them and the MCP bridge on the
  * viewer's device starts the server again; `onSaved` then shows that, in the
  * Connect dialog that follows the installation.
+ *
+ * A device whose program is from before the arguments starts nothing again.
+ * The dialog says so before the save, with how to get a newer program; the
+ * save then stores the arguments and the dialog closes, with nothing to
+ * follow.
  */
 export function DesktopMcpArgumentsDialog({
   onClose,
@@ -27,7 +39,10 @@ export function DesktopMcpArgumentsDialog({
   server,
 }: {
   onClose: () => void;
-  /** The arguments were changed: the server starts again on the device. */
+  /**
+   * The arguments were changed and the server starts again on the device.
+   * Not called for a device that starts nothing again: the dialog closes.
+   */
   onSaved: () => void;
   name: string;
   /** The command of the catalog item, exactly as stored. */
@@ -35,7 +50,15 @@ export function DesktopMcpArgumentsDialog({
   /** The viewer's own installation. */
   server: { id: string; desktopArguments: string[] | null };
 }) {
+  const appName = useAppName();
   const update = useUpdateDesktopMcpArguments();
+  // Whether the device applies arguments decides what follows the save, so
+  // nothing is saved before the devices are read.
+  const devices = useDesktopDevices({ live: false });
+  const notice = desktopArgumentsProgramNotice({
+    device: devices.data?.[0],
+    appName,
+  });
   const [text, setText] = useState(() =>
     argumentsToText(server.desktopArguments),
   );
@@ -54,7 +77,9 @@ export function DesktopMcpArgumentsDialog({
       }}
       size="medium"
       title={`Edit arguments of ${name}`}
-      description={`Saving starts ${name} again on your device.`}
+      description={
+        notice ? undefined : `Saving starts ${name} again on your device.`
+      }
       footer={
         <>
           <Button
@@ -67,11 +92,16 @@ export function DesktopMcpArgumentsDialog({
           </Button>
           <Button
             type="button"
-            disabled={update.isPending || !changed || error !== null}
+            disabled={
+              update.isPending ||
+              devices.isPending ||
+              !changed ||
+              error !== null
+            }
             onClick={() => {
               update.mutate(
-                { id: server.id, desktopArguments },
-                { onSuccess: onSaved },
+                { id: server.id, desktopArguments, followed: notice === null },
+                { onSuccess: notice === null ? onSaved : onClose },
               );
             }}
           >
@@ -89,6 +119,7 @@ export function DesktopMcpArgumentsDialog({
         onValueChange={setText}
         error={error}
         disabled={update.isPending}
+        notice={notice}
       />
     </StandardDialog>
   );

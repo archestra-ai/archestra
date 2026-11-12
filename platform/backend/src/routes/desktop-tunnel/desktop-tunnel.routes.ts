@@ -194,10 +194,15 @@ const desktopTunnelRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // operation; progress is not delivered to the caller yet, so there
         // is nothing to store.
         if (body.channel === DESKTOP_BRIDGE_CHANNEL && body.resp_json) {
-          await desktopBridgeControlService.recordState({
+          const running = await desktopBridgeControlService.recordState({
             device,
             message: body.resp_json,
           });
+          // An installation that waits for one of these MCP servers is
+          // completed now, not at the next poll: after a change of its
+          // config, the report is what says that the MCP server started
+          // again. The report does not wait for it.
+          desktopMcpInstallService.completeReadyChannels(device, running);
         }
         return { status: "ok" };
       }

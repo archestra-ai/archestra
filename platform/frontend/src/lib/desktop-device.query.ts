@@ -105,13 +105,19 @@ export function useDesktopMcpInstallationStatus(serverId: string | null) {
  * Stores the arguments the signed-in user adds to the command of a desktop
  * MCP server, for their own installation. The MCP bridge on their device
  * then starts the server again with them, and the installation waits until
- * its tools are read again. Shows no success toast: the Connect dialog
- * follows the installation and says it.
+ * its tools are read again. With `followed`, the Connect dialog follows the
+ * installation and says how it went, so there is no success toast. A device
+ * whose program is from before the arguments starts nothing again: there is
+ * nothing to follow, and a toast says that the arguments are saved.
  */
 export function useUpdateDesktopMcpArguments() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { id: string; desktopArguments: string[] }) => {
+    mutationFn: async (params: {
+      id: string;
+      desktopArguments: string[];
+      followed: boolean;
+    }) => {
       const { data, error } =
         await archestraApiSdk.updateMcpServerDesktopArguments({
           path: { id: params.id },
@@ -124,6 +130,7 @@ export function useUpdateDesktopMcpArguments() {
       return data;
     },
     onSuccess: async (server, params) => {
+      if (!params.followed) toast.success("Arguments saved");
       // What the dialog that follows the installation reads first: without
       // this it would show the status from before the change.
       queryClient.setQueryData(

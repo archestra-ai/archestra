@@ -24,12 +24,16 @@ import {
 } from "@/lib/desktop-device.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
+  desktopArgumentsProgramNotice,
   desktopMcpArgumentsError,
   desktopMcpCommandOf,
   desktopServerErrorSentence,
 } from "@/lib/mcp/desktop-mcp";
 import { cn } from "@/lib/utils/tailwind";
-import { DesktopMcpArgumentsFields } from "./desktop-mcp-arguments-fields";
+import {
+  DesktopMcpArgumentsFields,
+  DesktopMcpArgumentsNotice,
+} from "./desktop-mcp-arguments-fields";
 import {
   DESKTOP_MCP_NO_TARGET_REASON,
   DESKTOP_MCP_PROGRESS_STEPS,
@@ -84,7 +88,10 @@ type Props = {
  * Before the installation is made, the dialog shows the command of the
  * catalog item, which is not the user's to change, and a field for the
  * arguments the user adds to it. The arguments are optional: one click on
- * the button connects with none.
+ * the button connects with none. When the user's device runs a program from
+ * before the arguments, a notice says that they need a newer one; it stays
+ * to the end when the user added some, so "connected" is not all the dialog
+ * says.
  *
  * With a linked device, the dialog follows the connection until the tools
  * are read, then says the server is connected. With none, it creates the
@@ -124,6 +131,8 @@ function DesktopMcpAddFlow({
     bridgeSetup: boolean;
     /** The setup was shown: the dialog keeps its width to the end. */
     viaSetup: boolean;
+    /** The user added arguments to the command. */
+    withArguments: boolean;
   } | null>(null);
   const { data: installStatus } = useDesktopMcpInstallationStatus(
     added?.id ?? null,
@@ -151,18 +160,18 @@ function DesktopMcpAddFlow({
   const add = async () => {
     // None are not sent: should the user have an installation already, it
     // keeps the arguments it has.
-    const server = await onAdd(
-      catalogItem,
+    const sent =
       command === null || desktopArguments.length === 0
         ? undefined
-        : desktopArguments,
-    );
+        : desktopArguments;
+    const server = await onAdd(catalogItem, sent);
     if (!server) return;
     setAdded({
       id: server.id,
       at: Date.now(),
       bridgeSetup: addCase.kind === "no-bridge",
       viaSetup: addCase.kind === "no-bridge",
+      withArguments: sent !== undefined,
     });
   };
 
@@ -188,6 +197,7 @@ function DesktopMcpAddFlow({
         at: Date.now(),
         bridgeSetup,
         viaSetup: bridgeSetup,
+        withArguments: false,
       });
       return;
     }
@@ -221,6 +231,9 @@ function DesktopMcpAddFlow({
 
   const title = `Connect ${name} from your device to ${appName}`;
   const description = connectDescription({ addCase, appName, name });
+  // Read from the live devices: a device that is linked in this dialog, by
+  // the MCP bridge setup, is known here once it reported its version.
+  const argumentsNotice = desktopArgumentsProgramNotice({ device, appName });
   const argumentsFields =
     command === null ? null : (
       <DesktopMcpArgumentsFields
@@ -231,6 +244,7 @@ function DesktopMcpAddFlow({
         onValueChange={setArgumentsText}
         error={argumentsError}
         disabled={isAdding}
+        notice={argumentsNotice}
       />
     );
   const view: {
@@ -303,6 +317,12 @@ function DesktopMcpAddFlow({
             <ProgressSteps
               name={name}
               description={description}
+              // The arguments the user added do not apply on this device.
+              notice={
+                added?.withArguments && argumentsNotice ? (
+                  <DesktopMcpArgumentsNotice notice={argumentsNotice} />
+                ) : null
+              }
               progress={progress}
               hint={
                 !progress.done && progress.hint ? (
@@ -412,18 +432,21 @@ function connectDescription(params: {
  * follow the device. A note on why it takes long goes under the step it is
  * about. A skeleton stands for the intro line while the devices load.
  * `fields` go between the intro line and the steps: before Connect, the
- * command with the arguments the user can add.
+ * command with the arguments the user can add. `notice` goes under the
+ * steps: it is about the whole connection, not about one step.
  */
 function ProgressSteps({
   name,
   description,
   fields,
+  notice,
   progress,
   hint,
 }: {
   name: string;
   description: string | null;
   fields?: ReactNode;
+  notice?: ReactNode;
   progress: DesktopMcpProgress | null;
   hint: ReactNode;
 }) {
@@ -477,6 +500,7 @@ function ProgressSteps({
           );
         })}
       </ol>
+      {notice}
     </div>
   );
 }

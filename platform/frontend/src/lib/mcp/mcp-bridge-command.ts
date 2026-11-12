@@ -58,3 +58,31 @@ export function bridgeCommand(
  * PowerShell window.
  */
 export const UNINSTALL_COMMAND = "archestra uninstall";
+
+/**
+ * Gets the `archestra` program that the deployment serves now, and starts
+ * the MCP bridge again with it.
+ */
+const UPDATE_COMMAND = "archestra update";
+
+/**
+ * How the user gets the program that the deployment serves onto a device,
+ * in three parts, so a page can show the command as code.
+ *
+ * Only the MCP bridge on Windows updates by itself, and only where the
+ * deployment left auto-update on. Everywhere else the user runs the command.
+ */
+export function programUpdateInstruction(device: {
+  platform: string;
+  programAutoUpdate: boolean;
+}): { before: string; command: string; after: string } {
+  const updatesByItself =
+    device.programAutoUpdate && device.platform === "windows";
+  return {
+    before: updatesByItself
+      ? "The device updates by itself when no tool call is running. To update now, run "
+      : "Run ",
+    command: UPDATE_COMMAND,
+    after: " in a terminal on that device.",
+  };
+}

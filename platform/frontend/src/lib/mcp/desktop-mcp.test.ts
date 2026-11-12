@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   addDesktopMcpServer,
+  desktopArgumentsProgramNotice,
   desktopHostingOffered,
   desktopMcpArgumentsError,
   desktopMcpCommandOf,
@@ -81,6 +82,113 @@ describe("addDesktopMcpServer", () => {
     expect(install.mock.calls[0]).toEqual([
       expect.not.objectContaining({ desktopArguments: expect.anything() }),
     ]);
+  });
+});
+
+describe("desktopArgumentsProgramNotice", () => {
+  const appName = "Acme";
+  const device = {
+    name: "MBP-0142",
+    platform: "macos" as const,
+    lastPolledAt: "2026-11-12T12:00:00.000Z",
+    programVersion: "0.1.0",
+    programUpdate: null,
+    programAutoUpdate: true,
+  };
+
+  it("says nothing to a viewer with no device", () => {
+    expect(desktopArgumentsProgramNotice({ device: null, appName })).toBeNull();
+    expect(
+      desktopArgumentsProgramNotice({ device: undefined, appName }),
+    ).toBeNull();
+  });
+
+  it("says nothing when the program of the device applies arguments", () => {
+    for (const programVersion of ["0.1.2", "0.1.10", "0.2.0", "0.1.2-dev"]) {
+      expect(
+        desktopArgumentsProgramNotice({
+          device: { ...device, programVersion },
+          appName,
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it("says nothing of a device that was linked a moment ago and has not reported yet", () => {
+    expect(
+      desktopArgumentsProgramNotice({
+        device: { ...device, lastPolledAt: null, programVersion: null },
+        appName,
+      }),
+    ).toBeNull();
+  });
+
+  it("names the update command when the deployment serves a program that applies arguments", () => {
+    expect(
+      desktopArgumentsProgramNotice({
+        device: { ...device, programUpdate: { version: "0.1.2" } },
+        appName,
+      }),
+    ).toEqual({
+      title: "Arguments need a newer version of the MCP bridge",
+      text: {
+        before:
+          "The MCP bridge on MBP-0142 is version 0.1.0. Arguments need version 0.1.2 or newer. Run ",
+        command: "archestra update",
+        after:
+          " in a terminal on that device. Arguments are saved and apply after the update.",
+      },
+    });
+  });
+
+  it("says that a Windows device updates by itself where the deployment lets it", () => {
+    const notice = desktopArgumentsProgramNotice({
+      device: {
+        ...device,
+        platform: "windows",
+        programUpdate: { version: "0.2.0" },
+      },
+      appName,
+    });
+    expect(notice?.text.before).toBe(
+      "The MCP bridge on MBP-0142 is version 0.1.0. Arguments need version 0.1.2 or newer. The device updates by itself when no tool call is running. To update now, run ",
+    );
+    expect(notice?.text.command).toBe("archestra update");
+  });
+
+  it("names no command while the deployment serves no program that applies arguments: an update would get the same one", () => {
+    for (const programUpdate of [
+      null,
+      { version: "0.1.1" },
+      // A build put there by hand: its version is not known.
+      { version: null },
+    ]) {
+      expect(
+        desktopArgumentsProgramNotice({
+          device: { ...device, programUpdate },
+          appName,
+        }),
+      ).toEqual({
+        title: "Arguments need a newer version of the MCP bridge",
+        text: {
+          before:
+            "The MCP bridge on MBP-0142 is version 0.1.0. Arguments need version 0.1.2 or newer. Acme does not offer that version yet. Arguments are saved and apply once the device has it.",
+          command: null,
+          after: "",
+        },
+      });
+    }
+  });
+
+  it("counts a device that reported no version as too old", () => {
+    expect(
+      desktopArgumentsProgramNotice({
+        device: { ...device, programVersion: null },
+        appName,
+      })?.text.before,
+    ).toBe(
+      "The MCP bridge on MBP-0142 did not report its version. Arguments need version 0.1.2 or newer. Acme does not offer that version yet. Arguments are saved and apply once the device has it.",
+    );
   });
 });
 

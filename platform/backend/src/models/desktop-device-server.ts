@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { DesktopDeviceServer, DesktopMcpServerState } from "@/types";
 
@@ -37,24 +37,31 @@ class DesktopDeviceServerModel {
   }
 
   /**
-   * Forgets the state the tunnel client reported for one MCP server: its
-   * config changed in Archestra, so that state is of a server that the
-   * device is about to stop. The next report of the tunnel client stores the
-   * state again.
+   * Stores that one MCP server on a device is about to start again: its
+   * config changed in Archestra, so the state the tunnel client reported is
+   * of a server that the device stops when it gets the config. The next
+   * report of the tunnel client stores the state again. Whether the user
+   * stopped the MCP server stays as it is.
    */
-  static async clearState(params: {
+  static async markStarting(params: {
     deviceId: string;
     catalogId: string;
   }): Promise<void> {
     await db
-      .update(schema.desktopDeviceServersTable)
-      .set({ state: null, lastError: null })
-      .where(
-        and(
-          eq(schema.desktopDeviceServersTable.deviceId, params.deviceId),
-          eq(schema.desktopDeviceServersTable.catalogId, params.catalogId),
-        ),
-      );
+      .insert(schema.desktopDeviceServersTable)
+      .values({
+        deviceId: params.deviceId,
+        catalogId: params.catalogId,
+        state: "starting",
+        lastError: null,
+      })
+      .onConflictDoUpdate({
+        target: [
+          schema.desktopDeviceServersTable.deviceId,
+          schema.desktopDeviceServersTable.catalogId,
+        ],
+        set: { state: "starting", lastError: null },
+      });
   }
 
   /**

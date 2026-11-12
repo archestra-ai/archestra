@@ -57,6 +57,8 @@ function fakeGitData(
   repo: string,
   options: {
     head: Record<string, string>;
+    /** Paths among `head` that are symbolic links (mode 120000). */
+    symlinks?: string[];
     advance?: () => Response | undefined;
   },
 ) {
@@ -76,6 +78,7 @@ function fakeGitData(
         tree: Object.keys(options.head).map((path) => ({
           path,
           type: "blob",
+          mode: options.symlinks?.includes(path) ? "120000" : "100644",
         })),
       });
     }),
@@ -1357,6 +1360,95 @@ describe("APPA GitHub sync", () => {
     expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
       root,
     );
+  });
+
+  test("a repository whose included folder holds a symbolic link is refused, as any proposal is, and nothing is written", async () => {
+    const root = `include = ["rules/*.toml"]\n\n${policy}`;
+    const current =
+      '[policy]\nversion = 2\n\n[[policy.tool]]\nname = "ledger__export"\ndelta = {}\n';
+    server.use(
+      contentsOf("example/policies", () => ({
+        "guardrails/appa.toml": root,
+        "guardrails/rules/current.toml": current,
+      })),
+    );
+    await OpenAppaGithubSyncModel.save(organizationId, source);
+    const row = await OpenAppaGithubSyncModel.find(organizationId);
+    await OpenAppaGithubSyncModel.finish({
+      organizationId,
+      revision: row?.revision as string,
+      outcome: {
+        content: root,
+        contentHash: createHash("sha256").update(root).digest("hex"),
+        sourceCommit: commit,
+      },
+    });
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const installationId = randomUUID();
+    const secret = await secretManager().createSecret(
+      { apiToken: privateKey },
+      "test-link-app",
+    );
+    const githubApp = await GithubAppConfigModel.create({
+      organizationId,
+      name: "Policy App",
+      githubUrl: "https://api.github.com",
+      appId: "123",
+      installationId,
+      secretId: secret.id,
+    });
+    const git = fakeGitData("example/other-policy", {
+      head: {
+        "appa.toml": policy,
+        "rules/legacy.toml": "../elsewhere/legacy.toml",
+      },
+      symlinks: ["rules/legacy.toml"],
+    });
+    server.use(
+      http.post(
+        `https://api.github.com/app/installations/${installationId}/access_tokens`,
+        () =>
+          HttpResponse.json({
+            token: "test-installation-token",
+            expires_at: new Date(Date.now() + 3600000).toISOString(),
+          }),
+      ),
+      http.get("https://api.github.com/repos/example/other-policy", () =>
+        HttpResponse.json({ default_branch: "main" }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/commits",
+        () => HttpResponse.json([{ sha: commit }]),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/git/ref/heads/main",
+        () => HttpResponse.json({ object: { sha: commit } }),
+      ),
+      contentsOf("example/other-policy", git.files),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/repository",
+      payload: {
+        owner: "example",
+        name: "other-policy",
+        githubAppConfigId: githubApp.id,
+        interval: "1h",
+        existing: true,
+        replace: true,
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("not a regular file");
+    expect(git.state.commits).toBe(0);
+    // The source is left where it was.
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      repo: source.repo,
+    });
   });
 
   test("a private repository holding the template's example and a stray rules file is seeded over, the stray file removed", async () => {

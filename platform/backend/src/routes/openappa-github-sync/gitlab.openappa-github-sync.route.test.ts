@@ -5,6 +5,7 @@ import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
+import { GitHostClient } from "@/git-hosts/git-host-client";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import { createGitlabToken } from "@/services/git-credentials";
@@ -359,6 +360,102 @@ describe("APPA GitLab sync", () => {
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
       setupPullRequestNumber: null,
       lastSyncError: null,
+    });
+  });
+
+  test("a project whose policy file is over the read limit still gets the proposal, as a change to that file", async () => {
+    const repo = "platform/security/large";
+    gitlab.addProject({
+      path: repo,
+      files: { "appa.toml": `${initialPolicy()}\n# Theirs, and large\n` },
+    });
+    const local = await guardrailsPolicyService.get(organizationId);
+    // The bounded read answers null for a file over its limit, as for a
+    // missing one; the file is there all the same.
+    const read = GitHostClient.prototype.readFile;
+    const spy = vi
+      .spyOn(GitHostClient.prototype, "readFile")
+      .mockImplementation(async function (this: GitHostClient, params) {
+        return params.path === "appa.toml" && params.repo === repo
+          ? null
+          : read.call(this, params);
+      });
+    let response: Awaited<ReturnType<typeof app.inject>>;
+    try {
+      response = await app.inject({
+        method: "POST",
+        url: "/api/openappa/github-sync/repository",
+        payload: {
+          owner: "platform/security",
+          name: "large",
+          gitlabTokenId,
+          interval: "1h",
+          existing: true,
+        },
+      });
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().source).toMatchObject({
+      repo,
+      setupPullRequestNumber: 1,
+    });
+    // The request's branch holds the current policy where theirs was.
+    expect(gitlab.files(repo, gitlab.sourceBranch(repo, 1))["appa.toml"]).toBe(
+      local.content,
+    );
+  });
+
+  test("a project whose included folder holds a symbolic link is refused, as any proposal is", async () => {
+    const root =
+      'include = ["rules/*.toml"]\n\n[policy]\nversion = 2\n\n[[policy.tool]]\nname = "read"\ndelta = {}\n';
+    gitlab.addProject({
+      path: "platform/old",
+      files: {
+        "appa.toml": root,
+        "rules/current.toml":
+          '[policy]\nversion = 2\n\n[[policy.tool]]\nname = "ledger__export"\ndelta = {}\n',
+      },
+    });
+    await OpenAppaGithubSyncModel.save(organizationId, {
+      repo: "platform/old",
+      ref: "main",
+      path: "appa.toml",
+      interval: "1h",
+      githubPatId: null,
+      githubAppConfigId: null,
+      gitlabTokenId,
+    });
+    await syncAppaGithubPolicy(organizationId);
+    gitlab.addProject({
+      path: "platform/linked",
+      files: {
+        "appa.toml": `${initialPolicy()}\n# Theirs\n`,
+        "rules/legacy.toml": "../elsewhere/legacy.toml",
+      },
+      symlinks: ["rules/legacy.toml"],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/repository",
+      payload: {
+        owner: "platform",
+        name: "linked",
+        gitlabTokenId,
+        interval: "1h",
+        existing: true,
+        replace: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("not a regular file");
+    // The source is left where it was.
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      repo: "platform/old",
     });
   });
 

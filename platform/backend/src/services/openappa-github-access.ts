@@ -543,33 +543,49 @@ class OpenAppaRepositoryIncludes {
   private async pendingSetupCommit(
     source: RepositorySource & { setupPullRequestNumber: number },
   ): Promise<string | null> {
+    const number = source.setupPullRequestNumber;
+    const gitlab = source.gitlabTokenId
+      ? gitClient(
+          await resolveOpenAppaGitlabAccess({
+            organizationId: source.organizationId,
+            gitlabTokenId: source.gitlabTokenId,
+          }),
+        )
+      : null;
+    const github = gitlab
+      ? null
+      : await resolveOpenAppaGithubAccess(source, { pull_requests: "read" });
     const key = setupCommitKey({
       organizationId: source.organizationId,
-      host: source.gitlabTokenId ? "gitlab" : "github",
+      host: gitlab ? "gitlab" : "github",
+      api: gitlab ? gitlab.host.apiUrl : (github?.api ?? ""),
       repo: source.repo,
-      number: source.setupPullRequestNumber,
+      number,
     });
     const cached = this.pendingSetups.get(key);
     if (cached !== undefined) return cached;
     const kept = await cacheManager.get<string>(key);
     if (typeof kept !== "string" || !/^[a-f0-9]{40}$/.test(kept)) return null;
-    const state = source.gitlabTokenId
-      ? await this.gitlabSetupState(source)
-      : await this.githubSetupState(source);
+    const state = gitlab
+      ? await this.gitlabSetupState(gitlab, source.repo, number)
+      : await this.githubSetupState(
+          github as { token: string | null; api: string },
+          source.repo,
+          number,
+        );
     if (state === "closed") return null;
     this.pendingSetups.set(key, kept);
     return kept;
   }
 
   private async githubSetupState(
-    source: RepositorySource & { setupPullRequestNumber: number },
+    access: { token: string | null; api: string },
+    repo: string,
+    number: number,
   ): Promise<"open" | "merged" | "closed"> {
-    const { token, api } = await resolveOpenAppaGithubAccess(source, {
-      pull_requests: "read",
-    });
     const response = await githubFetch({
-      url: `${api}/repos/${source.repo}/pulls/${source.setupPullRequestNumber}`,
-      token: token || undefined,
+      url: `${access.api}/repos/${repo}/pulls/${number}`,
+      token: access.token || undefined,
     });
     if (!response.ok)
       throw new ApiError(
@@ -588,21 +604,12 @@ class OpenAppaRepositoryIncludes {
   }
 
   private async gitlabSetupState(
-    source: RepositorySource & { setupPullRequestNumber: number },
+    client: ReturnType<typeof gitClient>,
+    repo: string,
+    number: number,
   ): Promise<"open" | "merged" | "closed"> {
-    const client = gitClient(
-      await resolveOpenAppaGitlabAccess({
-        organizationId: source.organizationId,
-        gitlabTokenId: source.gitlabTokenId as string,
-      }),
-    );
     try {
-      return (
-        await client.gitlabMergeRequest(
-          source.repo,
-          source.setupPullRequestNumber,
-        )
-      ).state;
+      return (await client.gitlabMergeRequest(repo, number)).state;
     } catch (error) {
       if (error instanceof GitHostError)
         throw new ApiError(
@@ -785,6 +792,8 @@ export async function rememberSetupCommit(
 type SetupRequest = {
   organizationId: string;
   host: "github" | "gitlab";
+  /** The host's API origin: one GitHub Enterprise Server or GitLab from another. */
+  api: string;
   repo: string;
   number: number;
 };
@@ -795,6 +804,7 @@ function setupCommitKey(request: SetupRequest): AllowedCacheKey {
       JSON.stringify([
         request.organizationId,
         request.host,
+        request.api.replace(/\/+$/, "").toLowerCase(),
         request.repo.toLowerCase(),
         request.number,
       ]),

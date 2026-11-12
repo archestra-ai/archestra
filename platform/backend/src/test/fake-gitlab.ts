@@ -34,6 +34,8 @@ export class FakeGitlab {
     path: string;
     files?: Record<string, string>;
     branch?: string;
+    /** Paths among `files` that are symbolic links (mode 120000). */
+    symlinks?: string[];
   }): FakeProject {
     const project: FakeProject = {
       id: this.nextId++,
@@ -43,6 +45,7 @@ export class FakeGitlab {
       commits: new Map(),
       parents: new Map(),
       authors: new Map(),
+      symlinks: new Set(params.symlinks ?? []),
       mergeRequests: [],
     };
     this.projects.set(params.path, project);
@@ -359,7 +362,7 @@ export class FakeGitlab {
     if (kind === "tree") {
       const prefix = url.searchParams.get("path");
       const recursive = url.searchParams.get("recursive") === "true";
-      const entries = treeEntries(files).filter((entry) =>
+      const entries = treeEntries(files, project.symlinks).filter((entry) =>
         prefix
           ? entry.path.startsWith(`${prefix}/`) &&
             (recursive || !entry.path.slice(prefix.length + 1).includes("/"))
@@ -414,6 +417,8 @@ export interface FakeProject {
   parents: Map<string, string | null>;
   /** Each commit's author email; the token's user unless a test says otherwise. */
   authors: Map<string, string>;
+  /** Paths that are symbolic links, in every commit. */
+  symlinks: Set<string>;
   mergeRequests: FakeMergeRequest[];
 }
 
@@ -442,7 +447,7 @@ function commitSha(files: Record<string, string>, parent?: string | null) {
     .digest("hex");
 }
 
-function treeEntries(files: Map<string, string>) {
+function treeEntries(files: Map<string, string>, symlinks?: Set<string>) {
   const folders = new Set<string>();
   for (const path of files.keys()) {
     const parts = path.split("/");
@@ -464,7 +469,7 @@ function treeEntries(files: Map<string, string>) {
       name: nameOf(path),
       path,
       type: "blob",
-      mode: "100644",
+      mode: symlinks?.has(path) ? "120000" : "100644",
     })),
   ];
 }

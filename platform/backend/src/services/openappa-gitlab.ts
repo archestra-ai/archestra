@@ -309,29 +309,42 @@ class OpenAppaGitlab {
     // were never in the policy, go with the merge request. Only a glob
     // needs the project's whole tree; otherwise each file is read alone.
     const tree = hasRepositoryIncludeGlob(params.content)
-      ? (await withGitlabErrors(() => client.listTree(params.repo, baseSha)))
-          .filter((entry) => entry.type === "blob")
-          .map((entry) => entry.path)
+      ? await withGitlabErrors(() => client.listTree(params.repo, baseSha))
       : null;
     const remove = tree
       ? strayGlobMatches({
           content: params.content,
           policyPath: params.policyPath,
-          paths: tree,
+          paths: tree
+            .filter((entry) => entry.type === "blob")
+            .map((entry) => entry.path),
           written: files.map((file) => file.path),
         })
       : [];
-    const present = new Set<string>(tree ?? []);
+    // What is at each path now: the tree's entries with their modes, or,
+    // without a tree, whether the path exists at all; the bounded read
+    // alone would take a file over the limit for a missing one.
+    const present = new Map<string, { type: string; mode?: string }>(
+      tree ? tree.map((entry) => [entry.path, entry]) : [],
+    );
     const unchanged = await withGitlabErrors(async () => {
       let same = remove.length === 0;
       for (const file of files) {
+        if (
+          !tree &&
+          (await client.pathExists({
+            repo: params.repo,
+            ref: baseSha,
+            path: file.path,
+          }))
+        )
+          present.set(file.path, { type: "blob" });
         const bytes = await client.readFile({
           repo: params.repo,
           ref: baseSha,
           path: file.path,
           maxBytes: POLICY_MAX_BYTES,
         });
-        if (bytes) present.add(file.path);
         if (!bytes || !bytes.equals(Buffer.from(file.content))) same = false;
       }
       return same;
@@ -367,20 +380,17 @@ class OpenAppaGitlab {
     upsert: { path: string; content: string }[];
     delete: string[];
     /**
-     * Which of the paths exist at `baseSha`, when the caller read them
-     * already: the project's tree is not listed then, so a path that is a
-     * symbolic link or a folder is not told apart from a file; the commit
-     * writes a file there, and the reviewer sees it.
+     * What the paths are at `baseSha`, when the caller looked already: the
+     * project's tree is not listed then. An entry without a mode was found
+     * by an existence check alone, which does not tell a symbolic link from
+     * a file.
      */
-    present?: ReadonlySet<string>;
+    present?: ReadonlyMap<string, { type: string; mode?: string }>;
   }): Promise<{ iid: number; webUrl: string; sha: string }> {
     const client = gitClient(params.access);
     return withGitlabErrors(async () => {
-      let existing: Map<string, { type: string; mode?: string }>;
-      if (params.present)
-        existing = new Map(
-          [...params.present].map((path) => [path, { type: "blob" }]),
-        );
+      let existing: ReadonlyMap<string, { type: string; mode?: string }>;
+      if (params.present) existing = params.present;
       else {
         const tree = await client.listTree(params.repo, params.baseSha);
         existing = new Map(tree.map((entry) => [entry.path, entry]));

@@ -58,6 +58,7 @@ import {
   setOAuthState,
   setOAuthTeamId,
 } from "@/lib/auth/oauth-session";
+import { useDesktopDevices } from "@/lib/desktop-device.query";
 import { addDesktopMcpServer, DESKTOP_MCP_COPY } from "@/lib/mcp/desktop-mcp";
 import {
   useInstallMcpServer,
@@ -72,6 +73,10 @@ import {
   type ToolWithAssignmentsData,
   useToolsWithAssignments,
 } from "@/lib/tools/tool.query";
+import {
+  desktopLinkActionLabel,
+  desktopMcpAddCase,
+} from "./desktop-mcp-install";
 import { DesktopMcpInstallDialog } from "./desktop-mcp-install-dialog";
 import { InstallationProgress } from "./installation-progress";
 import {
@@ -196,6 +201,11 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
     });
 
   const isDesktopMcp = item.serverType === "desktop_mcp";
+  // Whether the user has the MCP bridge: it names the button of a desktop
+  // MCP server.
+  const desktopAddCase = desktopMcpAddCase(
+    useDesktopDevices({ enabled: isDesktopMcp, live: false }),
+  );
   const startInstall = () => {
     if (isDesktopMcp) {
       setOpenDialog("desktop");
@@ -299,7 +309,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
             </EmptyMedia>
             <EmptyDescription>
               {isDesktopMcp
-                ? `${item.name} runs on your device. Link it to your device to read its tools.`
+                ? `${item.name} is a desktop MCP running on your device.`
                 : "Create a connection to verify the server is reachable and discover its tools."}
             </EmptyDescription>
           </EmptyHeader>
@@ -313,8 +323,19 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
                 </Link>
               </Button>
             ) : (
-              <Button size="sm" onClick={startInstall} disabled={isInstalling}>
-                {isDesktopMcp ? DESKTOP_MCP_COPY.add : "Install"}
+              <Button
+                size="sm"
+                onClick={startInstall}
+                disabled={
+                  isInstalling ||
+                  (isDesktopMcp && desktopAddCase.kind === "loading")
+                }
+              >
+                <span>
+                  {isDesktopMcp
+                    ? desktopLinkActionLabel(desktopAddCase)
+                    : "Install"}
+                </span>
               </Button>
             )}
           </EmptyContent>
@@ -403,6 +424,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
           }
           catalogItem={item}
           isAdding={installMutation.isPending}
+          startAtOnce
         />
       )}
 

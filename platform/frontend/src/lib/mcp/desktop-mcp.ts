@@ -17,6 +17,8 @@ export type DesktopMcpTargetKind = "command" | "url";
  */
 export const DESKTOP_MCP_COPY = {
   add: "Link",
+  /** The Link action of a user who has no MCP bridge yet: it sets it up first. */
+  addWithBridge: "Install MCP bridge and link",
   adding: "Linking...",
   remove: "Unlink",
   removeTheirs: "Unlink from their device",

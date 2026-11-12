@@ -7,6 +7,7 @@ import {
   DESKTOP_MCP_SLOW_AFTER_MS,
   desktopAddAction,
   desktopInstallStateOfRow,
+  desktopLinkActionLabel,
   desktopMcpAddCase,
   desktopMcpProgress,
   desktopMcpStepLabel,
@@ -301,6 +302,22 @@ describe("hasDesktopTarget", () => {
   });
 });
 
+describe("desktopLinkActionLabel", () => {
+  it("says that the MCP bridge is set up first when the user has none", () => {
+    expect(desktopLinkActionLabel({ kind: "no-bridge" })).toBe(
+      "Install MCP bridge and link",
+    );
+  });
+
+  it("says Link when the user has a device, and while that is not known", () => {
+    expect(
+      desktopLinkActionLabel({ kind: "bridge", device: { name: "laptop" } }),
+    ).toBe("Link");
+    expect(desktopLinkActionLabel({ kind: "loading" })).toBe("Link");
+    expect(desktopLinkActionLabel({ kind: "error" })).toBe("Link");
+  });
+});
+
 describe("desktopMcpAddCase", () => {
   const device = { id: "device-1", name: "laptop-0142" };
 
@@ -450,7 +467,7 @@ describe("desktopMcpStepStatus and desktopMcpStepLabel", () => {
 
   it("names the server where it reads better", () => {
     expect(desktopMcpStepLabel("sending", "MATLAB")).toBe(
-      "Sending to your device",
+      "Linking your local device",
     );
     expect(desktopMcpStepLabel("starting", "MATLAB")).toBe("Starting MATLAB");
     expect(desktopMcpStepLabel("reading", "MATLAB")).toBe("Reading its tools");

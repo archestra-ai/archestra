@@ -9,7 +9,7 @@ import {
   TriangleAlert,
   WifiOff,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { McpBridgeSetup } from "@/components/mcp-bridge-setup";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,11 @@ type Props = {
   onAdd: (catalogItem: CatalogItem) => Promise<{ id: string } | null>;
   catalogItem: CatalogItem;
   isAdding: boolean;
+  /**
+   * The button that opened the dialog said already what it does (Link, or
+   * Install MCP bridge and link): the dialog starts at once, with no intro.
+   */
+  startAtOnce?: boolean;
 };
 
 /**
@@ -80,6 +85,7 @@ function DesktopMcpAddFlow({
   onAdd,
   catalogItem,
   isAdding,
+  startAtOnce = false,
 }: Props) {
   const appName = useAppName();
   const { startChat, isCreating } = useChatWithCatalogItem();
@@ -88,6 +94,8 @@ function DesktopMcpAddFlow({
     at: number;
     /** Added before any device ran the MCP bridge: it is set up first. */
     bridgeSetup: boolean;
+    /** The setup was shown: the dialog keeps its width to the end. */
+    viaSetup: boolean;
   } | null>(null);
   const { data: installStatus } = useDesktopMcpInstallationStatus(
     added?.id ?? null,
@@ -109,8 +117,25 @@ function DesktopMcpAddFlow({
       id: server.id,
       at: Date.now(),
       bridgeSetup: addCase.kind === "no-bridge",
+      viaSetup: addCase.kind === "no-bridge",
     });
   };
+
+  // Started from a button that named the action: no intro, once the devices
+  // are known (they decide whether the setup comes first).
+  const startedAtOnce = useRef(false);
+  useEffect(() => {
+    if (
+      !startAtOnce ||
+      startedAtOnce.current ||
+      !canAdd ||
+      addCase.kind === "loading"
+    ) {
+      return;
+    }
+    startedAtOnce.current = true;
+    void add();
+  });
 
   // The device is linked: the steps start now, so "taking longer" counts
   // from here and not from the time the setup took.
@@ -193,13 +218,15 @@ function DesktopMcpAddFlow({
             icon: <Laptop className="h-5 w-5" />,
             title: `Link ${name} to your device`,
             body: (
-              <output className="flex items-center gap-2 text-sm">
-                <CheckCircle2
-                  className="size-4 shrink-0 text-green-600"
-                  aria-hidden
-                />
-                <span>{`${name} is linked to your device`}</span>
-              </output>
+              <ProgressBody name={name} progress={progress}>
+                <output className="flex items-center gap-2 text-sm font-medium">
+                  <CheckCircle2
+                    className="size-4 shrink-0 text-green-600"
+                    aria-hidden
+                  />
+                  <span>{`${name} is linked to your device`}</span>
+                </output>
+              </ProgressBody>
             ),
             footer: (
               <>
@@ -224,8 +251,7 @@ function DesktopMcpAddFlow({
             icon: <Laptop className="h-5 w-5" />,
             title: `Link ${name} to your device`,
             body: (
-              <>
-                <ProgressSteps name={name} progress={progress} />
+              <ProgressBody name={name} progress={progress}>
                 {progress.hint ? (
                   <ProgressHint
                     hint={progress.hint}
@@ -238,7 +264,7 @@ function DesktopMcpAddFlow({
                     })}
                   />
                 ) : null}
-              </>
+              </ProgressBody>
             ),
             footer: (
               <Button type="button" variant="outline" onClick={onClose}>
@@ -254,9 +280,14 @@ function DesktopMcpAddFlow({
         if (!open) onClose();
       }}
       size="medium"
-      // As wide as the MCP bridge setup dialog while it shows the setup, so
-      // the command keeps its lines.
-      className={added?.bridgeSetup ? "max-w-3xl" : undefined}
+      // As wide as the MCP bridge setup dialog when the flow shows the setup,
+      // so the command keeps its lines; then the same width to the end, so
+      // the dialog does not jump between its steps.
+      className={
+        (added ? added.viaSetup : addCase.kind === "no-bridge")
+          ? "max-w-3xl"
+          : undefined
+      }
       bodyClassName="space-y-4"
       title={
         // Left on a phone too, and clear of the close button.
@@ -310,14 +341,36 @@ function addDescription(params: {
   const { addCase, appName, name } = params;
   switch (addCase.kind) {
     case "no-bridge":
-      return `The MCP bridge on your device starts ${name}, a program that is already there. Set up the MCP bridge once, and ${name} is ready right after.`;
+      return `Set up the MCP bridge on your device once, and ${name} is ready right after. Agents in ${appName} can then use it.`;
     case "bridge":
-      return `The MCP bridge on ${addCase.device.name} starts ${name}, a program that is already there. Agents in ${appName} can then use it.`;
+      return `The MCP bridge on ${addCase.device.name} starts ${name}. Agents in ${appName} can then use it.`;
     case "error":
-      return `The MCP bridge on your device starts ${name}, a program that is already there. Agents in ${appName} can then use it.`;
+      return `The MCP bridge on your device starts ${name}. Agents in ${appName} can then use it.`;
     case "loading":
       return null;
   }
+}
+
+/**
+ * The steps, and under them one slot for a note or the result. The slot keeps
+ * the height of a note, so the dialog does not grow or shrink as the steps
+ * move on.
+ */
+function ProgressBody({
+  name,
+  progress,
+  children,
+}: {
+  name: string;
+  progress: DesktopMcpProgress;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <ProgressSteps name={name} progress={progress} />
+      <div className="min-h-[4.5rem]">{children}</div>
+    </>
+  );
 }
 
 function ProgressSteps({

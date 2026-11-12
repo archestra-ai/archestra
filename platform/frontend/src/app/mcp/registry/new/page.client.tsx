@@ -150,7 +150,7 @@ export default function NewMcpCatalogItemPage() {
                       <CardTitle>Start from scratch</CardTitle>
                       <CardDescription>
                         {desktopMcpEnabled
-                          ? "Configure a custom MCP server manually — remote URL, self-hosted command, or a program on each user's connected device."
+                          ? "Configure a custom MCP server manually — remote URL, self-hosted command, or an MCP server installed on a user's device."
                           : "Configure a custom MCP server manually — remote URL or self-hosted command."}
                       </CardDescription>
                     </CardHeader>

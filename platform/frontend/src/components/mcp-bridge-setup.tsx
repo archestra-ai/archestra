@@ -49,7 +49,7 @@ export function McpBridgeSetup({ device }: { device: DesktopDevice | null }) {
   return (
     <div className="text-sm">
       <p className="text-muted-foreground text-pretty">
-        {`Connect your device to ${appName}, so it can use MCP servers running there. Run this command in ${windows ? "PowerShell" : "a terminal"} on your device.`}
+        {`Connect your device to ${appName}, so it can use MCP servers running there.`}
       </p>
       <ScriptBlock
         command={command}
@@ -63,6 +63,7 @@ export function McpBridgeSetup({ device }: { device: DesktopDevice | null }) {
         className="mt-3 [&_pre]:break-all [&_pre]:whitespace-pre-wrap"
       />
       <SetupNextSteps
+        title="Steps"
         platformControl={
           <TextButton
             onClick={() => setWindows(!windows)}
@@ -76,8 +77,13 @@ export function McpBridgeSetup({ device }: { device: DesktopDevice | null }) {
         }
       >
         <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+          <li>
+            <span>
+              {`Run the command in ${windows ? "PowerShell" : "a terminal"} on your device.`}
+            </span>
+          </li>
           <li>Approve your device on the browser page it opens.</li>
-          <li>The MCP bridge then runs in the background.</li>
+          <li>The MCP bridge runs in the background.</li>
         </ol>
       </SetupNextSteps>
       <output

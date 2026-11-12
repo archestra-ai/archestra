@@ -121,6 +121,18 @@ export function desktopMcpAddCase<Device>(devices: {
   return { kind: "no-bridge" };
 }
 
+/**
+ * The Link button of a desktop MCP server where it starts the link at once,
+ * with no intro: it says whether the MCP bridge is set up first.
+ */
+export function desktopLinkActionLabel(
+  addCase: DesktopMcpAddCase<unknown>,
+): string {
+  return addCase.kind === "no-bridge"
+    ? DESKTOP_MCP_COPY.addWithBridge
+    : DESKTOP_MCP_COPY.add;
+}
+
 /** The steps the Add dialog shows while the computer gets the server. */
 export type DesktopMcpProgressStep = "sending" | "starting" | "reading";
 
@@ -198,7 +210,7 @@ export function desktopMcpStepLabel(
 ): string {
   switch (step) {
     case "sending":
-      return "Sending to your device";
+      return "Linking your local device";
     case "starting":
       return `Starting ${name}`;
     case "reading":

@@ -2965,7 +2965,7 @@ function HostingChoice({
     {
       value: "desktop_mcp" as const,
       title: "Desktop",
-      description: "Runs a program that is already on each user's device.",
+      description: "Runs an MCP server installed on a user's device.",
       icon: Laptop,
       disabled: false,
       alpha: true,

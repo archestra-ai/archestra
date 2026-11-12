@@ -622,12 +622,12 @@ fn render_released_call(status: &str, call: &ProposedCall, owner: Option<&OfferO
 /// The released call's arguments as the client spelled them. Before the
 /// runtime judges a call, the backend (`normalizeToolArgumentsForPolicy`)
 /// copies a command tool's `command` argument to `cmd`, or `cmd` to
-/// `command`, a Read, Write or Edit call's `path` to `file_path`, and a
-/// lowercase `edit` call's `path` to `filePath` when it has none, so a rule
-/// matches every client's spelling. The client's tool accepts only its own
-/// spelling, and a model that follows the tool schema cannot send the copy, so
-/// the retry text leaves it out. The backend copies the retry the same way, so
-/// the retry still matches the released call.
+/// `command`, a Read, Write, Edit, `view` or `create` call's `path` to
+/// `file_path`, and a lowercase `edit` call's `path` to `filePath` when it has
+/// none, so a rule matches every client's spelling. The client's tool accepts
+/// only its own spelling, and a model that follows the tool schema cannot send
+/// the copy, so the retry text leaves it out. The backend copies the retry the
+/// same way, so the retry still matches the released call.
 fn retry_arguments(call: &ProposedCall) -> String {
     let raw = call.arguments.get();
     let tool = call.tool.as_str();
@@ -646,7 +646,7 @@ fn retry_arguments(call: &ProposedCall) -> String {
         "bash" | "mcp__workspace__bash" | "shell" | "exec_command" | "run_command" | "cmd"
     );
     let path_copy_target = match tool {
-        "Read" | "Write" | "Edit" => Some("file_path"),
+        "Read" | "Write" | "Edit" | "view" | "create" => Some("file_path"),
         "edit" => Some("filePath"),
         _ => None,
     };
@@ -1094,7 +1094,21 @@ mod typed_tests {
             released("Read", serde_json::json!({ "file_path": "/repo/.env" })),
             serde_json::json!({ "file_path": "/repo/.env" })
         );
-        // Copilot CLI's lowercase `edit` names the file `path`; the backend adds `filePath`.
+        // Copilot CLI's lowercase `view`, `create` and `edit` name the file `path`.
+        assert_eq!(
+            released(
+                "host/archestra/create",
+                serde_json::json!({
+                    "path": "C:\\repo\\.mcp.json",
+                    "file_path": "C:/repo/.mcp.json",
+                    "file_text": "{}",
+                })
+            ),
+            serde_json::json!({
+                "path": "C:\\repo\\.mcp.json",
+                "file_text": "{}",
+            })
+        );
         assert_eq!(
             released(
                 "host/archestra/edit",

@@ -182,11 +182,11 @@ version = 2
     expect(codingAliases?.read_file).toEqual([
       { name: "host/archestra/read", args: { file_path: "filePath" } },
       { name: "host/archestra/read_file", args: { file_path: "target_file" } },
-      { name: "host/archestra/view", args: { file_path: "path" } },
+      { name: "host/archestra/view", args: { file_path: "file_path" } },
     ]);
     expect(codingAliases?.write_file).toEqual([
       { name: "host/archestra/write", args: { file_path: "filePath" } },
-      { name: "host/archestra/create", args: { file_path: "path" } },
+      { name: "host/archestra/create", args: { file_path: "file_path" } },
     ]);
     expect(codingAliases?.edit_file).toEqual([
       { name: "host/archestra/edit", args: { file_path: "filePath" } },
@@ -290,6 +290,60 @@ version = 2
     expect(codingAliases?.read_file).toEqual([
       { name: "host/archestra/read_file", args: { file_path: "custom_arg" } },
       { name: "host/archestra/read", args: { file_path: "filePath" } },
+    ]);
+  });
+
+  test("scans active targetPolicy aliases so multi-user target mappings are not duplicated", () => {
+    const rootWithoutCodingAliases = `[aliases.host]
+claude-code = ["archestra"]
+
+[policy]
+version = 2
+`;
+    const batteriesWithTargetAliases = [
+      {
+        name: "coding",
+        policy: "[policy]\nversion = 2\n",
+        targetPolicy: `[policy]
+version = 2
+
+[[policy.tool]]
+name = "tool/coding/read_file"
+delta = {}
+`,
+      },
+      {
+        name: "claude-code",
+        policy: `[aliases.tool.coding]
+read_file = [{ name = "host/claude-code/Read", args = { file_path = "file_path" } }]
+
+[policy]
+version = 2
+`,
+        targetPolicy: `[aliases.tool.coding]
+read_file = [{ name = "host/claude-code/view", args = { file_path = "file_path" } }]
+
+[policy]
+version = 2
+`,
+      },
+    ];
+
+    const augmented = withHostClientCodingAliases({
+      root: rootWithoutCodingAliases,
+      batteries: batteriesWithTargetAliases,
+    });
+    const codingAliases = asRecord(
+      asRecord(asRecord(parsePolicyToml(augmented)?.aliases)?.tool)?.coding,
+    );
+
+    expect(codingAliases?.read_file).toEqual([
+      { name: "host/archestra/read", args: { file_path: "filePath" } },
+      { name: "host/archestra/read_file", args: { file_path: "target_file" } },
+    ]);
+    expect(codingAliases?.write_file).toEqual([
+      { name: "host/archestra/write", args: { file_path: "filePath" } },
+      { name: "host/archestra/create", args: { file_path: "file_path" } },
     ]);
   });
 });

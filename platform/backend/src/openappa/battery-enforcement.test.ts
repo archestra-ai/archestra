@@ -622,16 +622,14 @@ requires = { attention = ["blocked"] }
       `${tool} {\n${Object.entries(args)
         .map(([key, value]) => `  ${key}: ${JSON.stringify(value)}\n`)
         .join("")}}\nexpect allow\n`;
-    const copilotEditProtected = normalizeToolArgumentsForPolicy("edit", {
-      path: "/repo/.mcp.json",
-      old_str: "old",
-      new_str: "new",
-    }) as Record<string, unknown>;
-    const copilotEditOrdinary = normalizeToolArgumentsForPolicy("edit", {
-      path: "/repo/note.txt",
-      old_str: "old",
-      new_str: "new",
-    }) as Record<string, unknown>;
+    const copilotCall = (
+      tool: "view" | "create" | "edit",
+      args: Record<string, unknown>,
+    ) =>
+      call(
+        `host/archestra/${tool}`,
+        normalizeToolArgumentsForPolicy(tool, args) as Record<string, unknown>,
+      );
 
     const scenarios = {
       "grok-read-env": `${call("host/archestra/read_file", { target_file: "/repo/.env" })}${probe}`,
@@ -645,21 +643,31 @@ requires = { attention = ["blocked"] }
         `host/archestra/${grok.normalizeLocalToolName("todo_write")}`,
         { todos: [] },
       ),
-      "copilot-view-env": `${call("host/archestra/view", { path: "/repo/.env" })}${probe}`,
-      "copilot-view-readme": `${call("host/archestra/view", { path: "/repo/README.md" })}${probe}`,
-      "copilot-create-protected": call("host/archestra/create", {
+      "copilot-view-env": `${copilotCall("view", { path: "/repo/.env" })}${probe}`,
+      "copilot-view-env-windows": `${copilotCall("view", { path: "C:\\repo\\.env" })}${probe}`,
+      "copilot-view-readme": `${copilotCall("view", { path: "/repo/README.md" })}${probe}`,
+      "copilot-create-protected": copilotCall("create", {
         path: "/repo/.mcp.json",
         file_text: "{}",
       }),
-      "copilot-create-ordinary": call("host/archestra/create", {
+      "copilot-create-protected-windows": copilotCall("create", {
+        path: "C:\\repo\\.mcp.json",
+        file_text: "{}",
+      }),
+      "copilot-create-ordinary": copilotCall("create", {
         path: "/repo/note.txt",
         file_text: "hello",
       }),
-      "copilot-edit-protected": call(
-        "host/archestra/edit",
-        copilotEditProtected,
-      ),
-      "copilot-edit-ordinary": call("host/archestra/edit", copilotEditOrdinary),
+      "copilot-edit-protected": copilotCall("edit", {
+        path: "/repo/.mcp.json",
+        old_str: "old",
+        new_str: "new",
+      }),
+      "copilot-edit-ordinary": copilotCall("edit", {
+        path: "/repo/note.txt",
+        old_str: "old",
+        new_str: "new",
+      }),
       "copilot-web-fetch-docs": `${call("host/archestra/web_fetch", { url: "https://archestra.ai/docs" })}${probe}`,
       "copilot-web-fetch-external": call("host/archestra/web_fetch", {
         url: "https://example.com/",
@@ -687,8 +695,10 @@ requires = { attention = ["blocked"] }
       "grok-list-dir": ["allow", "allow"],
       "grok-todo-write": ["allow"],
       "copilot-view-env": ["allow", "authority human-approval"],
+      "copilot-view-env-windows": ["allow", "authority human-approval"],
       "copilot-view-readme": ["allow", "allow"],
       "copilot-create-protected": ["authority human-approval"],
+      "copilot-create-protected-windows": ["authority human-approval"],
       "copilot-create-ordinary": ["allow"],
       "copilot-edit-protected": ["authority human-approval"],
       "copilot-edit-ordinary": ["allow"],

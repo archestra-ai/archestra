@@ -465,8 +465,8 @@ ${CLAUDE_CODE_BATTERY} = ["archestra"]
 # The coding battery's tools under Codex's, OpenCode's, Claude Desktop
 # Cowork's, Kimi Code's, Copilot CLI's and Grok's spellings. Kimi Code shares
 # Claude Code's other tool names; the proxy also evaluates its Read, Write and
-# Edit \`path\` as \`file_path\`, and Copilot CLI's lowercase \`edit\` \`path\` as
-# \`filePath\`.
+# Edit \`path\` and Copilot CLI's \`view\` and \`create\` \`path\` as \`file_path\`, and
+# Copilot CLI's lowercase \`edit\` \`path\` as \`filePath\`.
 ${formatHostClientCodingAliases()}
 
 [policy]

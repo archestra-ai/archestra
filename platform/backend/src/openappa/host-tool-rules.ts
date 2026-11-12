@@ -54,11 +54,18 @@ export async function withHostToolRules(params: {
  */
 export function withHostClientCodingAliases(params: {
   root: string;
-  batteries: ReadonlyArray<{ name: string; policy: string }>;
+  batteries: ReadonlyArray<{
+    name: string;
+    policy: string;
+    targetPolicy?: string;
+  }>;
 }): string {
   const codingActive = params.batteries.some(
     (battery) =>
-      battery.name === CODING_BATTERY && toolEntries(battery.policy).length > 0,
+      battery.name === CODING_BATTERY &&
+      (toolEntries(battery.policy).length > 0 ||
+        (battery.targetPolicy !== undefined &&
+          toolEntries(battery.targetPolicy).length > 0)),
   );
   if (!codingActive) return params.root;
 
@@ -163,12 +170,12 @@ const HOST_CLIENT_CODING_ALIASES: Readonly<
   read_file: [
     { name: "host/archestra/read", args: { file_path: "filePath" } },
     { name: "host/archestra/read_file", args: { file_path: "target_file" } },
-    { name: "host/archestra/view", args: { file_path: "path" } },
+    { name: "host/archestra/view", args: { file_path: "file_path" } },
   ],
   search_files: [{ name: "host/archestra/grep", args: { path: "path" } }],
   write_file: [
     { name: "host/archestra/write", args: { file_path: "filePath" } },
-    { name: "host/archestra/create", args: { file_path: "path" } },
+    { name: "host/archestra/create", args: { file_path: "file_path" } },
   ],
   edit_file: [{ name: "host/archestra/edit", args: { file_path: "filePath" } }],
   fetch_url: [
@@ -185,25 +192,36 @@ const HOST_CLIENT_CODING_ALIASES: Readonly<
 function mappedToolNames(
   rootDocument: Record<string, unknown>,
   hostAliases: Record<string, unknown> | null,
-  batteries: ReadonlyArray<{ name: string; policy: string }>,
+  batteries: ReadonlyArray<{
+    name: string;
+    policy: string;
+    targetPolicy?: string;
+  }>,
 ): Set<string> {
   const mapped = new Set<string>();
   collectToolAliasNames(asRecord(asRecord(rootDocument.aliases)?.tool), (raw) =>
     mapped.add(raw),
   );
   for (const battery of batteries) {
-    const parsed = parsePolicyToml(battery.policy);
-    collectToolAliasNames(asRecord(asRecord(parsed?.aliases)?.tool), (raw) => {
-      mapped.add(raw);
-      const hostMatch = /^host\/([^/]+)\/(.+)$/.exec(raw);
-      if (!hostMatch) return;
-      const [, sourceHost, tool] = hostMatch;
-      const targets = hostAliases?.[sourceHost];
-      if (!Array.isArray(targets)) return;
-      for (const target of targets) {
-        if (typeof target === "string") mapped.add(`host/${target}/${tool}`);
-      }
-    });
+    for (const policy of [battery.targetPolicy, battery.policy]) {
+      if (!policy) continue;
+      const parsed = parsePolicyToml(policy);
+      collectToolAliasNames(
+        asRecord(asRecord(parsed?.aliases)?.tool),
+        (raw) => {
+          mapped.add(raw);
+          const hostMatch = /^host\/([^/]+)\/(.+)$/.exec(raw);
+          if (!hostMatch) return;
+          const [, sourceHost, tool] = hostMatch;
+          const targets = hostAliases?.[sourceHost];
+          if (!Array.isArray(targets)) return;
+          for (const target of targets) {
+            if (typeof target === "string")
+              mapped.add(`host/${target}/${tool}`);
+          }
+        },
+      );
+    }
   }
   return mapped;
 }

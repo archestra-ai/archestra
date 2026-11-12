@@ -192,8 +192,8 @@ vi.mock("@/lib/mcp/use-mcp-server-issues", () => ({
 vi.mock("@/lib/environment.query", () => ({ useEnvironments: () => ({}) }));
 
 const serverRulesHref = vi.fn<() => string | null>(() => null);
-vi.mock("../_parts/server-rules-launch", () => ({
-  SERVER_RULES_LABEL: "Edit Guardrails",
+vi.mock("../_parts/server-rules-launch", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../_parts/server-rules-launch")>()),
   ServerRulesButton: ({
     children,
   }: {
@@ -292,6 +292,7 @@ describe("McpCatalogItemDetailPage overview", () => {
       ].map((action) => ({ resource: "mcpRegistry", scope: "*", action })),
     } as ReturnType<typeof useScopedCapabilities>);
     vi.clearAllMocks();
+    serverRulesHref.mockReturnValue(null);
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
       replace: vi.fn(),
@@ -464,7 +465,6 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(
       screen.queryByRole("menuitem", { name: "Edit Guardrails" }),
     ).toBeNull();
-    serverRulesHref.mockReturnValue(null);
   });
 
   it("allows template editing before installation without a competing configuration Edit action", () => {

@@ -31,8 +31,8 @@ vi.mock("./catalog-edit-access", () => ({
 }));
 
 const serverRulesHref = vi.fn<() => string | null>(() => null);
-vi.mock("./server-rules-launch", () => ({
-  SERVER_RULES_LABEL: "Edit Guardrails",
+vi.mock("./server-rules-launch", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./server-rules-launch")>()),
   useServerRulesHref: () => serverRulesHref(),
 }));
 

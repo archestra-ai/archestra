@@ -3,16 +3,16 @@ import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useFeature } from "@/lib/config/config.query";
 import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import { McpCatalogItemEditPage } from "./page.client";
 
 vi.mock("next/navigation");
-vi.mock("@/lib/config/config.query");
 // The same action the server's page and the registry row offer: it renders
 // nothing while self-service is off, which its own tests cover.
-vi.mock("../../_parts/server-rules-launch", () => ({
-  SERVER_RULES_LABEL: "Edit Guardrails",
+vi.mock("../../_parts/server-rules-launch", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("../../_parts/server-rules-launch")
+  >()),
   ServerRulesButton: ({ children }: { children: React.ReactNode }) => (
     <a href="/server-rules">{children}</a>
   ),

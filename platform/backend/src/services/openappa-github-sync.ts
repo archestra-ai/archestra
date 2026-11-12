@@ -58,6 +58,7 @@ import {
 } from "@/services/openappa-github";
 import {
   configuredServerRulesFolder,
+  firstFileAtEachPath,
   githubAppLogin,
   githubAppProfile,
   MissingGithubPermission,
@@ -608,6 +609,9 @@ async function createAppaGitlabProject(params: {
     path?: string;
     setupPullRequestNumber?: number;
   };
+  // A project with a policy of its own is connected as a source: a first
+  // pull that fails leaves the sync stopped, as connecting does.
+  let holdsPolicy = false;
   if (params.existing) {
     const status = await openappaGitlab.repositoryStatus({
       access,
@@ -619,6 +623,7 @@ async function createAppaGitlabProject(params: {
     if (status.status !== "empty") {
       // A project that already holds a policy keeps it until the merge
       // request that carries the current policy and its files is merged.
+      holdsPolicy = true;
       const path = params.path ?? "appa.toml";
       const proposed = await openappaGitlab.proposeSetup({
         access,
@@ -685,7 +690,7 @@ async function createAppaGitlabProject(params: {
   await OpenAppaGithubSyncModel.save(params.organizationId, source);
   await syncAppaGithubPolicy(params.organizationId);
   const row = await OpenAppaGithubSyncModel.find(params.organizationId);
-  if (seeded.setupPullRequestNumber !== undefined && row?.lastSyncError) {
+  if (holdsPolicy && row?.lastSyncError) {
     await OpenAppaGithubSyncModel.setInterval(params.organizationId, null);
     throw new ApiError(
       400,
@@ -2268,10 +2273,7 @@ async function commitSetupFiles(params: {
   direct: boolean;
 }): Promise<{ setupPullRequestNumber?: number }> {
   const { base, token, branch, parent } = params;
-  // The first file at a path wins: the policy comes first.
-  const files = [
-    ...new Map(params.files.map((file) => [file.path, file])).values(),
-  ];
+  const files = firstFileAtEachPath(params.files);
   const parentCommit = await githubJson<{ tree?: { sha?: string } }>({
     url: `${base}/git/commits/${parent}`,
     token,

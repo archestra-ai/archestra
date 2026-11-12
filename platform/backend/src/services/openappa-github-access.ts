@@ -625,6 +625,18 @@ export function configuredServerRulesFolder(): string {
   return config.openappa.selfServiceDirectory;
 }
 
+/**
+ * The files setup writes, one per path: the first given at a path is kept,
+ * so the policy, given first, wins over a transferred file at its path.
+ */
+export function firstFileAtEachPath<T extends { path: string }>(
+  files: readonly T[],
+): T[] {
+  const kept = new Map<string, T>();
+  for (const file of files) if (!kept.has(file.path)) kept.set(file.path, file);
+  return [...kept.values()];
+}
+
 function fold(params: {
   content: string;
   files: ReadonlyMap<string, string>;

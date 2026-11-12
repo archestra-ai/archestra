@@ -16,12 +16,16 @@ import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
 import { secretManager } from "@/secrets-manager";
 import {
   guardrailsPolicyService,
   initialPolicy,
 } from "@/services/guardrails-policy";
-import { templateExampleBlob } from "@/services/openappa-github-access";
+import {
+  openappaRepositoryIncludes,
+  templateExampleBlob,
+} from "@/services/openappa-github-access";
 import {
   checkDueAppaGithubSyncs,
   syncAppaGithubPolicy,
@@ -1205,6 +1209,10 @@ describe("APPA GitHub sync", () => {
         HttpResponse.json({ default_branch: "main" }),
       ),
       http.get(
+        "https://api.github.com/repos/example/other-policy/commits",
+        () => HttpResponse.json([{ sha: commit }]),
+      ),
+      http.get(
         "https://api.github.com/repos/example/other-policy/git/ref/heads/main",
         () => HttpResponse.json({ object: { sha: commit } }),
       ),
@@ -1217,7 +1225,7 @@ describe("APPA GitHub sync", () => {
       ),
       http.get(
         "https://api.github.com/repos/example/other-policy/pulls/8",
-        () => HttpResponse.json(pull),
+        () => HttpResponse.json({ ...pull, head: { sha: SETUP_COMMIT } }),
       ),
       http.get(
         "https://api.github.com/repos/example/other-policy/commits/main",
@@ -1248,6 +1256,16 @@ describe("APPA GitHub sync", () => {
       setupPullRequestNumber: 8,
       ref: "main",
     });
+    // While the request is open, the policy's files are read from its commit.
+    expect(
+      await openappaRepositoryIncludes.expand({
+        organizationId,
+        content: root,
+      }),
+    ).toMatchObject({
+      errors: [],
+      included: [{ path: "rules/current.toml", sha256: expect.any(String) }],
+    });
     pull = { merged: true, state: "closed" };
     await syncAppaGithubPolicy(organizationId);
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
@@ -1256,6 +1274,110 @@ describe("APPA GitHub sync", () => {
       lastSyncError: null,
     });
     expect(git.files()["rules/legacy.toml"]).toBeUndefined();
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      root,
+    );
+  });
+
+  test("a private repository holding the template's example and a stray rules file is seeded over, the stray file removed", async () => {
+    const root = `include = ["rules/*.toml"]\n\n${policy}`;
+    const current =
+      '[policy]\nversion = 2\n\n[[policy.tool]]\nname = "ledger__export"\ndelta = {}\n';
+    const example =
+      OPENAPPA_TEMPLATE.files.find((file) => file.path === "appa.toml")
+        ?.content ?? "";
+    server.use(
+      contentsOf("example/policies", () => ({
+        "guardrails/appa.toml": root,
+        "guardrails/rules/current.toml": current,
+      })),
+    );
+    await OpenAppaGithubSyncModel.save(organizationId, source);
+    const row = await OpenAppaGithubSyncModel.find(organizationId);
+    await OpenAppaGithubSyncModel.finish({
+      organizationId,
+      revision: row?.revision as string,
+      outcome: {
+        content: root,
+        contentHash: createHash("sha256").update(root).digest("hex"),
+        sourceCommit: commit,
+      },
+    });
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const installationId = randomUUID();
+    const secret = await secretManager().createSecret(
+      { apiToken: privateKey },
+      "test-example-app",
+    );
+    const githubApp = await GithubAppConfigModel.create({
+      organizationId,
+      name: "Policy App",
+      githubUrl: "https://api.github.com",
+      appId: "123",
+      installationId,
+      secretId: secret.id,
+    });
+    const git = fakeGitData("example/new-policy", {
+      head: {
+        "appa.toml": example,
+        "rules/legacy.toml":
+          '[policy]\nversion = 2\n\n[[policy.tool]]\nname = "legacy__anything"\ndelta = {}\n',
+      },
+    });
+    server.use(
+      http.post(
+        `https://api.github.com/app/installations/${installationId}/access_tokens`,
+        () =>
+          HttpResponse.json({
+            token: "test-installation-token",
+            expires_at: new Date(Date.now() + 3600000).toISOString(),
+          }),
+      ),
+      http.get("https://api.github.com/repos/example/new-policy/commits", () =>
+        HttpResponse.json([{ sha: commit }]),
+      ),
+      // Not GitHub's copy of the template: no link, the example's bytes.
+      http.get("https://api.github.com/repos/example/new-policy", () =>
+        HttpResponse.json({
+          full_name: "example/new-policy",
+          default_branch: "main",
+          private: true,
+        }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/new-policy/commits/main",
+        () => HttpResponse.json({ sha: commit }),
+      ),
+      contentsOf("example/new-policy", git.files),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/repository",
+      payload: {
+        owner: "example",
+        name: "new-policy",
+        githubAppConfigId: githubApp.id,
+        interval: "1h",
+        existing: true,
+        replace: true,
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(git.written()).toEqual({
+      "appa.toml": root,
+      "rules/current.toml": current,
+    });
+    expect(git.removed()).toEqual(["rules/legacy.toml"]);
+    expect(response.json().source).toMatchObject({
+      repo: "example/new-policy",
+      sourceCommit: commit,
+      setupPullRequestNumber: null,
+      lastSyncError: null,
+    });
     expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
       root,
     );

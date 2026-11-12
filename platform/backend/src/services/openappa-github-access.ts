@@ -395,6 +395,11 @@ class OpenAppaRepositoryIncludes {
     maxSize: 256,
     defaultTtl: 60_000,
   });
+  /** The setup request's head commit, by repository and number, for a minute. */
+  private readonly pendingSetups = new LRUCacheManager<string | null>({
+    maxSize: 64,
+    defaultTtl: 60_000,
+  });
 
   /** Whether an `include` entry names a file in the policy repository. */
   isRepositoryFile(entry: string): boolean {
@@ -496,16 +501,82 @@ class OpenAppaRepositoryIncludes {
     paths: readonly string[];
   }): Promise<Map<string, string>> {
     const source = await OpenAppaGithubSyncModel.find(params.organizationId);
-    if (!source?.repo || !source.sourceCommit)
+    // While a setup pull request carries the policy and its files to a
+    // repository, nothing is accepted there yet: the files are read from
+    // the request's commit, which holds what was accepted before, until the
+    // merge accepts a commit.
+    const commit =
+      source?.repo &&
+      (source.sourceCommit ??
+        (source.setupPullRequestNumber
+          ? await this.pendingSetupCommit({
+              ...source,
+              repo: source.repo,
+              setupPullRequestNumber: source.setupPullRequestNumber,
+            })
+          : null));
+    if (!source?.repo || !commit)
       throw new ApiError(
         409,
         `include: ${JSON.stringify(params.paths[0])} is a file in the policy repository, and Git sync has accepted no repository commit. Connect Git sync, or remove the include.`,
       );
     return this.read({
       source: { ...source, repo: source.repo },
-      commit: source.sourceCommit,
+      commit,
       paths: params.paths,
     });
+  }
+
+  /** The head commit of the setup pull or merge request, for a minute. */
+  private async pendingSetupCommit(
+    source: RepositorySource & { setupPullRequestNumber: number },
+  ): Promise<string | null> {
+    const key = `${source.repo}#${source.setupPullRequestNumber}`;
+    const cached = this.pendingSetups.get(key);
+    if (cached !== undefined) return cached;
+    let sha: string | null = null;
+    if (source.gitlabTokenId) {
+      const client = gitClient(
+        await resolveOpenAppaGitlabAccess({
+          organizationId: source.organizationId,
+          gitlabTokenId: source.gitlabTokenId,
+        }),
+      );
+      const request = await client.gitlabMergeRequest(
+        source.repo,
+        source.setupPullRequestNumber,
+      );
+      sha =
+        request.state === "open"
+          ? await client.gitlabBranchCommit(source.repo, request.sourceBranch)
+          : null;
+    } else {
+      const { token, api } = await resolveOpenAppaGithubAccess(source, {
+        pull_requests: "read",
+      });
+      const response = await githubFetch({
+        url: `${api}/repos/${source.repo}/pulls/${source.setupPullRequestNumber}`,
+        token: token || undefined,
+      });
+      if (!response.ok)
+        throw new ApiError(
+          502,
+          `GitHub returned HTTP ${response.status} for the setup pull request. Check repository access and App permissions.`,
+        );
+      const pull = (await response.json()) as {
+        state?: string;
+        merged?: boolean;
+        head?: { sha?: string };
+      };
+      sha =
+        pull.state === "open" && pull.merged !== true
+          ? (pull.head?.sha ?? null)
+          : null;
+    }
+    if (sha !== null && !/^[a-f0-9]{40}$/.test(sha))
+      throw new ApiError(502, "The setup request names an invalid commit");
+    this.pendingSetups.set(key, sha);
+    return sha;
   }
 
   /**

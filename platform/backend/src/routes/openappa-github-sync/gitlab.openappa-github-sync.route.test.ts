@@ -11,6 +11,7 @@ import {
   guardrailsPolicyService,
   initialPolicy,
 } from "@/services/guardrails-policy";
+import { openappaRepositoryIncludes } from "@/services/openappa-github-access";
 import { syncAppaGithubPolicy } from "@/services/openappa-github-sync";
 import {
   getOpenAppaPolicyChangeStatus,
@@ -260,6 +261,16 @@ describe("APPA GitLab sync", () => {
       repo,
       ref: "main",
       setupPullRequestNumber: 1,
+    });
+    // While the request is open, the policy's files are read from its commit.
+    expect(
+      await openappaRepositoryIncludes.expand({
+        organizationId,
+        content: root,
+      }),
+    ).toMatchObject({
+      errors: [],
+      included: [{ path: "rules/current.toml", sha256: expect.any(String) }],
     });
     gitlab.merge(repo, 1);
     await syncAppaGithubPolicy(organizationId);

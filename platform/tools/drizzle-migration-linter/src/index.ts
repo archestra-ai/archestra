@@ -31,6 +31,8 @@ type Rule = {
   severity: LintSeverity;
   message: string;
   matches: (statement: string) => boolean;
+  /** When false, the allow-breaking marker does not suppress the rule. */
+  overridable?: boolean;
 };
 
 const ALLOW_BREAKING_PATTERN =
@@ -63,7 +65,13 @@ export function lintMigrationSql(
 
     for (const rule of RULES) {
       if (!rule.matches(normalizedStatement)) continue;
-      if (allowBreaking && rule.severity === "error") continue;
+      if (
+        allowBreaking &&
+        rule.severity === "error" &&
+        rule.overridable !== false
+      ) {
+        continue;
+      }
 
       issues.push({
         code: rule.code,
@@ -180,8 +188,10 @@ const RULES: Rule[] = [
   {
     code: "drop-column",
     severity: "error",
+    // Dropping a column destroys its data for good, so no marker permits it.
+    overridable: false,
     message:
-      "DROP COLUMN is not rollout-safe. Keep the old column until every supported app version no longer reads it.",
+      "DROP COLUMN deletes the column's data and is never allowed. Keep the column in the Drizzle schema, mark it `@deprecated`, and stop reading and writing it. If it is NOT NULL without a default, relax it with DROP NOT NULL so inserts that omit it still succeed.",
     matches: (statement) =>
       /\bALTER\s+TABLE\b[\s\S]*\bDROP\s+COLUMN\b/i.test(statement),
   },

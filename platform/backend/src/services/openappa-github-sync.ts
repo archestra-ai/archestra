@@ -39,6 +39,7 @@ import {
 } from "@/openappa/declarations";
 import {
   asRecord,
+  includesServerRulesFolder,
   isServerRulesFile,
   isServerRulesFolder,
   repositoryIncludePaths,
@@ -160,14 +161,32 @@ export async function selfServiceInForce(organizationId: string) {
   return selfServiceActive(await OpenAppaGithubSyncModel.find(organizationId));
 }
 
+/**
+ * Whether self-service is set up in full, which is when the registry offers
+ * its action and the Keeper's server rules tools work: on by the variable,
+ * a GitHub App source that has synced, the servers' folder included by the
+ * accepted policy, and the branch ruleset active. Before that, Finish setup
+ * on the Git sync card completes it; the ruleset's state is the protection
+ * read the card shows, kept for a minute and replaced by each sync.
+ */
+export async function selfServiceSetupComplete(
+  organizationId: string,
+): Promise<boolean> {
+  const row = await OpenAppaGithubSyncModel.find(organizationId);
+  if (!selfServiceActive(row) || !row.sourceCommit) return false;
+  const policy = await guardrailsPolicyService.get(organizationId);
+  if (!includesServerRulesFolder(policy.content, configuredServerRulesFolder()))
+    return false;
+  const protection = await getRepositoryProtection(organizationId);
+  return protection?.branchRules.state === "active";
+}
+
 /** What the MCP registry asks: whether its servers' editors may change their rules now. */
 export async function getAppaSelfService(organizationId: string) {
-  const row = await OpenAppaGithubSyncModel.find(organizationId);
   return {
     enabled:
       enterpriseTier.isOpenappaActive() &&
-      selfServiceActive(row) &&
-      !!row?.sourceCommit,
+      (await selfServiceSetupComplete(organizationId)),
   };
 }
 export async function configureAppaGithubSync(params: {

@@ -36,6 +36,7 @@ import {
   hasOwnFile,
   POLICY_CHECK_NAME,
   selfServiceActive,
+  selfServiceSetupComplete,
   syncAppaGithubPolicy,
 } from "@/services/openappa-github-sync";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -80,6 +81,8 @@ export async function getServerRules(params: Caller & { catalogId: string }) {
   // and the registry shows no action. The Keeper passes the reason on.
   if (source?.interval && source.repo && !selfServiceActive(source))
     throw new ApiError(409, SELF_SERVICE_OFF);
+  if (source?.interval && source.repo)
+    await requireSelfServiceComplete(params.organizationId);
   const included = includesServerRules(root.content, server.path);
   const accepted = await acceptedFile({
     organizationId: params.organizationId,
@@ -244,6 +247,7 @@ export async function getServerRulesChangeStatus(
   params: Caller & { catalogId: string; number: number },
 ) {
   const source = await requireSource(params.organizationId);
+  await requireSelfServiceComplete(params.organizationId);
   const server = await serverFor(params, configuredServerRulesFolder());
   const { token, api } = await githubWriter(source);
   const base = `${api}/repos/${source.repo}`;
@@ -361,6 +365,7 @@ async function checkedChange(
   },
 ) {
   const source = await requireSource(params.organizationId);
+  await requireSelfServiceComplete(params.organizationId);
   const folder = configuredServerRulesFolder();
   const include = serverRulesInclude(folder);
   const server = await serverFor(params, folder);
@@ -719,6 +724,19 @@ function repositoryView(
 /** The refusal every server rules tool gives while self-service is off. */
 const SELF_SERVICE_OFF =
   "MCP Guardrails Self-Service is off, so server rules cannot be read or proposed here. An administrator turns it on for the deployment with ARCHESTRA_OPENAPPA_SELF_SERVICE=enabled.";
+
+const SELF_SERVICE_UNFINISHED =
+  "MCP Guardrails Self-Service is not set up yet, so server rules cannot be read or proposed here. An administrator finishes the setup under Settings → Guardrails → Git sync with Finish setup: the branch ruleset, and the include that makes the servers' files apply.";
+
+/**
+ * The Keeper's tools and the registry's action open together, once Finish
+ * setup is complete; before that, a proposal would merge unchecked or land
+ * in a folder the policy does not include yet.
+ */
+async function requireSelfServiceComplete(organizationId: string) {
+  if (!(await selfServiceSetupComplete(organizationId)))
+    throw new ApiError(409, SELF_SERVICE_UNFINISHED);
+}
 
 async function requireSource(organizationId: string) {
   const source = await OpenAppaGithubSyncModel.find(organizationId);

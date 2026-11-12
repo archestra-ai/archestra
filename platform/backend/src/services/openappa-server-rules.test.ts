@@ -60,6 +60,25 @@ max_body_bytes = 65536
 `;
 /** The policy check's name for the tests' App, from the default template. */
 const CHECK = "Check OpenAPPA Guardrails";
+/** The one-rule ruleset the sync keeps on main for the tests' App (id 123). */
+const OUR_RULESET = {
+  id: 5,
+  name: CHECK,
+  target: "branch",
+  source_type: "Repository",
+  enforcement: "active",
+  conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
+  bypass_actors: [],
+  rules: [
+    {
+      type: "required_status_checks",
+      parameters: {
+        strict_required_status_checks_policy: false,
+        required_status_checks: [{ context: CHECK, integration_id: 123 }],
+      },
+    },
+  ],
+};
 const INCLUDING = `include = ["mcp/payments_api.toml"]\n${RULES}`;
 const REFUNDS = `[policy]
 version = 2
@@ -229,6 +248,17 @@ async function connectApp(params: {
     // The App as GitHub names it: the policy check is named after it.
     http.get("https://api.github.com/app", () =>
       HttpResponse.json({ slug: "acme-guardrails", name: "Policy App" }),
+    ),
+    // The ruleset the sync keeps, in place: self-service in full needs it.
+    // A test that serves its own rulesets registers them over these.
+    http.get(`${REPO}/rulesets`, () =>
+      HttpResponse.json([{ id: 5, name: CHECK, source_type: "Repository" }]),
+    ),
+    http.get(`${REPO}/rulesets/5`, () => HttpResponse.json(OUR_RULESET)),
+    http.get(`https://api.github.com/app/installations/${installationId}`, () =>
+      HttpResponse.json({
+        html_url: `https://github.com/settings/installations/${installationId}`,
+      }),
     ),
     http.post(
       `https://api.github.com/app/installations/${installationId}/access_tokens`,
@@ -1130,7 +1160,10 @@ test("a server's editors propose its rules as a pull request; readers and outsid
   });
 
   await connectApp({ organizationId: org.id });
-  serveRepository({ head: FIRST, files: { [FIRST]: { "appa.toml": RULES } } });
+  serveRepository({
+    head: FIRST,
+    files: { [FIRST]: { "appa.toml": `include = ["mcp/*.toml"]\n${RULES}` } },
+  });
   await syncAppaGithubPolicy(org.id);
 
   const read = await getServerRules({
@@ -1141,7 +1174,7 @@ test("a server's editors propose its rules as a pull request; readers and outsid
   expect(read).toMatchObject({
     canEdit: true,
     path: "mcp/payments_api.toml",
-    included: false,
+    included: true,
     content: null,
     expectedCommit: FIRST,
     tools: ["payments_api__get_invoice", "payments_api__refund_payment"],
@@ -1216,9 +1249,8 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     before: "",
     after: REFUNDS,
   });
-  // The first server file brings every server's in, so no later one needs
-  // its own line in appa.toml.
-  expect(preview.rootChange).toContain('+include = ["mcp/*.toml"]');
+  // The include is in place, as self-service needs: nothing changes in appa.toml.
+  expect(preview.rootChange).toBeUndefined();
 
   const trees: Array<{ tree: Array<{ path: string; content: string }> }> = [];
   const commits: Array<{ message: string; author?: unknown }> = [];
@@ -1267,13 +1299,11 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     number: 7,
     url: "https://github.com/example/policies/pull/7",
   });
-  // One commit: the server's file, and appa.toml including every server's.
+  // One commit with the server's file alone: appa.toml includes the folder already.
   expect(trees[0]?.tree.map((file) => file.path)).toEqual([
     "mcp/payments_api.toml",
-    "appa.toml",
   ]);
   expect(trees[0]?.tree[0]?.content).toBe(REFUNDS);
-  expect(trees[0]?.tree[1]?.content).toContain('"mcp/*.toml"');
   expect(refs[0]?.ref).toMatch(
     /^refs\/heads\/archestra\/openappa-server-payments_api-/,
   );
@@ -1782,6 +1812,25 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
     state: "active",
     url: "https://github.com/example/policies/rules/5",
   });
+  // The ruleset alone is not the whole setup: until the accepted policy
+  // includes the servers' folder, the registry offers nothing and the
+  // Keeper's tools point at Finish setup.
+  expect(await getAppaSelfService(org.id)).toEqual({ enabled: false });
+  await expect(
+    getServerRules({
+      organizationId: org.id,
+      userId: admin.id,
+      catalogId: catalog.id,
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 409,
+    message: expect.stringContaining("not set up yet"),
+  });
+  serveRepository({
+    head: SECOND,
+    files: { [SECOND]: { "appa.toml": `include = ["mcp/*.toml"]\n${RULES}` } },
+  });
+  await syncAppaGithubPolicy(org.id);
   expect(await getAppaSelfService(org.id)).toEqual({ enabled: true });
   await checkDueAppaGithubSyncs();
   expect(calls).toEqual(["POST rulesets", "GET pulls"]);
@@ -2538,8 +2587,30 @@ test("the self-service folder is the deployment's: the servers' files live there
   expect(pulls).toHaveLength(1);
   files.main = { "appa.toml": RULES };
 
+  // Until the include is pulled, self-service is not set up in full: the
+  // registry offers nothing, and the Keeper's tools point at Finish setup.
+  expect(await getAppaSelfService(org.id)).toEqual({ enabled: false });
+  await expect(
+    getServerRules({
+      organizationId: org.id,
+      userId: admin.id,
+      catalogId: catalog.id,
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 409,
+    message: expect.stringContaining("not set up yet"),
+  });
+
+  // Once the include is pulled, it is in place for good: off and on again
+  // with the same folder opens nothing.
+  serveRepository({ head: SECOND, files });
+  await syncAppaGithubPolicy(org.id);
+  expect(
+    (await OpenAppaGithubSyncModel.find(org.id))?.lastSyncError,
+  ).toBeNull();
   // The servers' files live in the chosen folder, and are held to their
   // server there, as they were under mcp/.
+  expect(await getAppaSelfService(org.id)).toEqual({ enabled: true });
   const read = await getServerRules({
     organizationId: org.id,
     userId: admin.id,
@@ -2547,7 +2618,7 @@ test("the self-service folder is the deployment's: the servers' files live there
   });
   expect(read).toMatchObject({
     path: "rules/servers/payments_api.toml",
-    included: false,
+    included: true,
     content: null,
   });
   expect(read.starter).toContain("through rules/servers/*.toml");
@@ -2555,7 +2626,7 @@ test("the self-service folder is the deployment's: the servers' files live there
     organizationId: org.id,
     userId: admin.id,
     catalogId: catalog.id,
-    expectedCommit: FIRST,
+    expectedCommit: SECOND,
   };
   const preview = await previewServerRulesChange({
     ...change,
@@ -2565,7 +2636,7 @@ test("the self-service folder is the deployment's: the servers' files live there
     valid: true,
     path: "rules/servers/payments_api.toml",
   });
-  expect(preview.rootChange).toContain('"rules/servers/*.toml"');
+  expect(preview.rootChange).toBeUndefined();
   await expect(
     previewServerRulesChange({
       ...change,
@@ -2574,14 +2645,6 @@ test("the self-service folder is the deployment's: the servers' files live there
   ).rejects.toThrow(
     /^rules\/servers\/payments_api\.toml may hold only rules for the tools of the MCP server it is named for/,
   );
-
-  // Once the include is pulled, it is in place for good: off and on again
-  // with the same folder opens nothing.
-  serveRepository({ head: SECOND, files });
-  await syncAppaGithubPolicy(org.id);
-  expect(
-    (await OpenAppaGithubSyncModel.find(org.id))?.lastSyncError,
-  ).toBeNull();
   expect(await selfServiceIncludeState(org.id)).toEqual({
     folder: "rules/servers",
     state: "included",

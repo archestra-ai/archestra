@@ -74,7 +74,7 @@ include = [
 ]
 ```
 
-Turn it on for the deployment with [`ARCHESTRA_OPENAPPA_SELF_SERVICE=enabled`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE), and name another folder with [`ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY). **Settings → Guardrails → Git sync** shows both, and **Finish setup** there grants the GitHub App the two permissions the check needs and opens the pull request that includes the folder.
+Turn it on for the deployment with [`ARCHESTRA_OPENAPPA_SELF_SERVICE=enabled`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE), and name another folder with [`ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY). **Settings → Guardrails → Git sync** shows both, and **Finish setup** there grants the GitHub App the two permissions the check needs and opens the pull request that includes the folder. Until that pull request is merged and pulled, and the ruleset is in place, the MCP Registry offers no **Edit Guardrails** action and the Keeper's server rules tools refuse.
 
 ### The Check and the Ruleset
 

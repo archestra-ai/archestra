@@ -2,7 +2,7 @@
   "agents": ["Agents", "Agent Tools", "Skills", "Plugins", "Hooks", "Schedule Triggers", "Agent Delegations", "OpenAPPA", "Browser Storage States"],
   "a2a": ["A2A", "Outbound A2A Agents"],
   "mcp-gateway": ["MCP Gateway", "MCP App Runtime", "MCP Tool Call"],
-  "mcp": ["MCP Server", "MCP Catalog", "MCP OAuth Clients", "Tools"],
+  "mcp": ["MCP Server", "MCP Catalog", "MCP OAuth Clients", "Tools", "Desktop Devices", "Desktop Tunnel", "Archestra CLI"],
   "llm-proxy": ["LLM Proxy", "LLM Models", "LLM Provider API Keys", "Virtual API Keys", "LLM OAuth Clients", "Model Pools", "Limits", "Guardrails", "GitHub Copilot Auth", "Microsoft 365 Copilot Auth", "OpenAI Codex Auth", "xAI Subscription Auth"],
   "llm-proxy/logs": ["LLM Proxy Logs"],
   "llm-proxy/auto-routing": ["Auto Routing"],

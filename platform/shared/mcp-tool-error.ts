@@ -20,6 +20,9 @@ export const GenericMcpToolErrorSchema = z
 export const AuthRequiredActionSchema = z.enum([
   "install_mcp_credentials",
   "connect_identity_provider",
+  // A desktop MCP server runs on the caller's own computer and has no
+  // credentials: the caller adds it to their computer.
+  "add_desktop_mcp_server",
 ]);
 
 export const AuthRequiredMcpToolErrorSchema = z

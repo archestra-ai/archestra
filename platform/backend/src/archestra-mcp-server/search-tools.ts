@@ -245,6 +245,8 @@ type SearchCandidate = {
   server: string | null;
   catalogName: string | null;
   available: boolean;
+  /** Why a tool that is not available cannot run, in words for the model. */
+  unavailableReason: string | null;
   inputParameters: InputParameterSummary[];
   // Keys the stored generated text; null when the candidate has none to look up.
   definitionHash: string | null;
@@ -389,6 +391,7 @@ export const __test = {
       server: null,
       catalogName: null,
       available: true,
+      unavailableReason: null,
       inputParameters: [],
       definitionHash: null,
       searchText: buildSearchText({
@@ -598,7 +601,11 @@ async function getSearchableTools(params: {
       : [];
 
   const catalogsById = await getCatalogsById(filteredTools);
-  const catalogsWithInstalls = await getCatalogIdsWithInstalls(filteredTools);
+  const catalogsWithInstalls = await getCatalogIdsWithInstalls({
+    tools: filteredTools,
+    catalogsById,
+    userId,
+  });
   const candidates = new Map<string, SearchCandidate>();
   // First occurrence wins on duplicate names: assigned tools come before the
   // discoverable ones, and the discoverable set is ordered newest-first — the
@@ -703,6 +710,11 @@ function toAssignedToolCandidate(params: {
     server: parsedToolName.serverName ?? null,
     catalogName: source === "mcp" ? (catalog?.name ?? null) : null,
     available,
+    unavailableReason: available
+      ? null
+      : catalog?.serverType === "desktop_mcp"
+        ? `${catalog.name} runs on the user's own computer, and the user has not added it to their computer yet. Ask them to add it from the MCP registry.`
+        : "MCP connection not installed — reconnect the server to use this tool.",
     inputParameters,
     definitionHash:
       source === "mcp" && tool.catalogId != null
@@ -732,6 +744,7 @@ function toDelegationToolCandidate(tool: Tool): SearchCandidate {
     server: null,
     catalogName: null,
     available: true,
+    unavailableReason: null,
     inputParameters,
     definitionHash: null,
     searchText: buildSearchText({
@@ -837,10 +850,15 @@ async function getCatalogsById(
 }
 
 // A tool is runnable only while its catalog still has an installed connection;
-// this resolves, in one query, which of the given tools' catalogs do.
-async function getCatalogIdsWithInstalls(
-  tools: Array<{ catalogId: string | null }>,
-): Promise<Set<string>> {
+// this resolves, in one query, which of the given tools' catalogs do. A desktop
+// MCP server runs on the caller's own computer, so only the caller's own
+// installation counts for it: a colleague's does not make the tool runnable.
+async function getCatalogIdsWithInstalls(params: {
+  tools: Array<{ catalogId: string | null }>;
+  catalogsById: Map<string, SearchCatalogMeta>;
+  userId?: string;
+}): Promise<Set<string>> {
+  const { tools, catalogsById, userId } = params;
   const catalogIds = Array.from(
     new Set(
       tools
@@ -851,6 +869,12 @@ async function getCatalogIdsWithInstalls(
   const installs = await McpServerModel.findByCatalogIds(catalogIds);
   return new Set(
     installs
+      .filter(
+        (server) =>
+          catalogsById.get(server.catalogId ?? "")?.serverType !==
+            "desktop_mcp" ||
+          (server.scope === "personal" && server.ownerId === userId),
+      )
       .map((server) => server.catalogId)
       .filter((catalogId): catalogId is string => catalogId != null),
   );
@@ -1046,9 +1070,7 @@ function toSearchResult(candidate: SearchCandidate) {
     source: candidate.source,
     server: candidate.server,
     available: candidate.available,
-    unavailableReason: candidate.available
-      ? null
-      : "MCP connection not installed — reconnect the server to use this tool.",
+    unavailableReason: candidate.unavailableReason,
     params: formatParamsSignature(candidate.inputParameters),
   };
 }

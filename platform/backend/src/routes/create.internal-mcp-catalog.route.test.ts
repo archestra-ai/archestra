@@ -1,4 +1,5 @@
-import { describe, expect, test } from "@/test";
+import config from "@/config";
+import { afterEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 
@@ -70,5 +71,50 @@ describe("POST /api/internal_mcp_catalog validation", () => {
     });
 
     expect(response.statusCode).toBe(200);
+  });
+
+  const betaAtStart = config.beta;
+  afterEach(() => {
+    config.beta = betaAtStart;
+  });
+
+  test("accepts a desktop MCP server, which has no URL and no command", async ({
+    makeMember,
+  }) => {
+    config.beta = true;
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload: {
+        name: "matlab",
+        description: "Runs on the user's own computer",
+        serverType: "desktop_mcp",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      name: "matlab",
+      serverType: "desktop_mcp",
+      serverUrl: null,
+      localConfig: null,
+    });
+  });
+
+  test("refuses a desktop MCP server without the beta flag, as it is in alpha", async ({
+    makeMember,
+  }) => {
+    config.beta = false;
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload: { name: "matlab", serverType: "desktop_mcp" },
+    });
+
+    expect(response.statusCode).toBe(403);
   });
 });

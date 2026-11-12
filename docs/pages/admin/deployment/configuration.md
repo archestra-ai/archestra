@@ -777,6 +777,21 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Set it below your proxy's maximum request duration, which Archestra cannot detect. A GKE Ingress backend without `timeoutSec` allows 30 seconds.
   - Some clients stop reconnecting after repeated ends and then miss tool-list changes. Test your client first.
 
+## MCP Bridge
+
+- **`ARCHESTRA_MCP_BRIDGE_POLL_MAX_WAIT_MS`** - Longest time Archestra holds one poll of a user's MCP bridge open while it has no work, in milliseconds.
+  - Default: `8000` (8 seconds)
+  - Keep it below the request timeout of the load balancer in front of the API. Otherwise the load balancer ends every idle poll with an error.
+
+- **`ARCHESTRA_MCP_BRIDGE_AUTO_UPDATE_ENABLED`** - Lets the MCP bridge on a user's computer update by itself when Archestra serves another version. Set it to `false` to make each user run `archestra update`.
+  - Default: `true`
+  - On macOS and Linux the MCP bridge does not update by itself. The user runs `archestra update`.
+
+- **`ARCHESTRA_CLI_DIR`** - Folder that holds the `archestra` programs that the Device tab of Personal Settings offers for download. Users run `archestra bridge start` to start the MCP bridge.
+  - Default: `/app/archestra-cli`, where the platform image keeps the programs. If the folder does not exist, the download answers "not found".
+  - One file per system and CPU, named `archestra-<system>-<cpu>`: `archestra-darwin-arm64`, `archestra-darwin-x86_64`, `archestra-linux-x86_64`, `archestra-linux-arm64`, `archestra-windows-x86_64.exe`, `archestra-windows-arm64.exe`. A system with no file gets no download.
+  - `manifest.json` in the folder holds the version of the programs, as `{ "version": "0.2.0" }`. The Device tab of Personal Settings shows it when a device needs an update.
+
 ## MCP Servers
 
 - **`ARCHESTRA_MCP_OAUTH_ENFORCE_OUTBOUND_VALIDATION`** - Enables optional hardening for backend requests to upstream MCP OAuth providers, for both remote and self-hosted MCP servers.

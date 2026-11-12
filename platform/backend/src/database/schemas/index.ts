@@ -129,6 +129,9 @@ export {
   default as conversationSharesTable,
 } from "./conversation-share";
 export { default as costExportsTable } from "./cost-export";
+export { default as desktopDevicesTable } from "./desktop-device";
+export { default as desktopDeviceServersTable } from "./desktop-device-server";
+export { default as desktopMcpRequestsTable } from "./desktop-mcp-request";
 export { default as encryptionKeyCanariesTable } from "./encryption-key-canary";
 export { default as environmentsTable } from "./environment";
 export { default as environmentDefaultUserLimitsTable } from "./environment-default-user-limits";

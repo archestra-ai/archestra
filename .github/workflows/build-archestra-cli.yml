@@ -1,0 +1,521 @@
+name: Build Archestra CLI
+
+# Builds `archestra` (platform/archestra-cli), the program users run on their
+# own computers, for six targets and publishes the files on the program's own
+# release track, `archestra-cli-v<version>`:
+#
+#   archestra-darwin-arm64       archestra-darwin-x86_64
+#   archestra-linux-arm64        archestra-linux-x86_64
+#   archestra-windows-arm64.exe  archestra-windows-x86_64.exe
+#
+# The backend serves these files from the platform image. The image does not
+# compile them (macOS and Windows binaries cannot be built in a Linux image):
+# the archestra-cli-release stage of platform/Dockerfile downloads the release
+# that platform/archestra-cli/release.lock.json pins and verifies each file's
+# SHA-256. So a release reaches the images in two steps: this workflow
+# publishes it, then a pull request updates the lock. The `lock` job opens
+# that pull request; a maintainer reviews and merges it.
+#
+# Why an own release track: this repository's releases are immutable. Once
+# published, a release's assets are frozen, so the files cannot be attached to
+# platform releases. The release is created as a draft, the assets are
+# uploaded, and then it is published (drafts stay mutable). It is published
+# with --latest=false so `releases/latest` keeps pointing at the platform.
+#
+# The release tag derives from `[package] version` in
+# platform/archestra-cli/Cargo.toml, and tags are immutable too, so every
+# change that reaches the binary needs a version bump. The `version` job
+# enforces that on pull requests: it fails when such a file changed but the
+# version is already released. That job does not run in the merge queue, so
+# `publish` repeats the comparison against the released commit and fails when
+# main holds changes that the published version does not.
+#
+# Pull requests do not build: the merge queue already compiles and tests the
+# program on macOS, Linux and Windows (archestra-cli-checks in
+# on-pull-requests.yml). A push to main that changes the binary's inputs or
+# this file builds and publishes. Dispatching on `main` re-attempts the
+# publish and the lock pull request; both are idempotent. Dispatching on
+# another branch only builds.
+#
+# The binaries are not code-signed yet.
+
+# The two path lists are duplicated on purpose: GitHub Actions does not
+# support YAML anchors, so they must be kept in sync by hand.
+# .github/scripts/test_archestra_cli_version_check.py checks that they are the
+# same and that they agree with the version check.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "platform/archestra-cli/**"
+      - "!platform/archestra-cli/**.md"
+      - "!platform/archestra-cli/tests/**"
+      - "!platform/archestra-cli/release.lock.json"
+      - ".github/workflows/build-archestra-cli.yml"
+  pull_request:
+    # Only main publishes, so only pull requests into main need the bump. A
+    # backport to release/X.Y changes no released binary: that branch's images
+    # carry what its release.lock.json pins.
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - "platform/archestra-cli/**"
+      - "!platform/archestra-cli/**.md"
+      - "!platform/archestra-cli/tests/**"
+      - "!platform/archestra-cli/release.lock.json"
+      - ".github/workflows/build-archestra-cli.yml"
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: build-archestra-cli-${{ github.ref }}
+  # Superseded pull-request checks are wasted; a main run may be mid-publish
+  # and finishes instead.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  version:
+    name: Require a version bump
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # Check out the pull request and read whether the version is released.
+    steps:
+      # The merge commit and its first parent, the base it was merged with:
+      # their difference is what this pull request changes, whatever landed on
+      # the base branch since the pull request was opened.
+      - name: Checkout pull request merge commit and its base
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Require a version bump for a released version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/archestra-cli-version-check.py check HEAD^1 HEAD
+
+  build:
+    name: Build ${{ matrix.file }}
+    # Not in forks: they have neither the arm64 Linux runner nor a release to build for.
+    if: github.repository == 'archestra-ai/archestra' && github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS: both CPUs on the arm64 runner; x86_64 is a cross build with
+          # the same Apple toolchain.
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+            file: archestra-darwin-arm64
+            runs-here: true
+          - target: x86_64-apple-darwin
+            runner: macos-latest
+            file: archestra-darwin-x86_64
+            runs-here: false
+          # Linux: static musl binaries, so one file runs on any distribution.
+          # Each CPU builds on a runner of that CPU: musl-tools provides
+          # musl-gcc for the runner's own CPU only.
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+            file: archestra-linux-x86_64
+            runs-here: true
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm-32core
+            file: archestra-linux-arm64
+            runs-here: true
+          # Windows: both CPUs on the x86_64 runner. NOT VERIFIED: the arm64
+          # target has never been built in CI. aws-lc-sys needs clang-cl for
+          # it and looks on PATH and in the Visual Studio installation; the
+          # hosted image is expected to have both clang-cl and the MSVC ARM64
+          # tools. If this target fails, the whole release stays unpublished.
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            file: archestra-windows-x86_64.exe
+            runs-here: true
+          - target: aarch64-pc-windows-msvc
+            runner: windows-latest
+            file: archestra-windows-arm64.exe
+            runs-here: false
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read # Check out the source.
+    defaults:
+      run:
+        shell: bash
+        working-directory: ./platform/archestra-cli
+    env:
+      # aws-lc-sys on Windows x86_64 uses its prebuilt NASM objects instead of
+      # a NASM install, as in archestra-cli-checks.
+      AWS_LC_SYS_PREBUILT_NASM: "1"
+      TARGET: ${{ matrix.target }}
+      FILE: ${{ matrix.file }}
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # musl-gcc compiles the C code of aws-lc-sys for the musl target. The
+      # same package the platform Rust checks install.
+      - name: Install musl C compiler
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      # The pinned toolchain of platform/rust-toolchain.toml, plus the target.
+      # No Cargo cache: a release is built from the locked sources alone, and
+      # release builds are too rare to keep a cache warm.
+      - name: Install pinned Rust toolchain
+        uses: $/.github/actions/setup-rust-build
+        with:
+          workspaces: platform/archestra-cli
+          targets: ${{ matrix.target }}
+          cache: "false"
+
+      - name: Build release binary
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
+          CC_aarch64_unknown_linux_musl: musl-gcc
+        run: cargo build --release --locked --target "$TARGET"
+
+      # The artifact carries the name the backend serves.
+      - name: Rename to the served file name
+        run: |
+          set -euo pipefail
+          built="target/${TARGET}/release/archestra"
+          if [[ "$TARGET" == *-windows-* ]]; then
+            built+=".exe"
+          fi
+          mkdir -p target/served
+          cp "$built" "target/served/${FILE}"
+          ls -l "target/served/${FILE}"
+
+      - name: Check the Linux binary is static
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          description="$(file "target/served/${FILE}")"
+          echo "$description"
+          if [[ "$description" != *"statically linked"* && "$description" != *"static-pie linked"* ]]; then
+            echo "::error::${FILE} is not a static binary"
+            exit 1
+          fi
+
+      # Only where the runner can execute the target's code.
+      - name: Run the binary
+        if: matrix.runs-here
+        run: target/served/"$FILE" --help
+
+      - name: Upload binary
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: ${{ matrix.file }}
+          path: platform/archestra-cli/target/served/${{ matrix.file }}
+          if-no-files-found: error
+          retention-days: "14"
+          # A re-run of this job replaces its file from the earlier attempt.
+          overwrite: "true"
+
+  publish:
+    name: Publish release
+    needs: [build]
+    if: >-
+      github.repository == 'archestra-ai/archestra'
+      && github.ref == 'refs/heads/main'
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # Create and publish the release.
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - name: Checkout release scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # Only "not found" means unpublished. Any other answer stops the job: a
+      # failed request must not start a second release of the same version.
+      - name: Read the version and whether it is published
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(python3 .github/scripts/archestra-cli-version-check.py version)"
+          tag="archestra-cli-v${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+          exists() {
+            local answer
+            if answer="$(gh api "repos/${GITHUB_REPOSITORY}/$1" --silent 2>&1)"; then
+              return 0
+            fi
+            if [[ "$answer" == *"HTTP 404"* ]]; then
+              return 1
+            fi
+            echo "::error::Could not read $1: ${answer}"
+            exit 1
+          }
+
+          if exists "releases/tags/${tag}"; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          elif exists "git/ref/tags/${tag}"; then
+            echo "::error::Tag ${tag} exists without a published release. Raise the version in platform/archestra-cli/Cargo.toml, or delete the tag if it was made by mistake."
+            exit 1
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The version check of pull requests does not run in the merge queue. A
+      # change that reached main under a published version would stop here
+      # with a notice and never ship, so compare main with the released commit
+      # and fail when the binary's inputs differ. The token is passed to this
+      # one git command only.
+      - name: Skip a published version
+        if: steps.release.outputs.published == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          echo "::notice::${TAG} is already published (a release cannot be changed); nothing to publish."
+          git -c credential.helper= \
+              -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' \
+              fetch --no-tags --depth=1 origin "refs/tags/${TAG}"
+          python3 .github/scripts/archestra-cli-version-check.py check FETCH_HEAD HEAD
+
+      - name: Download the six binaries
+        if: steps.release.outputs.published == 'false'
+        uses: $/.github/actions/github-download-artifact
+        with:
+          pattern: archestra-*
+          path: dist
+          merge-multiple: "true"
+
+      - name: Create and publish release
+        if: steps.release.outputs.published == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          # A draft left behind by an interrupted earlier attempt would pile
+          # up as clutter; replace it.
+          gh release list --repo "${GITHUB_REPOSITORY}" --json tagName,isDraft \
+            --jq ".[] | select(.isDraft and .tagName == \"${TAG}\") | .tagName" |
+            while read -r draft; do
+              gh release delete "${draft}" --repo "${GITHUB_REPOSITORY}" --yes
+            done
+
+          (cd dist && sha256sum archestra-* > SHA256SUMS)
+          # Refuses a missing or an unexpected file, so a release always has
+          # exactly the six files. The lock it writes here is not used.
+          python3 .github/scripts/archestra-cli-release-lock.py \
+            --version "${VERSION}" --dir dist --repository "${GITHUB_REPOSITORY}" \
+            --output "${RUNNER_TEMP}/release.lock.json"
+
+          {
+            printf '`archestra` v%s, the program users run on their own computers, built from %s.\n\n' "${VERSION}" "${GITHUB_SHA}"
+            printf 'Platform images carry these files once `platform/archestra-cli/release.lock.json` pins this release.\n\n'
+            printf 'SHA-256:\n\n```\n'
+            cat dist/SHA256SUMS
+            printf '```\n'
+          } > "${RUNNER_TEMP}/notes.md"
+
+          # Draft first: assets can only be attached before publishing on a
+          # repository with immutable releases. --latest=false keeps
+          # releases/latest pointing at the platform.
+          gh release create "${TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "Archestra CLI v${VERSION}" \
+            --notes-file "${RUNNER_TEMP}/notes.md" \
+            --draft
+          gh release upload "${TAG}" dist/archestra-* dist/SHA256SUMS --repo "${GITHUB_REPOSITORY}"
+          gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" --draft=false --latest=false
+
+      # The `lock` job opens this pull request. These are the same steps by
+      # hand, for when it cannot.
+      - name: Describe the lock update
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          {
+            echo "## ${TAG}"
+            echo
+            echo "Platform images carry this release once \`platform/archestra-cli/release.lock.json\` pins it."
+            echo "The \`lock\` job of this run opens that pull request. To write the lock by hand, on a branch from \`main\`:"
+            echo
+            echo '```sh'
+            echo "gh release download ${TAG} --repo ${GITHUB_REPOSITORY} --pattern SHA256SUMS --dir /tmp/${TAG}"
+            echo "python3 .github/scripts/archestra-cli-release-lock.py --version ${VERSION} --sums /tmp/${TAG}/SHA256SUMS"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Opens the pull request that pins the published release in
+  # platform/archestra-cli/release.lock.json, the way update-client-versions.yml
+  # opens its pull requests: the releaser App's token pushes the automation
+  # branch, so the pull request runs ordinary CI. No auto-merge: the lock
+  # decides what every platform image serves to users' computers, so a
+  # maintainer merges it. The merge queue builds the platform image from that
+  # pull request, which downloads and verifies the pinned files for real.
+  # This job runs no code of the program: it reads the published release.
+  lock:
+    name: Propose release lock update
+    needs: [publish]
+    if: >-
+      github.repository == 'archestra-ai/archestra'
+      && github.ref == 'refs/heads/main'
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # Check out main and download the published release.
+    env:
+      BRANCH: automation/archestra-cli-release-lock
+      LOCK_FILE: platform/archestra-cli/release.lock.json
+      VERSION: ${{ needs.publish.outputs.version }}
+      TAG: ${{ needs.publish.outputs.tag }}
+    steps:
+      - name: Checkout trusted main branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      # A run for an older commit must not move the lock back to its version.
+      - name: Check main still has this version
+        id: current
+        run: |
+          set -euo pipefail
+          current="$(python3 .github/scripts/archestra-cli-version-check.py version)"
+          if [[ "$current" != "$VERSION" ]]; then
+            echo "::notice::main is at archestra ${current}, this run released ${VERSION}; the run for ${current} updates the lock."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The lock is computed from the bytes users will download, and
+      # SHA256SUMS of the release has to agree with them.
+      - name: Download the published release
+        if: steps.current.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/release"
+
+      # The App token makes pushes and the new PR trigger ordinary CI.
+      - name: Generate releaser token
+        id: token
+        if: steps.current.outputs.proceed == 'true'
+        uses: archestra-ai/.github/actions/github-app-token@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Configure Git identity
+        if: steps.current.outputs.proceed == 'true'
+        uses: $/.github/actions/configure-git-identity
+
+      - name: Prepare automation branch
+        id: branch
+        if: steps.current.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git --hostname github.com --force
+          git fetch origin main
+
+          target="$RUNNER_TEMP/archestra-cli-release-lock-branch"
+          existing="$(git ls-remote --heads origin "refs/heads/$BRANCH")"
+          if [[ -n "$existing" ]]; then
+            git fetch origin "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+            git worktree add -b "$BRANCH" "$target" "origin/$BRANCH"
+            git -C "$target" -c core.hooksPath=/dev/null merge --no-edit origin/main
+          else
+            git worktree add -b "$BRANCH" "$target" origin/main
+          fi
+          echo "path=$target" >> "$GITHUB_OUTPUT"
+
+      # The writer comes from the trusted main checkout and only writes the
+      # lock file in the separate automation worktree.
+      - name: Write the release lock
+        id: update
+        if: steps.current.outputs.proceed == 'true'
+        env:
+          TARGET: ${{ steps.branch.outputs.path }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/archestra-cli-release-lock.py \
+            --version "$VERSION" --dir "$RUNNER_TEMP/release" --repository "$GITHUB_REPOSITORY" \
+            --output "$TARGET/$LOCK_FILE"
+          if git -C "$TARGET" diff --quiet -- "$LOCK_FILE"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push update
+        if: steps.current.outputs.proceed == 'true' && steps.update.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          TARGET: ${{ steps.branch.outputs.path }}
+        run: |
+          set -euo pipefail
+          git -C "$TARGET" add -- "$LOCK_FILE"
+          git -C "$TARGET" -c core.hooksPath=/dev/null commit -m "chore: update Archestra CLI release lock to v$VERSION"
+          git -C "$TARGET" push origin "HEAD:refs/heads/$BRANCH"
+
+      # Also recovers a branch pushed by an earlier run whose PR creation failed.
+      # No auto-merge: see the note above this job.
+      - name: Open or update pull request
+        if: steps.current.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET: ${{ steps.branch.outputs.path }}
+        run: |
+          set -euo pipefail
+          if git -C "$TARGET" diff --quiet origin/main HEAD -- "$LOCK_FILE"; then
+            echo "::notice::The release lock on main already pins archestra ${VERSION}."
+            exit 0
+          else
+            status=$?
+            if [[ "$status" -ne 1 ]]; then
+              exit "$status"
+            fi
+          fi
+
+          pr_title="chore: update Archestra CLI release lock to v$VERSION"
+          pr_body="Pin [\`$TAG\`](https://github.com/$GH_REPO/releases/tag/$TAG) in \`$LOCK_FILE\`: the version, the URL of the release and the SHA-256 of each of its six files, computed from the published files.
+
+          Platform images built after this merges download these files, verify them and serve them to users' computers as \`archestra\` v$VERSION. The merge queue builds the platform image from this pull request, so a file that is missing or does not match its checksum fails there."
+          owner="${GH_REPO%%/*}"
+          existing_pr="$(gh api "repos/$GH_REPO/pulls?state=open&head=$owner:$BRANCH&base=main&per_page=1" --jq '.[0].number // empty')"
+          if [[ -z "$existing_pr" ]]; then
+            pr="$(gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "$pr_title" \
+              --body "$pr_body")"
+          else
+            pr="$existing_pr"
+            gh pr edit "$pr" --title "$pr_title" --body "$pr_body"
+          fi
+          gh pr view "$pr" --repo "$GH_REPO" --json url --jq '"Lock pull request: " + .url' >> "$GITHUB_STEP_SUMMARY"

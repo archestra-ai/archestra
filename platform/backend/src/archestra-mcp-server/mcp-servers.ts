@@ -197,7 +197,7 @@ const CatalogMetadataToolSchema = z
 const McpConfigToolSchema = z
   .object({
     serverType: InsertInternalMcpCatalogSchema.shape.serverType
-      .exclude(["app"])
+      .exclude(["app", "desktop_mcp"])
       .optional()
       .describe("Server type: local, remote, or builtin."),
     serverUrl: InsertInternalMcpCatalogSchema.shape.serverUrl
@@ -410,7 +410,7 @@ const EditMcpConfigToolArgsSchema = z
 const CreateMcpServerToolArgsSchema = CatalogMetadataToolSchema.extend({
   initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
   serverType: InsertInternalMcpCatalogSchema.shape.serverType
-    .exclude(["app"])
+    .exclude(["app", "desktop_mcp"])
     .optional()
     .describe(
       "Server type: local, remote, or builtin. (The `app` type is reserved for user-generated Apps managed on the Apps surface, not creatable via this tool.)",
@@ -968,6 +968,14 @@ async function handleEditMcpConfig(
         "App-backed catalog items are managed through the Apps API and cannot be configured here.",
       );
     }
+    // The command of a desktop MCP server runs on the computers of users: a
+    // person changes it in the MCP registry, as the create tool does not make
+    // one either.
+    if (existing.serverType === "desktop_mcp") {
+      return errorResult(
+        "Desktop MCP servers are configured in the MCP registry and cannot be configured here.",
+      );
+    }
 
     try {
       // SPDX-SnippetBegin
@@ -1381,6 +1389,15 @@ async function handleDeployMcpServer(
         action: "use",
       });
       // SPDX-SnippetEnd
+    }
+
+    // A desktop MCP server runs on a user's own computer. The user adds it
+    // there themselves, from the MCP registry: an agent does not start a
+    // program on a person's computer.
+    if (catalogItem.serverType === "desktop_mcp") {
+      return errorResult(
+        `This MCP server runs on the user's own computer. The user adds it to their computer from the MCP registry: /mcp/registry?install=${catalogItem.id}`,
+      );
     }
 
     if (catalogItem.requiresAuth || catalogItem.oauthConfig) {

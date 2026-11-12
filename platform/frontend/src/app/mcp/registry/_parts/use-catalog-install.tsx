@@ -37,6 +37,7 @@ import {
   setOAuthUserConfigValues,
 } from "@/lib/auth/oauth-session";
 import { useDialogs } from "@/lib/hooks/use-dialog";
+import { addDesktopMcpServer } from "@/lib/mcp/desktop-mcp";
 import {
   clearPendingEnterpriseManagedInstall,
   type EnterpriseManagedInstallIntent,
@@ -58,6 +59,7 @@ import {
 } from "@/lib/mcp/pending-install";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import websocketService from "@/lib/websocket/websocket";
+import { DesktopMcpInstallDialog } from "./desktop-mcp-install-dialog";
 import { selectInstallSuccessToastIds } from "./install-success-toasts";
 import {
   LocalServerInstallDialog,
@@ -85,6 +87,8 @@ export interface UseCatalogInstallResult {
   installRemote: (item: CatalogItem) => void;
   /** Open the local install flow for an item. */
   installLocal: (item: CatalogItem) => void;
+  /** Open the Add dialog of a desktop MCP item: always personal. */
+  installDesktop: (item: CatalogItem) => void;
   /** Consume the ?install=/&scope=/&team= deep-link params, if present. */
   installFromSearchParams: () => void;
   /** Catalog id of the item whose install is currently being submitted. */
@@ -132,7 +136,7 @@ export function useCatalogInstall(opts?: {
   const queryClient = useQueryClient();
 
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
-    "remote-install" | "local-install" | "oauth" | "no-auth"
+    "remote-install" | "local-install" | "oauth" | "no-auth" | "desktop-install"
   >();
 
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
@@ -173,6 +177,13 @@ export function useCatalogInstall(opts?: {
     useState<CatalogItem | null>(null);
   const [localServerCatalogItem, setLocalServerCatalogItem] =
     useState<CatalogItem | null>(null);
+  const [desktopCatalogItem, setDesktopCatalogItem] =
+    useState<CatalogItem | null>(null);
+  // The item whose Add dialog is open: it shows the completion itself.
+  const desktopDialogCatalogIdRef = useRef<string | null>(null);
+  desktopDialogCatalogIdRef.current = isDialogOpened("desktop-install")
+    ? (desktopCatalogItem?.id ?? null)
+    : null;
 
   const getEnterpriseManagedInstallConnectUrl =
     useEnterpriseManagedInstallConnectUrl();
@@ -242,12 +253,22 @@ export function useCatalogInstall(opts?: {
           if (server) {
             if (server.localInstallationStatus === "success") {
               if (toastServerIds.has(serverId)) {
-                const catalogName = catalogItems?.find(
+                const catalogItem = catalogItems?.find(
                   (item) => item.id === server.catalogId,
-                )?.name;
-                toast.success(
-                  `Successfully installed ${catalogName ?? "MCP server"}`,
                 );
+                const catalogName = catalogItem?.name;
+                if (catalogItem?.serverType !== "desktop_mcp") {
+                  toast.success(
+                    `Successfully installed ${catalogName ?? "MCP server"}`,
+                  );
+                } else if (
+                  // The open Add dialog says it already.
+                  desktopDialogCatalogIdRef.current !== server.catalogId
+                ) {
+                  toast.success(
+                    `${catalogName ?? "The MCP server"} is ready on your device`,
+                  );
+                }
               }
               // Force immediate deployment status refresh via WebSocket
               websocketService.send({
@@ -311,13 +332,24 @@ export function useCatalogInstall(opts?: {
   useEffect(() => {
     if (!installedServers || resumedPendingRef.current) return;
     resumedPendingRef.current = true;
+    // A desktop MCP installation waits for its user's computer, for as long
+    // as that computer is off: it is not an install in progress here.
+    const desktopCatalogIds = new Set(
+      (catalogItems ?? [])
+        .filter((item) => item.serverType === "desktop_mcp")
+        .map((item) => item.id),
+    );
     const pendingIds = installedServers
-      .filter((s) => isInstallInProgress(s.localInstallationStatus))
+      .filter(
+        (s) =>
+          isInstallInProgress(s.localInstallationStatus) &&
+          !(s.catalogId && desktopCatalogIds.has(s.catalogId)),
+      )
       .map((s) => s.id);
     if (pendingIds.length > 0) {
       setInstallingServerIds((prev) => new Set([...prev, ...pendingIds]));
     }
-  }, [installedServers]);
+  }, [installedServers, catalogItems]);
 
   // Clear OAuth installation completion state
   useEffect(() => {
@@ -453,6 +485,32 @@ export function useCatalogInstall(opts?: {
     openDialog("local-install");
   };
 
+  // A desktop MCP server runs on the computer of the user who adds it, so
+  // the installation is always personal, whatever the entry point asked for.
+  const installDesktop = (catalogItem: CatalogItem) => {
+    setDesktopCatalogItem(catalogItem);
+    openDialog("desktop-install");
+  };
+
+  // The dialog stays open and follows the installation until the tools are
+  // read; closed earlier, the completion effect toasts it.
+  const handleDesktopAdd = async (catalogItem: CatalogItem) => {
+    setInstallingItemId(catalogItem.id);
+    try {
+      const server = await addDesktopMcpServer({
+        install: installMutation.mutateAsync,
+        catalogItem,
+      });
+      if (!server) return null;
+      clearPendingInstall();
+      trackPendingInstall(server);
+      onInstalled?.();
+      return server;
+    } finally {
+      setInstallingItemId(null);
+    }
+  };
+
   // The install mutation skips its own toast for an install that comes back
   // pending, so track it here and let the completion effect toast it.
   const trackPendingInstall = (
@@ -544,6 +602,10 @@ export function useCatalogInstall(opts?: {
 
   // Add personal connection: skip dialog if no config needed, otherwise open dialog with personalOnly
   const addPersonalConnection = (catalogItem: CatalogItem) => {
+    if (catalogItem.serverType === "desktop_mcp") {
+      installDesktop(catalogItem);
+      return;
+    }
     // Local installs deserve an explicit confirmation even when they have no
     // prompted config: creating a hosted runtime is a larger action than
     // saving a credential, and otherwise the button appears to do nothing.
@@ -618,6 +680,11 @@ export function useCatalogInstall(opts?: {
     scope?: McpServerInstallScope,
     teamId?: string,
   ) => {
+    // Personal only, so a team or organization link opens the same dialog.
+    if (catalogItem.serverType === "desktop_mcp") {
+      installDesktop(catalogItem);
+      return;
+    }
     if (scope === "personal") {
       addPersonalConnection(catalogItem);
       return;
@@ -721,7 +788,8 @@ export function useCatalogInstall(opts?: {
       isDialogOpened("remote-install") ||
       isDialogOpened("local-install") ||
       isDialogOpened("oauth") ||
-      isDialogOpened("no-auth")
+      isDialogOpened("no-auth") ||
+      isDialogOpened("desktop-install")
     ) {
       return;
     }
@@ -1091,6 +1159,20 @@ export function useCatalogInstall(opts?: {
           orgOnly={installOrgOnly}
         />
       )}
+
+      {desktopCatalogItem && (
+        <DesktopMcpInstallDialog
+          isOpen={isDialogOpened("desktop-install")}
+          onClose={() => {
+            clearPendingInstall();
+            closeDialog("desktop-install");
+            setDesktopCatalogItem(null);
+          }}
+          onAdd={handleDesktopAdd}
+          catalogItem={desktopCatalogItem}
+          isAdding={installMutation.isPending}
+        />
+      )}
     </>
   );
 
@@ -1100,6 +1182,7 @@ export function useCatalogInstall(opts?: {
     addOrgConnection,
     installRemote: (item) => void installRemote(item),
     installLocal: (item) => void installLocal(item),
+    installDesktop,
     installFromSearchParams,
     installingItemId,
     installingServerIds,

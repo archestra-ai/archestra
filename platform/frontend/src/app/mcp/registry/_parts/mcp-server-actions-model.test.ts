@@ -10,6 +10,8 @@ describe("getMcpServerActionModel", () => {
   it.each([
     ["local", "Installations"],
     ["remote", "Credentials"],
+    // Added by each user to their own computer: no credential.
+    ["desktop_mcp", "Devices"],
   ] as const)("shares the %s connection action with both surfaces", (serverType, label) => {
     const action = mcpServerAction(
       getMcpServerActionModel({ id: "server-1", serverType }),
@@ -44,6 +46,7 @@ describe("mcpServerLogsHref", () => {
   it.each([
     "remote",
     "builtin",
+    "desktop_mcp",
   ] as const)("has no destination for a %s server, whose page has no Logs tab", (serverType) => {
     expect(
       mcpServerLogsHref({ item: { id: "server-1", serverType } }),

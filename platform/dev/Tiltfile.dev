@@ -11,6 +11,13 @@ frontend_int_tests_port = os.getenv('ARCHESTRA_FRONTEND_INT_TESTS_PORT', '3010')
 # in another, and the port-forwarder watches a third.
 mcp_namespace = os.getenv('ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE', 'default')
 
+# The `archestra` program (the MCP bridge) of this checkout. The backend serves
+# it to the install command from this folder, which the archestra-cli-build
+# resource fills. An ARCHESTRA_CLI_DIR in .env wins.
+archestra_cli_dev_dir = os.path.abspath('../archestra-cli/target/dev-clients')
+if not os.getenv('ARCHESTRA_CLI_DIR'):
+  os.putenv('ARCHESTRA_CLI_DIR', archestra_cli_dev_dir)
+
 # Curated Agent catalog images. Dynamically-created Agent Runtime Sandboxes
 # are not part of Tilt's rendered YAML, so tiny sleeping deployments anchor
 # the images and make Tilt build/load them before the backend can schedule one.
@@ -232,6 +239,27 @@ local_resource(
   ],
   resource_deps=['pnpm-install'],
   labels=['apps'],
+)
+
+# Build the `archestra` program (platform/archestra-cli) for this computer and
+# put it where the backend serves it from, so that the install command of the
+# local Archestra downloads the program of this checkout. It runs at the start
+# and at each change of the program. The first run is a release build of a
+# Rust program (some minutes); a run with no change is quick. After a build
+# that changed the program, a device that is linked to this Archestra sees
+# another program (a new SHA-256) and offers an update.
+local_resource(
+  'archestra-cli-build',
+  # The default folder of the script is archestra_cli_dev_dir.
+  cmd='sh build-archestra-cli-dev.sh',
+  deps=[
+    '../archestra-cli/src',
+    '../archestra-cli/Cargo.toml',
+    '../archestra-cli/Cargo.lock',
+  ],
+  # Nothing waits for it: Archestra starts without the program.
+  allow_parallel=True,
+  labels=['dev'],
 )
 
 # Rebuild the native auto-routing planner addon (napi) when its Rust sources

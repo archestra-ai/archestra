@@ -1,4 +1,6 @@
 import { MCP_CATALOG_CLONE_QUERY_PARAM } from "@archestra/shared";
+import { DESKTOP_MCP_COPY } from "@/lib/mcp/desktop-mcp";
+import { type CatalogServerType, usesInstallations } from "./mcp-server-type";
 
 export type McpServerActionId =
   | "connections"
@@ -21,16 +23,18 @@ export interface McpServerActionDefinition {
  */
 export function getMcpServerActionModel(item: {
   id: string;
-  serverType: "app" | "builtin" | "local" | "remote";
+  serverType: CatalogServerType;
 }): McpServerActionDefinition[] {
   const pathname = `/mcp/registry/${item.id}`;
   return [
     {
       id: "connections",
       label:
-        item.serverType === "local" || item.serverType === "app"
-          ? "Installations"
-          : "Credentials",
+        item.serverType === "desktop_mcp"
+          ? DESKTOP_MCP_COPY.section
+          : usesInstallations(item.serverType) || item.serverType === "app"
+            ? "Installations"
+            : "Credentials",
       href:
         item.serverType === "builtin"
           ? undefined
@@ -67,15 +71,15 @@ export function getMcpServerActionModel(item: {
  * Where "View logs" goes for a server, or null when it has nowhere to go.
  *
  * Only local servers, which run in a pod, have a Logs tab on the server page.
- * A remote or built-in server has no container output to show, and the page
- * silently falls back to Overview for a tab it does not render. `serverId`
- * pre-selects that installation in the logs view.
+ * A remote, built-in or desktop MCP server has no container output to show,
+ * and the page silently falls back to Overview for a tab it does not render.
+ * `serverId` pre-selects that installation in the logs view.
  */
 export function mcpServerLogsHref({
   item,
   serverId,
 }: {
-  item: { id: string; serverType: "app" | "builtin" | "local" | "remote" };
+  item: { id: string; serverType: CatalogServerType };
   serverId?: string;
 }): string | null {
   if (item.serverType !== "local") return null;

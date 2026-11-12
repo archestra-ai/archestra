@@ -11,6 +11,7 @@ import BrowserStorageStateModel from "@/models/browser-storage-state";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
 import CostExportModel from "@/models/cost-export";
+import DesktopDeviceModel from "@/models/desktop-device";
 import DevFeedbackConfigModel from "@/models/dev-feedback-config";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
@@ -202,6 +203,23 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "clientPrivacy",
     action: "clientPrivacy.updated",
     onlyWhenChanged: true,
+  },
+  // A user approving or denying the sign-in of a tunnel client (the handler
+  // sets the snapshots), and removing their device.
+  "/api/desktop-devices/sign-in/:id/decision": {
+    resourceType: "desktopDeviceSignIn",
+    action: "desktopDeviceSignIn.updated",
+  },
+  "/api/desktop-devices/:id": {
+    resourceType: "desktopDevice",
+    fetchById: (id, orgId) => DesktopDeviceModel.findByIdForAudit(id, orgId),
+  },
+  // Start and Stop of one MCP server on the device. The snapshot of the
+  // device holds which of its MCP servers are stopped.
+  "/api/desktop-devices/:id/servers/:catalogId": {
+    resourceType: "desktopDevice",
+    action: "desktopDevice.updated",
+    fetchById: (id, orgId) => DesktopDeviceModel.findByIdForAudit(id, orgId),
   },
   // Disconnecting a client: the resource is the user whose client it was;
   // the snapshot names the client.

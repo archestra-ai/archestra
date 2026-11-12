@@ -176,6 +176,71 @@ describe("computeCascadeOutcome — remote auto path saves without a bar", () =>
   });
 });
 
+describe("computeCascadeOutcome — desktop MCP servers have no pod to restart", () => {
+  // What the API returns for a desktop MCP item, and what the form submits
+  // for one: its name and description, with no connection fields at all.
+  const stored = (over: Partial<CascadeSnapshot> = {}): CascadeSnapshot => ({
+    name: "matlab",
+    description: "Runs on the user's own computer",
+    serverType: "desktop_mcp",
+    multitenant: false,
+    serverUrl: null,
+    oauthConfig: null,
+    enterpriseManagedConfig: null,
+    localConfig: null,
+    userConfig: null,
+    ...over,
+  });
+  const submitted = (over: Partial<CascadeSnapshot> = {}): CascadeSnapshot => ({
+    name: "matlab",
+    description: "Runs on the user's own computer",
+    serverType: "desktop_mcp",
+    icon: null,
+    labels: [],
+    ...over,
+  });
+
+  test("description-only edit → 'skip'", () => {
+    expect(
+      computeCascadeOutcome(
+        stored(),
+        submitted({ description: "MATLAB on your computer" }),
+        { affectedServerCount: 2 },
+      ),
+    ).toEqual({ mode: "skip", renamed: false });
+  });
+
+  test("rename → 'rename' (tools re-slug; nothing restarts)", () => {
+    expect(
+      computeCascadeOutcome(stored(), submitted({ name: "matlab-2026" }), {
+        affectedServerCount: 2,
+      }),
+    ).toEqual({ mode: "rename", renamed: true });
+  });
+
+  test("a breaking diff never asks to 'Save and restart'", () => {
+    // Nothing the reduced form submits can produce one; if a connection
+    // field ever leaks in, the bar must still not promise a restart.
+    expect(
+      computeCascadeOutcome(
+        stored(),
+        submitted({ serverUrl: "https://stray.example.com/mcp" }),
+        { affectedServerCount: 2 },
+      ),
+    ).toEqual({ mode: "skip", renamed: false });
+    expect(
+      computeCascadeOutcome(
+        stored(),
+        submitted({
+          name: "matlab-2026",
+          serverUrl: "https://stray.example.com/mcp",
+        }),
+        { affectedServerCount: 2 },
+      ),
+    ).toEqual({ mode: "rename", renamed: true });
+  });
+});
+
 describe("computeCascadeOutcome — remote manual paths survive the no-bar auto rule", () => {
   const remote = (over: Partial<CascadeSnapshot> = {}): CascadeSnapshot => ({
     name: "linear",

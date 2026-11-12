@@ -10,6 +10,7 @@ export { default as agentToolRoutes } from "./agent-tool";
 export { default as apiKeyRoutes } from "./api-key";
 export { default as appRoutes } from "./app/app.routes";
 export { default as archestraCatalogProxyRoutes } from "./archestra-catalog-proxy";
+export { default as archestraCliRoutes } from "./archestra-cli/archestra-cli.routes";
 export { default as auditLogRoutes } from "./audit-log/audit-log.routes";
 export { default as authRoutes } from "./auth";
 export { default as autoRoutingRoutes } from "./auto-routing/auto-routing.routes";
@@ -26,6 +27,8 @@ export { default as connectedClientRoutes } from "./connected-client/connected-c
 export { default as connectionSetupRoutes } from "./connection-setup/connection-setup.routes";
 export { default as costExportRoutes } from "./cost-export/cost-export.routes";
 export { default as defaultUserLimitRoutes } from "./default-user-limit";
+export { default as desktopDeviceRoutes } from "./desktop-device/desktop-device.routes";
+export { default as desktopTunnelRoutes } from "./desktop-tunnel/desktop-tunnel.routes";
 export { default as devFeedbackRoutes } from "./dev-feedback/dev-feedback.routes";
 export { default as environmentRoutes } from "./environment";
 export { default as gitCredentialRoutes } from "./git-credential/git-credential.routes";

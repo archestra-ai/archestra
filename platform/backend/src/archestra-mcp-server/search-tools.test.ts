@@ -620,6 +620,73 @@ describe("search_tools", () => {
     expect(truncatedContent.tools[0].toolName).toBe("installed__do_thing");
   });
 
+  test("a desktop MCP tool is available only to a user who added the server to their own computer", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeAgentTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const anna = await makeUser();
+    const ben = await makeUser();
+    await makeMember(anna.id, org.id, { role: "admin" });
+    await makeMember(ben.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      name: "Desktop Agent",
+      organizationId: org.id,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Desk",
+      serverType: "desktop_mcp",
+      desktopConfig: { command: "/opt/desk/mcp" },
+    });
+    const tool = await makeTool({
+      name: "desk__open_drawing",
+      description: "open a drawing on the desk",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(agent.id, tool.id);
+    // Only Anna added it: her installation runs on her computer, not on Ben's.
+    await makeMcpServer({
+      catalogId: catalog.id,
+      serverType: "desktop_mcp",
+      scope: "personal",
+      ownerId: anna.id,
+    });
+
+    const search = async (userId: string) => {
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "open drawing", limit: 5 },
+        {
+          agent: { id: agent.id, name: agent.name },
+          agentId: agent.id,
+          organizationId: org.id,
+          userId,
+        },
+      );
+      const content = result.structuredContent as SearchToolsStructuredContent;
+      return content.tools.find(
+        (found) => found.toolName === "desk__open_drawing",
+      );
+    };
+
+    expect(await search(anna.id)).toMatchObject({
+      available: true,
+      unavailableReason: null,
+    });
+    const forBen = await search(ben.id);
+    expect(forBen?.available).toBe(false);
+    expect(forBen?.unavailableReason).toContain(
+      "has not added it to their computer",
+    );
+  });
+
   test("includes unassigned tools from catalogs the user can access when the agent allows dynamic access", async ({
     makeAgent,
     makeInternalMcpCatalog,

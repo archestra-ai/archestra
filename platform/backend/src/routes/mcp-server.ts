@@ -47,6 +47,7 @@ import { openappaBatteriesService } from "@/openappa/batteries";
 import { secretManager } from "@/secrets-manager";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { resolveMcpCredentialValues } from "@/services/credentials";
+import { desktopMcpInstallService } from "@/services/desktop-mcp/desktop-mcp-install";
 import { assertValuesMatchEnvironmentRegex } from "@/services/environments/environment";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
 import {
@@ -507,6 +508,23 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // The catalog row is the source of truth for the install name.
         serverData.name = catalogItem.name;
 
+        // A desktop MCP server runs on the computer of the user who installs
+        // it: no shared installation, and nobody installs it for another user.
+        if (catalogItem.serverType === "desktop_mcp") {
+          if (serverData.scope !== "personal") {
+            throw new ApiError(
+              400,
+              "A desktop MCP server runs on a user's own computer, so it can only be installed as a personal installation.",
+            );
+          }
+          if (targetUserId !== user.id) {
+            throw new ApiError(
+              400,
+              "A desktop MCP server runs on a user's own computer, so each user installs it for themselves.",
+            );
+          }
+        }
+
         // Scope-based authorization (personal / team / org).
         await validateScopeAndAuthorization({
           scope: serverData.scope,
@@ -556,8 +574,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         // Check for duplicate personal installation (same user, no team)
-        // Return existing server instead of erroring (idempotent behavior)
-        if (serverData.scope === "personal") {
+        // Return existing server instead of erroring (idempotent behavior).
+        // A desktop MCP install is idempotent in its own path below: its
+        // tools go to the owner's personal gateway only, never to the agents
+        // of the request.
+        if (
+          serverData.scope === "personal" &&
+          catalogItem.serverType !== "desktop_mcp"
+        ) {
           const existingPersonal = existingServers.find(
             (s) => s.scope === "personal" && s.ownerId === targetUserId,
           );
@@ -634,6 +658,21 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           (await McpServerModel.hasSecretReference(secretId)))
       ) {
         throw new ApiError(400, "Credential references cannot be supplied");
+      }
+
+      // A desktop MCP server starts on the user's device only after its
+      // installation exists, so the installation is created waiting and is
+      // completed when the device reports the server in operation.
+      if (catalogItem?.serverType === "desktop_mcp") {
+        const mcpServer = await desktopMcpInstallService.install({
+          catalogItem,
+          userId: targetUserId,
+        });
+        broadcastMcpServersChanged({
+          organizationId,
+          serverIds: [mcpServer.id],
+        });
+        return reply.send(mcpServer);
       }
 
       // For REMOTE servers: create secrets and validate connection
@@ -1695,6 +1734,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
           }
           await McpServerModel.delete(id);
+          await syncDeviceAfterDesktopInstallChange(server);
         },
         audit: { target: request, snapshot },
       });
@@ -1784,6 +1824,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Soft-delete the MCP server record (uninstall = recoverable delete).
       const success = await McpServerModel.delete(mcpServerId);
       if (success) {
+        await syncDeviceAfterDesktopInstallChange(mcpServer);
         broadcastMcpServersChanged({
           organizationId,
           serverIds: [mcpServerId],
@@ -1867,10 +1908,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "MCP server not found");
       }
 
+      if (mcpServer.serverType === "desktop_mcp") {
+        // Nothing to reinstall: the owner's device starts the MCP server
+        // again at its next sync.
+        await McpServerModel.update(mcpServerId, { reinstallRequired: false });
+      }
       const restored = await McpServerModel.findById(mcpServerId);
       if (!restored) {
         throw new ApiError(404, "MCP server not found");
       }
+      await syncDeviceAfterDesktopInstallChange(restored);
       return reply.send(restored);
     },
   );
@@ -3230,6 +3277,18 @@ async function failHardReset(
     "Hard reset of an MCP server deployment failed",
   );
   return message;
+}
+
+/**
+ * A desktop MCP installation was removed or restored: the owner's device gets
+ * its config again, so the MCP server stops or starts there.
+ */
+async function syncDeviceAfterDesktopInstallChange(mcpServer: {
+  serverType: InternalMcpCatalogServerType;
+  ownerId: string | null;
+}): Promise<void> {
+  if (mcpServer.serverType !== "desktop_mcp") return;
+  await desktopMcpInstallService.notifyDeviceOfUser(mcpServer.ownerId);
 }
 
 async function connectAndGetToolsForInstallation(params: {

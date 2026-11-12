@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { parseFullToolName } from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
 import {
@@ -26,6 +27,7 @@ import {
   serverRulesFolderOf,
   withoutRepositoryIncludes,
 } from "@/openappa/policy-text";
+import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import { githubFetch } from "@/services/openappa-github";
 import {
@@ -627,6 +629,69 @@ export function firstFileAtEachPath<T extends { path: string }>(
   const kept = new Map<string, T>();
   for (const file of files) if (!kept.has(file.path)) kept.set(file.path, file);
   return [...kept.values()];
+}
+
+/**
+ * The git blob id of the bundled template's example `appa.toml`: a repository
+ * holding exactly that file is a fresh template copy, however it was made.
+ */
+export function templateExampleBlob(): string {
+  const example =
+    OPENAPPA_TEMPLATE.files.find((file) => file.path === "appa.toml")
+      ?.content ?? "";
+  return createHash("sha1")
+    .update(`blob ${Buffer.byteLength(example)}\0`)
+    .update(example)
+    .digest("hex");
+}
+
+/**
+ * The files a repository already holds that `content`'s include globs would
+ * read beside the policy file at `policyPath`, and that setup does not write:
+ * left there, they would join the policy after the merge without ever having
+ * been in it, so setup removes them in the same commit, where the reviewer
+ * sees them go and can keep any on the branch.
+ */
+export function strayGlobMatches(params: {
+  content: string;
+  policyPath: string;
+  /** Every blob path the repository holds at the commit setup writes over. */
+  paths: Iterable<string>;
+  /** The paths setup writes. */
+  written: Iterable<string>;
+}): string[] {
+  const globs = repositoryIncludePaths(params.content).flatMap((entry) => {
+    try {
+      const glob = parseIncludeGlob(entry);
+      return glob
+        ? [
+            {
+              folder: repositoryPath({ path: params.policyPath }, glob.folder),
+              pattern: glob.pattern,
+            },
+          ]
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  if (globs.length === 0) return [];
+  const written = new Set(params.written);
+  const stray: string[] = [];
+  for (const path of params.paths) {
+    if (written.has(path)) continue;
+    const slash = path.lastIndexOf("/");
+    const folder = slash < 0 ? "" : path.slice(0, slash);
+    const name = path.slice(slash + 1);
+    if (
+      globs.some(
+        (glob) =>
+          glob.folder === folder && globFileNameMatches(glob.pattern, name),
+      )
+    )
+      stray.push(path);
+  }
+  return stray.sort();
 }
 
 /** The self-service folder of the organization's source, or the default. */

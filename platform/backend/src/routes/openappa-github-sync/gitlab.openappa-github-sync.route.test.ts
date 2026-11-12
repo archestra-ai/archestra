@@ -208,6 +208,74 @@ describe("APPA GitLab sync", () => {
     );
   });
 
+  test("a project's own files the policy's globs would read go out with the merge request", async () => {
+    const root =
+      'include = ["rules/*.toml"]\n\n[policy]\nversion = 2\n\n[[policy.tool]]\nname = "read"\ndelta = {}\n';
+    const current =
+      '[policy]\nversion = 2\n\n[[policy.tool]]\nname = "ledger__export"\ndelta = {}\n';
+    gitlab.addProject({
+      path: "platform/old",
+      files: { "appa.toml": root, "rules/current.toml": current },
+    });
+    await OpenAppaGithubSyncModel.save(organizationId, {
+      repo: "platform/old",
+      ref: "main",
+      path: "appa.toml",
+      interval: "1h",
+      githubPatId: null,
+      githubAppConfigId: null,
+      gitlabTokenId,
+    });
+    await syncAppaGithubPolicy(organizationId);
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      root,
+    );
+    const repo = "platform/security/existing";
+    gitlab.addProject({
+      path: repo,
+      files: {
+        "guardrails/appa.toml": `${initialPolicy()}\n# Kept in GitLab\n`,
+        "guardrails/rules/legacy.toml":
+          '[policy]\nversion = 2\n\n[[policy.tool]]\nname = "legacy__anything"\ndelta = {}\n',
+        "guardrails/rules/README.md": "# Not a rules file\n",
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/repository",
+      payload: {
+        owner: "platform/security",
+        name: "existing",
+        gitlabTokenId,
+        interval: "1h",
+        existing: true,
+        path: "guardrails/appa.toml",
+        replace: true,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().source).toMatchObject({
+      repo,
+      ref: "main",
+      setupPullRequestNumber: 1,
+    });
+    gitlab.merge(repo, 1);
+    await syncAppaGithubPolicy(organizationId);
+    const files = gitlab.files(repo, "main");
+    expect(files).toMatchObject({
+      "guardrails/appa.toml": root,
+      "guardrails/rules/current.toml": current,
+      "guardrails/rules/README.md": "# Not a rules file\n",
+    });
+    expect(files["guardrails/rules/legacy.toml"]).toBeUndefined();
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      setupPullRequestNumber: null,
+      lastSyncError: null,
+    });
+  });
+
   test("reports what setup would do with a project", async () => {
     gitlab.addProject({ path: "team/empty" });
     gitlab.addProject({

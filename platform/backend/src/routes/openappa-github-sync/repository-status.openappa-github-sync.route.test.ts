@@ -8,6 +8,7 @@ import {
 } from "@/fastify-instance";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
+import { templateExampleBlob } from "@/services/openappa-github-access";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import { registerRoutePermissions } from "@/test/route-permissions";
@@ -90,6 +91,8 @@ describe("GET /api/openappa/github-app/repository", () => {
     repository?: Record<string, unknown>;
     commits?: number;
     present?: string[];
+    /** The blob id of a present file; any other id unless given. */
+    sha?: Record<string, string>;
   }) {
     server.use(
       http.get(REPO, () =>
@@ -99,13 +102,25 @@ describe("GET /api/openappa/github-app/repository", () => {
         `${REPO}/commits`,
         () => new HttpResponse(null, { status: params.commits ?? 200 }),
       ),
-      ...["appa.toml", "traces", "checks", "guardrails/appa.toml"].map((path) =>
-        http.head(`${REPO}/contents/${path}`, ({ request }) => {
-          heads.push(`${path}${new URL(request.url).search}`);
-          return new HttpResponse(null, {
-            status: params.present?.includes(path) ? 200 : 404,
-          });
-        }),
+      ...["appa.toml", "traces", "checks", "guardrails/appa.toml"].flatMap(
+        (path) => [
+          http.head(`${REPO}/contents/${path}`, ({ request }) => {
+            heads.push(`${path}${new URL(request.url).search}`);
+            return new HttpResponse(null, {
+              status: params.present?.includes(path) ? 200 : 404,
+            });
+          }),
+          // The policy file's blob id, read where the example may be unchanged.
+          http.get(`${REPO}/contents/${path}`, ({ request }) => {
+            heads.push(`${path}${new URL(request.url).search}`);
+            return params.present?.includes(path)
+              ? HttpResponse.json({
+                  sha: params.sha?.[path] ?? "0".repeat(40),
+                  path,
+                })
+              : new HttpResponse(null, { status: 404 });
+          }),
+        ],
       ),
     );
   }
@@ -127,6 +142,22 @@ describe("GET /api/openappa/github-app/repository", () => {
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).toEqual({ status: "template", validations: null });
     expect(heads).toEqual([]);
+  });
+
+  test("a private repository holding the template's example unchanged is ready to seed, however it was made", async () => {
+    github({
+      present: ["appa.toml", "traces"],
+      sha: { "appa.toml": templateExampleBlob() },
+    });
+    const response = await status();
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toEqual({ status: "template", validations: null });
+  });
+
+  test("a private repository whose example was changed holds a policy", async () => {
+    github({ present: ["appa.toml", "traces"] });
+    const response = await status();
+    expect(response.json()).toEqual({ status: "policy", validations: true });
   });
 
   test.each([

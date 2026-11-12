@@ -69,6 +69,8 @@ import {
   repositoryPath,
   resolveOpenAppaGithubAccess,
   resolveOpenAppaGitlabAccess,
+  strayGlobMatches,
+  templateExampleBlob,
 } from "@/services/openappa-github-access";
 import { openappaGitlab } from "@/services/openappa-gitlab";
 import { ApiError } from "@/types";
@@ -424,7 +426,7 @@ export async function createAppaGithubRepository(params: {
         message: "Seed current OpenAPPA policy",
         pull: {
           title: "Seed current OpenAPPA policy",
-          body: setupPullBody(transfer, false),
+          body: setupPullBody(transfer, false, "github"),
         },
         direct: true,
       });
@@ -495,25 +497,36 @@ async function proposeSetupPullRequest(params: {
   const { api, repo, token, path } = params;
   const base = `${api}/repos/${repo}`;
   let setupPullRequestNumber: number | undefined;
+  let branch = params.ref;
   try {
-    const branch = params.ref ?? (await defaultBranch({ token, base }));
+    branch ??= await defaultBranch({ token, base });
+    const parent = await branchHead({ base, token, branch });
+    const files = firstFileAtEachPath([
+      { path, content: params.seed },
+      ...transferredFiles(params.transfer, {
+        path,
+        validationDirectory:
+          params.source.validationDirectory ?? VALIDATION_DIRECTORY,
+      }),
+    ]);
     const outcome = await commitSetupFiles({
       base,
       token,
       branch,
-      parent: await branchHead({ base, token, branch }),
-      files: [
-        { path, content: params.seed },
-        ...transferredFiles(params.transfer, {
-          path,
-          validationDirectory:
-            params.source.validationDirectory ?? VALIDATION_DIRECTORY,
-        }),
-      ],
+      parent,
+      files,
+      // Files the repository holds that the policy's globs would read, and
+      // that were never in the policy, go in the same commit.
+      remove: strayGlobMatches({
+        content: params.seed,
+        policyPath: path,
+        paths: await blobPaths({ base, token, commit: parent }),
+        written: files.map((file) => file.path),
+      }),
       message: "Seed current OpenAPPA policy",
       pull: {
         title: "Seed current OpenAPPA policy",
-        body: setupPullBody(params.transfer, true),
+        body: setupPullBody(params.transfer, true, "github"),
       },
       direct: false,
     });
@@ -537,7 +550,9 @@ async function proposeSetupPullRequest(params: {
   const source = {
     ...params.source,
     repo,
-    ref: params.ref,
+    // A pull request merges into the branch it was opened against: the
+    // source follows that branch, not a default that may move meanwhile.
+    ref: setupPullRequestNumber ? branch : params.ref,
     path,
     githubPatId: null,
     gitlabTokenId: null,
@@ -616,16 +631,19 @@ async function createAppaGitlabProject(params: {
         access,
         repo,
         ref: params.ref ?? null,
+        policyPath: path,
+        content: policy.content,
         files: [
           { path, content: policy.content },
           ...transferredFiles(transfer, { path, validationDirectory }),
         ],
         title: "Seed current OpenAPPA policy",
-        summary: setupPullBody(transfer, true),
+        summary: setupPullBody(transfer, true, "gitlab"),
       });
       seeded = {
         repo,
-        branch: params.ref ?? null,
+        // A merge request merges into the branch it was opened against.
+        branch: proposed ? proposed.branch : (params.ref ?? null),
         path,
         setupPullRequestNumber: proposed?.iid,
       };
@@ -2095,24 +2113,29 @@ async function recoverPristineTemplateRepository(params: {
     });
     if (
       !repository.private ||
-      repository.full_name?.toLowerCase() !== params.repo.toLowerCase() ||
-      repository.template_repository?.full_name?.toLowerCase() !==
-        TEMPLATE_REPO.toLowerCase()
+      repository.full_name?.toLowerCase() !== params.repo.toLowerCase()
     )
       throw params.error;
-    const [existing, template] = await Promise.all([
-      githubJson<{ sha?: string }>({
-        url: `${params.api}/repos/${params.repo}/contents/appa.toml`,
-        token: params.token,
-        errors: githubSyncErrors,
-      }),
-      githubJson<{ sha?: string }>({
-        url: `${params.api}/repos/${TEMPLATE_REPO}/contents/appa.toml`,
-        token: params.token,
-        errors: githubSyncErrors,
-      }),
-    ]);
-    if (!existing.sha || existing.sha !== template.sha) throw params.error;
+    // A copy GitHub made from the template, or any private repository that
+    // holds the template's example unchanged: both are fresh copies to seed.
+    const existing = await githubJson<{ sha?: string }>({
+      url: `${params.api}/repos/${params.repo}/contents/appa.toml`,
+      token: params.token,
+      errors: githubSyncErrors,
+    });
+    if (!existing.sha) throw params.error;
+    if (existing.sha === templateExampleBlob()) return repository;
+    if (
+      repository.template_repository?.full_name?.toLowerCase() !==
+      TEMPLATE_REPO.toLowerCase()
+    )
+      throw params.error;
+    const template = await githubJson<{ sha?: string }>({
+      url: `${params.api}/repos/${TEMPLATE_REPO}/contents/appa.toml`,
+      token: params.token,
+      errors: githubSyncErrors,
+    });
+    if (existing.sha !== template.sha) throw params.error;
     return repository;
   } catch {
     throw params.error;
@@ -2169,7 +2192,10 @@ async function seedEmptyRepository(params: {
     parent,
     files: [...rest, ...params.transferred],
     message,
-    pull: { title: message, body: setupPullBody(params.transferred, false) },
+    pull: {
+      title: message,
+      body: setupPullBody(params.transferred, false, "github"),
+    },
     direct: true,
   });
   return { branch, setupPullRequestNumber };
@@ -2269,7 +2295,10 @@ function transferredFiles(
 function setupPullBody(
   transfer: SetupTransfer | SetupFile[],
   existing: boolean,
+  host: "github" | "gitlab",
 ): string {
+  const request = host === "gitlab" ? "merge request" : "pull request";
+  const hostName = host === "gitlab" ? "GitLab" : "GitHub";
   const carried = Array.isArray(transfer)
     ? transfer.length
     : transfer.includes.size + transfer.validations.length;
@@ -2278,8 +2307,8 @@ function setupPullBody(
       ? ""
       : ` It also carries ${carried === 1 ? "the file" : `the ${carried} files`} the policy reads beside itself.`;
   return existing
-    ? `This pull request puts your current OpenAPPA policy in place of the one in this repository.${files} Merge it as it is, or change this branch first to combine the two. Your current policy stays active until this pull request is merged.`
-    : `Review and merge this pull request to finish GitHub policy sync setup.${files} Your current policy stays active until this pull request is merged.`;
+    ? `This ${request} puts your current OpenAPPA policy in place of the one in this repository.${files} Merge it as it is, or change this branch first to combine the two. Your current policy stays active until this ${request} is merged.`
+    : `Review and merge this ${request} to finish ${hostName} policy sync setup.${files} Your current policy stays active until this ${request} is merged.`;
 }
 
 /** The commit a branch points at; `setup` waits for a repository GitHub is still creating. */
@@ -2305,6 +2334,30 @@ async function branchHead(params: {
   return sha;
 }
 
+/** Every file the repository holds at `commit`. */
+async function blobPaths(params: {
+  base: string;
+  token: string;
+  commit: string;
+}): Promise<string[]> {
+  const tree = await githubJson<{
+    truncated?: boolean;
+    tree?: Array<{ path?: string; type?: string }>;
+  }>({
+    url: `${params.base}/git/trees/${params.commit}?recursive=1`,
+    token: params.token,
+    errors: githubSyncErrors,
+  });
+  if (tree.truncated)
+    throw new ApiError(
+      400,
+      "The repository holds too many files to read in one pass",
+    );
+  return (tree.tree ?? []).flatMap((entry) =>
+    entry.type === "blob" && entry.path ? [entry.path] : [],
+  );
+}
+
 /**
  * One commit on top of `parent` that writes `files`, advanced onto `branch`
  * when `direct`, else proposed as a pull request against it; rules that
@@ -2318,12 +2371,20 @@ async function commitSetupFiles(params: {
   branch: string;
   parent: string;
   files: SetupFile[];
+  /** Paths the commit removes. */
+  remove?: string[];
   message: string;
   pull: { title: string; body: string };
   direct: boolean;
 }): Promise<{ setupPullRequestNumber?: number }> {
   const { base, token, branch, parent } = params;
   const files = firstFileAtEachPath(params.files);
+  const removed = (params.remove ?? []).map((path) => ({
+    path,
+    mode: "100644",
+    type: "blob",
+    sha: null,
+  }));
   const parentCommit = await githubJson<{ tree?: { sha?: string } }>({
     url: `${base}/git/commits/${parent}`,
     token,
@@ -2336,12 +2397,15 @@ async function commitSetupFiles(params: {
       method: "POST",
       body: {
         base_tree: parentCommit.tree?.sha,
-        tree: entries.map((file) => ({
-          path: file.path,
-          mode: "100644",
-          type: "blob",
-          content: file.content,
-        })),
+        tree: [
+          ...entries.map((file) => ({
+            path: file.path,
+            mode: "100644",
+            type: "blob",
+            content: file.content,
+          })),
+          ...removed,
+        ],
       },
       errors: githubSyncErrors,
     });
@@ -2410,8 +2474,10 @@ async function commitSetupFiles(params: {
       return {};
     } catch (error) {
       if (outcome === "workflow" && attempt === 0) {
+        // Only workflow files need that permission; a validation folder
+        // under .github stays.
         commit = await commitFiles(
-          files.filter((file) => !file.path.startsWith(".github/")),
+          files.filter((file) => !file.path.startsWith(".github/workflows/")),
         );
         if (!commit) return {};
         continue;

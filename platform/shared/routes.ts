@@ -1178,6 +1178,7 @@ export const RouteId = {
   RestartDesktopDeviceServer: "restartDesktopDeviceServer",
   TestDesktopDeviceServer: "testDesktopDeviceServer",
   GetDesktopDeviceServerLog: "getDesktopDeviceServerLog",
+  // white-label-ok: wire identifier of the `archestra` program's download, not copy
   DownloadArchestraCli: "downloadArchestraCli",
   StartDesktopDeviceSignIn: "startDesktopDeviceSignIn",
   PollDesktopDeviceSignIn: "pollDesktopDeviceSignIn",

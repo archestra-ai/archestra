@@ -738,10 +738,31 @@ jobs:
           fetch-depth: 1
 
       # See the note in ai-labs-rust-checks. One system is enough: the
-      # lockfile is the same on all three.
-      - name: Check new Cargo dependency release ages
+      # lockfile is the same on all three. The action compares with the
+      # lockfile of the base, so it needs one there: the change that adds the
+      # lockfile is checked by the organization's Supply-Chain Policy check.
+      - name: Find the lockfile in the base
+        id: base-lockfile
         if: runner.os == 'Linux'
-        uses: archestra-ai/.github/actions/cargo-release-age@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
+        env:
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          GH_TOKEN: ${{ github.token }}
+          GIT_CONFIG_COUNT: "2"
+          GIT_CONFIG_KEY_0: credential.helper
+          GIT_CONFIG_VALUE_0: ""
+          GIT_CONFIG_KEY_1: credential.https://github.com.helper
+          GIT_CONFIG_VALUE_1: '!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f'
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          if git cat-file -e "$BASE_SHA:platform/archestra-cli/Cargo.lock"; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check new Cargo dependency release ages
+        if: runner.os == 'Linux' && steps.base-lockfile.outputs.present == 'true'
+        uses: archestra-ai/.github/actions/cargo-release-age@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
         env:
           GH_TOKEN: ${{ github.token }}
           GIT_CONFIG_COUNT: "2"

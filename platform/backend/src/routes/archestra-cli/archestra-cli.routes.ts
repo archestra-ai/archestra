@@ -22,6 +22,7 @@ const archestraCliRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.DownloadArchestraCli,
         description:
           "Download the archestra program for one operating system and CPU, for example darwin-arm64, linux-x86_64 or windows-AMD64.",
+        // white-label-ok: names the `archestra` program, which keeps its name in every deployment
         tags: ["Archestra CLI"],
         params: z.object({
           // As `uname -s` and `uname -m` print them ("Darwin-arm64",

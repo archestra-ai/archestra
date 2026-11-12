@@ -368,7 +368,9 @@ class OpenAppaGitlab {
     delete: string[];
     /**
      * Which of the paths exist at `baseSha`, when the caller read them
-     * already: the project's tree is not listed then.
+     * already: the project's tree is not listed then, so a path that is a
+     * symbolic link or a folder is not told apart from a file; the commit
+     * writes a file there, and the reviewer sees it.
      */
     present?: ReadonlySet<string>;
   }): Promise<{ iid: number; webUrl: string; sha: string }> {

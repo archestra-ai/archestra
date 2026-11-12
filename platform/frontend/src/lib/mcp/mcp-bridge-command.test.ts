@@ -53,7 +53,7 @@ describe("bridgeCommand", () => {
         "AbCdEfGhIjKlMnOpQrStUv",
       ),
     ).toContain(
-      "./archestra bridge start --url https://archestra.example.com --setup-code AbCdEfGhIjKlMnOpQrStUv",
+      "./archestra bridge start --url https://archestra.example.com \\\n    --setup-code AbCdEfGhIjKlMnOpQrStUv",
     );
     expect(
       bridgeCommand(
@@ -62,7 +62,7 @@ describe("bridgeCommand", () => {
         "AbCdEfGhIjKlMnOpQrStUv",
       ),
     ).toContain(
-      ".\\archestra.exe bridge start --url https://archestra.example.com --setup-code AbCdEfGhIjKlMnOpQrStUv }",
+      ".\\archestra.exe bridge start --url https://archestra.example.com `\n    --setup-code AbCdEfGhIjKlMnOpQrStUv }",
     );
   });
 

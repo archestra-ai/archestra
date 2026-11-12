@@ -22,7 +22,8 @@
  * - Each line is short, so the command reads well where it wraps in a dialog.
  * - `setupCode`, from the setup dialog that shows the command: the program
  *   sends it with its sign-in, and the dialog approves that sign-in in place,
- *   so no approval page opens.
+ *   so no approval page opens. It goes on a line of its own, so the code is
+ *   never broken in the middle.
  */
 export function bridgeCommand(
   baseUrl: string,
@@ -31,21 +32,21 @@ export function bridgeCommand(
 ): string {
   const origin = baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
   const download = `${origin}/api/archestra-cli`;
-  const start = `bridge start --url ${origin}${setupCode ? ` --setup-code ${setupCode}` : ""}`;
+  const start = `bridge start --url ${origin}`;
   if (windows) {
     return (
       `$ProgressPreference = 'SilentlyContinue'; \`\n` +
       `  $arch = $env:PROCESSOR_ARCHITECTURE; \`\n` +
       `  irm "${download}/windows-$arch" \`\n` +
       `    -OutFile archestra.exe; \`\n` +
-      `  if ($?) { .\\archestra.exe ${start} }`
+      `  if ($?) { .\\archestra.exe ${start}${setupCode ? ` \`\n    --setup-code ${setupCode}` : ""} }`
     );
   }
   return (
     `curl -fsSL -o archestra \\\n` +
     `  "${download}/$(uname -s)-$(uname -m)" \\\n` +
     `  && chmod +x archestra \\\n` +
-    `  && ./archestra ${start}`
+    `  && ./archestra ${start}${setupCode ? ` \\\n    --setup-code ${setupCode}` : ""}`
   );
 }
 

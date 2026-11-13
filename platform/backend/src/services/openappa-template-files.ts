@@ -500,9 +500,12 @@ async function githubHost(
       let workflowRefused: string | null = null;
       const errors = withGithubMessage((status, message) => {
         if (/workflow/i.test(message ?? ""))
-          workflowRefused = new MissingGithubPermission(row.repo, {
-            workflows: "write",
-          }).message;
+          // An access token has no App to grant it: its scope is the fix.
+          workflowRefused = row.githubAppConfigId
+            ? new MissingGithubPermission(row.repo, {
+                workflows: "write",
+              }).message
+            : "The access token lacks the workflow scope, so it cannot write the validation workflow. Give the token that scope.";
         return new ApiError(
           502,
           `GitHub returned HTTP ${status} while proposing the repository files.`,

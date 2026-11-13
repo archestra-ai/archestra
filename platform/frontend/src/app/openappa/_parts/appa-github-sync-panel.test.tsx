@@ -310,6 +310,74 @@ test("one Finish setup notice names what still waits, and its wizard takes the p
   expect(screen.queryByText(/Finish the Git sync setup/)).toBeNull();
 });
 
+test("a source read with an access token is not sent to grant an App Workflows: the card says what its token lacks", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubPatId: "pat-1" },
+    selfService: {
+      enabled: false,
+      setting: false,
+      directory: "mcp",
+      autoMerge: { enabled: false, setting: false },
+    },
+    templateFiles: {
+      templateCommit: "2302fc9b4a9921ea73910047fd1e98535c321112",
+      state: "pull_open",
+      paths: [".github/workflows/validate.yml", "README.md"],
+      withheld: [".github/workflows/validate.yml"],
+      detail:
+        "The access token lacks the workflow scope, so it cannot write the validation workflow. Give the token that scope.",
+      pull: { number: 4, url: "https://github.com/example/policies/pull/4" },
+      checkedAt: "2026-11-13T09:00:00Z",
+    },
+  };
+  show();
+  expect(await screen.findByText("Merge PR #4.")).toBeVisible();
+  expect(screen.queryByText(/Workflows permission/)).toBeNull();
+  expect(
+    screen.getByText("Repository files could not be updated"),
+  ).toBeVisible();
+  expect(screen.getByText(/lacks the workflow scope/)).toBeVisible();
+});
+
+test("a branch rule left behind with self-service off is named, and the card says the check is still posted", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: "app-1" },
+    selfService: {
+      enabled: false,
+      setting: false,
+      directory: "mcp",
+      autoMerge: { enabled: false, setting: false },
+      leftoverRule: {
+        checkName: "Check OpenAPPA Guardrails",
+        url: "https://github.com/example/policies/rules/5",
+      },
+    },
+  };
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Check OpenAPPA Guardrails",
+        include: { folder: "mcp", state: "included" },
+        branchRules: {
+          state: "active",
+          url: "https://github.com/example/policies/rules/5",
+        },
+      }),
+    ),
+  );
+  show();
+  const ruleset = await screen.findByRole("link", { name: "ruleset" });
+  expect(ruleset).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/rules/5",
+  );
+  expect(ruleset.closest("p")).toHaveTextContent(
+    "keeps posting it, so pull requests merge once it passes. Remove the rule before you move or stop Git sync.",
+  );
+});
+
 test("shows a branch rule that needs a change, with the ruleset linked and the fix, and offers to finish the setup", async () => {
   server.use(
     http.get(`${url}/protection`, () =>

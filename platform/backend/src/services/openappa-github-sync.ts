@@ -2325,6 +2325,8 @@ export type PolicySource = RepositorySource & {
   ref: string | null;
   validationDirectory?: string | null;
   selfServiceDirectory?: string | null;
+  /** The pull request setup opened, while it waits for its merge. */
+  setupPullRequestNumber?: number | null;
 };
 
 /** An outcome as stored, or null for one that is not in yet. */
@@ -2572,10 +2574,13 @@ async function judgeGithubPull(params: {
     ...params,
     own,
     governed,
+    setup: source.setupPullRequestNumber === number,
   });
   if (requester === null) return null;
   if ("refused" in requester)
     return { governed: paths, selfServed: false, outcome: requester.refused };
+  if ("setup" in requester)
+    return { governed: paths, selfServed: false, outcome: { accepted: true } };
   const { userId, email } = requester;
   const prefixes = governed.some((file) => file.prefix !== null)
     ? await catalogToolPrefixes(source.organizationId)
@@ -2703,8 +2708,13 @@ async function archestraPullRequester(params: {
   number: number;
   own: { login: string };
   governed: Array<{ path: string }>;
+  /** The source's own setup pull request. */
+  setup: boolean;
 }): Promise<
-  { userId: string; email: string } | { refused: PullOutcome } | null
+  | { userId: string; email: string }
+  | { refused: PullOutcome }
+  | { setup: true }
+  | null
 > {
   const { source, token, base, number, own } = params;
   const appName = archestraMcpBranding.appName;
@@ -2739,6 +2749,9 @@ async function archestraPullRequester(params: {
     commits.map((entry) => requesterOf(entry.commit?.message)),
   );
   const [email] = [...emails];
+  // A setup pull request opened before setup named who asked for it: setup
+  // itself took the permission to set the policy.
+  if (params.setup && emails.size === 1 && !email) return { setup: true };
   const member =
     emails.size === 1 && email
       ? await MemberModel.findByIdOrEmail(email, source.organizationId)
@@ -4000,6 +4013,9 @@ const GITHUB_APP_PERMISSIONS = [
   "workflows",
 ] as const;
 
+/** What posting the policy check takes, of those. */
+const CHECK_PERMISSIONS = ["contents", "pull_requests", "checks"] as const;
+
 export type RepositoryProtection = {
   /** The name of the policy check, and of the ruleset that requires it. */
   checkName: string;
@@ -4108,8 +4124,16 @@ export async function getAppaGithubAppGrants(
     { fresh: true },
   );
   // Read when the switch's dialog checks again: a grant that just arrived
-  // should not wait out a refused round of checks.
-  if (grants?.permissions.every((permission) => permission.granted))
+  // should not wait out a refused round of checks, whatever else, such as
+  // Workflows, the App still lacks.
+  if (
+    grants &&
+    CHECK_PERMISSIONS.every((name) =>
+      grants.permissions.some(
+        (permission) => permission.name === name && permission.granted,
+      ),
+    )
+  )
     await forgetRefusedChecks(organizationId, row.repo);
   return grants ?? null;
 }
@@ -4170,8 +4194,8 @@ async function mergeWhatTheRulesetHeld(
 /**
  * Read the repository's protection, as each sync does. On, the branch rules
  * are read and shown. Off, a rule that still requires the check is recorded:
- * Archestra cannot take it off, so it keeps posting the check as skipped,
- * and the settings name the rule to remove.
+ * Archestra cannot take it off, so it keeps posting the check, and the
+ * settings name the rule to remove before a move or a stop.
  */
 async function maintainRepositoryProtection(
   organizationId: string,
@@ -4569,7 +4593,7 @@ function desiredRuleset(params: {
 
 // === A rule left behind with self-service off ===
 
-/** Off, a branch rule that still requires the check: shown, and posted as skipped. */
+/** Off, a branch rule that still requires the check: shown, and it holds a move or a stop. */
 type LeftoverRule = { checkName: string; url: string | null };
 
 /** How long a leftover rule stands recorded between syncs. */
@@ -4595,9 +4619,9 @@ async function recordedLeftoverRule(
 /**
  * Self-service off: whether a branch rule still requires the check. Archestra
  * cannot take the rule off (that takes Administration, which it never
- * holds), so the record keeps the check posted as skipped and tells the
- * administrator which rule to remove. Read at each sync; a read that fails
- * keeps the last record.
+ * holds), so the record tells the administrator which rule to remove
+ * before a move or a stop. Read at each sync; a read that fails keeps the
+ * last record.
  */
 async function recordLeftoverRule(source: RuledSource) {
   const checkName = POLICY_CHECK_NAME;

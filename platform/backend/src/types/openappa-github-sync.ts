@@ -259,7 +259,8 @@ export const AppaSelfServiceSchema = z.object({
     .optional(),
   /**
    * Off, a branch rule that still requires the policy check: Archestra
-   * posts the check as skipped until the administrator removes the rule.
+   * keeps posting the check, and a move or a stop waits until the
+   * administrator removes the rule.
    */
   leftoverRule: z
     .object({ checkName: z.string(), url: z.string().nullable() })

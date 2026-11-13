@@ -32,6 +32,7 @@ import {
 } from "@/clients/azure-url";
 import config from "@/config";
 import { metrics } from "@/observability";
+import { azureClaudeChatCompletionsGuidance } from "@/services/azure-model-capabilities";
 import type {
   Azure,
   CreateClientOptions,
@@ -412,7 +413,11 @@ export const azureAdapterFactory: LLMProvider<
         azureRequest,
       )) as unknown as AzureResponse;
     } catch (error) {
-      throw explainUnsupportedChatCompletions(error);
+      throw explainUnsupportedChatCompletions({
+        error,
+        deployment: request.model,
+        baseUrl: (client as AzureClient).baseUrl,
+      });
     }
   },
 
@@ -433,7 +438,11 @@ export const azureAdapterFactory: LLMProvider<
         azureClient.chat.completions.create(azureRequest),
       );
     } catch (error) {
-      throw explainUnsupportedChatCompletions(error);
+      throw explainUnsupportedChatCompletions({
+        error,
+        deployment: request.model,
+        baseUrl: (client as AzureClient).baseUrl,
+      });
     }
   },
 
@@ -529,18 +538,22 @@ const DEFAULT_AZURE_REASONING_EFFORT: ReasoningEffort = "medium";
  * Chat Completions endpoint, whose `404 api_not_supported` says nothing about
  * the endpoint being the problem. Replace it with what to do instead.
  */
-function explainUnsupportedChatCompletions(error: unknown): unknown {
-  if (get(error, "error.code") !== "api_not_supported") {
-    return error;
+function explainUnsupportedChatCompletions(params: {
+  error: unknown;
+  deployment: string;
+  baseUrl: string | undefined;
+}): unknown {
+  if (get(params.error, "error.code") !== "api_not_supported") {
+    return params.error;
   }
-  return new ApiError(400, AZURE_CHAT_COMPLETIONS_NOT_SUPPORTED_MESSAGE);
+  return new ApiError(
+    400,
+    azureClaudeChatCompletionsGuidance({
+      deployment: params.deployment,
+      baseUrl: params.baseUrl,
+    }),
+  );
 }
-
-const AZURE_CHAT_COMPLETIONS_NOT_SUPPORTED_MESSAGE =
-  "This Azure deployment does not serve the OpenAI Chat Completions API (api_not_supported). " +
-  "Claude deployments on Microsoft Foundry are served over the Responses API, or under the Anthropic provider with base URL " +
-  'https://<resource>.services.ai.azure.com/anthropic and model "anthropic:<deployment>". ' +
-  "Refresh this provider's models so Archestra rejects such requests before sending them.";
 
 /**
  * Azure's OpenAI reasoning deployments reject `max_tokens` ("Use

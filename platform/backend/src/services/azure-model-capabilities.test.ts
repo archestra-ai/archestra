@@ -199,8 +199,16 @@ describe("Azure resource capability evidence", () => {
       operation: "chat",
     });
     await expect(chat).rejects.toMatchObject({ statusCode: 400 });
-    await expect(chat).rejects.toThrow(
-      /claude-haiku-5-5.*Chat Completions.*Responses API.*services\.ai\.azure\.com\/anthropic.*"anthropic:team-assistant"/,
+    const message = await chat.catch((error: Error) => error.message);
+    expect(message).toContain('"team-assistant" runs claude-haiku-5-5');
+    expect(message).toContain("POST /v1/model-router/responses");
+    // The resource's own Anthropic URL, ready to paste.
+    expect(message).toContain(
+      "base URL https://scope5.services.ai.azure.com/anthropic,",
+    );
+    expect(message).toContain('call "anthropic:team-assistant"');
+    expect(message).toContain(
+      "/llm-proxy/providers/anthropic#anthropic-on-microsoft-foundry",
     );
     expect(
       await validateAzureModelOperation({

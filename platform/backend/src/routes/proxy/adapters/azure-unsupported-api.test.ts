@@ -7,7 +7,7 @@ import { azureAdapterFactory } from "./azure";
 // biome-ignore lint/correctness/useHookAtTopLevel: This registers Vitest lifecycle hooks, not React hooks.
 const server = useMswServer();
 
-const baseUrl = "https://resource.example/openai/v1";
+const baseUrl = "https://contoso-ai.services.ai.azure.com/openai/v1";
 
 // What Microsoft Foundry answers when a Claude deployment is called over
 // OpenAI Chat Completions.
@@ -46,12 +46,16 @@ describe("Azure Chat Completions on a deployment that does not serve it", () => 
         ? azureAdapterFactory.execute(client, request)
         : azureAdapterFactory.executeStream(client, request);
 
-    await expect(call).rejects.toMatchObject({
-      statusCode: 400,
-      message: expect.stringMatching(
-        /Chat Completions.*Responses API.*services\.ai\.azure\.com\/anthropic.*anthropic:<deployment>/,
-      ),
-    });
+    await expect(call).rejects.toMatchObject({ statusCode: 400 });
+    const message = await call.catch((error: Error) => error.message);
+    expect(message).toContain(
+      '"team-assistant" does not serve the OpenAI Chat Completions API',
+    );
+    expect(message).toContain("POST /v1/model-router/responses");
+    expect(message).toContain(
+      "base URL https://contoso-ai.services.ai.azure.com/anthropic,",
+    );
+    expect(message).toContain('call "anthropic:team-assistant"');
   });
 
   test("other upstream 404s pass through unchanged", async () => {

@@ -314,6 +314,7 @@ function AgentDetails({
   const steps = getAgentSetupSteps({
     agentType: agent.agentType,
     builtIn: isBuiltIn,
+    canReadTriggers: !!canReadAgentTriggers,
   });
   // A built-in subagent is reached by the agents that delegate to it, never by
   // a person in a channel, so it has no assignments to make.

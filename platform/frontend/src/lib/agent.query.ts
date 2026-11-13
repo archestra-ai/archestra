@@ -25,7 +25,7 @@ import {
   agentQueryKey,
   chatAgentsQueryKey,
 } from "@/lib/agent-query-keys";
-import { awaitBootstrapSeed } from "@/lib/auth/auth.query";
+import { authQueryKeys, awaitBootstrapSeed } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { getSavedAgent } from "@/lib/chat/use-chat-preferences";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
@@ -94,6 +94,7 @@ export function useCloneAgent() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
+      invalidateCapabilitiesForNewAgent(queryClient);
       if (data.id) {
         queryClient.setQueryData(["agents", data.id], data);
       }
@@ -457,6 +458,7 @@ export function useCreateProfile() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
+      invalidateCapabilitiesForNewAgent(queryClient);
       // Invalidate profile tokens for the new profile
       if (data?.id) {
         queryClient.invalidateQueries({
@@ -1020,6 +1022,7 @@ export function useImportAgent() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
+      invalidateCapabilitiesForNewAgent(queryClient);
 
       const warningCount = data.warnings.length;
       if (warningCount > 0) {
@@ -1152,4 +1155,16 @@ function agentCredentialReadinessQuery(requestedIds: string[]) {
       return rows;
     },
   };
+}
+
+/**
+ * A new agent is written with its author's grants on it (read, update,
+ * delete, ...), which the cached capability list predates. Edit buttons and
+ * row actions read that list, so without a refetch a creator whose update
+ * comes from the grant could not edit what they had just made.
+ */
+function invalidateCapabilitiesForNewAgent(queryClient: QueryClient) {
+  queryClient.invalidateQueries({
+    queryKey: authQueryKeys.scopedCapabilities(),
+  });
 }

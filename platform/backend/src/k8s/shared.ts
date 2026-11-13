@@ -9,6 +9,8 @@ const {
     kubernetes: { namespace, kubeconfig, loadKubeconfigFromCurrentCluster },
   },
 } = config;
+// Only an explicit `false` turns the orchestrator off.
+const orchestratorEnabled = config.orchestrator.enabled !== false;
 
 interface K8sClients {
   kubeConfig: k8s.KubeConfig;
@@ -107,12 +109,20 @@ export function validateKubeconfig(path?: string) {
 /**
  * Loads and initializes KubeConfig based on environment configuration.
  * Returns the loaded KubeConfig and resolved namespace.
- * Throws if loading fails.
+ * Throws if loading fails, or if the orchestrator is turned off
+ * (`ARCHESTRA_ORCHESTRATOR_ENABLED=false`): every Kubernetes client is built
+ * from this, so throwing here keeps the process away from the cluster.
  */
 export function loadKubeConfig(): {
   kubeConfig: k8s.KubeConfig;
   namespace: string;
 } {
+  if (!orchestratorEnabled) {
+    throw new Error(
+      "Kubernetes orchestrator is disabled (ARCHESTRA_ORCHESTRATOR_ENABLED=false)",
+    );
+  }
+
   const kc = new k8s.KubeConfig();
 
   const kubeconfigPath =
@@ -169,13 +179,15 @@ export function createK8sClients(
 
 /**
  * Check if K8s runtime is enabled based on environment configuration.
- * Returns true when either KUBECONFIG or LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER is set.
+ * Returns true when either KUBECONFIG or LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER is set,
+ * unless the orchestrator is turned off (`ARCHESTRA_ORCHESTRATOR_ENABLED=false`).
  * @public — exported for testability
  */
 export function isK8sConfigured(): boolean {
   return (
-    loadKubeconfigFromCurrentCluster ||
-    (!!kubeconfig && kubeconfig.trim().length > 0)
+    orchestratorEnabled &&
+    (loadKubeconfigFromCurrentCluster ||
+      (!!kubeconfig && kubeconfig.trim().length > 0))
   );
 }
 

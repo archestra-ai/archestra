@@ -1564,13 +1564,17 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Values: at least 32 characters, the same on every replica. A shorter value stops startup.
   - Set it to rotate this key separately from the session secret. See [Guardrails Signing Key](/docs/admin/deployment/secret-rotation#guardrails-signing-key).
 
-- **`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`** - Name of the check Archestra posts on the policy repository's pull requests with [Git sync](/docs/agents/guardrails/git-sync#the-check-and-the-ruleset), and of the branch ruleset that requires it.
+- **`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`** - Name of the check Archestra posts on the policy repository's pull requests with [Git sync](/docs/agents/guardrails/git-sync#the-check-and-the-ruleset), and of the branch ruleset you import to require it.
   - Default: `Check OpenAPPA Guardrails`.
-  - Values: up to 100 characters. A rename moves the ruleset and its required check over at the next sync.
+  - Values: up to 100 characters. After a rename, edit the imported ruleset so it requires the check under the new name.
 
 - **`ARCHESTRA_OPENAPPA_SELF_SERVICE`** - Controls the MCP Guardrails Self-Service feature - whether the MCP owners can edit Guardrail policies for these MCPs themselves. Overrides related configuration from Settings.
   - Default: unset.
   - Values: `enabled`, `disabled`.
+
+- **`ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE`** - Sets [Auto-merge](/docs/agents/guardrails/git-sync#auto-merge) for MCP Guardrails Self-Service: the GitHub App merges each MCP server's rules pull request once its policy check passes. While it is set, it overrides the setting saved in Git sync setup, which cannot be edited there.
+  - Default: unset (the saved setting applies, off unless changed).
+  - Values: `enabled`, `disabled`. Other values stop startup.
 
 - **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Sets **Human approval** under [Break the glass](/docs/agents/guardrails/policies#yells) for the whole deployment. While it is set, it overrides the value saved in **Settings → Guardrails**, and the setting cannot be edited there. Unset it to edit the setting again.
   - Default: unset (the saved setting applies, `block` unless changed)

@@ -1832,6 +1832,219 @@ describe("APPA GitHub sync", () => {
     });
   });
 
+  test("an existing repository connected with self-service on gets the servers' include in the setup pull request, which stands for the include until it merges", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const installationId = randomUUID();
+    const secret = await secretManager().createSecret(
+      { apiToken: privateKey },
+      "test-setup-include-app",
+    );
+    const githubApp = await GithubAppConfigModel.create({
+      organizationId,
+      name: "Policy App",
+      githubUrl: "https://api.github.com",
+      appId: "123",
+      installationId,
+      secretId: secret.id,
+    });
+    // The target holds its own policy: the current one goes in as a pull request.
+    const git = fakeGitData("example/other-policy", {
+      head: { "appa.toml": policy },
+    });
+    let pull = { merged: false, state: "open" };
+    const opened: unknown[] = [];
+    let rules: Array<Record<string, unknown>> = [];
+    const runs: Array<Record<string, unknown>> = [];
+    let setupHead = SETUP_COMMIT;
+    server.use(
+      http.get("https://api.github.com/repos/example/other-policy/pulls", () =>
+        HttpResponse.json(
+          pull.merged
+            ? []
+            : [
+                {
+                  number: 8,
+                  head: { sha: setupHead },
+                  merge_commit_sha: null,
+                },
+                // Someone else's pull request into the branch meanwhile.
+                {
+                  number: 9,
+                  head: { sha: "e".repeat(40) },
+                  merge_commit_sha: null,
+                },
+              ],
+        ),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/commits/:sha/check-runs",
+        () => HttpResponse.json({ check_runs: [] }),
+      ),
+      http.post(
+        "https://api.github.com/repos/example/other-policy/check-runs",
+        async ({ request }) => {
+          runs.push((await request.json()) as Record<string, unknown>);
+          return HttpResponse.json({ id: 1 }, { status: 201 });
+        },
+      ),
+      http.post(
+        `https://api.github.com/app/installations/${installationId}/access_tokens`,
+        () =>
+          HttpResponse.json({
+            token: "test-installation-token",
+            expires_at: new Date(Date.now() + 3600000).toISOString(),
+          }),
+      ),
+      http.get("https://api.github.com/repos/example/other-policy", () =>
+        HttpResponse.json({ default_branch: "main" }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/commits",
+        () => HttpResponse.json([{ sha: commit }]),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/git/ref/heads/main",
+        () => HttpResponse.json({ object: { sha: commit } }),
+      ),
+      http.post(
+        "https://api.github.com/repos/example/other-policy/git/refs",
+        () => HttpResponse.json({}),
+      ),
+      http.post(
+        "https://api.github.com/repos/example/other-policy/pulls",
+        async ({ request }) => {
+          opened.push(await request.json());
+          return HttpResponse.json({
+            number: 8,
+            html_url: "https://github.com/example/other-policy/pull/8",
+          });
+        },
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/pulls/8",
+        () =>
+          HttpResponse.json({
+            head: { sha: SETUP_COMMIT },
+            html_url: "https://github.com/example/other-policy/pull/8",
+            ...pull,
+          }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/commits/main",
+        () => HttpResponse.json({ sha: commit }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/rules/branches/main",
+        () => HttpResponse.json(rules),
+      ),
+      contentsOf("example/other-policy", git.files, () =>
+        pull.merged ? [commit, SETUP_COMMIT] : [SETUP_COMMIT],
+      ),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/repository",
+      payload: {
+        owner: "example",
+        name: "other-policy",
+        githubAppConfigId: githubApp.id,
+        interval: "1h",
+        existing: true,
+        replace: true,
+        selfService: true,
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    // The seed includes the servers' folder from the first commit.
+    expect(git.written()["appa.toml"]).toContain('"mcp/*.toml"');
+    expect(opened).toHaveLength(1);
+    expect(response.json()).toMatchObject({
+      source: { setupPullRequestNumber: 8, sourceCommit: null },
+      selfService: { enabled: true },
+    });
+    // Until it merges, the setup pull request is the include on its way:
+    // the protection names it, and nothing else opens.
+    const protection = async (branchRules: string) => {
+      const read = await app.inject({
+        method: "GET",
+        url: "/api/openappa/github-sync/protection?fresh=true",
+      });
+      expect(read.statusCode, read.body).toBe(200);
+      // The branch rules are read meanwhile: the ruleset can be imported
+      // before the merge.
+      expect(read.json().branchRules).toMatchObject({ state: branchRules });
+      return read.json().include;
+    };
+    expect(await protection("missing")).toEqual({
+      folder: "mcp",
+      state: "pull_open",
+      pull: {
+        number: 8,
+        url: "https://github.com/example/other-policy/pull/8",
+      },
+    });
+    const include = await app.inject({
+      method: "PATCH",
+      url: "/api/openappa/github-sync",
+      payload: { action: "include_servers" },
+    });
+    expect(include.statusCode, include.body).toBe(200);
+    expect(opened).toHaveLength(1);
+    // No rule yet: the minute's round posts nothing on the setup pull
+    // request. The ruleset imported meanwhile: the check it requires is
+    // posted as skipped, once, on the setup pull request alone, so it can
+    // merge; another pull request waits for the checks to begin.
+    await checkDueAppaGithubSyncs();
+    expect(runs).toEqual([]);
+    rules = [
+      {
+        type: "required_status_checks",
+        parameters: {
+          strict_required_status_checks_policy: false,
+          required_status_checks: [
+            { context: "Check OpenAPPA Guardrails", integration_id: 123 },
+          ],
+        },
+        ruleset_id: 5,
+        ruleset_source_type: "Repository",
+        ruleset_source: "example/other-policy",
+      },
+    ];
+    await checkDueAppaGithubSyncs();
+    await checkDueAppaGithubSyncs();
+    expect(runs).toEqual([
+      expect.objectContaining({
+        head_sha: SETUP_COMMIT,
+        conclusion: "skipped",
+        output: expect.objectContaining({
+          title: "Git sync setup in progress",
+        }),
+      }),
+    ]);
+    // A commit pushed onto the setup branch since: not Archestra's commit,
+    // so it gets no skip and waits under the rule.
+    setupHead = "f".repeat(40);
+    await checkDueAppaGithubSyncs();
+    expect(runs).toHaveLength(1);
+    setupHead = SETUP_COMMIT;
+    // Merged and pulled, the include is in place.
+    pull = { merged: true, state: "closed" };
+    await syncAppaGithubPolicy(organizationId);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      sourceCommit: commit,
+      setupPullRequestNumber: null,
+      lastSyncError: null,
+    });
+    expect(await protection("active")).toEqual({
+      folder: "mcp",
+      state: "included",
+    });
+  });
+
   test("a policy that reads repository files no commit was accepted for is not moved, and nothing is created", async () => {
     const root = `include = ["teams/ops.toml"]\n\n${policy}`;
     // Kept as the latest revision without a source: nowhere to read teams/ops.toml from.
@@ -2029,6 +2242,107 @@ describe("APPA GitHub sync", () => {
       .from(schema.tasksTable)
       .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
     expect(tasks).toHaveLength(1);
+  });
+
+  test("auto-merge takes self-service, is off by default, is saved by the action and audited, and the environment variable locks it", async () => {
+    const status = () =>
+      app.inject({ method: "GET", url: "/api/openappa/github-sync" });
+    // A source without self-service: auto-merge has nothing to merge, and a
+    // save that asks for it alone keeps it off.
+    expect(
+      (await configure({ ...source, selfServiceAutoMerge: true })).statusCode,
+    ).toBe(200);
+    expect((await status()).json().selfService).toMatchObject({
+      autoMerge: { enabled: false, setting: false },
+    });
+    const refused = await action({
+      action: "self_service_auto_merge",
+      enabled: true,
+    });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error.message).toMatch(
+      /needs MCP Guardrails Self-Service/,
+    );
+
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const secret = await secretManager().createSecret(
+      { apiToken: privateKey },
+      "test-auto-merge-app",
+    );
+    const githubApp = await GithubAppConfigModel.create({
+      organizationId,
+      name: "Policy App",
+      githubUrl: "https://api.github.com",
+      appId: "123",
+      installationId: randomUUID(),
+      secretId: secret.id,
+    });
+    await OpenAppaGithubSyncModel.save(organizationId, {
+      ...source,
+      githubAppConfigId: githubApp.id,
+      selfService: true,
+    });
+    const on = await action({
+      action: "self_service_auto_merge",
+      enabled: true,
+    });
+    expect(on.statusCode).toBe(200);
+    expect(on.json().selfService.autoMerge).toEqual({
+      enabled: true,
+      setting: true,
+    });
+    expect(on.json().source.selfServiceAutoMerge).toBe(true);
+    await vi.waitFor(async () => {
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, organizationId));
+      expect(
+        rows.some(
+          (row) =>
+            (row.before as { selfServiceAutoMerge?: boolean })
+              ?.selfServiceAutoMerge === false &&
+            (row.after as { selfServiceAutoMerge?: boolean })
+              ?.selfServiceAutoMerge === true,
+        ),
+      ).toBe(true);
+    });
+
+    // While the environment variable sets it, it decides, and the setting
+    // cannot be edited; unset, the saved setting applies again.
+    config.openappa.selfServiceAutoMerge = "disabled";
+    try {
+      const locked = await action({
+        action: "self_service_auto_merge",
+        enabled: false,
+      });
+      expect(locked.statusCode).toBe(400);
+      expect(locked.json().error.message).toBe(
+        "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE sets auto-merge for this deployment. Unset it to edit this setting.",
+      );
+      expect((await status()).json().selfService.autoMerge).toEqual({
+        enabled: false,
+        setting: true,
+        environment: {
+          variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE",
+          value: "disabled",
+        },
+      });
+    } finally {
+      delete config.openappa.selfServiceAutoMerge;
+    }
+    const off = await action({
+      action: "self_service_auto_merge",
+      enabled: false,
+    });
+    expect(off.json().selfService.autoMerge).toEqual({
+      enabled: false,
+      setting: false,
+    });
   });
 
   test("schedule changes persist and successful recent syncs are not due", async () => {

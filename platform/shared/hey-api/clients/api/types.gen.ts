@@ -125485,6 +125485,7 @@ export type GetAppaGithubSyncResponses = {
             setupPullRequestNumber: number | null;
             selfService: boolean;
             selfServiceDirectory: string;
+            selfServiceAutoMerge: boolean;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
@@ -125495,6 +125496,18 @@ export type GetAppaGithubSyncResponses = {
             environment?: {
                 variable: string;
                 value: 'enabled' | 'disabled';
+            };
+            leftoverRule?: {
+                checkName: string;
+                url: string | null;
+            };
+            autoMerge: {
+                enabled: boolean;
+                setting: boolean;
+                environment?: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
             };
         };
         hasPolicy: boolean;
@@ -125518,6 +125531,9 @@ export type UpdateAppaGithubSyncData = {
         action: 'self_service';
         enabled: boolean;
         directory?: string;
+    } | {
+        action: 'self_service_auto_merge';
+        enabled: boolean;
     } | {
         action: 'include_servers';
     };
@@ -125614,6 +125630,7 @@ export type UpdateAppaGithubSyncResponses = {
             setupPullRequestNumber: number | null;
             selfService: boolean;
             selfServiceDirectory: string;
+            selfServiceAutoMerge: boolean;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
@@ -125624,6 +125641,18 @@ export type UpdateAppaGithubSyncResponses = {
             environment?: {
                 variable: string;
                 value: 'enabled' | 'disabled';
+            };
+            leftoverRule?: {
+                checkName: string;
+                url: string | null;
+            };
+            autoMerge: {
+                enabled: boolean;
+                setting: boolean;
+                environment?: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
             };
         };
         hasPolicy: boolean;
@@ -125647,6 +125676,7 @@ export type ConfigureAppaGithubSyncData = {
         gitlabTokenId?: string | null;
         selfService?: boolean;
         selfServiceDirectory?: string;
+        selfServiceAutoMerge?: boolean;
     };
     path?: never;
     query?: never;
@@ -125741,6 +125771,7 @@ export type ConfigureAppaGithubSyncResponses = {
             setupPullRequestNumber: number | null;
             selfService: boolean;
             selfServiceDirectory: string;
+            selfServiceAutoMerge: boolean;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
@@ -125751,6 +125782,18 @@ export type ConfigureAppaGithubSyncResponses = {
             environment?: {
                 variable: string;
                 value: 'enabled' | 'disabled';
+            };
+            leftoverRule?: {
+                checkName: string;
+                url: string | null;
+            };
+            autoMerge: {
+                enabled: boolean;
+                setting: boolean;
+                environment?: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
             };
         };
         hasPolicy: boolean;
@@ -125765,7 +125808,9 @@ export type ConfigureAppaGithubSyncResponse = ConfigureAppaGithubSyncResponses[k
 export type GetAppaRepositoryProtectionData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        fresh?: 'true' | 'false';
+    };
     url: '/api/openappa/github-sync/protection';
 };
 
@@ -125849,7 +125894,7 @@ export type GetAppaRepositoryProtectionResponses = {
             settingsUrl: string;
             installationUrl: string | null;
             permissions: Array<{
-                name: 'contents' | 'pull_requests' | 'checks' | 'administration';
+                name: 'contents' | 'pull_requests' | 'checks';
                 granted: boolean;
             }>;
         };
@@ -125857,8 +125902,28 @@ export type GetAppaRepositoryProtectionResponses = {
             state: 'active' | 'incomplete' | 'missing' | 'needs_permission' | 'unavailable' | 'error';
             url?: string;
             detail?: string;
-            bypassActors?: number;
             checkRule?: 'unposted';
+            settingsUrl?: string;
+            ruleset?: {
+                name: string;
+                target: 'branch';
+                source_type?: 'Repository';
+                source?: string;
+                enforcement: 'active';
+                conditions: {
+                    ref_name: {
+                        include: Array<string>;
+                        exclude: Array<string>;
+                    };
+                };
+                bypass_actors: Array<unknown>;
+                rules: Array<{
+                    type: string;
+                    parameters?: {
+                        [key: string]: unknown;
+                    };
+                }>;
+            };
         };
         include: {
             folder: string;
@@ -125958,7 +126023,7 @@ export type GetAppaGithubAppGrantsResponses = {
         settingsUrl: string;
         installationUrl: string | null;
         permissions: Array<{
-            name: 'contents' | 'pull_requests' | 'checks' | 'administration';
+            name: 'contents' | 'pull_requests' | 'checks';
             granted: boolean;
         }>;
     } | null;
@@ -126066,6 +126131,7 @@ export type CreateAppaGithubRepositoryData = {
         replace?: boolean;
         selfService?: boolean;
         selfServiceDirectory?: string;
+        selfServiceAutoMerge?: boolean;
     };
     path?: never;
     query?: never;
@@ -126160,6 +126226,7 @@ export type CreateAppaGithubRepositoryResponses = {
             setupPullRequestNumber: number | null;
             selfService: boolean;
             selfServiceDirectory: string;
+            selfServiceAutoMerge: boolean;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
@@ -126170,6 +126237,18 @@ export type CreateAppaGithubRepositoryResponses = {
             environment?: {
                 variable: string;
                 value: 'enabled' | 'disabled';
+            };
+            leftoverRule?: {
+                checkName: string;
+                url: string | null;
+            };
+            autoMerge: {
+                enabled: boolean;
+                setting: boolean;
+                environment?: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
             };
         };
         hasPolicy: boolean;
@@ -126185,7 +126264,6 @@ export type StartAppaGithubAppData = {
     body: {
         githubUrl: string;
         owner: string;
-        selfService?: boolean;
     };
     path?: never;
     query?: never;

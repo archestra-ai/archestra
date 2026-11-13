@@ -167,6 +167,58 @@ describe("Azure resource capability evidence", () => {
     });
   });
 
+  test("a Claude deployment is rejected on Chat with guidance and allowed on Responses", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "synthetic-key" } });
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "azure",
+      baseUrl,
+    });
+    // The alias says nothing about Claude; the backing model does.
+    server.use(
+      http.get(`${baseUrl}/deployments`, () =>
+        HttpResponse.json({
+          data: [{ id: "team-assistant", model: "claude-haiku-5-5" }],
+        }),
+      ),
+    );
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: key.id,
+      provider: "azure",
+      apiKeyValue: "synthetic-key",
+      baseUrl,
+    });
+
+    const chat = validateAzureModelOperation({
+      providerApiKeyId: key.id,
+      modelId: "team-assistant",
+      operation: "chat",
+    });
+    await expect(chat).rejects.toMatchObject({ statusCode: 400 });
+    const message = await chat.catch((error: Error) => error.message);
+    expect(message).toContain('"team-assistant" runs claude-haiku-5-5');
+    expect(message).toContain("POST /v1/model-router/responses");
+    // The resource's own Anthropic URL, ready to paste.
+    expect(message).toContain(
+      "base URL https://scope5.services.ai.azure.com/anthropic,",
+    );
+    expect(message).toContain('call "anthropic:team-assistant"');
+    expect(message).toContain(
+      "/llm-proxy/providers/anthropic#anthropic-on-microsoft-foundry",
+    );
+    expect(
+      await validateAzureModelOperation({
+        providerApiKeyId: key.id,
+        modelId: "team-assistant",
+        operation: "responses",
+      }),
+    ).toMatchObject({ status: "known", operations: ["responses"] });
+  });
+
   test("explicit deployment flags classify missing backing names without trusting aliases", async ({
     makeOrganization,
     makeSecret,

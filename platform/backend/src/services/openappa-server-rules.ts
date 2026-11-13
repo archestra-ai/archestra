@@ -3,6 +3,7 @@ import { isBuiltInCatalogId, slugifyMcpServerName } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import ToolModel from "@/models/tool";
 import UserModel from "@/models/user";
@@ -13,8 +14,10 @@ import {
   includedFileErrors,
   includesServerRules,
   includesServerRulesFolder,
+  isServerRulesBranch,
   parsePolicyToml,
   repositoryIncludePaths,
+  serverRulesBranch,
   serverRulesFolderOf,
   serverRulesInclude,
   serverRulesPath,
@@ -34,9 +37,18 @@ import {
   resolveOpenAppaGithubAccess,
 } from "@/services/openappa-github-access";
 import {
-  hasOwnFile,
+  checkIntegrationId,
+  heldMergeReason,
+  listedNames,
+  ownersAsNamedFor,
+  ownersNotEditable,
   POLICY_CHECK_NAME,
+  RETRY_REFUSED_MERGE,
+  rulesFileRefusal,
+  rulesFileServers,
   selfServiceActive,
+  selfServiceAutoMergeActive,
+  storedPullCheck,
   syncAppaGithubPolicy,
 } from "@/services/openappa-github-sync";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -55,18 +67,8 @@ import { ApiError } from "@/types";
  * decide, and Git sync applies it once merged. Nothing is stored here.
  */
 
-/** Pull request branches this deployment opens for a server's rules. */
-const BRANCH_PREFIX = "archestra/openappa-server-";
 /** The branch of the pull request that includes the self-service folder. */
 const INCLUDE_BRANCH = "archestra/openappa-self-service";
-
-/** Whether a branch is one this deployment opened for this server's rules. */
-function isServerBranch(prefix: string, branch: string): boolean {
-  const start = `${BRANCH_PREFIX}${prefix}-`;
-  return (
-    branch.startsWith(start) && /^[0-9a-f]{8}$/.test(branch.slice(start.length))
-  );
-}
 
 type Caller = { organizationId: string; userId: string };
 
@@ -103,6 +105,8 @@ export async function getServerRules(params: Caller & { catalogId: string }) {
     },
     canEdit: server.canEdit,
     path: server.path,
+    sharedWith: server.sharedWith,
+    hiddenCopies: server.hiddenCopies,
     included,
     content: accepted,
     // A server without a file yet starts from one that names every tool.
@@ -126,10 +130,12 @@ export async function getServerRules(params: Caller & { catalogId: string }) {
     instruction: !repositoryView(source)
       ? "Git sync is not set up, so server rules cannot be proposed. Tell the user an administrator sets it up under Settings → Guardrails."
       : !server.canEdit
-        ? "The user may read these rules but not propose a change: that takes edit access to this MCP server in the MCP registry."
-        : accepted === null
-          ? `This server has no rules file of its own yet${rules.length > 0 ? "; `rules` lists the rules other files of the policy keep for its tools, which stay where they are" : ""}. Start from \`starter\`, which lists every tool with the organization's defaults; write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees.`
-          : "`rules` lists every rule for this server's tools across the policy, with the file each comes from; only the server's own file at `path` is changed here. To change it, write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees.",
+        ? `The user may read these rules but not propose a change: that takes edit access to ${server.needs(unseenServers("the user"))} in the MCP registry.${sharedSentence(server)}`
+        : `${
+            accepted === null
+              ? `This server has no rules file of its own yet${rules.length > 0 ? "; `rules` lists the rules other files of the policy keep for its tools, which stay where they are" : ""}. Start from \`starter\`, which lists every tool with the organization's defaults; write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees.`
+              : "`rules` lists every rule for this server's tools across the policy, with the file each comes from; only the server's own file at `path` is changed here. To change it, write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees."
+          }${sharedSentence(server)}`,
     expectedCommit: source?.sourceCommit ?? null,
   };
 }
@@ -217,7 +223,7 @@ export async function proposeServerRulesChange(
   const body = [
     params.summary.trim(),
     "",
-    `Requested in ${archestraMcpBranding.appName} by ${requester?.name ?? "a user"}${requester?.email ? ` (${requester.email})` : ""}, who may edit the MCP server ${change.server.name} in the MCP registry.`,
+    `Requested in ${archestraMcpBranding.appName} by ${requester?.name ?? "a user"}${requester?.email ? ` (${requester.email})` : ""}, who may edit ${await ownersAsNamedFor({ organizationId: params.organizationId, userId: params.userId, servers: change.server.owners })} in the MCP registry.`,
     `This changes \`${change.server.path}\`${change.rootChanged ? `, and adds \`${change.include}\` to \`${change.source.path}\`'s include list, so every MCP server's own rules file applies from then on` : ""}. It applies once merged and pulled by Git sync.`,
   ].join("\n");
   const files = [
@@ -229,7 +235,10 @@ export async function proposeServerRulesChange(
       ? [{ path: change.source.path, content: change.rootAfter }]
       : []),
   ];
-  const head = `${BRANCH_PREFIX}${change.server.prefix}-${randomUUID().slice(0, 8)}`;
+  const head = serverRulesBranch(
+    change.server.prefix,
+    randomUUID().slice(0, 8),
+  );
   // The commit names the person who asked, in a trailer GitHub's signature
   // for the App covers: the policy check reads it from there.
   const opened = await openGithubPull({
@@ -246,50 +255,300 @@ export async function proposeServerRulesChange(
     ...opened,
     repo: change.source.repo,
     ...change.view,
-    instruction: `Give the user the link. Once its ${POLICY_CHECK_NAME} check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does; no other approval is needed. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.`,
+    instruction: selfServiceAutoMergeActive(change.source)
+      ? `Give the user the link. The pull request merges by itself within about a minute of its ${POLICY_CHECK_NAME} check passing; nobody needs to merge it, and Git sync then applies it. Follow it now: call get_guardrails_server_rules_change_status with this number, wait=true and the last phase as since, tell the user each change in one short sentence, and keep calling until done is true. Then say whether the rules are active, or what went wrong and what to do.`
+      : `Give the user the link. Once its ${POLICY_CHECK_NAME} check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does; no other approval is needed. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.`,
   };
 }
 
-/** Whether a server's rules pull request is merged, and applied here yet. */
+/**
+ * How long one status call may wait for the pull request to move on, and
+ * how often it looks. The wait stays well inside the minute an MCP client
+ * gives a call, GitHub's own answers included.
+ */
+const STATUS_WAIT = 40 * 1000;
+const STATUS_POLL = 5 * 1000;
+
+/** Where a server's rules pull request stands, from opened to applied. */
+export const CHANGE_PHASES = [
+  "check_pending",
+  "check_failed",
+  "check_passed",
+  "merge_pending",
+  "merge_refused",
+  "merged",
+  "applied",
+  "closed",
+] as const;
+export type ChangePhase = (typeof CHANGE_PHASES)[number];
+
+/** Phases nothing moves on from by itself: the Keeper stops following there. */
+const SETTLED: ReadonlySet<ChangePhase> = new Set([
+  "check_failed",
+  "check_passed",
+  "merge_refused",
+  "applied",
+  "closed",
+]);
+
+/**
+ * Where a server's rules pull request stands: its policy check, whether the
+ * App merges it or someone must, the merge, and whether Git sync has applied
+ * it. With `wait`, the call returns once the phase moves on from `since` (or
+ * from the phase first seen), or settles, or after some forty seconds; the
+ * Keeper follows an auto-merged pull request by calling it again until `done`.
+ */
 export async function getServerRulesChangeStatus(
-  params: Caller & { catalogId: string; number: number },
+  params: Caller & {
+    catalogId: string;
+    number: number;
+    wait?: boolean;
+    since?: ChangePhase;
+    /** How long to wait and how often to look; tests shorten them. */
+    waitMs?: number;
+    pollMs?: number;
+  },
 ) {
-  const source = await requireSource(params.organizationId);
+  let source = await requireSource(params.organizationId);
   const server = await serverFor(params, serverRulesFolderOf(source));
-  const { token, api } = await githubWriter(source);
+  // The check posted on the head is read too, which takes Checks.
+  const { token, api } = await githubWriter(source, { checks: "read" });
   const base = `${api}/repos/${source.repo}`;
+  const appId = await checkIntegrationId(source);
+  const poll = params.pollMs ?? STATUS_POLL;
+  const deadline =
+    Date.now() + (params.wait ? (params.waitMs ?? STATUS_WAIT) : 0);
+  let baseline = params.since ?? null;
+  let last: Awaited<ReturnType<typeof readChangeStatus>> | undefined;
+  for (let read = 0; ; read += 1) {
+    // Git sync may have applied the merge since the last look.
+    if (read > 0) source = await requireSource(params.organizationId);
+    // No look starts once the wait is over: the last one's answer stands.
+    if (last && Date.now() >= deadline) return last;
+    let status: Awaited<ReturnType<typeof readChangeStatus>>;
+    try {
+      status = await readChangeStatus({
+        ...params,
+        source,
+        prefix: server.prefix,
+        token,
+        base,
+        appId,
+        // Every look in a wait is bounded by what the wait has left.
+        ...(params.wait ? { deadline } : {}),
+      });
+    } catch (error) {
+      // A host that fails for now is asked again while the wait lasts; a
+      // refusal of the request itself (no such pull request) is not. Past
+      // the wait, what the last look found is the answer.
+      const transient =
+        (error instanceof ApiError && error.statusCode >= 500) ||
+        (error instanceof Error &&
+          ["TimeoutError", "AbortError"].includes(error.name));
+      if (!transient) throw error;
+      if (!params.wait || Date.now() + poll >= deadline) {
+        if (last) return last;
+        throw error;
+      }
+      await pause(poll, deadline);
+      continue;
+    }
+    last = status;
+    baseline ??= status.phase;
+    // No look is started that the wait has no room for.
+    if (
+      !params.wait ||
+      status.done ||
+      status.phase !== baseline ||
+      Date.now() + poll >= deadline
+    )
+      return status;
+    await pause(poll, deadline);
+  }
+}
+
+function pause(ms: number, deadline: number): Promise<void> {
+  return new Promise((resolve) =>
+    setTimeout(resolve, Math.max(0, Math.min(ms, deadline - Date.now()))),
+  );
+}
+
+async function readChangeStatus(params: {
+  organizationId: string;
+  number: number;
+  source: Source;
+  prefix: string;
+  token: string;
+  base: string;
+  appId: number | undefined;
+  /** When the caller's wait ends: no request outlives it. */
+  deadline?: number;
+}) {
+  const { source, token, base } = params;
+  // One signal for the look: GitHub's usual time, or what the wait has left.
+  const signal =
+    params.deadline !== undefined
+      ? AbortSignal.timeout(
+          Math.min(15_000, Math.max(1, params.deadline - Date.now())),
+        )
+      : undefined;
   const pull = await github<{
     number: number;
     html_url: string;
     state: string;
     merged?: boolean;
+    merged_at?: string | null;
     merge_commit_sha?: string | null;
-    head?: { ref?: string };
-  }>({ token, url: `${base}/pulls/${params.number}` });
-  if (!isServerBranch(server.prefix, pull.head?.ref ?? ""))
+    head?: { ref?: string; sha?: string };
+  }>({ token, url: `${base}/pulls/${params.number}`, signal });
+  if (!isServerRulesBranch(pull.head?.ref ?? "", params.prefix))
     throw new ApiError(404, "No rules change for this server has that number");
   const merged = pull.merged === true && !!pull.merge_commit_sha;
-  // Applied once the accepted commit contains the merge.
-  const applied =
-    merged &&
-    (source.sourceCommit === pull.merge_commit_sha ||
+  const autoMerge = selfServiceAutoMergeActive(source);
+  const answer = (phase: ChangePhase, extra: StatusExtra = {}) => ({
+    number: pull.number,
+    url: pull.html_url,
+    state: merged ? "merged" : pull.state === "open" ? "open" : "closed",
+    applied: phase === "applied",
+    phase,
+    done: SETTLED.has(phase) || !!extra.syncFailed,
+    autoMerge,
+    ...extra,
+    instruction: changeInstruction(phase, extra),
+  });
+  if (merged) {
+    // Applied once the accepted commit contains the merge.
+    const applied =
+      source.sourceCommit === pull.merge_commit_sha ||
       ["ahead", "identical"].includes(
         (
           await github<{ status?: string }>({
             token,
             url: `${base}/compare/${pull.merge_commit_sha}...${source.sourceCommit}`,
+            signal,
           })
         ).status ?? "",
-      ));
-  // A pull applies what is merged; queue one rather than wait for the schedule.
-  if (merged && !applied)
+      );
+    if (applied) return answer("applied");
+    // A pull since the merge that failed is what keeps it from applying:
+    // nothing moves on until that is put right.
+    const mergedAt = pull.merged_at ? Date.parse(pull.merged_at) : Number.NaN;
+    if (
+      source.lastSyncError &&
+      source.lastSyncedAt &&
+      (Number.isNaN(mergedAt) || source.lastSyncedAt.getTime() > mergedAt)
+    )
+      return answer("merged", { syncFailed: { reason: source.lastSyncError } });
+    // A pull applies what is merged; queue one rather than wait for the schedule.
     await OpenAppaGithubSyncModel.enqueue(params.organizationId);
-  return {
-    number: pull.number,
-    url: pull.html_url,
-    state: merged ? "merged" : pull.state === "open" ? "open" : "closed",
-    applied: merged ? applied : false,
+    return answer("merged");
+  }
+  if (pull.state !== "open") return answer("closed");
+  const head = pull.head?.sha ?? "";
+  // The check this deployment posted on the head, if it has yet.
+  const runs = /^[a-f0-9]{40}$/.test(head)
+    ? await github<{
+        check_runs?: Array<{
+          status?: string;
+          conclusion?: string | null;
+          completed_at?: string | null;
+          output?: { title?: string | null; summary?: string | null };
+        }>;
+      }>({
+        token,
+        url: `${base}/commits/${head}/check-runs?check_name=${encodeURIComponent(POLICY_CHECK_NAME)}${params.appId ? `&app_id=${params.appId}` : ""}&per_page=10`,
+        signal,
+      }).then((listed) => listed.check_runs ?? [])
+    : [];
+  const run = runs.find((entry) => entry.status === "completed");
+  if (!run) return answer("check_pending", { check: { state: "pending" } });
+  // Only success counts for the required check; skipped, cancelled and the
+  // rest leave the pull request where a failure does.
+  const check = {
+    state: run.conclusion === "success" ? "passed" : "failed",
+    ...(run.output?.title ? { title: run.output.title } : {}),
+    ...(run.output?.summary
+      ? { summary: run.output.summary.slice(0, 2000) }
+      : {}),
   };
+  if (check.state === "failed") return answer("check_failed", { check });
+  if (!autoMerge) return answer("check_passed", { check });
+  const merge = pull.merge_commit_sha;
+  const stored = await storedPullCheck(source, {
+    head,
+    result: merge && /^[a-f0-9]{40}$/.test(merge) ? merge : head,
+  });
+  // The App holds off the whole repository when it may not merge there:
+  // that stands over whatever one pull request's merge met.
+  const held = await heldMergeReason(source);
+  if (held)
+    return answer("merge_refused", {
+      check,
+      mergeRefused: { reason: held, at: new Date().toISOString() },
+    });
+  if (stored?.mergeRefusedAt !== undefined) {
+    const mergeRefused = {
+      reason: stored.mergeRefusedReason ?? "GitHub refused the merge",
+      at: new Date(stored.mergeRefusedAt).toISOString(),
+    };
+    // A check just posted can take GitHub a moment to count: the first
+    // refusal is tried again next minute, and only a second one stands.
+    return answer(
+      (stored.mergeRefusals ?? 1) > 1 ? "merge_refused" : "merge_pending",
+      { check, mergeRefused },
+    );
+  }
+  // A merge that has not come for as long as a refusal holds is not waited
+  // on any longer: people take it from here, and the App keeps trying.
+  const completedAt = run.completed_at ? Date.parse(run.completed_at) : NaN;
+  if (
+    !Number.isNaN(completedAt) &&
+    Date.now() - completedAt > RETRY_REFUSED_MERGE
+  )
+    return answer("merge_refused", {
+      check,
+      mergeRefused: {
+        reason:
+          "the GitHub App has not merged it since the check passed; it keeps trying every minute",
+        at: new Date().toISOString(),
+      },
+    });
+  return answer("merge_pending", { check });
+}
+
+type StatusExtra = {
+  check?: { state: string; title?: string; summary?: string };
+  mergeRefused?: { reason: string; at: string };
+  /** Git sync failed on a pull since the merge: the rules are not active. */
+  syncFailed?: { reason: string };
+};
+
+/** What the Keeper does next at each phase, and what it tells the user. */
+function changeInstruction(phase: ChangePhase, extra: StatusExtra): string {
+  const again = (since: ChangePhase) =>
+    `Call this again with wait=true and since="${since}", and tell the user only when something changes.`;
+  switch (phase) {
+    case "check_pending":
+      return `The ${POLICY_CHECK_NAME} check posts within a minute. ${again(phase)}`;
+    case "check_failed":
+      return `The ${POLICY_CHECK_NAME} check failed, so this pull request cannot merge and nothing is applied. Tell the user what failed in plain words${extra.check?.title ? ` (${extra.check.title})` : ""}, then offer to fix the file and propose it again, which opens a new pull request. Stop following this one.`;
+    case "check_passed":
+      return `The ${POLICY_CHECK_NAME} check passed. The user merges the pull request on GitHub themselves, or anyone with write access to the repository does; Git sync then applies it. Tell the user; follow it further only if they ask.`;
+    case "merge_pending":
+      return extra.mergeRefused
+        ? `The ${POLICY_CHECK_NAME} check passed; GitHub refused the first merge (${extra.mergeRefused.reason}), which it does while the check is still being counted, and the App tries again within a minute. ${again(phase)}`
+        : `The ${POLICY_CHECK_NAME} check passed, and the App merges the pull request within about a minute. ${again(phase)}`;
+    case "merge_refused":
+      return `The App did not merge the pull request${extra.mergeRefused ? `: ${extra.mergeRefused.reason}` : ""}. It stays open and nothing is applied. Tell the user in plain words why, and that someone with write access can merge it on GitHub meanwhile; the App tries again in fifteen minutes. Stop following it.`;
+    case "merged":
+      return extra.syncFailed
+        ? `Merged, but Git sync could not apply it: ${extra.syncFailed.reason} The rules are not active until an administrator puts the policy repository right; the Git sync card shows the same error. Tell the user, and stop here.`
+        : `Merged; Git sync is pulling it now. ${again(phase)}`;
+    case "applied":
+      return "Done: the pull request is merged and the rules are active. Tell the user, and stop here.";
+    case "closed":
+      return "The pull request was closed without merging, so nothing is applied. Tell the user; propose the change again if they still want it.";
+  }
 }
 
 // ===
@@ -323,14 +582,6 @@ async function serverFor(
     scope: catalog.id,
     action: "read",
   });
-  // The registry's own edit rule: whoever may edit the server may propose its rules.
-  const canEdit = await ResourcePermissions.allows({
-    organizationId,
-    userId,
-    resource: "mcpRegistry",
-    scope: catalog.id,
-    action: "update",
-  });
   // SPDX-SnippetEnd
   const tools = (await ToolModel.getToolNamesByCatalogIds([catalog.id]))
     .map((tool) => tool.name)
@@ -340,27 +591,85 @@ async function serverFor(
       409,
       `${catalog.name} has no tools yet. Connect it first, so its rules have tools to name.`,
     );
-  // The file is named by the server's own slug, and only when every one of
-  // its tools carries that prefix and no other server's tool does: a server
-  // must not reach another's file, or the built-in tools, through its name.
+  // The file is named by the server's own slug, and governs every server
+  // whose tools carry that prefix: those servers share it.
   const prefix = slugifyMcpServerName(catalog.name);
-  const owners = await catalogToolPrefixes(organizationId, {
+  const prefixes = await catalogToolPrefixes(organizationId, {
     targets: [prefix],
     catalogIds: [catalog.id],
   });
-  if (!hasOwnFile(catalog, owners))
-    throw new ApiError(
-      409,
-      `${catalog.name}'s tools do not all carry its own name prefix, ${prefix}__, or another server's tools carry it too, so it has no rules file of its own`,
-    );
+  const refusal = rulesFileRefusal({ catalog, tools, prefixes });
+  if (refusal) throw new ApiError(409, refusal);
+  const servers = await rulesFileServers(prefix, prefixes);
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // The registry's own edit rule: whoever may edit every server that owns
+  // the file may propose its rules.
+  const notEditable = await ownersNotEditable({
+    organizationId,
+    userId,
+    servers,
+  });
+  // SPDX-SnippetEnd
+  const readable = new Set(
+    await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+      userId,
+      false,
+      organizationId,
+    ),
+  );
+  const others = servers.filter((server) => server.id !== catalog.id);
   return {
     id: catalog.id,
     name: catalog.name,
     prefix,
     path: serverRulesPath(folder, prefix),
-    canEdit,
+    canEdit: notEditable.length === 0,
+    /**
+     * The owners the caller may not edit, named when the caller may see
+     * them; the rest counted as `hidden` words them.
+     */
+    needs: (hidden: (count: number) => string) => {
+      const named = notEditable
+        .filter((server) => server.id === catalog.id || readable.has(server.id))
+        .map((server) => server.name);
+      const unseen = notEditable.length - named.length;
+      return listedNames([...named, ...(unseen > 0 ? [hidden(unseen)] : [])]);
+    },
+    owners: servers.filter((server) => server.owner),
+    sharedWith: others.filter((server) => readable.has(server.id)),
+    hiddenCopies: others.filter(
+      (server) => server.scope === "personal" && !readable.has(server.id),
+    ).length,
     tools,
   };
+}
+
+/** Owners of a file the caller cannot see, as a sentence counts them. */
+function unseenServers(who: string): (count: number) => string {
+  return (count) =>
+    count === 1
+      ? `an MCP server ${who} cannot see`
+      : `${count} MCP servers ${who} cannot see`;
+}
+
+/** What the Keeper says about a file other servers share, if any. */
+function sharedSentence(server: {
+  sharedWith: Array<{ name: string }>;
+  hiddenCopies: number;
+}): string {
+  const names = [
+    ...server.sharedWith.map((other) => other.name),
+    ...(server.hiddenCopies > 0
+      ? [
+          `${server.hiddenCopies} personal ${server.hiddenCopies === 1 ? "copy" : "copies"} the user cannot see`,
+        ]
+      : []),
+  ];
+  return names.length === 0
+    ? ""
+    : ` The file is shared: its rules also govern ${listedNames(names)}, whose tools carry the same prefix.`;
 }
 
 /** The checks a preview and a proposal share, and what the change would do. */
@@ -378,7 +687,7 @@ async function checkedChange(
   if (!server.canEdit)
     throw new ApiError(
       403,
-      `You may propose ${server.name}'s Guardrails rules only if you may edit it in the MCP registry`,
+      `You may propose ${server.name}'s Guardrails rules only if you may edit ${server.needs(unseenServers("you"))} in the MCP registry`,
     );
   if (source.sourceCommit !== params.expectedCommit)
     throw new ApiError(
@@ -584,6 +893,29 @@ async function includeSituation(params: {
     githubAppConfigId: source.githubAppConfigId,
   });
   const base = `${api}/repos/${repo}`;
+  // A setup pull request still waiting carries the policy the connect
+  // seeded, the folder included when self-service was on: nothing else
+  // opens until it merges, and the card points at it meanwhile.
+  if (source.setupPullRequestNumber) {
+    const setup = await setupPullFor({
+      token,
+      base,
+      number: source.setupPullRequestNumber,
+    });
+    if (setup) {
+      const atSetup = await rootAt({
+        token,
+        base,
+        path: source.path,
+        ref: setup.headSha,
+      });
+      if (atSetup !== null && includesServerRulesFolder(atSetup, folder))
+        return {
+          state: "pull_open",
+          pull: { number: setup.number, url: setup.url },
+        };
+    }
+  }
   const branch =
     source.ref ??
     (await github<{ default_branch: string }>({ token, url: base }))
@@ -614,6 +946,33 @@ async function includeSituation(params: {
   return atHead !== null && includesServerRulesFolder(atHead, folder)
     ? { state: "pull_open", pull: { number: pull.number, url: pull.url } }
     : { state: "missing", stale: { number: pull.number, url: pull.url } };
+}
+
+/**
+ * The setup pull request while it is open: its head to read the seeded
+ * policy at, and its page. Merged or closed, there is nothing to point at.
+ */
+async function setupPullFor(params: {
+  token: string;
+  base: string;
+  number: number;
+}): Promise<{ number: number; url: string; headSha: string } | null> {
+  const pull = await github<{
+    state?: string;
+    html_url?: string;
+    head?: { sha?: string };
+  }>({
+    token: params.token,
+    url: `${params.base}/pulls/${params.number}`,
+  }).catch(() => {
+    throw new ApiError(
+      502,
+      "Could not read the setup pull request on GitHub; try again",
+    );
+  });
+  return pull.state === "open" && pull.html_url && pull.head?.sha
+    ? { number: params.number, url: pull.html_url, headSha: pull.head.sha }
+    : null;
 }
 
 /**
@@ -653,6 +1012,29 @@ export async function ensureSelfServiceInclude(params: Caller) {
   const saved = await OpenAppaGithubSyncModel.find(params.organizationId);
   if (saved?.interval && saved.repo && saved.path && !saved.sourceCommit)
     await syncAppaGithubPolicy(params.organizationId);
+  // A connect that proposed the current policy in a setup pull request has
+  // no accepted commit until it merges: the seed carries the include, so
+  // nothing opens, and a seed without it waits for the merge.
+  const pending = await OpenAppaGithubSyncModel.find(params.organizationId);
+  if (
+    pending?.interval &&
+    pending.repo &&
+    pending.path &&
+    pending.setupPullRequestNumber &&
+    !pending.sourceCommit
+  ) {
+    if (!selfServiceActive(pending)) throw new ApiError(409, SELF_SERVICE_OFF);
+    const situation = await includeSituation({
+      organizationId: params.organizationId,
+      source: pending,
+      folder: serverRulesFolderOf(pending),
+    });
+    if (situation.state !== "missing") return null;
+    throw new ApiError(
+      409,
+      "The setup pull request that carries the current policy has not merged yet. Merge it first; the include follows.",
+    );
+  }
   const source = await requireSource(params.organizationId);
   const folder = serverRulesFolderOf(source);
   const entry = serverRulesInclude(folder);
@@ -720,9 +1102,9 @@ function serverRulesReadme(folder: string, policyPath: string): string {
   return [
     "# Guardrails rules per MCP server",
     "",
-    `Each MCP server's Guardrails rules live here, one \`<tool prefix>.toml\` file per server, which \`${policyFile}\` includes through \`${folder}/*.toml\`. A file holds rules for its own server's tools only; a rule in \`${policyFile}\` for the same tool wins.`,
+    `Each MCP server's Guardrails rules live here, one \`<tool prefix>.toml\` file per tool prefix, which \`${policyFile}\` includes through \`${folder}/*.toml\`. A file holds rules only for the tools that carry its prefix, and servers whose tools share a prefix share its file. A rule in \`${policyFile}\` for the same tool wins.`,
     "",
-    `The people who may edit a server in the ${archestraMcpBranding.appName} MCP registry change its file through **Edit Guardrails rules** there, which opens a pull request. The ${archestraMcpBranding.appName} policy check on each pull request confirms the change.`,
+    `The people who may edit a server in the ${archestraMcpBranding.appName} MCP registry change its file through **Edit Guardrails** there, which opens a pull request. A shared file takes edit access to each server shared with a team or the organization. The ${archestraMcpBranding.appName} policy check on each pull request confirms the change.`,
     "",
   ].join("\n");
 }
@@ -931,10 +1313,13 @@ async function githubWriter(
     Source,
     "organizationId" | "repo" | "githubPatId" | "githubAppConfigId"
   >,
+  /** What the job needs besides writing contents and pull requests. */
+  more: { checks?: "read" } = {},
 ) {
   const { token, api } = await resolveOpenAppaGithubAccess(source, {
     contents: "write",
     pull_requests: "write",
+    ...more,
   });
   if (!token)
     throw new ApiError(
@@ -955,6 +1340,7 @@ async function github<T = unknown>(params: {
   url: string;
   method?: "GET" | "POST" | "PATCH";
   body?: object;
+  signal?: AbortSignal;
 }): Promise<T> {
   return githubJson<T>({ ...params, errors: githubPolicyChangeErrors });
 }

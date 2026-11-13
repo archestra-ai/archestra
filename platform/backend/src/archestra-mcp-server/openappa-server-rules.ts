@@ -2,6 +2,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import config from "@/config";
 import {
+  CHANGE_PHASES,
   getServerRules,
   getServerRulesChangeStatus,
   previewServerRulesChange,
@@ -30,7 +31,7 @@ const FileSchema = z
   .string()
   .max(256 * 1024)
   .describe(
-    "The complete file: `[policy]` with `version = 2`, then [[policy.tool]] rules for this server's tools only and any [[policy.annotator]] they use, named <tool prefix>.<name>.",
+    "The complete file: `[policy]` with `version = 2`, then [[policy.tool]] rules for tools that carry the file's tool prefix only and any [[policy.annotator]] they use, named <tool prefix>.<name>.",
   );
 
 const ExpectedCommitSchema = z
@@ -44,7 +45,7 @@ const registry = defineArchestraTools([
     title: "Read an MCP server's Guardrails rules",
     annotations: { readOnlyHint: true },
     description:
-      "Read one MCP server's own Guardrails rules: its file in the Git sync policy repository's self-service folder (`path`, e.g. mcp/<tool prefix>.toml), as merged at the accepted commit, or null when it has none yet (then `starter` is a first version that names every tool, to write the file from), whether appa.toml includes it (by name or through mcp/*.toml), the server's tools, every rule the policy keeps for those tools wherever it keeps it (`rules`: each with the file it comes from, the root's first since they win, then each included file, the server's own among them), the names of the root's own (`rootRules`), and the organization's authorities and sanitizers the file can use but not declare (`organizationHelpers`: names, tags and permits). Anyone who may open the server in the MCP registry may read them; `canEdit` says whether the caller may propose a change, which takes edit access to the server in the registry, not a Guardrails permission. Use this, not get_guardrails_policy, when the user asks to change one server's rules.",
+      "Read one MCP server's own Guardrails rules: its file in the Git sync policy repository's self-service folder (`path`, e.g. mcp/<tool prefix>.toml), as merged at the accepted commit, or null when it has none yet (then `starter` is a first version that names every tool, to write the file from), whether appa.toml includes it (by name or through mcp/*.toml), the server's tools, every rule the policy keeps for those tools wherever it keeps it (`rules`: each with the file it comes from, the root's first since they win, then each included file, the server's own among them), the names of the root's own (`rootRules`), and the organization's authorities and sanitizers the file can use but not declare (`organizationHelpers`: names, tags and permits). A file governs every MCP server whose tools carry its prefix: `sharedWith` lists the other servers the caller may see, and `hiddenCopies` counts members' personal copies they cannot. Anyone who may open the server in the MCP registry may read them; `canEdit` says whether the caller may propose a change, which takes edit access in the registry to each shared server that owns the file (members' personal copies only follow it), not a Guardrails permission. Use this, not get_guardrails_policy, when the user asks to change one server's rules.",
     schema: z.strictObject({ mcpServerId: ServerSchema }),
     handler: ({ args, context }) =>
       answered(async () => {
@@ -59,7 +60,7 @@ const registry = defineArchestraTools([
     title: "Preview an MCP server's Guardrails rules change",
     annotations: { readOnlyHint: true },
     description:
-      "Check a proposed rules file for one MCP server and return its `diff`, plus `rootChange` when appa.toml does not include the self-service folder yet and gains its `<folder>/*.toml` entry, once for every server. The whole organization policy is validated with the file folded in, as Git sync will compose it after the merge. This saves and opens nothing. Pass the complete file and `expectedCommit` from get_guardrails_server_rules. Rules may name only this server's tools, or all of them as `<tool prefix>__*` (each tool the file has no rule of its own for), annotators are named `<tool prefix>.<name>`, and the file declares no authority or sanitizer: it reaches the organization's through an attention mark an authority permits, or a tag, and a tool_output sanitizer also needs the tool under [policy.deployment] confined_results. Git sync refuses any other file, whoever merged it. Root rules for the same tool keep priority. Explain what the change does to agents, then ask the user before proposing it.",
+      "Check a proposed rules file for one MCP server and return its `diff`, plus `rootChange` when appa.toml does not include the self-service folder yet and gains its `<folder>/*.toml` entry, once for every server. The whole organization policy is validated with the file folded in, as Git sync will compose it after the merge. This saves and opens nothing. Pass the complete file and `expectedCommit` from get_guardrails_server_rules. Rules may name only tools that carry the file's tool prefix, or all of them as `<tool prefix>__*` (each tool the file has no rule of its own for), annotators are named `<tool prefix>.<name>`, and the file declares no authority or sanitizer: it reaches the organization's through an attention mark an authority permits, or a tag, and a tool_output sanitizer also needs the tool under [policy.deployment] confined_results. Git sync refuses any other file, whoever merged it. Root rules for the same tool keep priority. Explain what the change does to agents, then ask the user before proposing it.",
     schema: z.strictObject({
       mcpServerId: ServerSchema,
       content: FileSchema,
@@ -81,7 +82,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: "propose_guardrails_server_rules_change",
     title: "Propose an MCP server's Guardrails rules change",
-    description: `Open a pull request on the policy repository that changes this one MCP server's rules file, and adds the self-service folder's \`<folder>/*.toml\` entry to appa.toml's include list when no server file is included yet. Call preview_guardrails_server_rules_change first with the same content and expectedCommit, and only after the user agreed. Nothing applies until the request is merged and Git sync pulls it. Its ${config.openappa.policyCheckName} check verifies the policy and that the user may change this server's rules, so the user's own merge is enough; no one else's approval is needed. Give the user the link from \`url\`.`,
+    description: `Open a pull request on the policy repository that changes one MCP server's rules file, which governs every server whose tools carry its prefix, and adds the self-service folder's \`<folder>/*.toml\` entry to appa.toml's include list when no server file is included yet. Call preview_guardrails_server_rules_change first with the same content and expectedCommit, and only after the user agreed. Nothing applies until the request is merged and Git sync pulls it. Its ${config.openappa.policyCheckName} check verifies the policy and that the user may edit each shared server that owns the file, so the user's own merge is enough; no one else's approval is needed. Give the user the link from \`url\`.`,
     schema: z.strictObject({
       mcpServerId: ServerSchema,
       content: FileSchema,
@@ -111,13 +112,22 @@ const registry = defineArchestraTools([
   }),
   defineArchestraTool({
     shortName: "get_guardrails_server_rules_change_status",
-    title: "Check an MCP server's Guardrails rules pull request",
+    title: "Follow an MCP server's Guardrails rules pull request",
     annotations: { readOnlyHint: true },
-    description:
-      "Check a pull request propose_guardrails_server_rules_change opened for this server: `state` (open, merged or closed) and `applied`, whether Git sync has pulled the merge, so new calls follow it. A merged request not yet applied queues a sync.",
+    description: `Where a pull request propose_guardrails_server_rules_change opened for this server stands: \`phase\` (check_pending, check_failed, check_passed, merge_pending, merge_refused, merged, applied or closed), \`done\` once nothing moves on by itself, the ${config.openappa.policyCheckName} check's outcome (\`check\`), why GitHub refused an automatic merge (\`mergeRefused\`), \`state\` and \`applied\`, and an \`instruction\` for what to do next. With wait=true the call returns as soon as the phase moves on from \`since\` (or from the phase first seen), or settles, or after some forty seconds. While auto-merge is on, follow a proposed pull request by calling this again with wait=true and the last phase as since until \`done\`, and tell the user each change; a merged request not yet applied queues a sync.`,
     schema: z.strictObject({
       mcpServerId: ServerSchema,
       number: z.number().int().positive(),
+      wait: z
+        .boolean()
+        .optional()
+        .describe(
+          "Return only once the phase moves on from `since`, settles, or some forty seconds pass.",
+        ),
+      since: z
+        .enum(CHANGE_PHASES)
+        .optional()
+        .describe("The `phase` the last call returned, to wait past."),
     }),
     handler: ({ args, context }) =>
       answered(async () => {
@@ -127,6 +137,8 @@ const registry = defineArchestraTools([
             ...caller,
             catalogId: args.mcpServerId,
             number: args.number,
+            ...(args.wait !== undefined ? { wait: args.wait } : {}),
+            ...(args.since !== undefined ? { since: args.since } : {}),
           }),
         );
       }),

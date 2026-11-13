@@ -1,5 +1,5 @@
 {
-  "id": "373be6ce-2f41-4150-9e0a-a9a3e2a8eb21",
+  "id": "339ca9b7-3ff9-4802-acf9-086d5962ce6d",
   "prevId": "df77e64f-dd21-4369-813a-7b7fa064450a",
   "version": "7",
   "dialect": "postgresql",
@@ -19787,12 +19787,6 @@
           "notNull": true,
           "default": "'{}'::jsonb"
         },
-        "desktop_arguments": {
-          "name": "desktop_arguments",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_by_service_account_id": {
           "name": "created_by_service_account_id",
           "type": "uuid",
@@ -35900,6 +35894,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'mcp'"
+        },
+        "self_service_auto_merge": {
+          "name": "self_service_auto_merge",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "last_synced_at": {
           "name": "last_synced_at",

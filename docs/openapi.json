@@ -486942,6 +486942,9 @@
                         "selfServiceDirectory": {
                           "type": "string"
                         },
+                        "selfServiceAutoMerge": {
+                          "type": "boolean"
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -486966,6 +486969,7 @@
                         "setupPullRequestNumber",
                         "selfService",
                         "selfServiceDirectory",
+                        "selfServiceAutoMerge",
                         "lastSyncedAt",
                         "lastSyncError"
                       ],
@@ -487002,12 +487006,66 @@
                             "value"
                           ],
                           "additionalProperties": false
+                        },
+                        "leftoverRule": {
+                          "type": "object",
+                          "properties": {
+                            "checkName": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "nullable": true,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "checkName",
+                            "url"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "autoMerge": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "setting": {
+                              "type": "boolean"
+                            },
+                            "environment": {
+                              "type": "object",
+                              "properties": {
+                                "variable": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string",
+                                  "enum": [
+                                    "enabled",
+                                    "disabled"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "variable",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "setting"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
                         "setting",
-                        "directory"
+                        "directory",
+                        "autoMerge"
                       ],
                       "additionalProperties": false
                     },
@@ -487368,6 +487426,10 @@
                     "minLength": 1,
                     "maxLength": 200,
                     "pattern": "^(?!batteries(?:\\/|$))[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:\\/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$"
+                  },
+                  "selfServiceAutoMerge": {
+                    "default": false,
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -487468,6 +487530,9 @@
                         "selfServiceDirectory": {
                           "type": "string"
                         },
+                        "selfServiceAutoMerge": {
+                          "type": "boolean"
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -487492,6 +487557,7 @@
                         "setupPullRequestNumber",
                         "selfService",
                         "selfServiceDirectory",
+                        "selfServiceAutoMerge",
                         "lastSyncedAt",
                         "lastSyncError"
                       ],
@@ -487528,12 +487594,66 @@
                             "value"
                           ],
                           "additionalProperties": false
+                        },
+                        "leftoverRule": {
+                          "type": "object",
+                          "properties": {
+                            "checkName": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "nullable": true,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "checkName",
+                            "url"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "autoMerge": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "setting": {
+                              "type": "boolean"
+                            },
+                            "environment": {
+                              "type": "object",
+                              "properties": {
+                                "variable": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string",
+                                  "enum": [
+                                    "enabled",
+                                    "disabled"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "variable",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "setting"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
                         "setting",
-                        "directory"
+                        "directory",
+                        "autoMerge"
                       ],
                       "additionalProperties": false
                     },
@@ -487905,6 +488025,25 @@
                       "action": {
                         "type": "string",
                         "enum": [
+                          "self_service_auto_merge"
+                        ]
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "enabled"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": [
                           "include_servers"
                         ]
                       }
@@ -488007,6 +488146,9 @@
                         "selfServiceDirectory": {
                           "type": "string"
                         },
+                        "selfServiceAutoMerge": {
+                          "type": "boolean"
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -488031,6 +488173,7 @@
                         "setupPullRequestNumber",
                         "selfService",
                         "selfServiceDirectory",
+                        "selfServiceAutoMerge",
                         "lastSyncedAt",
                         "lastSyncError"
                       ],
@@ -488067,12 +488210,66 @@
                             "value"
                           ],
                           "additionalProperties": false
+                        },
+                        "leftoverRule": {
+                          "type": "object",
+                          "properties": {
+                            "checkName": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "nullable": true,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "checkName",
+                            "url"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "autoMerge": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "setting": {
+                              "type": "boolean"
+                            },
+                            "environment": {
+                              "type": "object",
+                              "properties": {
+                                "variable": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string",
+                                  "enum": [
+                                    "enabled",
+                                    "disabled"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "variable",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "setting"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
                         "setting",
-                        "directory"
+                        "directory",
+                        "autoMerge"
                       ],
                       "additionalProperties": false
                     },
@@ -488355,6 +488552,20 @@
         "tags": [
           "OpenAPPA"
         ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "in": "query",
+            "name": "fresh",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -488394,8 +488605,7 @@
                                 "enum": [
                                   "contents",
                                   "pull_requests",
-                                  "checks",
-                                  "administration"
+                                  "checks"
                                 ]
                               },
                               "granted": {
@@ -488439,17 +488649,106 @@
                         "detail": {
                           "type": "string"
                         },
-                        "bypassActors": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "exclusiveMinimum": true,
-                          "maximum": 9007199254740991
-                        },
                         "checkRule": {
                           "type": "string",
                           "enum": [
                             "unposted"
                           ]
+                        },
+                        "settingsUrl": {
+                          "type": "string"
+                        },
+                        "ruleset": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "target": {
+                              "type": "string",
+                              "enum": [
+                                "branch"
+                              ]
+                            },
+                            "source_type": {
+                              "type": "string",
+                              "enum": [
+                                "Repository"
+                              ]
+                            },
+                            "source": {
+                              "type": "string"
+                            },
+                            "enforcement": {
+                              "type": "string",
+                              "enum": [
+                                "active"
+                              ]
+                            },
+                            "conditions": {
+                              "type": "object",
+                              "properties": {
+                                "ref_name": {
+                                  "type": "object",
+                                  "properties": {
+                                    "include": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "exclude": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "include",
+                                    "exclude"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "ref_name"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "bypass_actors": {
+                              "type": "array",
+                              "items": {}
+                            },
+                            "rules": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string"
+                                  },
+                                  "parameters": {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "target",
+                            "enforcement",
+                            "conditions",
+                            "bypass_actors",
+                            "rules"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -488790,8 +489089,7 @@
                             "enum": [
                               "contents",
                               "pull_requests",
-                              "checks",
-                              "administration"
+                              "checks"
                             ]
                           },
                           "granted": {
@@ -489401,6 +489699,9 @@
                     "minLength": 1,
                     "maxLength": 200,
                     "pattern": "^(?!batteries(?:\\/|$))[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:\\/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$"
+                  },
+                  "selfServiceAutoMerge": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -489501,6 +489802,9 @@
                         "selfServiceDirectory": {
                           "type": "string"
                         },
+                        "selfServiceAutoMerge": {
+                          "type": "boolean"
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -489525,6 +489829,7 @@
                         "setupPullRequestNumber",
                         "selfService",
                         "selfServiceDirectory",
+                        "selfServiceAutoMerge",
                         "lastSyncedAt",
                         "lastSyncError"
                       ],
@@ -489561,12 +489866,66 @@
                             "value"
                           ],
                           "additionalProperties": false
+                        },
+                        "leftoverRule": {
+                          "type": "object",
+                          "properties": {
+                            "checkName": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "nullable": true,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "checkName",
+                            "url"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "autoMerge": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "setting": {
+                              "type": "boolean"
+                            },
+                            "environment": {
+                              "type": "object",
+                              "properties": {
+                                "variable": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string",
+                                  "enum": [
+                                    "enabled",
+                                    "disabled"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "variable",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "setting"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
                         "setting",
-                        "directory"
+                        "directory",
+                        "autoMerge"
                       ],
                       "additionalProperties": false
                     },
@@ -489866,9 +490225,6 @@
                     "type": "string",
                     "maxLength": 39,
                     "pattern": "^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9]))*$"
-                  },
-                  "selfService": {
-                    "type": "boolean"
                   }
                 },
                 "required": [

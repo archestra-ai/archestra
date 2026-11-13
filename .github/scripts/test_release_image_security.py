@@ -107,20 +107,6 @@ class ReleasePolicyTests(unittest.TestCase):
                     catalog.write_text(json.dumps(value))
                     POLICY.candidate_matrix(root)
 
-    def test_pinned_dagger_engine_is_scanned_and_a_missing_pin_fails_closed(self):
-        source = (ROOT / "platform/backend/src/k8s/dagger-environment-runtime/manager.ts").read_text()
-        engine = re.search(r'^const ENGINE_IMAGE = "([^"]+)";$', source, re.M).group(1)
-        self.assertEqual(POLICY.upstream_matrix(ROOT), {"include": [{"image": "dagger-engine", "reference": engine}]})
-        with tempfile.TemporaryDirectory() as directory:
-            manager = Path(directory) / "platform/backend/src/k8s/dagger-environment-runtime/manager.ts"
-            manager.parent.mkdir(parents=True)
-            for text in ("", source.replace("const ENGINE_IMAGE", "const ENGINE_IMAGE_TAG"),
-                         source.replace(engine, "registry.dagger.io/engine:latest"),
-                         source + f'\nconst ENGINE_IMAGE = "{engine}";\n'):
-                with self.subTest(text=text[-60:]), self.assertRaises(ValueError):
-                    manager.write_text(text)
-                    POLICY.upstream_matrix(Path(directory))
-
     def test_classification_emits_complete_matrix_and_ordinary_events_still_skip(self):
         with tempfile.TemporaryDirectory() as directory:
             event, output = Path(directory) / "event", Path(directory) / "output"
@@ -137,8 +123,6 @@ class ReleasePolicyTests(unittest.TestCase):
                 self.assertEqual(values["scan"], "false")
                 self.assertEqual(json.loads(values["matrix"]), {"include": [row | {"arch": arch}
                     for row in POLICY.candidate_matrix(ROOT)["include"] for arch in ("amd64", "arm64")]})
-                self.assertEqual(json.loads(values["upstream-matrix"]), {"include": [row | {"arch": arch}
-                    for row in POLICY.upstream_matrix(ROOT)["include"] for arch in ("amd64", "arm64")]})
 
     def test_main_and_stable_release_prs_only_scan_in_the_queue(self):
         for branch in ("main", "release/1.4", "release/12.30"):
@@ -171,22 +155,17 @@ class ReleasePolicyTests(unittest.TestCase):
                 with patch.object(POLICY, "queue_versions", return_value=[before, after]):
                     event = {"merge_group": group}
                     self.assertEqual(POLICY.requires_scan("merge_group", event, REPOSITORY), required)
-                    expected = "success" if required else "skipped"
                     POLICY.validate_gate("merge_group", event, REPOSITORY, "success", str(required).lower(),
-                                         expected, group["head_sha"], group["head_sha"],
-                                         upstream_scan_result=expected)
+                                         "success" if required else "skipped", group["head_sha"], group["head_sha"])
                     if required:
                         for scan in ("failure", "cancelled", "skipped", "", "neutral"):
-                            for candidate, upstream in ((scan, "success"), ("success", scan)):
-                                with self.subTest(candidate=candidate, upstream=upstream), \
-                                        self.assertRaises(ValueError):
-                                    POLICY.validate_gate("merge_group", event, REPOSITORY, "success", "true",
-                                                         candidate, group["head_sha"], group["head_sha"],
-                                                         upstream_scan_result=upstream)
+                            with self.assertRaises(ValueError):
+                                POLICY.validate_gate("merge_group", event, REPOSITORY, "success", "true",
+                                                     scan, group["head_sha"], group["head_sha"])
                         for live, workflow in (("d" * 40, "c" * 40), ("c" * 40, "d" * 40), (None, "c" * 40)):
                             with self.assertRaises(ValueError):
                                 POLICY.validate_gate("merge_group", event, REPOSITORY, "success", "true",
-                                                     "success", live, workflow, upstream_scan_result="success")
+                                                     "success", live, workflow)
         for key, value in (("base_sha", ""), ("head_sha", "bad"), ("head_ref", "refs/heads/feature")):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 POLICY.requires_scan("merge_group", {"merge_group": group | {key: value}}, REPOSITORY)
@@ -232,20 +211,18 @@ class ReleasePolicyTests(unittest.TestCase):
     def test_skipped_pr_scan_still_requires_a_consistent_successful_gate(self):
         args = dict(event_name="pull_request", event={"pull_request": release_pr()},
                     repository=REPOSITORY, classify_result="success", decision="false",
-                    scan_result="skipped", workflow_sha="c" * 40, upstream_scan_result="skipped")
+                    scan_result="skipped", workflow_sha="c" * 40)
         POLICY.validate_gate(**args)
         for field, values in (("classify_result", ("failure", "cancelled", "")),
                               ("decision", ("true", "", "unknown")),
-                              ("scan_result", ("success", "failure", "cancelled", "")),
-                              ("upstream_scan_result", ("success", "failure", "cancelled", ""))):
+                              ("scan_result", ("success", "failure", "cancelled", ""))):
             for value in values:
                 with self.subTest(field=field, value=value), self.assertRaises(ValueError):
                     POLICY.validate_gate(**(args | {field: value}))
 
     def test_manual_pass_requires_an_explicit_successful_classification(self):
         args = dict(event_name="workflow_dispatch", event={}, repository=REPOSITORY,
-                    classify_result="success", decision="false", scan_result="skipped",
-                    upstream_scan_result="skipped")
+                    classify_result="success", decision="false", scan_result="skipped")
         POLICY.validate_gate(**args)
         with self.assertRaises(ValueError):
             POLICY.validate_gate(**(args | {"decision": ""}))
@@ -261,8 +238,7 @@ class ReleasePolicyTests(unittest.TestCase):
             env = os.environ | {"PATH": f"{root}:{os.environ['PATH']}",
                 "GITHUB_EVENT_PATH": str(event), "GITHUB_EVENT_NAME": "pull_request",
                 "GITHUB_REPOSITORY": REPOSITORY, "GITHUB_SHA": "c" * 40,
-                "CLASSIFY_RESULT": "success", "SCAN_REQUIRED": "false", "SCAN_RESULT": "skipped",
-                "UPSTREAM_SCAN_RESULT": "skipped"}
+                "CLASSIFY_RESULT": "success", "SCAN_REQUIRED": "false", "SCAN_RESULT": "skipped"}
             return subprocess.run(["python3", str(SCRIPTS / "release-image-policy.py"), "gate"],
                 env=env | overrides, text=True, capture_output=True)
 
@@ -270,7 +246,6 @@ class ReleasePolicyTests(unittest.TestCase):
         result = self.run_gate()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertNotEqual(self.run_gate(SCAN_RESULT="failure").returncode, 0)
-        self.assertNotEqual(self.run_gate(UPSTREAM_SCAN_RESULT="failure").returncode, 0)
         self.assertNotEqual(self.run_gate(SCAN_REQUIRED="true").returncode, 0)
 
 
@@ -437,13 +412,7 @@ class WorkflowContractTests(unittest.TestCase):
         source = (ROOT / ".github/workflows/docker-image-scanning.yml").read_text()
         gate = source.split("  release-image-security:\n", 1)[1].split("  required-contexts:\n", 1)[0]
         self.assertIn("if: ${{ always() }}", gate)
-        self.assertIn("needs: [classify, scan-release-images, scan-upstream-images]", gate)
-        self.assertIn("UPSTREAM_SCAN_RESULT: ${{ needs.scan-upstream-images.result }}", gate)
-        upstream = source.split("  scan-upstream-images:\n", 1)[1].split("  release-image-security:\n", 1)[0]
-        self.assertIn("if: ${{ needs.classify.outputs.scan == 'true' }}", upstream)
-        self.assertIn("image: registry://${{ matrix.reference }}", upstream)
-        self.assertIn('exit-code: "true"', upstream)
-        self.assertNotIn("continue-on-error", upstream)
+        self.assertIn("needs: [classify, scan-release-images]", gate)
         for job in ("required-contexts", "legacy-required-context"):
             section = re.search(rf"^  {job}:\n(.*?)(?=^  [\w-]+:|\Z)", source, re.M | re.S).group(1)
             self.assertIn("if: ${{ always() }}", section)

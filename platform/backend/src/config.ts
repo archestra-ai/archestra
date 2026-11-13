@@ -1716,6 +1716,24 @@ const mcpServerBaseImage =
   });
 
 /**
+ * The engine each organization's Dagger StatefulSet runs. A released chart
+ * ships a digest for Archestra's patched build (the `dagger-engine` target of
+ * platform/Dockerfile: upstream's engine with its binaries rebuilt against
+ * fixed dependencies) and pins it. Without that digest (local development, CI
+ * e2e, the quickstart) the engine is the same upstream release, unpatched.
+ * platform/scripts/check-dagger-version-sync.sh keeps its tag in step with the
+ * CLI and SDK.
+ */
+const daggerEngineImage =
+  process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_IMAGE?.trim() ||
+  (releaseImageDigests?.images["dagger-engine"]
+    ? pinReleaseImage({
+        image: `ghcr.io/archestra-ai/dagger-engine:${appVersion}`,
+        digests: releaseImageDigests,
+      })
+    : "registry.dagger.io/engine:v0.21.11");
+
+/**
  * Default resource requests/limits applied to generated MCP server
  * containers. Ephemeral-storage governance is required so the scheduler
  * accounts for disk usage — without it nodes get over-packed until kubelet
@@ -3695,6 +3713,7 @@ const config = {
     // requires `request <= limit`, and it stays far above the daemon's own
     // footprint so ordinary sandbox load can never OOM-kill the engine.
     engine: {
+      image: daggerEngineImage,
       cpuRequest:
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST || "2",
       memoryRequest: daggerEngineMemoryRequest,

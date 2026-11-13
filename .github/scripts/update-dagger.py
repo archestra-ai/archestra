@@ -6,7 +6,9 @@ and the CI fixtures must move together (platform/scripts/check-dagger-version-sy
 Every new value is resolved from upstream and verified before any file changes:
 
 - the release tag's commit, from the GitHub API;
-- the engine's multi-architecture index digest, from registry.dagger.io;
+- the engine's multi-architecture index digest, from registry.dagger.io, which
+  is also the base of the patched dagger-engine target in platform/Dockerfile;
+- the runc release Dagger's own engine build pins, and that tag's commit;
 - the stock linux/amd64 CLI checksum, from the release's checksums.txt;
 - the dagger-sdk crate, from crates.io, checked against its published checksum.
 
@@ -44,6 +46,7 @@ SDK_CARGO = "platform/archestra-rs/sandbox-core/Cargo.toml"
 CARGO_LOCK = "platform/archestra-rs/Cargo.lock"
 VENDOR_DIR = "platform/archestra-rs/vendor"
 DOCKERFILE = "platform/Dockerfile"
+DAGGER_DEPS = "platform/docker/dagger-deps.sh"
 BENCH_JOB = ".github/bench/dagger-job.yaml"
 SDK_WORKFLOW = ".github/workflows/on-pull-requests-dagger-sdk.yml"
 # Every file that names the pinned Dagger version. Each must name it before and
@@ -51,6 +54,7 @@ SDK_WORKFLOW = ".github/workflows/on-pull-requests-dagger-sdk.yml"
 # layout this list has to learn about.
 VERSION_FILES = (
     DOCKERFILE,
+    DAGGER_DEPS,
     BENCH_JOB,
     SDK_WORKFLOW,
     "LICENSE.md",
@@ -60,7 +64,7 @@ VERSION_FILES = (
     SDK_CARGO,
     "platform/archestra-rs/sandbox-core/src/backends/dagger.rs",
     "platform/archestra-rs/sandbox-core/tests/live_dagger_sdk.rs",
-    "platform/backend/src/k8s/dagger-environment-runtime/manager.ts",
+    "platform/backend/src/config.ts",
     "platform/backend/src/k8s/dagger-environment-runtime/manager.test.ts",
     "platform/docker/dagger-engine.quickstart.yaml",
 )
@@ -101,7 +105,9 @@ def main():
     note = upstream.go_directive(new.commit)
     if note:
         print(f"Upstream go.mod at v{target} declares go {note}; "
-              f"platform/Dockerfile aligns the module directive to {dockerfile_go(root)}")
+              f"{DAGGER_DEPS} aligns the module directive to {dockerfile_go(root)}")
+    if new.runc_version != old.runc_version:
+        print(f"runc follows Dagger's engine build: {old.runc_version} -> {new.runc_version}")
     print(f"Updated Dagger {current} -> {target}")
 
 
@@ -123,13 +129,21 @@ class Upstream:
     def releases(self):
         return self.json(f"{self.github_api}/repos/dagger/dagger/releases?per_page=100", github=True)
 
-    def commit(self, version):
-        ref = self.json(f"{self.github_api}/repos/dagger/dagger/git/ref/tags/v{version}", github=True)["object"]
+    def commit(self, tag, repo="dagger/dagger"):
+        ref = self.json(f"{self.github_api}/repos/{repo}/git/ref/tags/{tag}", github=True)["object"]
         if ref["type"] == "tag":
-            ref = self.json(f"{self.github_api}/repos/dagger/dagger/git/tags/{ref['sha']}", github=True)["object"]
+            ref = self.json(f"{self.github_api}/repos/{repo}/git/tags/{ref['sha']}", github=True)["object"]
         if ref["type"] != "commit" or not COMMIT.fullmatch(ref["sha"]):
-            raise ValueError(f"Dagger v{version} does not resolve to a commit")
+            raise ValueError(f"{repo} {tag} does not resolve to a commit")
         return ref["sha"]
+
+    def runc_version(self, commit):
+        """The runc release Dagger's own engine build pins at this commit."""
+        text = self.get(f"{self.raw}/dagger/dagger/{commit}/toolchains/engine-dev/consts/consts.go").decode()
+        versions = re.findall(r'^\s*RuncVersion\s*=\s*"(v\d+\.\d+\.\d+)"', text, re.M)
+        if len(versions) != 1:
+            raise ValueError("Dagger's engine build does not pin a single runc version")
+        return versions[0]
 
     def cli_checksum(self, version):
         name = f"dagger_v{version}_linux_amd64.tar.gz"
@@ -189,9 +203,10 @@ class Upstream:
 class Pins:
     """The values a Dagger bump changes besides the version string itself."""
 
-    def __init__(self, version, commit, engine_digest, cli_checksum):
+    def __init__(self, version, commit, engine_digest, cli_checksum, runc_version, runc_commit):
         self.version, self.commit = version, commit
         self.engine_digest, self.cli_checksum = engine_digest, cli_checksum
+        self.runc_version, self.runc_commit = runc_version, runc_commit
 
     @classmethod
     def read(cls, root, version):
@@ -203,14 +218,18 @@ class Pins:
                      bench, "benchmark engine digest")
         checksum = one(rf"dagger_v{re.escape(version)}_linux_amd64\.tar\.gz \\\n\s+--output .*\n"
                        r"\s+printf .*\n\s+([0-9a-f]{64}) \\$", workflow, "SDK fixture CLI checksum")
-        if digest not in workflow:
-            raise ValueError("The SDK fixture and benchmark Job pin different engine digests")
-        return cls(version, commit, digest, checksum)
+        if digest not in workflow or digest not in dockerfile:
+            raise ValueError("The SDK fixture, Dockerfile and benchmark Job pin different engine digests")
+        runc_version = one(r"^ARG RUNC_VERSION=(v\d+\.\d+\.\d+)$", dockerfile, "RUNC_VERSION")
+        runc_commit = one(r"^ARG RUNC_COMMIT=([0-9a-f]{40})$", dockerfile, "RUNC_COMMIT")
+        return cls(version, commit, digest, checksum, runc_version, runc_commit)
 
     @classmethod
     def resolve(cls, upstream, version):
-        return cls(version, upstream.commit(version), upstream.engine_digest(version),
-                   upstream.cli_checksum(version))
+        commit = upstream.commit(f"v{version}")
+        runc_version = upstream.runc_version(commit)
+        return cls(version, commit, upstream.engine_digest(version), upstream.cli_checksum(version),
+                   runc_version, upstream.commit(runc_version, repo="opencontainers/runc"))
 
 
 class Crate:
@@ -283,7 +302,15 @@ def rewrite(root, old, new):
                               (old.cli_checksum, new.cli_checksum)):
             updated = updated.replace(before, after)
         path.write_text(updated)
-    for name, value in ((DOCKERFILE, new.commit), (BENCH_JOB, new.engine_digest),
+    dockerfile = root / DOCKERFILE
+    text = dockerfile.read_text()
+    for name, before, after in (("RUNC_VERSION", old.runc_version, new.runc_version),
+                                ("RUNC_COMMIT", old.runc_commit, new.runc_commit)):
+        text, count = re.subn(rf"^ARG {name}={re.escape(before)}$", f"ARG {name}={after}", text, flags=re.M)
+        if count != 1:
+            raise ValueError(f"platform/Dockerfile has no single ARG {name}")
+    dockerfile.write_text(text)
+    for name, value in ((DOCKERFILE, new.commit), (DOCKERFILE, new.engine_digest), (BENCH_JOB, new.engine_digest),
                         (SDK_WORKFLOW, new.engine_digest), (SDK_WORKFLOW, new.cli_checksum)):
         if value not in (root / name).read_text():
             raise ValueError(f"{name} did not receive the new pin {value}")
@@ -310,8 +337,8 @@ def revendor(old_dir, new_dir, old, new, crate):
 
 
 def dockerfile_go(root):
-    return one(r"# dagger v\S+ vendored Go SDK requires .*\n\s+go mod edit -go=(\S+) &&",
-               (root / DOCKERFILE).read_text(), "Dagger go directive")
+    return one(r"# dagger v\S+ vendored Go SDK requires .*\ngo mod edit -go=(\S+)$",
+               (root / DAGGER_DEPS).read_text(), "Dagger go directive")
 
 
 def one(pattern, text, label):

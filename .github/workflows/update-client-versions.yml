@@ -682,7 +682,7 @@ jobs:
           pr_title="fix(deps): update Dagger engine and SDK"
           pr_body="Move every Dagger pin to the newest stable upstream release that has been public for at least 7 days, matching the repository's \`minimumReleaseAge\`: the engine image the backend provisions, the CLI built into \`platform/Dockerfile\`, the vendored Rust SDK, and the CI and benchmark fixtures. \`.github/scripts/update-dagger.py\` resolved the tag commit, engine index digest, CLI checksum and crate checksum from upstream and verified each one.
 
-          The vendored SDK takes the new crate's sources unchanged and keeps its hand-normalized dependency backport, which the updater only carries forward when upstream's published manifest is unchanged. **Dagger SDK Integration** runs the SDK against a live engine on this pull request, and the release gate scans the engine image for CVEs. Review the upstream release notes before merging. Existing engine StatefulSets keep their image until they are recreated."
+          The vendored SDK takes the new crate's sources unchanged and keeps its hand-normalized dependency backport, which the updater only carries forward when upstream's published manifest is unchanged. runc follows the version Dagger's own engine build pins. **Validate Dagger Engine Image Build** rebuilds and smoke-tests the patched engine, **Dagger SDK Integration** runs the SDK against a live engine, and the release scan checks the patched engine for CVEs. Review the upstream release notes before merging. Existing engine StatefulSets keep their image until they are recreated."
           owner="${GH_REPO%%/*}"
           existing_pr="$(gh api "repos/$GH_REPO/pulls?state=open&head=$owner:$BRANCH&base=main&per_page=1" --jq '.[0].number // empty')"
           if [[ -z "$existing_pr" ]]; then
@@ -781,7 +781,7 @@ jobs:
             report "Playwright MCP image" "$PLAYWRIGHT_RESULT" "$PLAYWRIGHT_PUSHED" \
               "$PLAYWRIGHT_SUMMARY" "$PLAYWRIGHT_PULL_REQUEST_URL" " — review upstream runtime vulnerabilities and browser compatibility before merging."
             report "Dagger engine and SDK" "$DAGGER_RESULT" "$DAGGER_PUSHED" \
-              "$DAGGER_SUMMARY" "$DAGGER_PULL_REQUEST_URL" " — merge once Dagger SDK Integration passes."
+              "$DAGGER_SUMMARY" "$DAGGER_PULL_REQUEST_URL" " — merge once Validate Dagger Engine Image Build and Dagger SDK Integration pass."
           )"
           if [[ -z "$message" ]]; then
             exit 0

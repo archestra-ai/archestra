@@ -13,6 +13,7 @@ request with no session or an unknown session gets `404`.
 
 import json
 import os
+import socketserver
 import sys
 import threading
 import uuid
@@ -82,10 +83,20 @@ def make_handler(root):
     return Handler
 
 
+class HttpServer(ThreadingHTTPServer):
+    def server_bind(self):
+        # HTTPServer.server_bind looks up the name of the host with
+        # socket.getfqdn, between the bind and the listen. Where reverse
+        # lookups are broken (GitHub's macOS runners), that can take longer
+        # than a test waits, and each connection is refused until then.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+
 def main(argv):
     if len(argv) != 3:
         sys.exit("usage: http_mcp_server.py <root> <port>")
-    server = ThreadingHTTPServer(("127.0.0.1", int(argv[2])), make_handler(argv[1]))
+    server = HttpServer(("127.0.0.1", int(argv[2])), make_handler(argv[1]))
     server.serve_forever()
 
 

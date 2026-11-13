@@ -675,10 +675,13 @@ for line in sys.stdin:
             .await
             .expect_err("the server stopped");
         assert_eq!(error, ForwardError::Closed);
-        wait_for_state(&handle, |state| {
-            state.error() == Some("the MCP server stopped (exit status: 3)")
-        })
-        .await;
+        // Rust writes an exit status as "exit code: 3" on Windows.
+        let expected = if cfg!(windows) {
+            "the MCP server stopped (exit code: 3)"
+        } else {
+            "the MCP server stopped (exit status: 3)"
+        };
+        wait_for_state(&handle, |state| state.error() == Some(expected)).await;
     }
 
     #[tokio::test]

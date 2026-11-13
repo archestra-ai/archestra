@@ -1125,7 +1125,7 @@ const registry = defineArchestraTools([
     title: "Check OpenAPPA policy pull request",
     annotations: { readOnlyHint: true },
     description:
-      "Check the review state of an OpenAPPA policy pull request and whether Git sync has processed the merged policy. Use the pull request number returned by update_guardrails_policy.",
+      "Check the review state of an OpenAPPA policy pull request, and once it merges whether Git sync applied it (`applied`), with an `instruction` for what to tell the user. A merged pull request not yet applied queues a sync. Use the pull request number returned by update_guardrails_policy or update_guardrails_validation.",
     schema: z.strictObject({ number: z.number().int().positive() }),
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(

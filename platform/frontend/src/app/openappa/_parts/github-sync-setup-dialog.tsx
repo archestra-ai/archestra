@@ -1,6 +1,10 @@
 "use client";
 
-import { DocsPage, type GitProvider } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  type GitProvider,
+} from "@archestra/shared";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -253,7 +257,7 @@ export function GithubSyncSetupDialog({
     editing?.selfServiceDirectory || DEFAULT_SELF_SERVICE_FOLDER,
   );
   const [interval, setSyncInterval] = useState<SyncInterval>(
-    editing?.interval ?? DEFAULT_INTERVAL,
+    editing?.interval ?? DEFAULT_SYNC_INTERVAL,
   );
   // The save or connect the Finish step runs first; none when the step
   // is opened again to read what is in place.
@@ -1362,12 +1366,23 @@ export function GithubSyncSetupDialog({
               gitlab={gitlab}
             />
           ) : null}
+          <div className="space-y-2">
+            <Label htmlFor="github-sync-interval">Sync schedule</Label>
+            <FieldDescription>
+              {`How often to check the branch for merged ${gitlab ? "merge requests" : "pull requests"}.`}
+            </FieldDescription>
+            <SyncScheduleSelect
+              id="github-sync-interval"
+              value={interval}
+              onValueChange={setSyncInterval}
+            />
+          </div>
           <Collapsible open={advanced} onOpenChange={setAdvanced}>
             <CollapsibleTrigger className="group flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
               <ChevronRight className="size-3.5 transition-transform group-data-[state=open]:rotate-90" />
               <span>Advanced</span>
               <span className="font-normal text-muted-foreground/70">
-                (branch, policy file, validations, schedule)
+                (branch, policy file, validations)
               </span>
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-3">
@@ -1425,29 +1440,6 @@ export function GithubSyncSetupDialog({
                     }
                     onChange={(event) => setValidations(event.target.value)}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="github-sync-interval">Sync schedule</Label>
-                  <FieldDescription>
-                    How often to check for merges.
-                  </FieldDescription>
-                  <Select
-                    value={interval}
-                    onValueChange={(value) =>
-                      setSyncInterval(value as SyncInterval)
-                    }
-                  >
-                    <SelectTrigger id="github-sync-interval" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent position="popper">
-                      {SYNC_INTERVALS.map((entry) => (
-                        <SelectItem key={entry.value} value={entry.value}>
-                          {entry.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
               </div>
             </CollapsibleContent>
@@ -1951,13 +1943,46 @@ const USABLE = new Set<RepositoryStatus>([
 ]);
 
 const DEFAULT_VALIDATIONS = "traces";
-type SyncInterval = "15m" | "1h" | "1d";
-const DEFAULT_INTERVAL: SyncInterval = "1h";
-const SYNC_INTERVALS: { value: SyncInterval; label: string }[] = [
-  { value: "15m", label: "Every 15 minutes" },
-  { value: "1h", label: "Every hour" },
-  { value: "1d", label: "Once a day" },
-];
+/** How often a sync checks the branch, as the API names it. */
+type SyncInterval =
+  archestraApiTypes.ConfigureAppaGithubSyncData["body"]["interval"];
+/** A merge on the host applies within minutes, with no webhook. */
+export const DEFAULT_SYNC_INTERVAL: SyncInterval = "15m";
+export const SYNC_INTERVAL_LABELS: Record<SyncInterval, string> = {
+  "5m": "Every 5 minutes",
+  "15m": "Every 15 minutes",
+  "1h": "Every hour",
+  "1d": "Once a day",
+};
+
+/** How often the policy syncs, picked like the limits' reset period. */
+export function SyncScheduleSelect({
+  id,
+  value,
+  onValueChange,
+}: {
+  id: string;
+  value: SyncInterval;
+  onValueChange: (value: SyncInterval) => void;
+}) {
+  return (
+    <Select
+      value={value}
+      onValueChange={(next) => onValueChange(next as SyncInterval)}
+    >
+      <SelectTrigger id={id} className="w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent position="popper">
+        {(Object.keys(SYNC_INTERVAL_LABELS) as SyncInterval[]).map((option) => (
+          <SelectItem key={option} value={option}>
+            {SYNC_INTERVAL_LABELS[option]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 type EditedSource = {
   provider: GitProvider;

@@ -8,6 +8,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { toast } from "sonner";
@@ -135,6 +136,9 @@ test("syncs on demand and shows the server's failure while retaining the source"
     "GitHub returned HTTP 403",
   );
   expect(screen.getByRole("link", { name: /example\/policies/ })).toBeVisible();
+  expect(screen.getByText("Every hour")).toBeVisible();
+  // The link opens appa.toml at the root: the card does not name it again.
+  expect(screen.queryByText("appa.toml")).toBeNull();
   expect(toast.success).not.toHaveBeenCalled();
 });
 
@@ -1095,7 +1099,7 @@ test("links an existing repository whose policy lives elsewhere through Advanced
         owner: "example",
         name: "policies",
         githubAppConfigId: appId,
-        interval: "1h",
+        interval: "5m",
         selfService: false,
         existing: true,
         replace: false,
@@ -1142,7 +1146,20 @@ test("links an existing repository whose policy lives elsewhere through Advanced
   expect(
     screen.getByRole("button", { name: "Connect repository" }),
   ).toBeDisabled();
+  // The schedule shows above Advanced, every 15 minutes unless changed.
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.setPointerCapture = vi.fn();
+  Element.prototype.releasePointerCapture = vi.fn();
+  const user = userEvent.setup();
+  const schedule = screen.getByRole("combobox", { name: "Sync schedule" });
+  expect(schedule).toHaveTextContent("Every 15 minutes");
+  await user.click(schedule);
+  await user.click(
+    await screen.findByRole("option", { name: "Every 5 minutes" }),
+  );
+  expect(schedule).toHaveTextContent("Every 5 minutes");
   fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+  expect(screen.queryByText(/schedule\)/)).toBeNull();
   fireEvent.change(screen.getByLabelText("Branch"), {
     target: { value: "prod" },
   });
@@ -1185,7 +1202,7 @@ test("starts fresh from the template, connects it through a chosen App and finis
         owner: "example",
         name: "openappa-policy",
         githubAppConfigId: appId,
-        interval: "1h",
+        interval: "15m",
         selfService: false,
         existing: true,
         replace: false,
@@ -1563,7 +1580,7 @@ test("connecting an existing repository with self-service keeps the checklist op
         owner: "example",
         name: "policies",
         githubAppConfigId: appId,
-        interval: "1h",
+        interval: "15m",
         selfService: true,
         selfServiceAutoMerge: false,
         existing: true,
@@ -1766,7 +1783,7 @@ test("creates a private GitLab project in a group with the saved token", async (
       owner: "platform",
       name: "openappa-policy",
       gitlabTokenId: tokenId,
-      interval: "1h",
+      interval: "15m",
       selfService: false,
       existing: false,
     }),
@@ -1999,7 +2016,7 @@ test("asks before discarding a GitHub source draft", async () => {
   expect(close).toHaveBeenCalledWith(false);
 });
 
-test("leaves the validation folder and sync interval alone, and stays open on server rejection", async () => {
+test("keeps the validation folder and the saved schedule, and stays open on server rejection", async () => {
   server.use(
     http.get("http://localhost:9000/api/credentials", () =>
       HttpResponse.json([]),
@@ -2028,7 +2045,9 @@ test("leaves the validation folder and sync interval alone, and stays open on se
   expect(
     screen.queryByLabelText("Validation directory (optional)"),
   ).not.toBeInTheDocument();
-  expect(screen.queryByLabelText("Sync frequency")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Sync schedule")).toHaveTextContent(
+    "Once a day",
+  );
   fireEvent.click(screen.getByRole("button", { name: "Save source and sync" }));
   expect(await screen.findByText("appa.toml not found")).toBeVisible();
   expect(close).not.toHaveBeenCalled();

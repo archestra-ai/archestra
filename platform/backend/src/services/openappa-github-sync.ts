@@ -934,6 +934,9 @@ export async function updateAppaGithubSync(params: {
       enabled: params.enabled === true,
       directory: params.directory,
     });
+    // The servers' files apply only under self-service: a pull now reads
+    // the repository the way the setting asks, not at the next check.
+    await OpenAppaGithubSyncModel.enqueue(params.organizationId);
     return getAppaGithubSync(params.organizationId);
   }
   if (params.action === "self_service_auto_merge") {
@@ -942,6 +945,7 @@ export async function updateAppaGithubSync(params: {
       row,
       enabled: params.enabled === true,
     });
+    await OpenAppaGithubSyncModel.enqueue(params.organizationId);
     return getAppaGithubSync(params.organizationId);
   }
   if (params.action === "sync")
@@ -955,6 +959,9 @@ export async function updateAppaGithubSync(params: {
       params.organizationId,
       params.action === "disconnect" ? null : (params.interval ?? row.interval),
     );
+    // A new schedule counts from a pull now.
+    if (params.action === "schedule")
+      await OpenAppaGithubSyncModel.enqueue(params.organizationId);
   }
   return getAppaGithubSync(params.organizationId);
 }

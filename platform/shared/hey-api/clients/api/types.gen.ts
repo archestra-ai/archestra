@@ -125493,7 +125493,7 @@ export type GetAppaGithubSyncResponses = {
             repo: string | null;
             ref: string | null;
             path: string | null;
-            interval: '15m' | '1h' | '1d' | null;
+            interval: '5m' | '15m' | '1h' | '1d' | null;
             githubPatId: string | null;
             githubAppConfigId: string | null;
             gitlabTokenId: string | null;
@@ -125560,7 +125560,7 @@ export type UpdateAppaGithubSyncData = {
         action: 'disconnect';
     } | {
         action: 'schedule';
-        interval: '15m' | '1h' | '1d';
+        interval: '5m' | '15m' | '1h' | '1d';
     } | {
         action: 'self_service';
         enabled: boolean;
@@ -125655,7 +125655,7 @@ export type UpdateAppaGithubSyncResponses = {
             repo: string | null;
             ref: string | null;
             path: string | null;
-            interval: '15m' | '1h' | '1d' | null;
+            interval: '5m' | '15m' | '1h' | '1d' | null;
             githubPatId: string | null;
             githubAppConfigId: string | null;
             gitlabTokenId: string | null;
@@ -125720,7 +125720,7 @@ export type ConfigureAppaGithubSyncData = {
         repo: string;
         ref?: string | null;
         path: string;
-        interval: '15m' | '1h' | '1d';
+        interval: '5m' | '15m' | '1h' | '1d';
         validationDirectory?: '' | string;
         githubPatId?: string | null;
         githubAppConfigId?: string | null;
@@ -125813,7 +125813,7 @@ export type ConfigureAppaGithubSyncResponses = {
             repo: string | null;
             ref: string | null;
             path: string | null;
-            interval: '15m' | '1h' | '1d' | null;
+            interval: '5m' | '15m' | '1h' | '1d' | null;
             githubPatId: string | null;
             githubAppConfigId: string | null;
             gitlabTokenId: string | null;
@@ -126191,7 +126191,7 @@ export type CreateAppaGithubRepositoryData = {
         name: string;
         githubAppConfigId?: string;
         gitlabTokenId?: string;
-        interval: '15m' | '1h' | '1d';
+        interval: '5m' | '15m' | '1h' | '1d';
         existing?: boolean;
         ref?: string | null;
         path?: string;
@@ -126285,7 +126285,7 @@ export type CreateAppaGithubRepositoryResponses = {
             repo: string | null;
             ref: string | null;
             path: string | null;
-            interval: '15m' | '1h' | '1d' | null;
+            interval: '5m' | '15m' | '1h' | '1d' | null;
             githubPatId: string | null;
             githubAppConfigId: string | null;
             gitlabTokenId: string | null;

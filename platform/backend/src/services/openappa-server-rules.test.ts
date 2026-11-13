@@ -2060,13 +2060,28 @@ test("self-service is opt-in: off, server rules are not read while the check is 
   });
 
   // On: the branch rules are read at once, the ruleset to import is offered,
-  // and the checks start.
+  // and the checks start. A pull is queued too, so the servers' files apply
+  // now rather than at the next scheduled check.
   calls.length = 0;
+  const syncTasks = async () =>
+    (
+      await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.taskType, "openappa_github_sync"))
+    ).filter(
+      (task) =>
+        (task.payload as { organizationId?: string }).organizationId === org.id,
+    );
+  await db
+    .delete(schema.tasksTable)
+    .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
   const on = await updateAppaGithubSync({
     organizationId: org.id,
     action: "self_service",
     enabled: true,
   });
+  expect(await syncTasks()).toHaveLength(1);
   expect(on.selfService).toEqual({
     enabled: true,
     setting: true,

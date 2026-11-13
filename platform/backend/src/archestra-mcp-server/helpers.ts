@@ -428,6 +428,46 @@ export function agentCredentialSetupUrl(
     : url;
 }
 
+/**
+ * What a person reads in a chat thread when a run cannot use their
+ * credentials: what to set up, what to connect again, and one link that opens
+ * the Agent's setup dialog on exactly those keys. Markdown, so chat providers
+ * render the link.
+ */
+export function credentialsNeededMessage(params: {
+  agentId: string;
+  missing: Array<{ key: string; label: string; reconnect?: boolean }>;
+  /** The run is already going: say it picks up the new value on its own. */
+  duringRun?: boolean;
+}): string {
+  const labels = (entries: typeof params.missing) =>
+    entries.map((entry) => entry.label).join(", ");
+  const reconnect = params.missing.filter((entry) => entry.reconnect);
+  const add = params.missing.filter((entry) => !entry.reconnect);
+  const lines: string[] = [];
+  if (add.length > 0)
+    lines.push(
+      `This agent runs in its own runtime, which needs credentials you have not set up yet: ${labels(add)}.`,
+    );
+  if (reconnect.length > 0)
+    lines.push(
+      params.duringRun
+        ? `Your ${labels(reconnect)} connection stopped working during this run, so connect it again.`
+        : `Your ${labels(reconnect)} connection no longer works (for example, the GitHub App changed), so connect it again.`,
+    );
+  const url = agentCredentialSetupUrl(
+    params.agentId,
+    params.missing.map((entry) => entry.key),
+  );
+  const action = add.length === 0 ? "Reconnect" : "Set up credentials";
+  lines.push(
+    params.duringRun
+      ? `[${action}](${url}). The run uses the new connection as soon as it is saved.`
+      : `[${action}](${url}), then send your message again.`,
+  );
+  return lines.join("\n\n");
+}
+
 export function catchError(error: unknown, action: string): CallToolResult {
   logger.error({ err: error }, `Error ${action}`);
   // Zod validation errors are safe to surface — they describe user input issues.

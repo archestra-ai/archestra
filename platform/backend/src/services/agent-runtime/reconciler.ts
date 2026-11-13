@@ -8,6 +8,7 @@ import {
   AgentRunModel,
   AgentWorkspaceModel,
 } from "@/models";
+import { notifyRunCredentialReconnect } from "@/services/agent-runtime/credential-reconnect-notice";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
 import type { AgentWorkspace } from "@/types/agent-workspace";
 import {
@@ -67,9 +68,15 @@ class AgentRunReconciler {
       const retained = await AgentRunModel.listRetainedForCredentialRefresh();
       for (const session of [...sessions, ...retained]) {
         try {
-          await resolveAgentRuntimeBackendDriver(
-            session.backend,
-          ).refreshCredentials?.(session);
+          const reconnect =
+            (await resolveAgentRuntimeBackendDriver(
+              session.backend,
+            ).refreshCredentials?.(session)) ?? [];
+          if (reconnect.length > 0)
+            await notifyRunCredentialReconnect({
+              session,
+              credentials: reconnect,
+            });
         } catch {
           logger.warn(
             { taskId: session.taskId },

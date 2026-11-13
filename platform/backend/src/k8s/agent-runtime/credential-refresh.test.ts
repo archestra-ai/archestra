@@ -6,9 +6,14 @@ import {
   A2ATaskModel,
   AgentRunModel,
   GithubAppConfigModel,
+  RuntimeCredentialConnectionModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { AGENT_RUNTIME_CREDENTIALS_SECRET_KEY } from "@/services/agent-runtime/runtime-contract";
+import {
+  createRuntimeCredentialDefinition,
+  setRuntimeCredentialConnection,
+} from "@/services/agent-runtime/runtime-credentials";
 import { expect, test, vi } from "@/test";
 import { useMswServer as setupMswServer } from "@/test/msw";
 import manager from "./manager";
@@ -152,6 +157,154 @@ test("refreshes the frozen run binding and cannot restore a concurrently revoked
     await manager.refreshCredentials(run);
     expect(stored.data?.[AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]).toBe("");
     expect(writes).toBe(1);
+  } finally {
+    internals.clients = original;
+    sandboxInstalled.mockRestore();
+  }
+});
+
+test("asks once to reconnect a personal GitHub connection made with a replaced App, keeping the old value", async ({
+  makeAdmin,
+  makeOrganization,
+  makeMember,
+  makeAgent,
+}) => {
+  const user = await makeAdmin();
+  const organization = await makeOrganization();
+  await makeMember(user.id, organization.id, { role: "admin" });
+  const agent = await makeAgent({ organizationId: organization.id });
+  await createRuntimeCredentialDefinition({
+    organizationId: organization.id,
+    userId: user.id,
+    definition: {
+      description: "",
+      icon: null,
+      key: "repository-app",
+      name: "Repository App",
+      kind: "github_app",
+      allowPersonal: false,
+      allowOrganization: true,
+      githubUrl: "https://api.github.com",
+      appId: "123",
+      installationId: "456",
+      githubClientId: "replacement-client",
+    },
+  });
+  await setRuntimeCredentialConnection({
+    organizationId: organization.id,
+    userId: user.id,
+    credentialId: "repository-app",
+    scope: "organization",
+    value: JSON.stringify({
+      privateKey: "test-private-key",
+      clientSecret: "test-client-secret",
+    }),
+  });
+  await createRuntimeCredentialDefinition({
+    organizationId: organization.id,
+    userId: user.id,
+    definition: {
+      description: "",
+      icon: null,
+      key: "github-user",
+      name: "GitHub",
+      kind: "github_app_user",
+      allowPersonal: true,
+      allowOrganization: false,
+      githubAppCredentialKey: "repository-app",
+    },
+  });
+  // Signed in with the App the organization has since replaced.
+  await RuntimeCredentialConnectionModel.upsert({
+    organizationId: organization.id,
+    userId: user.id,
+    credentialId: "github-user",
+    scope: "personal",
+    value: JSON.stringify({
+      accessToken: "old-user-token",
+      refreshToken: "old-refresh",
+      expiresAt: Date.now() + 60_000,
+      refreshExpiresAt: Date.now() + 86_400_000,
+      clientId: "previous-client",
+      githubId: 12345,
+      login: "example-developer",
+    }),
+  });
+  const context = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: user.id,
+  });
+  const task = await A2ATaskModel.create({
+    contextId: context.id,
+    agentId: agent.id,
+    state: "TASK_STATE_WORKING",
+  });
+  const run = await AgentRunModel.create({
+    organizationId: organization.id,
+    agentId: agent.id,
+    taskId: task.id,
+    actorKind: "user",
+    actorId: user.id,
+    actorUserId: user.id,
+    backend: "kubernetes",
+    runtimeScope: "local",
+    workloadName: "reconnect-test",
+  });
+  let stored: V1Secret = {
+    metadata: { resourceVersion: "1" },
+    data: {
+      [AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]: Buffer.from(
+        JSON.stringify({
+          taskId: task.id,
+          credentials: {
+            GITHUB_TOKEN: {
+              credentialId: "github-user",
+              scope: "personal",
+              value: "old-user-token",
+              expiresAt: Date.now() + 60_000,
+            },
+          },
+        }),
+      ).toString("base64"),
+    },
+  };
+  const internals = manager as unknown as { clients: unknown };
+  const original = internals.clients;
+  const sandboxInstalled = vi
+    .spyOn(agentSandboxApi, "isInstalled", "get")
+    .mockReturnValue(true);
+  internals.clients = {
+    coreApi: {
+      listNamespacedPod: async () => ({ items: [] }),
+      readNamespacedSecret: async () => structuredClone(stored),
+      patchNamespacedSecret: async ({ body }: { body: V1Secret }) => {
+        stored = {
+          metadata: { resourceVersion: "2" },
+          data: {
+            [AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]: Buffer.from(
+              body.stringData?.[AGENT_RUNTIME_CREDENTIALS_SECRET_KEY] ?? "",
+            ).toString("base64"),
+          },
+        };
+      },
+    },
+  };
+  try {
+    expect(await manager.refreshCredentials(run)).toEqual([
+      { key: "GITHUB_TOKEN", credentialId: "github-user" },
+    ]);
+    const bundle = JSON.parse(
+      Buffer.from(
+        stored.data?.[AGENT_RUNTIME_CREDENTIALS_SECRET_KEY] ?? "",
+        "base64",
+      ).toString(),
+    );
+    expect(bundle.credentials.GITHUB_TOKEN).toMatchObject({
+      value: "old-user-token",
+      reconnectNotified: true,
+    });
+    // The next pass finds the same broken connection and stays quiet.
+    expect(await manager.refreshCredentials(run)).toEqual([]);
   } finally {
     internals.clients = original;
     sandboxInstalled.mockRestore();

@@ -26979,8 +26979,6 @@ export type ListBuiltInAgentRuntimeSettingsResponses = {
     200: Array<{
         locked: boolean;
         settings: {
-            inferenceProtocol?: 'openai_responses' | 'openai_chat' | 'anthropic';
-            steerMode?: 'pipe' | 'tmux_keys';
             tier?: string | null;
             maxTier?: string | null;
             ttlHours?: number | null;
@@ -27121,8 +27119,6 @@ export type GetRuntimeTemplateSettingsResponses = {
             [key: string]: {
                 locked: boolean;
                 settings: {
-                    inferenceProtocol?: 'openai_responses' | 'openai_chat' | 'anthropic';
-                    steerMode?: 'pipe' | 'tmux_keys';
                     tier?: string | null;
                     maxTier?: string | null;
                     ttlHours?: number | null;
@@ -27220,8 +27216,6 @@ export type SaveRuntimeTemplateSettingsData = {
             [key: string]: {
                 locked: boolean;
                 settings: {
-                    inferenceProtocol?: 'openai_responses' | 'openai_chat' | 'anthropic';
-                    steerMode?: 'pipe' | 'tmux_keys';
                     tier?: string | null;
                     maxTier?: string | null;
                     ttlHours?: number | null;
@@ -27391,8 +27385,6 @@ export type SaveRuntimeTemplateSettingsResponses = {
             [key: string]: {
                 locked: boolean;
                 settings: {
-                    inferenceProtocol?: 'openai_responses' | 'openai_chat' | 'anthropic';
-                    steerMode?: 'pipe' | 'tmux_keys';
                     tier?: string | null;
                     maxTier?: string | null;
                     ttlHours?: number | null;

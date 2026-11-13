@@ -123,9 +123,12 @@ describe("locked Agent Runtime settings", () => {
   test("a custom runtime with a maintained image can't be locked", async () => {
     const template = makeTemplate({
       locked: true,
-      runtime: buildCustomAgentRuntime({
-        image: config.agentRuntime.catalogImages.codex,
-      }),
+      runtime: {
+        ...buildCustomAgentRuntime({
+          image: config.agentRuntime.catalogImages.codex,
+        }),
+        privileged: false,
+      },
     });
     const refused = await save({ revision: 0, templates: [template] });
     expect(refused.statusCode).toBe(400);

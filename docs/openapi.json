@@ -100702,21 +100702,6 @@
                       "settings": {
                         "type": "object",
                         "properties": {
-                          "inferenceProtocol": {
-                            "type": "string",
-                            "enum": [
-                              "openai_responses",
-                              "openai_chat",
-                              "anthropic"
-                            ]
-                          },
-                          "steerMode": {
-                            "type": "string",
-                            "enum": [
-                              "pipe",
-                              "tmux_keys"
-                            ]
-                          },
                           "tier": {
                             "nullable": true,
                             "type": "string",
@@ -101310,21 +101295,6 @@
                           "settings": {
                             "type": "object",
                             "properties": {
-                              "inferenceProtocol": {
-                                "type": "string",
-                                "enum": [
-                                  "openai_responses",
-                                  "openai_chat",
-                                  "anthropic"
-                                ]
-                              },
-                              "steerMode": {
-                                "type": "string",
-                                "enum": [
-                                  "pipe",
-                                  "tmux_keys"
-                                ]
-                              },
                               "tier": {
                                 "nullable": true,
                                 "type": "string",
@@ -102024,21 +101994,6 @@
                         "settings": {
                           "type": "object",
                           "properties": {
-                            "inferenceProtocol": {
-                              "type": "string",
-                              "enum": [
-                                "openai_responses",
-                                "openai_chat",
-                                "anthropic"
-                              ]
-                            },
-                            "steerMode": {
-                              "type": "string",
-                              "enum": [
-                                "pipe",
-                                "tmux_keys"
-                              ]
-                            },
                             "tier": {
                               "nullable": true,
                               "type": "string",
@@ -102494,21 +102449,6 @@
                           "settings": {
                             "type": "object",
                             "properties": {
-                              "inferenceProtocol": {
-                                "type": "string",
-                                "enum": [
-                                  "openai_responses",
-                                  "openai_chat",
-                                  "anthropic"
-                                ]
-                              },
-                              "steerMode": {
-                                "type": "string",
-                                "enum": [
-                                  "pipe",
-                                  "tmux_keys"
-                                ]
-                              },
                               "tier": {
                                 "nullable": true,
                                 "type": "string",

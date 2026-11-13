@@ -4497,7 +4497,7 @@ test("a pull and a person asking for the include at once open one pull request: 
   ]);
 });
 
-test("turning self-service on while the setup pull request waits puts the include on that pull request's branch, so one pull request brings both", async ({
+test("turning self-service on while the setup pull request waits: the next pull puts the include on that pull request's branch, so one pull request brings both", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -4526,6 +4526,8 @@ test("turning self-service on while the setup pull request waits puts the includ
   const moves: Array<{ branch: string; body: Record<string, unknown> }> = [];
   const notes: Array<Record<string, unknown>> = [];
   const opened: unknown[] = [];
+  // GitHub moves the pull request's head with its branch.
+  let setupHead = SETUP_HEAD;
   server.use(
     http.get(`${REPO}/rulesets`, () => HttpResponse.json([])),
     http.get(`${REPO}/pulls/3`, () =>
@@ -4534,7 +4536,7 @@ test("turning self-service on while the setup pull request waits puts the includ
         state: "open",
         html_url: "https://github.com/example/policies/pull/3",
         body: "This pull request puts your current OpenAPPA policy in place.",
-        head: { sha: SETUP_HEAD, ref: "archestra/openappa-setup-1234" },
+        head: { sha: setupHead, ref: "archestra/openappa-setup-1234" },
       }),
     ),
     http.patch(`${REPO}/pulls/3`, async ({ request }) => {
@@ -4559,10 +4561,12 @@ test("turning self-service on while the setup pull request waits puts the includ
     http.patch(
       `${REPO}/git/refs/heads/archestra/:branch`,
       async ({ params, request }) => {
-        moves.push({
-          branch: String(params.branch),
-          body: (await request.json()) as Record<string, unknown>,
-        });
+        const body = (await request.json()) as { sha: string };
+        moves.push({ branch: String(params.branch), body });
+        setupHead = body.sha;
+        files[setupHead] = {
+          "appa.toml": trees.at(-1)?.tree[0]?.content ?? "",
+        };
         return HttpResponse.json({});
       },
     ),
@@ -4576,12 +4580,8 @@ test("turning self-service on while the setup pull request waits puts the includ
     action: "self_service",
     enabled: true,
   });
-  expect(
-    await ensureSelfServiceInclude({
-      organizationId: org.id,
-      userId: admin.id,
-    }),
-  ).toEqual({ number: 3, url: "https://github.com/example/policies/pull/3" });
+  // The pull the switch queued: nobody opens the wizard.
+  await syncAppaGithubPolicy(org.id);
   // One commit on the setup branch, from its head, adding the include and
   // starting the folder; no second pull request.
   expect(trees[0]?.base_tree).toBe(TREE);
@@ -4607,8 +4607,8 @@ test("turning self-service on while the setup pull request waits puts the includ
     expect.stringContaining("It also adds `mcp/*.toml`"),
   );
   expect(opened).toEqual([]);
-  // The setup pull request now carries the include: it stands for it.
-  files[SETUP_HEAD] = { "appa.toml": `include = ["mcp/*.toml"]\n${RULES}` };
+  // The setup pull request now carries the include: it stands for it, and
+  // a person asking for the include finds it there.
   expect(await selfServiceIncludeState(org.id)).toEqual({
     folder: "mcp",
     state: "pull_open",

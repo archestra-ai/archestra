@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { expect, test, vi } from "vitest";
 import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
-import { expect, test, vi } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { withOpenAppaLease } from "./openappa-leases";
 

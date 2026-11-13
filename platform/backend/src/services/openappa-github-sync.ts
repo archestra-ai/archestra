@@ -1165,6 +1165,11 @@ export async function syncAppaGithubPolicy(organizationId: string) {
               : null,
         },
       });
+      // Its policy applies only once it merges, but what self-service needs
+      // from that policy goes onto its branch now, so one pull request
+      // brings both.
+      if (read.pending === "open" && selfServiceActive(row))
+        await proposeIncludeAfterPull(organizationId);
       return;
     }
     const { content } = read;
@@ -1228,22 +1233,28 @@ export async function syncAppaGithubPolicy(organizationId: string) {
       "OpenAPPA could not read the policy repository's protection",
     );
   }
-  // What self-service still needs from the policy file is proposed at once,
-  // as the template's files are: the include of the servers' folder waits
-  // in the Git sync setup as a pull request, never as a step that asks for
-  // one. An accepted policy that includes it costs no request to GitHub.
-  // Never fails the pull.
-  if (protection)
-    try {
-      const include = await port("selfServiceInclude");
-      if (await include.proposeSelfServiceInclude(organizationId))
-        await maintainRepositoryProtection(organizationId);
-    } catch (error) {
-      logger.warn(
-        { organizationId, error },
-        "OpenAPPA could not propose the include of the self-service folder",
-      );
-    }
+  if (protection) await proposeIncludeAfterPull(organizationId);
+}
+
+/**
+ * What self-service still needs from the policy file is proposed at once,
+ * as the template's files are: the include of the servers' folder waits in
+ * the Git sync setup as a pull request, never as a step that asks for one.
+ * A setup pull request still waiting takes it onto its own branch. An
+ * accepted policy that includes it costs no request to GitHub. Never fails
+ * the pull.
+ */
+async function proposeIncludeAfterPull(organizationId: string) {
+  try {
+    const include = await port("selfServiceInclude");
+    if (await include.proposeSelfServiceInclude(organizationId))
+      await maintainRepositoryProtection(organizationId);
+  } catch (error) {
+    logger.warn(
+      { organizationId, error },
+      "OpenAPPA could not propose the include of the self-service folder",
+    );
+  }
 }
 /**
  * Every check a pull makes before it accepts a commit's policy, storing

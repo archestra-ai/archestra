@@ -298,6 +298,7 @@ export function BlobProviderDialog({
           <AdvancedSection
             key={`${open}-${provider?.id ?? "new"}-${values.type}-${advancedError}`}
             defaultOpen={advancedOpen}
+            scrollIntoViewOnOpen
           >
             <Field
               {...field("keyPrefix", "Key prefix")}

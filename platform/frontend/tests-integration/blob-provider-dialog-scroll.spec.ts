@@ -63,6 +63,23 @@ const labels = {
   azure_blob: "Azure Blob Storage",
 };
 
+async function expectInsideBody(dialog: Locator, field: Locator) {
+  await expect
+    .poll(async () => {
+      const fieldBox = await field.boundingBox();
+      const bodyBox = await dialog
+        .locator('[data-slot="dialog-body"]')
+        .boundingBox();
+      return (
+        !!fieldBox &&
+        !!bodyBox &&
+        fieldBox.y >= bodyBox.y &&
+        fieldBox.y + fieldBox.height <= bodyBox.y + bodyBox.height
+      );
+    })
+    .toBe(true);
+}
+
 async function scrollBody(page: Page, dialog: Locator, lastField: Locator) {
   const body = dialog.locator('[data-slot="dialog-body"]');
   const header = dialog.locator('[data-slot="dialog-header"]');
@@ -79,18 +96,7 @@ async function scrollBody(page: Page, dialog: Locator, lastField: Locator) {
   await expect(lastField).toBeInViewport({ ratio: 1 });
   // Being in the viewport alone would also pass for a field hidden behind
   // the opaque footer. Require it to fit inside the body's visible bounds.
-  await expect
-    .poll(async () => {
-      const fieldBox = await lastField.boundingBox();
-      const bodyBox = await body.boundingBox();
-      return (
-        !!fieldBox &&
-        !!bodyBox &&
-        fieldBox.y >= bodyBox.y &&
-        fieldBox.y + fieldBox.height <= bodyBox.y + bodyBox.height
-      );
-    })
-    .toBe(true);
+  await expectInsideBody(dialog, lastField);
   await expect(header).toHaveJSProperty("scrollTop", 0);
   expect(await header.boundingBox()).toEqual(headerBefore);
   expect(await footer.boundingBox()).toEqual(footerBefore);
@@ -136,9 +142,25 @@ for (const provider of providers) {
           .getByRole("option", { name: new RegExp(labels[provider.type]) })
           .click();
       }
+      const header = dialog.locator('[data-slot="dialog-header"]');
+      const footer = dialog.locator('[data-slot="dialog-footer"]');
       await dialog
         .getByRole("button", { name: "Advanced", exact: true })
         .click();
+      // No wheel or focus action: opening Advanced itself reveals the fields.
+      await expectInsideBody(
+        dialog,
+        dialog.getByRole("textbox", { name: "Key prefix", exact: true }),
+      );
+      await expect(header).toBeInViewport({ ratio: 1 });
+      await expect(footer).toBeInViewport({ ratio: 1 });
+      await expect
+        .poll(() =>
+          dialog
+            .locator('[data-slot="dialog-body"]')
+            .evaluate((element) => element.scrollTop),
+        )
+        .toBeGreaterThan(0);
       const lastField =
         provider.type === "s3"
           ? dialog.getByRole("switch", { name: "Path-style addressing" })

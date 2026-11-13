@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import * as k8s from "@kubernetes/client-node";
 import * as Sentry from "@sentry/node";
+import config from "@/config";
 import logger from "@/logging";
 import { posthogErrorTrackingService } from "@/services/error-tracking";
 
@@ -33,6 +34,8 @@ import { posthogErrorTrackingService } from "@/services/error-tracking";
  * startup.
  */
 export async function reportAbnormalPreviousTermination(): Promise<void> {
+  // Orchestrator off means no Kubernetes credentials at all, this read included.
+  if (config.orchestrator.enabled === false) return;
   try {
     const namespace = (
       await readFile(SERVICE_ACCOUNT_NAMESPACE_PATH, "utf8")

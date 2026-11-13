@@ -1,5 +1,54 @@
 # Changelog
 
+## [1.5.0-rc.32](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.31...platform-v1.5.0-rc.32) (2026-11-13)
+
+
+### Features
+
+* **credentials:** upload a GitHub App private key as a .pem file instead of pasting it ([#10672](https://github.com/archestra-ai/archestra/issues/10672)) ([02e7d65](https://github.com/archestra-ai/archestra/commit/02e7d659d18abce5c5888b5300bfbcdfd4d45d1c))
+* **guardrails:** admins import the self-service ruleset; the GitHub App needs no Administration ([#10651](https://github.com/archestra-ai/archestra/issues/10651)) ([44a1917](https://github.com/archestra-ai/archestra/commit/44a191779dc63a4c76a129d0467205334f5f43ed))
+* **guardrails:** auto-merge self-served Guardrails rules pull requests once their check passes ([#10652](https://github.com/archestra-ai/archestra/issues/10652)) ([72840ef](https://github.com/archestra-ai/archestra/commit/72840ef90479d5cffa429b1f56bea98801722f9d))
+* **mcp:** desktop MCP servers on a user's device through the MCP bridge ([#10630](https://github.com/archestra-ai/archestra/issues/10630)) ([6febcaf](https://github.com/archestra-ai/archestra/commit/6febcaf9bf413be8d1063a8cd80e7ac801776643))
+* **mcp:** let a user add arguments to a desktop MCP server's command ([#10645](https://github.com/archestra-ai/archestra/issues/10645)) ([da0131c](https://github.com/archestra-ai/archestra/commit/da0131c65eadf37651b35b72e877a52a525a4c57))
+* **migrations:** forbid DROP COLUMN in the migration linter with no override ([#10639](https://github.com/archestra-ai/archestra/issues/10639)) ([bd856d6](https://github.com/archestra-ai/archestra/commit/bd856d6fd9789c637797f2606368e27ffbb7c8cc))
+* **skills:** accept user MCP OAuth tokens for marketplace reads ([#10640](https://github.com/archestra-ai/archestra/issues/10640)) ([a226b72](https://github.com/archestra-ai/archestra/commit/a226b72154d5a19f2fc7c73b7f4323d22477aa16))
+
+
+### Bug Fixes
+
+* **agents:** skip the blank Triggers step and show Edit on agents a custom role just created ([#10653](https://github.com/archestra-ai/archestra/issues/10653)) ([35fafc7](https://github.com/archestra-ai/archestra/commit/35fafc7eb270e64ac492ffed46c5137d0533ee8b))
+* **archestra-cli:** disallow http on non-loopback addresses ([#10664](https://github.com/archestra-ai/archestra/issues/10664)) ([fbc1aa1](https://github.com/archestra-ai/archestra/commit/fbc1aa1655e1106d220d0ad14d470922b89a8718))
+* **archestra-cli:** fix the CLI tests that fail on macOS and Windows ([#10668](https://github.com/archestra-ai/archestra/issues/10668)) ([62c451c](https://github.com/archestra-ai/archestra/commit/62c451cf73f946f322668af3716544e288493642))
+* **archestra-cli:** read the Windows user variable in the command variables test ([#10670](https://github.com/archestra-ai/archestra/issues/10670)) ([f48deca](https://github.com/archestra-ai/archestra/commit/f48decadba48cef4588d8fcb18894387bc6ea6df))
+* **azure:** reject Claude-on-Foundry Chat Completions locally and route Claude to Responses ([#10655](https://github.com/archestra-ai/archestra/issues/10655)) ([b8c8016](https://github.com/archestra-ai/archestra/commit/b8c80169c31653842b56557eb4ad1d4871cd7afa))
+* bound generated Slack slash command names ([#10607](https://github.com/archestra-ai/archestra/issues/10607)) ([a29e37a](https://github.com/archestra-ai/archestra/commit/a29e37aec767cc1e4290392ac70ae658df9af47c))
+* **chatops:** prevent duplicate replies during Slack stream startup ([#10633](https://github.com/archestra-ai/archestra/issues/10633)) ([1ff7481](https://github.com/archestra-ai/archestra/commit/1ff74818546c6bb259851b8410d94020466473ee))
+* **chat:** stop in-flight runs on shutdown and keep pending questions on 409 ([#10662](https://github.com/archestra-ai/archestra/issues/10662)) ([3ec6f5b](https://github.com/archestra-ai/archestra/commit/3ec6f5bc8caa10df658fe3988e30a24af3ba517d))
+* **guardrails:** keep the built-in tools' prefix out of server rules files ([#10646](https://github.com/archestra-ai/archestra/issues/10646)) ([b68d012](https://github.com/archestra-ai/archestra/commit/b68d012c2ea4ddd8c680bd33e20af07670a54a1a))
+* **guardrails:** let MCP servers that share a tool prefix share one rules file ([#10643](https://github.com/archestra-ai/archestra/issues/10643)) ([a22dd87](https://github.com/archestra-ai/archestra/commit/a22dd8778d153332c88d18ba97add01d4dd57e6c))
+* **guardrails:** send the setup wizard's Guardrails step to the server's own rules file ([#10648](https://github.com/archestra-ai/archestra/issues/10648)) ([d489779](https://github.com/archestra-ai/archestra/commit/d489779af6eaf5ef4d425543bc318513c294a508))
+* **openappa:** compose missing client coding tool aliases into saved policies ([#10631](https://github.com/archestra-ai/archestra/issues/10631)) ([696b6a3](https://github.com/archestra-ai/archestra/commit/696b6a3ddc601f05f043eb2b788ce125441633f7))
+
+
+### Documentation
+
+* **mcp:** add Desktop MCP Servers and Archestra CLI pages ([#10669](https://github.com/archestra-ai/archestra/issues/10669)) ([f1524a3](https://github.com/archestra-ai/archestra/commit/f1524a31b07c9595b5fc59e2b52ee8eaade16aa9))
+
+
+### Code Refactoring
+
+* **mcp:** remove the MCP bridge tray icon ([#10642](https://github.com/archestra-ai/archestra/issues/10642)) ([54f17f9](https://github.com/archestra-ai/archestra/commit/54f17f9e8004c7feaf12fae0362cea314ba2b5a1))
+
+
+### Miscellaneous Chores
+
+* update Archestra CLI release lock to v0.1.0 ([#10641](https://github.com/archestra-ai/archestra/issues/10641)) ([c2d8c40](https://github.com/archestra-ai/archestra/commit/c2d8c40f3e6ffd76a4f67535ccd0220120d4b3af))
+* update Archestra CLI release lock to v0.1.1 ([#10644](https://github.com/archestra-ai/archestra/issues/10644)) ([3ba1899](https://github.com/archestra-ai/archestra/commit/3ba18997eb5e8d8359da9b0ffcf2c344586b730d))
+* update Archestra CLI release lock to v0.1.3 ([#10663](https://github.com/archestra-ai/archestra/issues/10663)) ([58dda4d](https://github.com/archestra-ai/archestra/commit/58dda4d539c16287f299a4004f9cb0e25510be98))
+* update Archestra CLI release lock to v0.1.4 ([#10671](https://github.com/archestra-ai/archestra/issues/10671)) ([766c2b8](https://github.com/archestra-ai/archestra/commit/766c2b8cf02f52c69529b6700b4fc967226fb0f4))
+* update client versions ([#10656](https://github.com/archestra-ai/archestra/issues/10656)) ([0a44276](https://github.com/archestra-ai/archestra/commit/0a44276f91318c8155e8d07861673e72b89df578))
+* update client versions ([#10659](https://github.com/archestra-ai/archestra/issues/10659)) ([466d05e](https://github.com/archestra-ai/archestra/commit/466d05ea0e80b1fa3b923b9c8c2a2bc2da18f9e0))
+
 ## [1.5.0-rc.31](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.30...platform-v1.5.0-rc.31) (2026-11-12)
 
 

@@ -5057,6 +5057,13 @@ class AgentModel {
           modelId: sourceAgent.modelId,
           identityProviderId: null,
           passthroughHeaders: null,
+          // The runtime holds only configuration and credential declarations;
+          // the clone route checks the caller may configure it and read the
+          // credentials it names. Shared values stay in the source's secret
+          // bag (`runtimeSecretId`, not copied), so the copy needs its own.
+          runtime: sourceAgent.runtime
+            ? structuredClone(sourceAgent.runtime)
+            : null,
         },
         cloneScope === "personal" ? userId : undefined,
         // Copy the source's assignments verbatim below; don't let create's

@@ -33,6 +33,7 @@ export function RuntimeCredentialConnectionDialog({
   onClose,
   onConnected,
   silent = false,
+  reconnect = false,
   create,
 }: {
   definition: Pick<
@@ -45,6 +46,8 @@ export function RuntimeCredentialConnectionDialog({
   onConnected?: () => void;
   /** Skips the "connected" toast, for a caller that shows the result itself. */
   silent?: boolean;
+  /** The person's earlier connection stopped working; ask to connect again. */
+  reconnect?: boolean;
   /**
    * Makes the credential when the value is submitted, for a definition that
    * does not exist yet, so a dialog closed without a value leaves nothing.
@@ -94,15 +97,18 @@ export function RuntimeCredentialConnectionDialog({
         onOpenChange={(open) => {
           if (!open) onClose();
         }}
-        title="Connect GitHub"
+        title={reconnect ? "Reconnect GitHub" : "Connect GitHub"}
         description={
           <span className="whitespace-pre-wrap break-words">
-            {definition.description?.trim() ||
-              "Connect your GitHub account to use it with your agents."}
+            {reconnect
+              ? "Your GitHub connection no longer works, for example because the GitHub App changed. Connect it again to keep using it with your agents."
+              : definition.description?.trim() ||
+                "Connect your GitHub account to use it with your agents."}
           </span>
         }
         action={
           <GitHubConnectButton
+            label={reconnect ? "Reconnect GitHub" : undefined}
             pending={startGitHub.isPending}
             onClick={() => startGitHub.mutate(definition.key)}
           />

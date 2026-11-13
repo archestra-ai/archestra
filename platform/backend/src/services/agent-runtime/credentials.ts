@@ -10,6 +10,7 @@ import {
 } from "@/services/agent-runtime/runtime-credentials";
 import { CredentialAccess } from "@/services/credential-access";
 import { CredentialResolutionBatch } from "@/services/credentials";
+import { GitHubReconnectRequiredError } from "@/services/github-user-connection";
 import type {
   AgentRuntime,
   AgentRuntimeCredentialDeclaration,
@@ -152,7 +153,7 @@ export async function resolveAgentRuntimeCredentials(params: {
         continue;
       }
       const credential = declaration.credentialId
-        ? await batch.resolve({
+        ? await resolvePersonalCredential(batch, {
             organizationId: params.organizationId,
             scope: "personal",
             userId: params.userId,
@@ -160,6 +161,10 @@ export async function resolveAgentRuntimeCredentials(params: {
             minimumValidityMs: 50 * 60_000,
           })
         : null;
+      if (credential === RECONNECT) {
+        missing.push({ ...toMissing(declaration), reconnect: true });
+        continue;
+      }
       const value = declaration.credentialId
         ? credential?.value
         : resolved.values[declaration.key];
@@ -317,19 +322,23 @@ export async function preflightAgentRuntimeCredentials(params: {
       const hasEphemeral =
         typeof effectiveEphemeral?.[declaration.key] === "string" &&
         effectiveEphemeral[declaration.key].length > 0;
+      const credential =
+        !hasEphemeral && declaration.credentialId
+          ? await resolvePersonalCredential(batch, {
+              organizationId: params.organizationId,
+              scope: "personal",
+              userId: params.userId,
+              credentialId: declaration.credentialId,
+            })
+          : null;
+      if (credential === RECONNECT) {
+        missing.push({ ...toMissing(declaration), reconnect: true });
+        continue;
+      }
       const connected =
         hasEphemeral ||
         (declaration.credentialId
-          ? Boolean(
-              (
-                await batch.resolve({
-                  organizationId: params.organizationId,
-                  scope: "personal",
-                  userId: params.userId,
-                  credentialId: declaration.credentialId,
-                })
-              )?.value,
-            )
+          ? Boolean(credential?.value)
           : present.has(declaration.key));
       if (connected) {
         configured.push(declaration.key);
@@ -749,6 +758,26 @@ async function readSharedBag(
   }
   return secret.secret ?? {};
 }
+
+/**
+ * A personal value, or `RECONNECT` when the person's stored connection exists
+ * but no longer works. Other failures still propagate.
+ */
+async function resolvePersonalCredential(
+  batch: CredentialResolutionBatch,
+  params: Parameters<CredentialResolutionBatch["resolve"]>[0],
+): Promise<
+  Awaited<ReturnType<CredentialResolutionBatch["resolve"]>> | typeof RECONNECT
+> {
+  try {
+    return await batch.resolve(params);
+  } catch (error) {
+    if (error instanceof GitHubReconnectRequiredError) return RECONNECT;
+    throw error;
+  }
+}
+
+const RECONNECT = Symbol("reconnect");
 
 function toMissing(
   declaration: AgentRuntimeCredentialDeclaration,

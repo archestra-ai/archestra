@@ -1,5 +1,8 @@
 import { A2AManager } from "@/agents/a2a/a2a-manager";
-import { watchTaskCompletion } from "@/agents/task-completion-watcher";
+import {
+  notifyRunCredentialReconnect,
+  watchTaskCompletion,
+} from "@/agents/task-completion-watcher";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -67,9 +70,15 @@ class AgentRunReconciler {
       const retained = await AgentRunModel.listRetainedForCredentialRefresh();
       for (const session of [...sessions, ...retained]) {
         try {
-          await resolveAgentRuntimeBackendDriver(
-            session.backend,
-          ).refreshCredentials?.(session);
+          const reconnect =
+            (await resolveAgentRuntimeBackendDriver(
+              session.backend,
+            ).refreshCredentials?.(session)) ?? [];
+          if (reconnect.length > 0)
+            await notifyRunCredentialReconnect({
+              session,
+              credentials: reconnect,
+            });
         } catch {
           logger.warn(
             { taskId: session.taskId },

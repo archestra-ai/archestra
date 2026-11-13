@@ -55,6 +55,7 @@ import {
 } from "@/services/agent-runtime/runtime-contract";
 import { resolveCredential } from "@/services/credentials";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
+import { GitHubReconnectRequiredError } from "@/services/github-user-connection";
 import type {
   AgentRunInput,
   AgentRunRecord,
@@ -726,8 +727,14 @@ class AgentRuntimeManager {
     });
   }
 
-  /** CAS against release/continuation: a stale refresher cannot restore revoked values. */
-  async refreshCredentials(session: AgentRunRecord): Promise<void> {
+  /**
+   * CAS against release/continuation: a stale refresher cannot restore revoked values.
+   * Returns the personal credentials that stopped working on this pass and
+   * whose owner has not been told yet, so the caller can ask them to connect again.
+   */
+  async refreshCredentials(
+    session: AgentRunRecord,
+  ): Promise<Array<{ key: string; credentialId: string }>> {
     const clients = this.requireClients();
     const name = agentRuntimeNames(session.workloadName).secret;
     const secret = await clients.coreApi
@@ -737,35 +744,55 @@ class AgentRuntimeManager {
         throw error;
       });
     const encoded = secret?.data?.[AGENT_RUNTIME_CREDENTIALS_SECRET_KEY];
-    if (!encoded) return;
+    if (!encoded) return [];
     const parsed = RenewableCredentialBundleSchema.safeParse(
       JSON.parse(Buffer.from(encoded, "base64").toString("utf8")),
     );
-    if (!parsed.success || parsed.data.taskId !== session.taskId) return;
+    if (!parsed.success || parsed.data.taskId !== session.taskId) return [];
     const bundle = parsed.data;
     let changed = false;
+    // Personal connections that stopped working on this pass and whose owner
+    // has not been told yet.
+    const reconnect: Array<{ key: string; credentialId: string }> = [];
     for (const [key, current] of Object.entries(bundle.credentials)) {
       if (current.expiresAt - Date.now() > 15 * 60_000) continue;
-      const next = await resolveCredential({
-        organizationId: session.organizationId,
-        credentialId: current.credentialId,
-        scope: current.scope ?? "organization",
-        userId: session.actorUserId,
-        minimumValidityMs: 55 * 60_000,
-      });
+      const personal = current.scope === "personal";
+      let next: Awaited<ReturnType<typeof resolveCredential>>;
+      try {
+        next = await resolveCredential({
+          organizationId: session.organizationId,
+          credentialId: current.credentialId,
+          scope: current.scope ?? "organization",
+          userId: session.actorUserId,
+          minimumValidityMs: 55 * 60_000,
+        });
+      } catch (error) {
+        if (!(error instanceof GitHubReconnectRequiredError)) throw error;
+        // Keep the old value until it expires; only the person can fix this.
+        if (!current.reconnectNotified) {
+          bundle.credentials[key] = { ...current, reconnectNotified: true };
+          reconnect.push({ key, credentialId: current.credentialId });
+          changed = true;
+        }
+        continue;
+      }
+      const lost = personal && !next?.value;
+      if (lost && !current.reconnectNotified)
+        reconnect.push({ key, credentialId: current.credentialId });
       bundle.credentials[key] = {
         ...current,
         credentialId: current.credentialId,
         value: next?.value ?? "",
         expiresAt: next?.expiresAt ?? 0,
+        reconnectNotified: lost ? true : undefined,
       };
       changed = true;
     }
     if (!changed) {
       await this.projectWarmCredentials(session);
-      return;
+      return [];
     }
-    await clients.coreApi
+    const patched = await clients.coreApi
       .patchNamespacedSecret(
         {
           namespace: session.runtimeScope,
@@ -779,11 +806,15 @@ class AgentRuntimeManager {
         },
         setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
       )
+      .then(() => true)
       .catch((error) => {
         if (!isK8sConflictError(error) && !isK8sNotFoundError(error))
           throw error;
+        return false;
       });
     await this.projectWarmCredentials(session);
+    // Only once the flag is stored, so a lost write cannot repeat the notice.
+    return patched ? reconnect : [];
   }
 
   async hasRetainedTerminal(

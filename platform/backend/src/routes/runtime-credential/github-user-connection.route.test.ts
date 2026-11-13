@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import config from "@/config";
@@ -10,8 +10,13 @@ import {
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { RuntimeCredentialConnectionModel } from "@/models";
 import {
+  preflightAgentRuntimeCredentials,
+  resolveAgentRuntimeCredentials,
+} from "@/services/agent-runtime/credentials";
+import {
   createRuntimeCredentialDefinition,
   setRuntimeCredentialConnection,
+  updateRuntimeCredentialDefinition,
 } from "@/services/agent-runtime/runtime-credentials";
 import { resolveCredential } from "@/services/credentials";
 import { afterEach, beforeEach, expect, test } from "@/test";
@@ -320,6 +325,52 @@ test("a connected account joins the member roster of GitHub's deployed target", 
     config.openappa = openappa;
     config.daggerRuntime.enabled = sandbox;
   }
+});
+
+test("a connection made with a replaced GitHub App asks to connect again, even when the Agent marks it optional", async () => {
+  await complete(await start());
+  await updateRuntimeCredentialDefinition({
+    organizationId,
+    key: "repository-app",
+    definition: { githubClientId: "replacement-client" },
+  });
+  const runtime = {
+    agentId: randomUUID(),
+    secretId: null,
+    credentials: [
+      {
+        key: "GITHUB_TOKEN",
+        scope: "per_user" as const,
+        credentialId: "github-user",
+        label: "GitHub",
+        required: false,
+      },
+    ],
+  };
+
+  const check = await preflightAgentRuntimeCredentials({
+    runtime,
+    organizationId,
+    userId: user.id,
+  });
+  expect(check.configured).toEqual([]);
+  expect(check.missing).toEqual([
+    expect.objectContaining({
+      key: "GITHUB_TOKEN",
+      label: "GitHub",
+      reconnect: true,
+    }),
+  ]);
+
+  const launch = await resolveAgentRuntimeCredentials({
+    runtime,
+    organizationId,
+    userId: user.id,
+  });
+  expect(launch.env.GITHUB_TOKEN).toBeUndefined();
+  expect(launch.missing).toEqual([
+    expect.objectContaining({ key: "GITHUB_TOKEN", reconnect: true }),
+  ]);
 });
 
 async function start() {

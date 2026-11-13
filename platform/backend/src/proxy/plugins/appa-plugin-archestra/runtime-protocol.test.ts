@@ -577,6 +577,19 @@ describe("protected runtime protocol", () => {
     expect(processed.mock.calls[0][0].classifySpawnResult?.(reported)).toBe(
       "failed",
     );
+
+    const adminOnlyOrg = await makeOrganization();
+    const adminOnlyLaunch = await releasedLaunch(adminOnlyOrg.id, {
+      kind: "failed",
+      reason: "credentials_admin_only",
+    });
+    const adminOnlyOutcome = await adminOnlyLaunch.plugin.onToolResults({
+      ...adminOnlyLaunch.context,
+      toolResults: [reported],
+    });
+    expect(adminOnlyOutcome?.toolResultUpdates["runtime-call"]).toBe(
+      "No runtime was started. Only admins can run this Agent, because it uses an organization credential. Ask an admin to run it for you.",
+    );
   });
 
   test("gives the model no handle when the gateway recorded no launch", async ({

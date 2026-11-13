@@ -33,6 +33,10 @@ import { signRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as openappa from "@/openappa/service";
 import { superyellSession } from "@/openappa/unenforced";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
+import {
+  createRuntimeCredentialDefinition,
+  setRuntimeCredentialConnection,
+} from "@/services/agent-runtime/runtime-credentials";
 import * as workspaceFiles from "@/services/agent-runtime/workspace-files";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -851,6 +855,77 @@ describe("model-facing runtime tools", () => {
       setup_url: expect.stringContaining(
         `/agents/${agent.id}?setup=credentials&keys=GITHUB_TOKEN`,
       ),
+    });
+  });
+
+  test("records credentials_admin_only rather than OpenAPPA refusal when a member launches an Agent with a shared organization credential", async ({
+    makeAdmin,
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const admin = await makeAdmin();
+    const member = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    await makeMember(member.id, org.id, { role: "member" });
+    await createRuntimeCredentialDefinition({
+      organizationId: org.id,
+      userId: admin.id,
+      definition: {
+        key: "org-router-secret",
+        name: "Organization router secret",
+        description: "",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    await setRuntimeCredentialConnection({
+      organizationId: org.id,
+      userId: admin.id,
+      credentialId: "org-router-secret",
+      scope: "organization",
+      value: "shared-secret-value",
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: admin.id,
+      runtime: {
+        ...runtimeConfig(),
+        credentials: [
+          {
+            key: "ORG_ROUTER_SECRET",
+            label: "Organization router secret",
+            scope: "shared",
+            credentialId: "org-router-secret",
+            required: false,
+          },
+        ],
+      },
+    });
+    await releasedSpawn(org.id);
+
+    const result = await startDelegatedTask({
+      agentId: agent.id,
+      message: "Do the work",
+      context: {
+        agent: { id: agent.id, name: agent.name },
+        userId: member.id,
+        organizationId: org.id,
+        openappaRuntimeCall: {
+          session: proofSession(org.id),
+          toolCallId: "call-1",
+          spawn: true,
+        },
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(await recordedLaunch(org.id)).toEqual({
+      kind: "failed",
+      reason: "credentials_admin_only",
     });
   });
 

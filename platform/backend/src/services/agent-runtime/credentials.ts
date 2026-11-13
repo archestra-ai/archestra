@@ -152,9 +152,9 @@ export async function resolveAgentRuntimeCredentials(params: {
         continue;
       }
       const credential = declaration.credentialId
-        ? await batch.resolve({
+        ? await resolvePersonalBatchCredential({
+            batch,
             organizationId: params.organizationId,
-            scope: "personal",
             userId: params.userId,
             credentialId: declaration.credentialId,
             minimumValidityMs: 50 * 60_000,
@@ -322,9 +322,9 @@ export async function preflightAgentRuntimeCredentials(params: {
         (declaration.credentialId
           ? Boolean(
               (
-                await batch.resolve({
+                await resolvePersonalBatchCredential({
+                  batch,
                   organizationId: params.organizationId,
-                  scope: "personal",
                   userId: params.userId,
                   credentialId: declaration.credentialId,
                 })
@@ -390,13 +390,53 @@ async function requireSharedCredentialAccess(params: {
 }
 
 /** A person without organization settings access tried to run with an organization credential. */
-class SharedCredentialAccessDeniedError extends ApiError {
+export class SharedCredentialAccessDeniedError extends ApiError {
   constructor() {
     super(
       403,
       "Only admins can run this agent, because it uses an organization credential. Ask an admin to run it for you.",
     );
     this.name = "SharedCredentialAccessDeniedError";
+  }
+}
+
+async function resolvePersonalBatchCredential(params: {
+  batch: CredentialResolutionBatch;
+  organizationId: string;
+  userId: string;
+  credentialId: string;
+  minimumValidityMs?: number;
+}): Promise<{ value: string; expiresAt: number | null } | null> {
+  try {
+    return await params.batch.resolve({
+      organizationId: params.organizationId,
+      scope: "personal",
+      userId: params.userId,
+      credentialId: params.credentialId,
+      minimumValidityMs: params.minimumValidityMs,
+    });
+  } catch (error) {
+    // GitHub sign-in reports a revoked, expired, or reconfigured personal
+    // authorization (e.g. rotated GitHub App clientId) as a 400. Treat it as
+    // disconnected so optional declarations are omitted and required ones
+    // report `missing` with a reconnect link instead of crashing launch.
+    if (
+      params.batch.kind(params.credentialId) === "github_app_user" &&
+      error instanceof ApiError &&
+      error.statusCode === 400 &&
+      error.message !== "Credential ownership does not match this binding"
+    ) {
+      logger.info(
+        {
+          userId: params.userId,
+          credentialId: params.credentialId,
+          error: error.message,
+        },
+        "[agent-runtime] A personal GitHub connection can no longer be used",
+      );
+      return null;
+    }
+    throw error;
   }
 }
 

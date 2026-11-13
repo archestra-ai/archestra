@@ -48,6 +48,10 @@ import {
   agentRunFailure,
   tagAgentRunFailure,
 } from "@/services/agent-runtime/run-failure";
+import {
+  createRuntimeCredentialDefinition,
+  setRuntimeCredentialConnection,
+} from "@/services/agent-runtime/runtime-credentials";
 import { subagentLoadBalancer } from "@/services/agent-runtime/subagent-load-balancer";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { modelSyncService } from "@/services/model-sync";
@@ -2803,5 +2807,93 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     expect(new Set([run1AgentId, run2AgentId])).toEqual(
       new Set([readyKimiSubagent.id, readyGrokSubagent.id]),
     );
+  });
+
+  test("fails over across load-balanced candidates when a primary candidate requires admin-only shared credentials", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const memberUser = await makeUser();
+    await makeMember(memberUser.id, organizationId, { role: "member" });
+
+    await createRuntimeCredentialDefinition({
+      organizationId,
+      userId: actorId,
+      definition: {
+        key: "admin-only-shared-cred",
+        name: "Admin-only shared credential",
+        description: "",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    await setRuntimeCredentialConnection({
+      organizationId,
+      userId: actorId,
+      credentialId: "admin-only-shared-cred",
+      scope: "organization",
+      value: "shared-secret",
+    });
+
+    const adminOnlyCandidate = await makeAgent({
+      name: "Admin-Only Candidate",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId,
+      runtime: runtimeConfig({
+        credentials: [
+          {
+            key: "SHARED_ORG_SECRET",
+            label: "Admin-only shared credential",
+            scope: "shared",
+            credentialId: "admin-only-shared-cred",
+            required: false,
+          },
+        ],
+      }),
+    });
+    await AgentToolModel.create(
+      gateway.id,
+      (await ToolModel.findOrCreateDelegationTool(adminOnlyCandidate.id)).id,
+    );
+    const openCandidate = await createRuntimeSubagent(
+      makeAgent,
+      "Open Candidate",
+    );
+
+    await AgentModel.update(gateway.id, {
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+
+    const sendSpy = await mockDetachedTaskStart();
+
+    // `memberUser` is a non-admin `member`, so `adminOnlyCandidate` fails preflight
+    // with `SharedCredentialAccessDeniedError` (`credentials_admin_only`) and load
+    // balancing must fail over to `openCandidate` instead of aborting.
+    const result = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Run on eligible worker" },
+      { ...context, userId: memberUser.id },
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({
+      run: {
+        agent_id: openCandidate.id,
+      },
+    });
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy.mock.calls[0]?.[0]).toMatchObject({
+      agentId: openCandidate.id,
+    });
   });
 });

@@ -3864,6 +3864,16 @@ const RUNTIME_LAUNCH_FAILURE_TEXT: Record<RuntimeLaunchFailureReason, string> =
       "No runtime was started. This Agent's Agent Runtime needs credentials that are not set up yet.",
     credentials_misconfigured:
       "No runtime was started. This Agent is missing shared Agent Runtime credentials that an administrator must configure.",
+    credentials_admin_only:
+      "No runtime was started. Only admins can run this Agent, because it uses an organization credential. Ask an admin to run it for you.",
+    model_unready:
+      "No runtime was started. This Agent's model or provider credential is not set up for your account.",
+    backend_unavailable:
+      "No runtime was started. The Agent Runtime backend is not available right now.",
+    not_allowed:
+      "No runtime was started. This caller is not allowed to start a run on the requested Agent.",
+    invalid_request:
+      "No runtime was started. The launch request parameters or limits are not valid for this Agent.",
     refused: "No runtime was started. OpenAPPA refused this launch.",
     failed:
       "No runtime was started. An internal error occurred while starting the run.",

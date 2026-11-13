@@ -65,6 +65,10 @@ export class CredentialResolutionBatch {
     return this.definitions.has(credentialId);
   }
 
+  kind(credentialId: string): RuntimeCredentialDefinition["kind"] | undefined {
+    return this.definitions.get(credentialId)?.kind;
+  }
+
   /** The credential's display name, falling back to its key. */
   name(credentialId: string): string {
     return this.definitions.get(credentialId)?.name ?? credentialId;

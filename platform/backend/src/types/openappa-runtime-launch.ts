@@ -8,6 +8,11 @@ const RuntimeLaunchFailureReasonSchema = z.enum([
   "agent_not_found",
   "credentials_needed",
   "credentials_misconfigured",
+  "credentials_admin_only",
+  "model_unready",
+  "backend_unavailable",
+  "not_allowed",
+  "invalid_request",
   "refused",
   "failed",
 ]);

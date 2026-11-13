@@ -10,8 +10,13 @@ import {
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { RuntimeCredentialConnectionModel } from "@/models";
 import {
+  preflightAgentRuntimeCredentials,
+  resolveAgentRuntimeCredentials,
+} from "@/services/agent-runtime/credentials";
+import {
   createRuntimeCredentialDefinition,
   setRuntimeCredentialConnection,
+  updateRuntimeCredentialDefinition,
 } from "@/services/agent-runtime/runtime-credentials";
 import { resolveCredential } from "@/services/credentials";
 import { afterEach, beforeEach, expect, test } from "@/test";
@@ -320,6 +325,84 @@ test("a connected account joins the member roster of GitHub's deployed target", 
     config.openappa = openappa;
     config.daggerRuntime.enabled = sandbox;
   }
+});
+
+test("treats a personal GitHub connection as disconnected when the backing GitHub App client ID rotates", async ({
+  makeAgent,
+}) => {
+  expect((await complete(await start())).statusCode).toBe(200);
+  await updateRuntimeCredentialDefinition({
+    organizationId,
+    key: "repository-app",
+    definition: { githubClientId: "rotated-client-id" },
+  });
+  const agent = await makeAgent({ organizationId });
+
+  const optionalRuntime = {
+    agentId: agent.id,
+    secretId: null,
+    credentials: [
+      {
+        key: "GITHUB_TOKEN",
+        label: "GitHub token",
+        scope: "per_user" as const,
+        credentialId: "github-user",
+        required: false,
+      },
+    ],
+  };
+  await expect(
+    preflightAgentRuntimeCredentials({
+      runtime: optionalRuntime,
+      organizationId,
+      userId: user.id,
+    }),
+  ).resolves.toEqual({ configured: [], missing: [], misconfigured: [] });
+  await expect(
+    resolveAgentRuntimeCredentials({
+      runtime: optionalRuntime,
+      organizationId,
+      userId: user.id,
+    }),
+  ).resolves.toEqual({
+    env: {},
+    renewableCredentials: {},
+    missing: [],
+    misconfigured: [],
+  });
+
+  const requiredRuntime = {
+    ...optionalRuntime,
+    credentials: [{ ...optionalRuntime.credentials[0], required: true }],
+  };
+  await expect(
+    preflightAgentRuntimeCredentials({
+      runtime: requiredRuntime,
+      organizationId,
+      userId: user.id,
+    }),
+  ).resolves.toMatchObject({
+    configured: [],
+    missing: [
+      {
+        key: "GITHUB_TOKEN",
+        credentialId: "github-user",
+        canConnect: true,
+      },
+    ],
+    misconfigured: [],
+  });
+  await expect(
+    resolveAgentRuntimeCredentials({
+      runtime: requiredRuntime,
+      organizationId,
+      userId: user.id,
+    }),
+  ).resolves.toMatchObject({
+    env: {},
+    missing: [{ key: "GITHUB_TOKEN", credentialId: "github-user" }],
+    misconfigured: [],
+  });
 });
 
 async function start() {

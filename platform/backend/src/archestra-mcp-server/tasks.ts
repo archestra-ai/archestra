@@ -44,7 +44,10 @@ import {
   prepareAgentRuntimeBackendDriver,
   resolveAgentRuntimeBackendDriver,
 } from "@/services/agent-runtime/backends";
-import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
+import {
+  preflightAgentRuntimeCredentials,
+  SharedCredentialAccessDeniedError,
+} from "@/services/agent-runtime/credentials";
 import { ephemeralCredentialGrantManager } from "@/services/agent-runtime/ephemeral-credential-grants";
 import {
   pendingExports,
@@ -224,7 +227,11 @@ export async function checkCallerSubagentAccess(
   targetAgent: Pick<Agent, "id" | "name" | "environmentId">,
 ): Promise<
   | { allowed: true }
-  | { allowed: false; reason: "agent_not_found" | "refused"; message: string }
+  | {
+      allowed: false;
+      reason: "agent_not_found" | "not_allowed";
+      message: string;
+    }
 > {
   if (callerAgentId === targetAgent.id) {
     return { allowed: true };
@@ -245,7 +252,7 @@ export async function checkCallerSubagentAccess(
   if (excludedSubagentIds.includes(targetAgent.id)) {
     return {
       allowed: false,
-      reason: "refused",
+      reason: "not_allowed",
       message: `Agent "${targetAgent.name}" is not an allowed subagent of "${callerAgent.name}".`,
     };
   }
@@ -295,7 +302,7 @@ export async function checkCallerSubagentAccess(
       if (!allowedViaRouter) {
         return {
           allowed: false,
-          reason: "refused",
+          reason: "not_allowed",
           message: `Agent "${targetAgent.name}" is not an allowed subagent of "${callerAgent.name}".`,
         };
       }
@@ -379,7 +386,7 @@ export async function startDelegatedTask(params: {
           !params.context.tokenAuth.isUserToken)
       ) {
         const { result, outcome } = failedLaunch(
-          "refused",
+          "not_allowed",
           errorResult(
             "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
           ),
@@ -392,7 +399,7 @@ export async function startDelegatedTask(params: {
         actor = requireActor(params.context);
       } catch (error) {
         const { result, outcome } = failedLaunch(
-          "refused",
+          "not_allowed",
           error instanceof ApiError
             ? errorResult(error.message)
             : catchError(error, "starting the run"),
@@ -487,7 +494,7 @@ export async function startDelegatedTask(params: {
         actor = requireActor(params.context);
       } catch (error) {
         const { result, outcome } = failedLaunch(
-          "refused",
+          "not_allowed",
           error instanceof ApiError
             ? errorResult(error.message)
             : catchError(error, "starting the run"),
@@ -504,7 +511,7 @@ export async function startDelegatedTask(params: {
       });
       if (!resolved.ok) {
         const { result, outcome } = failedLaunch(
-          "refused",
+          "invalid_request",
           errorResult(resolved.message),
         );
         if (outcome) await recordRuntimeLaunch(params.context, outcome);
@@ -533,9 +540,24 @@ export async function startDelegatedTask(params: {
     return result;
   }
 
+  if (
+    params.context.tokenAuth?.oauthExecution ||
+    (params.context.tokenAuth?.oauthClientId &&
+      !params.context.tokenAuth.isUserToken)
+  ) {
+    const { result, outcome } = failedLaunch(
+      "not_allowed",
+      errorResult(
+        "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
+      ),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
   if (!poolAgent) {
     const { result, outcome } = failedLaunch(
-      "refused",
+      "invalid_request",
       errorResult("agent_id is required."),
     );
     if (outcome) await recordRuntimeLaunch(params.context, outcome);
@@ -544,7 +566,7 @@ export async function startDelegatedTask(params: {
 
   if (assignedIds.length === 0) {
     const { result, outcome } = failedLaunch(
-      "refused",
+      "invalid_request",
       errorResult("No runtime subagents are assigned to this gateway."),
     );
     if (outcome) await recordRuntimeLaunch(params.context, outcome);
@@ -557,7 +579,7 @@ export async function startDelegatedTask(params: {
   );
   if (excludedSet.size > 0 && !fallbackEnabled) {
     const { result, outcome } = failedLaunch(
-      "refused",
+      "invalid_request",
       errorResult(
         "No remaining fallback subagents are available on this gateway.",
       ),
@@ -634,7 +656,7 @@ export async function startDelegatedTask(params: {
     });
   if (candidateIds.length === 0) {
     const { result, outcome } = failedLaunch(
-      "refused",
+      "invalid_request",
       errorResult(
         "No remaining fallback subagents are available on this gateway.",
       ),
@@ -660,7 +682,7 @@ export async function startDelegatedTask(params: {
         scopeKey,
       });
       const { result, outcome } = failedLaunch(
-        "refused",
+        "not_allowed",
         error instanceof ApiError
           ? errorResult(error.message)
           : catchError(error, "starting the run"),
@@ -682,7 +704,7 @@ export async function startDelegatedTask(params: {
         scopeKey,
       });
       const { result, outcome } = failedLaunch(
-        "refused",
+        "invalid_request",
         errorResult(resolved.message),
       );
       if (outcome) await recordRuntimeLaunch(params.context, outcome);
@@ -734,7 +756,8 @@ export async function startDelegatedTask(params: {
     }
     if (
       attempt.outcome?.kind === "failed" &&
-      attempt.outcome.reason === "refused"
+      (attempt.outcome.reason === "refused" ||
+        attempt.outcome.reason === "invalid_request")
     ) {
       if (currentCandidateId === claimedPrimaryAgentId) {
         await subagentLoadBalancer.releaseUnlaunchedClaim({
@@ -791,7 +814,7 @@ async function launchDelegatedTask(params: {
     (context.tokenAuth?.oauthClientId && !context.tokenAuth.isUserToken)
   ) {
     return failedLaunch(
-      "refused",
+      "not_allowed",
       errorResult(
         "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
       ),
@@ -799,7 +822,15 @@ async function launchDelegatedTask(params: {
   }
   let restoreConsumedGrants: (() => Promise<void>) | undefined;
   try {
-    const actor = requireActor(context);
+    let actor: A2AActor;
+    try {
+      actor = requireActor(context);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return failedLaunch("not_allowed", errorResult(error.message));
+      }
+      throw error;
+    }
     const agent = await AgentModel.findById(agentId);
     if (!agent || agent.organizationId !== actor.organizationId) {
       return failedLaunch("agent_not_found", errorResult("Agent not found"));
@@ -836,7 +867,7 @@ async function launchDelegatedTask(params: {
     const runtime = resolveAgentRuntime(agent);
     if (!runtime) {
       return failedLaunch(
-        "refused",
+        context.openappaRuntimeCall?.spawn ? "refused" : "invalid_request",
         errorResult(
           context.openappaRuntimeCall?.spawn
             ? SPAWN_TARGET_MISMATCH
@@ -877,10 +908,17 @@ async function launchDelegatedTask(params: {
       });
     } catch (error) {
       if (error instanceof ApiError)
-        return failedLaunch("refused", errorResult(error.message));
+        return failedLaunch("invalid_request", errorResult(error.message));
       throw error;
     }
-    await prepareAgentRuntimeBackendDriver(runtime.backend);
+    try {
+      await prepareAgentRuntimeBackendDriver(runtime.backend);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return failedLaunch("backend_unavailable", errorResult(error.message));
+      }
+      throw error;
+    }
     const crossing = await runtimeCrossingForStart(context);
     if (typeof crossing === "string") {
       return failedLaunch("refused", errorResult(crossing));
@@ -889,12 +927,23 @@ async function launchDelegatedTask(params: {
     // Refuse before creating a task when the caller can already fix the
     // missing credential. Otherwise the detached task fails after its handle
     // has been returned and the user only discovers the problem by polling.
-    const preflight = await preflightAgentRuntimeCredentials({
-      runtime,
-      organizationId: actor.organizationId,
-      userId: actor.id,
-      ephemeralCredentials: params.ephemeralCredentials,
-    });
+    let preflight: Awaited<ReturnType<typeof preflightAgentRuntimeCredentials>>;
+    try {
+      preflight = await preflightAgentRuntimeCredentials({
+        runtime,
+        organizationId: actor.organizationId,
+        userId: actor.id,
+        ephemeralCredentials: params.ephemeralCredentials,
+      });
+    } catch (error) {
+      if (error instanceof SharedCredentialAccessDeniedError) {
+        return failedLaunch(
+          "credentials_admin_only",
+          errorResult(error.message),
+        );
+      }
+      throw error;
+    }
     if (preflight.missing.length > 0) {
       return credentialsNeededLaunch(agent.id, preflight.missing);
     }
@@ -908,7 +957,18 @@ async function launchDelegatedTask(params: {
         ),
       );
     }
-    await preflightAgentRuntimeModelReadiness({ runtime, agent, actor });
+    try {
+      await preflightAgentRuntimeModelReadiness({ runtime, agent, actor });
+    } catch (error) {
+      const needed = missingCredentialsFrom(error);
+      if (needed) {
+        return credentialsNeededLaunch(needed.agentId, needed.missing);
+      }
+      if (error instanceof ApiError) {
+        return failedLaunch("model_unready", errorResult(error.message));
+      }
+      throw error;
+    }
 
     if (params.credentialGrantIds && params.credentialGrantIds.length > 0) {
       const consumed = await ephemeralCredentialGrantManager.consumeGrants({
@@ -922,7 +982,7 @@ async function launchDelegatedTask(params: {
         ],
       });
       if (!consumed.ok) {
-        return failedLaunch("refused", errorResult(consumed.message));
+        return failedLaunch("invalid_request", errorResult(consumed.message));
       }
       restoreConsumedGrants = consumed.restore;
     }
@@ -1026,10 +1086,16 @@ async function launchDelegatedTask(params: {
     if (needed) {
       return credentialsNeededLaunch(needed.agentId, needed.missing);
     }
+    if (error instanceof SharedCredentialAccessDeniedError) {
+      return failedLaunch("credentials_admin_only", errorResult(error.message));
+    }
     const refused = crossingRefusal(error);
     if (refused) return failedLaunch("refused", errorResult(refused));
     if (error instanceof ApiError) {
-      return failedLaunch("refused", errorResult(error.message));
+      return failedLaunch(
+        error.statusCode === 403 ? "not_allowed" : "invalid_request",
+        errorResult(error.message),
+      );
     }
     return failedLaunch("failed", catchError(error, "starting the run"));
   }

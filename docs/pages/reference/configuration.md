@@ -1497,9 +1497,9 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Values: at least 32 characters, the same on every replica. A shorter value stops startup.
   - Set it to rotate this key separately from the session secret.
 
-- **`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`** - Name of the check Archestra posts on the policy repository's pull requests with [Git sync](/docs/agents/guardrails/git-sync#the-check-and-the-ruleset), and of the branch ruleset that requires it.
+- **`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`** - Name of the check Archestra posts on the policy repository's pull requests with [Git sync](/docs/agents/guardrails/git-sync#the-check-and-the-ruleset), and of the branch ruleset you import to require it.
   - Default: `Check OpenAPPA Guardrails`.
-  - Values: up to 100 characters. A rename moves the ruleset and its required check over at the next sync.
+  - Values: up to 100 characters. After a rename, edit the imported ruleset so it requires the check under the new name.
 
 - **`ARCHESTRA_OPENAPPA_SELF_SERVICE`** - Whether the people who can edit an MCP server change its Guardrails rules themselves, through pull requests on the Git sync repository. See [MCP Guardrails Self-Service](/docs/agents/guardrails/git-sync#mcp-guardrails-self-service). Shown read-only under **Git sync** in **Settings → Guardrails**.
   - Default: `disabled`

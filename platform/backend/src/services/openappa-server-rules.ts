@@ -648,6 +648,29 @@ async function includeSituation(params: {
     githubAppConfigId: source.githubAppConfigId,
   });
   const base = `${api}/repos/${repo}`;
+  // A setup pull request still waiting carries the policy the connect
+  // seeded, the folder included when self-service was on: nothing else
+  // opens until it merges, and the card points at it meanwhile.
+  if (source.setupPullRequestNumber) {
+    const setup = await setupPullFor({
+      token,
+      base,
+      number: source.setupPullRequestNumber,
+    });
+    if (setup) {
+      const atSetup = await rootAt({
+        token,
+        base,
+        path: source.path,
+        ref: setup.headSha,
+      });
+      if (atSetup !== null && includesServerRulesFolder(atSetup, folder))
+        return {
+          state: "pull_open",
+          pull: { number: setup.number, url: setup.url },
+        };
+    }
+  }
   const branch =
     source.ref ??
     (await github<{ default_branch: string }>({ token, url: base }))
@@ -678,6 +701,33 @@ async function includeSituation(params: {
   return atHead !== null && includesServerRulesFolder(atHead, folder)
     ? { state: "pull_open", pull: { number: pull.number, url: pull.url } }
     : { state: "missing", stale: { number: pull.number, url: pull.url } };
+}
+
+/**
+ * The setup pull request while it is open: its head to read the seeded
+ * policy at, and its page. Merged or closed, there is nothing to point at.
+ */
+async function setupPullFor(params: {
+  token: string;
+  base: string;
+  number: number;
+}): Promise<{ number: number; url: string; headSha: string } | null> {
+  const pull = await github<{
+    state?: string;
+    html_url?: string;
+    head?: { sha?: string };
+  }>({
+    token: params.token,
+    url: `${params.base}/pulls/${params.number}`,
+  }).catch(() => {
+    throw new ApiError(
+      502,
+      "Could not read the setup pull request on GitHub; try again",
+    );
+  });
+  return pull.state === "open" && pull.html_url && pull.head?.sha
+    ? { number: params.number, url: pull.html_url, headSha: pull.head.sha }
+    : null;
 }
 
 /**
@@ -718,6 +768,29 @@ export async function ensureSelfServiceInclude(params: Caller) {
   const saved = await OpenAppaGithubSyncModel.find(params.organizationId);
   if (selfServiceActive(saved) && !saved.sourceCommit)
     await syncAppaGithubPolicy(params.organizationId);
+  // A connect that proposed the current policy in a setup pull request has
+  // no accepted commit until it merges: the seed carries the include, so
+  // nothing opens, and a seed without it waits for the merge.
+  const pending = await OpenAppaGithubSyncModel.find(params.organizationId);
+  if (
+    pending?.interval &&
+    pending.repo &&
+    pending.path &&
+    pending.setupPullRequestNumber &&
+    !pending.sourceCommit
+  ) {
+    if (!selfServiceActive(pending)) throw new ApiError(409, SELF_SERVICE_OFF);
+    const situation = await includeSituation({
+      organizationId: params.organizationId,
+      source: pending,
+      folder: configuredServerRulesFolder(),
+    });
+    if (situation.state !== "missing") return null;
+    throw new ApiError(
+      409,
+      "The setup pull request that carries the current policy has not merged yet. Merge it first; the include follows.",
+    );
+  }
   const source = await requireSource(params.organizationId);
   const folder = configuredServerRulesFolder();
   const entry = serverRulesInclude(folder);

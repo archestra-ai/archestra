@@ -185,9 +185,11 @@ export function GithubSyncSetupDialog({
     account: string;
   } | null>(null);
   const [chosenRepo, setRepo] = useState(editing?.repo ?? "");
-  // Release 1.4: MCP Guardrails Self-Service is the deployment's setting. On,
-  // the App also gets Checks and Administration, and the connect step shows
-  // what the save brought: the branch ruleset and the include pull request.
+  // Release 1.4: MCP Guardrails Self-Service is the deployment's setting.
+  // Every App created here already has the Checks permission it posts the
+  // policy check with; an older one gets it through Finish setup on the Git
+  // sync card. On, the connect step shows what the save brought: the include
+  // pull request, and the branch ruleset to import.
   const selfServiceState = useAppaGithubSync().data?.selfService;
   const selfService = selfServiceState?.enabled === true;
   const [advanced, setAdvanced] = useState(false);
@@ -401,6 +403,24 @@ export function GithubSyncSetupDialog({
       : { githubAppConfigId: appId };
     setStep("connect");
     const withSelfService = !gitlab && selfService;
+    // With self-service on, a setup pull request that carries the current
+    // policy is one more row of the checklist, beside the ruleset to import.
+    const setupPullOf = (data: {
+      source?: {
+        repo?: string | null;
+        setupPullRequestNumber?: number | null;
+      } | null;
+    }) => {
+      const number = data.source?.setupPullRequestNumber;
+      return number && data.source?.repo && github
+        ? {
+            setupPull: {
+              number,
+              url: `${github.web}/${data.source.repo}/pull/${number}`,
+            },
+          }
+        : {};
+    };
     if (keepsSource) {
       const body = {
         repo,
@@ -413,7 +433,8 @@ export function GithubSyncSetupDialog({
         gitlabTokenId: null,
         ...credential,
       };
-      if (withSelfService) setOutcome(() => () => configure.mutateAsync(body));
+      if (withSelfService)
+        setOutcome(() => () => configure.mutateAsync(body).then(setupPullOf));
       else
         configure.mutate(body, {
           onSuccess: () => onOpenChange(false),
@@ -445,7 +466,7 @@ export function GithubSyncSetupDialog({
       return false;
     };
     if (withSelfService)
-      setOutcome(() => () => create.mutateAsync(body).then(setupPull));
+      setOutcome(() => () => create.mutateAsync(body).then(setupPullOf));
     else
       create.mutate(body, {
         onSuccess: (data) => {
@@ -458,7 +479,8 @@ export function GithubSyncSetupDialog({
   function back() {
     if (gitlab) return setStep(step === "repo" ? "app" : "provider");
     if (step === "start") {
-      if (origin) return setOrigin(null);
+      // The template panel goes back to the choice; the choice, to the host.
+      if (origin === "fresh") return setOrigin(null);
       return setStep("provider");
     }
     if (step === "repo") {
@@ -629,7 +651,7 @@ export function GithubSyncSetupDialog({
         />
       ) : null}
 
-      {step === "start" && !origin ? (
+      {step === "start" && origin !== "fresh" ? (
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="github-sync-host">GitHub URL</Label>
@@ -666,7 +688,7 @@ export function GithubSyncSetupDialog({
         </div>
       ) : null}
 
-      {step === "start" && !origin ? (
+      {step === "start" && origin !== "fresh" ? (
         <div className="grid gap-3 sm:grid-cols-2">
           <ChoiceTile
             disabled={!ready}
@@ -784,42 +806,57 @@ export function GithubSyncSetupDialog({
       ) : null}
 
       {step === "app" && !gitlab && !loadingApps && mode === "pick" ? (
-        <RadioGroup
-          value={pickedId}
-          onValueChange={setPickedId}
-          className="gap-2"
-          aria-label="GitHub App"
-        >
-          {apps.map((app) => {
-            const account = accounts.data?.find(
-              (entry) => entry.id === app.id,
-            )?.account;
-            return (
-              <Label
-                key={app.id}
-                htmlFor={`github-sync-app-${app.id}`}
-                className={cn(
-                  radioCardClass(),
-                  "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 font-normal",
-                )}
-              >
-                <RadioGroupItem
-                  value={app.id}
-                  id={`github-sync-app-${app.id}`}
-                />
-                <RuntimeCredentialIcon
-                  icon={app.icon ?? "logo:github"}
-                  className="size-4"
-                  size={16}
-                />
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                  {app.name}
-                </span>
-                {account ? <AccountChip account={account} /> : null}
-              </Label>
-            );
-          })}
-        </RadioGroup>
+        <div className="space-y-3">
+          <RadioGroup
+            value={pickedId}
+            onValueChange={setPickedId}
+            className="gap-2"
+            aria-label="GitHub App"
+          >
+            {apps.map((app) => {
+              const account = accounts.data?.find(
+                (entry) => entry.id === app.id,
+              )?.account;
+              return (
+                <Label
+                  key={app.id}
+                  htmlFor={`github-sync-app-${app.id}`}
+                  className={cn(
+                    radioCardClass(),
+                    "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 font-normal",
+                  )}
+                >
+                  <RadioGroupItem
+                    value={app.id}
+                    id={`github-sync-app-${app.id}`}
+                  />
+                  <RuntimeCredentialIcon
+                    icon={app.icon ?? "logo:github"}
+                    className="size-4"
+                    size={16}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {app.name}
+                  </span>
+                  {account ? <AccountChip account={account} /> : null}
+                </Label>
+              );
+            })}
+          </RadioGroup>
+          {canCreateCredentials ? (
+            // An edited source opens on its App; creating another is a
+            // step away, not a guess at Back.
+            <Button
+              type="button"
+              variant="link"
+              size="xs"
+              className="h-auto px-0 text-muted-foreground"
+              onClick={() => setMode("create")}
+            >
+              <span>Create a new GitHub App instead</span>
+            </Button>
+          ) : null}
+        </div>
       ) : null}
 
       {step === "app" && !gitlab && !loadingApps && mode === "create" ? (
@@ -919,10 +956,11 @@ export function GithubSyncSetupDialog({
             {createdApp ? (
               <AppLogoTip settingsUrl={createdApp.settingsUrl} />
             ) : null}
-            <AccessSummary
-              workflows={!github?.dotCom}
-              selfService={selfService}
-            />
+            {/* Checks is for the policy check self-service posts on pull
+                requests, asked for up front so turning self-service on later
+                changes nothing. Off github.com the App also writes the
+                validation workflow into the new repository. */}
+            <AccessSummary workflows={!github?.dotCom} />
           </div>
         ) : (
           <InlineNotice variant="info">
@@ -1333,6 +1371,7 @@ export function GithubSyncSetupDialog({
             done: editing
               ? "Git sync saved and the policy pulled"
               : "Repository connected and the policy pulled",
+            proposed: editing ? "Git sync saved" : "Repository connected",
             failed: editing
               ? "Could not save Git sync"
               : "Could not connect the repository",
@@ -1711,14 +1750,7 @@ function AppLogoTip({ settingsUrl }: { settingsUrl: string }) {
 }
 
 /** Off github.com the App also writes the validation workflow into the new repository. */
-function AccessSummary({
-  workflows,
-  selfService,
-}: {
-  workflows: boolean;
-  /** MCP Guardrails Self-Service is on: the App also posts the check and keeps the ruleset. */
-  selfService: boolean;
-}) {
+function AccessSummary({ workflows }: { workflows: boolean }) {
   return (
     <div className="flex items-start gap-3 rounded-lg bg-muted/40 px-4 py-3">
       <ShieldCheck className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -1731,7 +1763,7 @@ function AccessSummary({
           {[
             "Contents",
             "Pull requests",
-            ...(selfService ? ["Checks", "Administration"] : []),
+            "Checks",
             ...(workflows ? ["Workflows"] : []),
           ].map((permission) => (
             <Badge key={permission} variant="outline" className="bg-background">

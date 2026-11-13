@@ -47,7 +47,7 @@ describe("POST /api/openappa/github-app/manifest", () => {
       payload: { githubUrl: "https://github.com", owner },
     });
 
-  test("the manifest asks for the sync's permissions, and with MCP Guardrails Self-Service on for the policy check's and the branch ruleset's too", async () => {
+  test("the manifest asks for the sync's permissions and the policy check's, whether or not self-service is on, never Administration", async () => {
     server.use(
       http.get("https://api.github.com/users/:login", ({ params }) =>
         HttpResponse.json({ login: params.login, type: "Organization" }),
@@ -62,21 +62,22 @@ describe("POST /api/openappa/github-app/manifest", () => {
         }
       ).default_permissions;
     };
-    const sync = {
+    // Reading and proposing (Contents, Pull requests), the policy check on
+    // pull requests (Checks); Metadata comes with every App. The branch
+    // ruleset that requires the check is the administrator's to import, so
+    // no Administration, and self-service turned on later changes nothing.
+    const expected = {
       contents: "write",
       pull_requests: "write",
+      checks: "write",
       metadata: "read",
     };
-    expect(await permissions()).toEqual(sync);
-    // Release 1.4: ARCHESTRA_OPENAPPA_SELF_SERVICE decides for every App. On,
-    // the policy check (Checks) and the branch ruleset (Administration).
+    expect(await permissions()).toEqual(expected);
+    // Release 1.4: ARCHESTRA_OPENAPPA_SELF_SERVICE decides for every App,
+    // and changes nothing about what the App asks for.
     config.openappa.selfService = "enabled";
     try {
-      expect(await permissions()).toEqual({
-        ...sync,
-        checks: "write",
-        administration: "write",
-      });
+      expect(await permissions()).toEqual(expected);
     } finally {
       config.openappa.selfService = "disabled";
     }

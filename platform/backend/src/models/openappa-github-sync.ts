@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { lockGuardrailsPolicy } from "@/models/guardrails-policy";
 import type { AppaGithubSource } from "@/types/openappa-github-sync";
@@ -168,6 +168,20 @@ class OpenAppaGithubSyncModel {
           isNotNull(table.interval),
           isNotNull(table.repo),
           isNotNull(table.sourceCommit),
+        ),
+      );
+  }
+  /** Sources whose setup pull request has not merged: no commit accepted yet. */
+  static async findAwaitingSetup() {
+    return db
+      .select()
+      .from(table)
+      .where(
+        and(
+          isNotNull(table.interval),
+          isNotNull(table.repo),
+          isNotNull(table.setupPullRequestNumber),
+          isNull(table.sourceCommit),
         ),
       );
   }

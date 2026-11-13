@@ -34,6 +34,7 @@ import {
   AppaGithubSourceSchema,
   AppaGithubSyncActionSchema,
   AppaGithubSyncStatusSchema,
+  AppaRepositoryProtectionQuerySchema,
   AppaRepositoryProtectionSchema,
   AppaSelfServiceAvailabilitySchema,
   CreateAppaGithubRepositorySchema,
@@ -58,11 +59,14 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetAppaRepositoryProtection,
         tags: ["OpenAPPA"],
+        querystring: AppaRepositoryProtectionQuerySchema,
         response: constructResponseSchema(AppaRepositoryProtectionSchema),
       },
     },
     async (request, reply) => {
-      const protection = await getRepositoryProtection(request.organizationId);
+      const protection = await getRepositoryProtection(request.organizationId, {
+        fresh: request.query.fresh === "true",
+      });
       return reply.send(
         protection && {
           ...protection,

@@ -165,6 +165,25 @@ export function githubPolicyFileUrl(
   return `${sync.githubWebUrl}/${source.repo}${gitPathSeparator(sync)}/${view}/${encodeURIComponent(source.ref ?? "HEAD")}/${path}`;
 }
 
+/**
+ * A file the root includes, by its include path beside the policy file, on
+ * the repository's host.
+ */
+export function githubRepositoryFileUrl(
+  sync: AppaGithubSyncStatus | null | undefined,
+  includePath: string,
+  view: "blob" | "edit",
+): string | null {
+  const source = sync?.source;
+  if (!sync || !source?.repo || !source.path) return null;
+  const folder = source.path.slice(0, source.path.lastIndexOf("/") + 1);
+  const path = `${folder}${includePath}`
+    .split("/")
+    .map(encodeURIComponent)
+    .join("/");
+  return `${sync.githubWebUrl}/${source.repo}${gitPathSeparator(sync)}/${view}/${encodeURIComponent(source.ref ?? "HEAD")}/${path}`;
+}
+
 /** GitLab puts `/-` before a project's tree, blob, and edit pages. */
 function gitPathSeparator(
   sync: Pick<AppaGithubSyncStatus, "provider"> | null | undefined,

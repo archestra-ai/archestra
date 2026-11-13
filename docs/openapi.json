@@ -479005,6 +479005,21 @@
                         "additionalProperties": false
                       }
                     },
+                    "repositoryFiles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "rootRevision": {
                       "type": "number"
                     },
@@ -479180,6 +479195,7 @@
                   "required": [
                     "batteries",
                     "unusedAliases",
+                    "repositoryFiles",
                     "rootRevision",
                     "lastError",
                     "composition",
@@ -479465,6 +479481,13 @@
                     "name": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "battery",
+                        "repository"
+                      ]
+                    },
                     "content": {
                       "type": "string"
                     }
@@ -479472,6 +479495,7 @@
                   "required": [
                     "entry",
                     "name",
+                    "kind",
                     "content"
                   ],
                   "additionalProperties": false
@@ -483184,6 +483208,21 @@
                         "additionalProperties": false
                       }
                     },
+                    "repositoryFiles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "rootRevision": {
                       "type": "number"
                     },
@@ -483359,6 +483398,7 @@
                   "required": [
                     "batteries",
                     "unusedAliases",
+                    "repositoryFiles",
                     "rootRevision",
                     "lastError",
                     "composition",

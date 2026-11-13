@@ -123387,6 +123387,9 @@ export type GetOpenappaPolicyDeclarationsResponses = {
             servers: Array<string>;
             line: number;
         }>;
+        repositoryFiles: Array<{
+            path: string;
+        }>;
         rootRevision: number;
         lastError: string | null;
         composition: {
@@ -123506,6 +123509,7 @@ export type GetOpenappaBatteryPolicySourceResponses = {
     200: {
         entry: string;
         name: string;
+        kind: 'battery' | 'repository';
         content: string;
     };
 };
@@ -124530,6 +124534,9 @@ export type SetOpenappaCredentialBindingResponses = {
             namespace: string;
             servers: Array<string>;
             line: number;
+        }>;
+        repositoryFiles: Array<{
+            path: string;
         }>;
         rootRevision: number;
         lastError: string | null;

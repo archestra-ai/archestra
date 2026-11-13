@@ -795,11 +795,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Cannot create an agent in another organization",
         );
       }
-      body.runtime = await applyAgentRuntimeLock({
-        organizationId,
-        userId: user.id,
-        runtime: body.runtime,
-      });
+      if (body.runtime !== undefined) {
+        body.runtime = await applyAgentRuntimeLock({
+          organizationId,
+          userId: user.id,
+          runtime: body.runtime,
+        });
+      }
       await requireAgentRuntimePermission({
         agentType,
         runtime: body.runtime,
@@ -2105,12 +2107,16 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         throw error;
       }
-      body.runtime = await applyAgentRuntimeLock({
-        organizationId,
-        userId: user.id,
-        runtime: body.runtime,
-        previous: existingAgent.runtime,
-      });
+      // Only a body that sets the runtime carries one: assigning `undefined`
+      // would leave a `runtime` key with nothing to save.
+      if (body.runtime !== undefined) {
+        body.runtime = await applyAgentRuntimeLock({
+          organizationId,
+          userId: user.id,
+          runtime: body.runtime,
+          previous: existingAgent.runtime,
+        });
+      }
       await requireAgentRuntimePermission({
         agentType: existingAgent.agentType,
         runtime: body.runtime,

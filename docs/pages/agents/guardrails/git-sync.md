@@ -111,8 +111,9 @@ What to know:
 
 MCP owners need no access to the policy repository: the GitHub App merges their pull requests itself. Turn on **Auto-merge pull requests** in the Self-service step of Git sync setup, or by editing the source later. The Git sync card then says that admitted self-service pull requests merge automatically.
 
-- The policy check is the only gate. A pull request merges within about a minute of its check passing, and Git sync then applies it. The APPA Keeper follows the pull request in the chat and reports when it is applied, or why it did not merge.
+- A pull request merges within about a minute once every check on it passes, and Git sync then applies it. The APPA Keeper opens it without asking you to approve it first. The Keeper then follows it in the chat and reports when the change applies, or what holds it.
 - Only rules pull requests opened from Archestra for an MCP server merge this way. Pull requests people open on GitHub keep the repository's own review.
-- If another branch rule blocks the merge, the pull request stays open for people to merge. The App tries again a minute later, then every 15 minutes.
+- A conflict or a draft holds the pull request until someone resolves it on GitHub. If GitHub refuses a merge for another reason, the App tries again a minute later, then every 15 minutes.
+- If the branch ruleset takes the check from another GitHub App, **Finish setup** shows the fix. The App merges the pull request within a minute of that fix.
 
 The [`ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE) env var sets it for the whole deployment.

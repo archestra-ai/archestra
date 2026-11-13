@@ -281,6 +281,13 @@ export async function createAppaGithubRepository(params: {
   if (!params.githubAppConfigId)
     throw new ApiError(400, "Choose a GitHub App or a GitLab token");
   const githubAppConfigId = params.githubAppConfigId;
+  // A rule on the branch left behind refuses the move before anything is
+  // created on GitHub; the save checks again with the branch resolved.
+  await beforeSourceChange(params.organizationId, {
+    repo: `${params.owner}/${params.name}`,
+    ref: params.ref ?? null,
+    githubAppConfigId,
+  });
   // The installation-wide token: the repository does not exist yet.
   const { token: appToken, api } = await resolveOpenAppaGithubAccess({
     organizationId: params.organizationId,
@@ -643,6 +650,12 @@ async function createAppaGitlabProject(params: {
   validationDirectory?: string;
   replace?: boolean;
 }) {
+  // A GitLab project in a GitHub App's place posts no check: a rule on the
+  // branch left behind refuses the move before the project is created.
+  await beforeSourceChange(params.organizationId, {
+    repo: params.owner ? `${params.owner}/${params.name}` : params.name,
+    ref: params.ref ?? null,
+  });
   const access = await resolveOpenAppaGitlabAccess({
     organizationId: params.organizationId,
     gitlabTokenId: params.gitlabTokenId,

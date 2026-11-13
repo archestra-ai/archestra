@@ -18,6 +18,7 @@ import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
   checkDueAppaGithubSyncs,
   configureAppaGithubSync,
+  createAppaGithubRepository,
   getAppaGithubSync,
   getAppaSelfService,
   getRepositoryProtection,
@@ -2023,6 +2024,39 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
     message: expect.stringContaining(rulesetUrl),
   });
   expect((await OpenAppaGithubSyncModel.find(org.id))?.ref).toBe("main");
+  // A move to another repository, or to a GitLab project, is refused
+  // before anything is created there: no GitHub call but the rules' read.
+  calls.length = 0;
+  await expect(
+    createAppaGithubRepository({
+      organizationId: org.id,
+      userId: admin.id,
+      owner: "example",
+      name: "other",
+      githubAppConfigId: moved.githubAppConfigId ?? undefined,
+      interval: "1h",
+      existing: true,
+      replace: true,
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 409,
+    message: expect.stringContaining(rulesetUrl),
+  });
+  await expect(
+    createAppaGithubRepository({
+      organizationId: org.id,
+      userId: admin.id,
+      owner: "platform",
+      name: "policy",
+      gitlabTokenId: "11111111-1111-4111-8111-111111111111",
+      interval: "1h",
+      replace: true,
+    }),
+  ).rejects.toMatchObject({ statusCode: 409 });
+  expect(calls).toEqual(["GET rules main", "GET rules main"]);
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.repo).toBe(
+    "example/policies",
+  );
   rules = [];
   await configureAppaGithubSync({
     organizationId: org.id,

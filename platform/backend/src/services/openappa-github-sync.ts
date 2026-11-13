@@ -1196,7 +1196,6 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   const source = { ...row, repo: row.repo, path: row.path };
   const refused = refusedChecksKey(organizationId, source.repo);
   if (await cacheManager.get(refused)) return;
-  const checkName = POLICY_CHECK_NAME;
   let pulls: CheckedPull[];
   try {
     pulls = await githubPullRequests(source);

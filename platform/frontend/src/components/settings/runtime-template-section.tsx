@@ -286,26 +286,24 @@ export function RuntimeTemplateSection({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuLabel>Not in this list</DropdownMenuLabel>
-            {removedRows.length ? (
-              removedRows.map((row) => (
-                <DropdownMenuItem
-                  key={row.id}
-                  onSelect={() => setAvailable(row, true)}
-                >
-                  <RuntimeMark row={row} />
-                  <span className="min-w-0 flex-1 truncate" title={row.name}>
-                    {row.name}
-                  </span>
-                  <Plus className="ml-auto size-3.5" />
-                </DropdownMenuItem>
-              ))
-            ) : (
-              <DropdownMenuItem disabled>
-                All saved runtimes are included
-              </DropdownMenuItem>
+            {removedRows.length > 0 && (
+              <>
+                <DropdownMenuLabel>Removed runtimes</DropdownMenuLabel>
+                {removedRows.map((row) => (
+                  <DropdownMenuItem
+                    key={row.id}
+                    onSelect={() => setAvailable(row, true)}
+                  >
+                    <RuntimeMark row={row} />
+                    <span className="min-w-0 flex-1 truncate" title={row.name}>
+                      {row.name}
+                    </span>
+                    <Plus className="ml-auto size-3.5" />
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+              </>
             )}
-            <DropdownMenuSeparator />
             <DropdownMenuItem
               disabled={state.templates.length >= 100}
               onSelect={() => setEditing("new")}

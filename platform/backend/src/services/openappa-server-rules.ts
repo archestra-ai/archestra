@@ -1225,7 +1225,7 @@ async function openSelfServiceInclude(params: {
   const base = `${api}/repos/${source.repo}`;
   if (
     params.pull &&
-    (await includeDeclined({
+    (await pullLeavesInclude({
       organizationId: params.organizationId,
       repo: source.repo,
       token,
@@ -1288,12 +1288,13 @@ async function openSelfServiceInclude(params: {
 const INCLUDE_TITLE = "Include each MCP server's Guardrails rules file";
 
 /**
- * Whether the newest include pull request on the repository was closed
- * without merging: someone declined it. GitHub keeps every pull request, so
- * one an earlier version opened counts too. A failed read counts as not
- * declined: the include is then proposed as it would have been anyway.
+ * Whether a pull leaves the include to a person: the newest include pull
+ * request on the repository was closed without merging, so someone declined
+ * it. GitHub keeps every pull request, so one an earlier version opened
+ * counts too. A history that cannot be read now proves nothing either way:
+ * the pull leaves the include, and the next one reads it again.
  */
-async function includeDeclined(params: {
+async function pullLeavesInclude(params: {
   organizationId: string;
   repo: string;
   token: string;
@@ -1314,11 +1315,11 @@ async function includeDeclined(params: {
     );
     return true;
   } catch (error) {
-    logger.debug(
+    logger.warn(
       { organizationId: params.organizationId, error },
-      "OpenAPPA could not read the include pull requests",
+      "OpenAPPA could not read the include pull requests; the next pull proposes the include if it is still missing",
     );
-    return false;
+    return true;
   }
 }
 

@@ -4419,6 +4419,8 @@ test("a pull with self-service on and the policy file lacking the servers' folde
  * pull requests GitHub keeps: numbers opened, those closed without merging.
  */
 function serveIncludePulls(params: { closedBefore?: number }) {
+  // While set, GitHub cannot list the pull requests of every state.
+  const history = { failing: false };
   serveRepository({
     head: FIRST,
     files: { [FIRST]: { "appa.toml": RULES }, main: { "appa.toml": RULES } },
@@ -4431,6 +4433,8 @@ function serveIncludePulls(params: { closedBefore?: number }) {
     // Open ones by default; every state, newest first, when asked.
     http.get(`${REPO}/pulls`, ({ request }) => {
       const all = new URL(request.url).searchParams.get("state") === "all";
+      if (all && history.failing)
+        return HttpResponse.json({ message: "Server Error" }, { status: 502 });
       return HttpResponse.json(
         [...pulls]
           .reverse()
@@ -4467,7 +4471,7 @@ function serveIncludePulls(params: { closedBefore?: number }) {
       });
     }),
   );
-  return { opened, closed };
+  return { opened, closed, history };
 }
 
 test("an include pull request someone closed without merging is not opened again by a pull: a person asking still opens a fresh one", async ({
@@ -4497,6 +4501,23 @@ test("an include pull request someone closed without merging is not opened again
     }),
   ).toEqual({ number: 10, url: "https://github.com/example/policies/pull/10" });
   expect(opened).toHaveLength(2);
+});
+
+test("a pull that cannot read the include pull requests leaves the include for the next pull", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  await connectApp({ organizationId: org.id });
+  const { opened, history } = serveIncludePulls({});
+  // The open ones read fine; every state does not: nothing opens.
+  history.failing = true;
+  await syncAppaGithubPolicy(org.id);
+  expect(opened).toEqual([]);
+  // GitHub answers again: none was declined, so the next pull opens it.
+  history.failing = false;
+  await syncAppaGithubPolicy(org.id);
+  expect(opened).toHaveLength(1);
 });
 
 test("an include pull request closed without merging before this version counts as declined too", async ({

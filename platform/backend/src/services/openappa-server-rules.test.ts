@@ -4457,6 +4457,74 @@ test("a pull with self-service on and the policy file lacking the servers' folde
   });
 });
 
+test("an include pull request someone closed without merging is not opened again by a pull: a person asking still opens a fresh one", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ name: "Alex" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  await connectApp({ organizationId: org.id });
+  serveRepository({
+    head: FIRST,
+    files: { [FIRST]: { "appa.toml": RULES }, main: { "appa.toml": RULES } },
+  });
+  const pulls: Array<{ head: string }> = [];
+  const closed = new Set<number>();
+  server.use(
+    http.get(`${REPO}/rulesets`, () => HttpResponse.json([])),
+    // None waits open: the one opened is closed below.
+    http.get(`${REPO}/pulls`, () => HttpResponse.json([])),
+    http.get(`${REPO}/pulls/:number`, ({ params }) =>
+      HttpResponse.json({
+        number: Number(params.number),
+        state: closed.has(Number(params.number)) ? "closed" : "open",
+        merged: false,
+      }),
+    ),
+    http.get(`${REPO}/git/commits/${FIRST}`, () =>
+      HttpResponse.json({ tree: { sha: TREE } }),
+    ),
+    http.post(`${REPO}/git/trees`, () =>
+      HttpResponse.json({ sha: "4".repeat(40) }),
+    ),
+    http.post(`${REPO}/git/commits`, () =>
+      HttpResponse.json({ sha: "5".repeat(40) }),
+    ),
+    http.post(`${REPO}/git/refs`, () => HttpResponse.json({})),
+    http.delete(
+      `${REPO}/git/refs/heads/archestra/openappa-self-service`,
+      () => new HttpResponse(null, { status: 422 }),
+    ),
+    http.post(`${REPO}/pulls`, async ({ request }) => {
+      pulls.push((await request.json()) as { head: string });
+      const number = 8 + pulls.length;
+      return HttpResponse.json({
+        number,
+        html_url: `https://github.com/example/policies/pull/${number}`,
+      });
+    }),
+  );
+
+  await syncAppaGithubPolicy(org.id);
+  expect(pulls).toHaveLength(1);
+  // Someone closes it without merging: the next pulls leave it closed.
+  closed.add(9);
+  await syncAppaGithubPolicy(org.id);
+  await syncAppaGithubPolicy(org.id);
+  expect(pulls).toHaveLength(1);
+  // A person asking, from Finish setup, still opens a fresh one.
+  expect(
+    await ensureSelfServiceInclude({
+      organizationId: org.id,
+      userId: admin.id,
+    }),
+  ).toEqual({ number: 10, url: "https://github.com/example/policies/pull/10" });
+  expect(pulls).toHaveLength(2);
+});
+
 test("a pull and a person asking for the include at once open one pull request: whoever comes second finds it waiting", async ({
   makeOrganization,
   makeUser,

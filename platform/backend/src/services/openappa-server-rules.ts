@@ -5,7 +5,7 @@ import {
   TimeInMs,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
+import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
@@ -1180,13 +1180,16 @@ export async function ensureSelfServiceInclude(params: Caller) {
  * After a pull, with self-service on and the include missing: the App
  * proposes it at once, so the Git sync setup lists its pull request waiting
  * rather than a step that asks for one. Another caller opening it right now
- * is left to it. Returns what was opened, or null.
+ * is left to it, and one someone closed without merging is not opened
+ * again: Finish setup still offers it to a person. Returns what was opened,
+ * or null.
  */
 export async function proposeSelfServiceInclude(organizationId: string) {
   const leased = await withOpenAppaLease({
     key: includeLeaseKey(organizationId),
     ttlMs: INCLUDE_LEASE_MS,
-    work: () => openSelfServiceInclude({ organizationId, requester: null }),
+    work: () =>
+      openSelfServiceInclude({ organizationId, requester: null, pull: true }),
   });
   return leased.ran ? leased.value : null;
 }
@@ -1204,6 +1207,11 @@ async function openSelfServiceInclude(params: {
   organizationId: string;
   /** Who turned self-service on, named on the pull request; none for a pull. */
   requester: { name: string; email: string } | null;
+  /**
+   * A pull proposes it: the include pull request someone closed without
+   * merging is their answer, so it opens again only when a person asks.
+   */
+  pull?: boolean;
 }): Promise<{ number: number; url: string } | null> {
   // A connect that proposed the current policy in a setup pull request has
   // no accepted commit until it merges, and the include changes that
@@ -1242,6 +1250,16 @@ async function openSelfServiceInclude(params: {
   const root = await guardrailsPolicyService.get(params.organizationId);
   const { token, api } = await githubWriter(source);
   const base = `${api}/repos/${source.repo}`;
+  if (
+    params.pull &&
+    (await includeDeclined({
+      organizationId: params.organizationId,
+      repo: source.repo,
+      token,
+      base,
+    }))
+  )
+    return null;
   if (situation.stale) {
     await github({
       token,
@@ -1272,7 +1290,7 @@ async function openSelfServiceInclude(params: {
   ].join("\n");
   // A branch left by an earlier, closed pull request would refuse the new ref.
   await deleteBranch({ token, base, head: SELF_SERVICE_INCLUDE_BRANCH });
-  return openGithubPull({
+  const opened = await openGithubPull({
     source,
     title: INCLUDE_TITLE,
     message: requester
@@ -1292,9 +1310,64 @@ async function openSelfServiceInclude(params: {
     ],
     head: SELF_SERVICE_INCLUDE_BRANCH,
   });
+  await cacheManager
+    .set(
+      includePullKey(params.organizationId),
+      { repo: source.repo, number: opened.number },
+      INCLUDE_PULL_MEMORY_MS,
+    )
+    .catch((error) =>
+      logger.warn(
+        { organizationId: params.organizationId, error },
+        "OpenAPPA could not remember the include pull request it opened",
+      ),
+    );
+  return opened;
 }
 
 const INCLUDE_TITLE = "Include each MCP server's Guardrails rules file";
+
+/** How long the include pull request last opened is remembered. */
+const INCLUDE_PULL_MEMORY_MS = 90 * TimeInMs.Day;
+
+function includePullKey(organizationId: string): AllowedCacheKey {
+  return `${CacheKey.OpenAppaPolicyCheck}-include-pull-${organizationId}`;
+}
+
+/**
+ * Whether the include pull request last opened on this repository was closed
+ * without merging. A failed read counts as not closed: the include is then
+ * proposed as it would have been anyway.
+ */
+async function includeDeclined(params: {
+  organizationId: string;
+  repo: string;
+  token: string;
+  base: string;
+}): Promise<boolean> {
+  const last = await cacheManager.get<{ repo: string; number: number }>(
+    includePullKey(params.organizationId),
+  );
+  if (!last || last.repo !== params.repo) return false;
+  try {
+    const pull = await github<{ state?: string; merged?: boolean }>({
+      token: params.token,
+      url: `${params.base}/pulls/${last.number}`,
+    });
+    if (pull.state !== "closed" || pull.merged === true) return false;
+    logger.info(
+      { organizationId: params.organizationId, pull: last.number },
+      "OpenAPPA leaves the include of the self-service folder to a person: its pull request was closed without merging",
+    );
+    return true;
+  } catch (error) {
+    logger.debug(
+      { organizationId: params.organizationId, error },
+      "OpenAPPA could not read the include pull request it last opened",
+    );
+    return false;
+  }
+}
 
 /**
  * Add the include to the setup pull request's branch when the policy it

@@ -334,7 +334,7 @@ type Protection = NonNullable<
 
 /**
  * The repository's protection for server rules files: the branch ruleset
- * Archestra keeps in line at each sync.
+ * the administrator imports, which Archestra reads at each sync.
  */
 /**
  * The self-service switch: whether each MCP server's editors change its own
@@ -353,12 +353,13 @@ function SelfServiceRow({
   selfService: archestraApiTypes.GetAppaGithubSyncResponses["200"]["selfService"];
   canManage: boolean;
 }) {
+  const appName = useAppName();
   const eligible = !!source.githubAppConfigId;
   const [setup, setSetup] = useState(false);
   const description = (
     <>
       {eligible
-        ? "MCP owners can manage MCP Guardrails. Additional GitHub App permissions are added to ensure the related pull requests are checked."
+        ? "MCP owners can manage MCP Guardrails. The GitHub App checks their pull requests, and a branch ruleset you import makes the check required."
         : "Connect the policy repository through a GitHub App so MCP owners can manage MCP Guardrails."}{" "}
       <SelfServiceDocsLink />
     </>
@@ -400,6 +401,14 @@ function SelfServiceRow({
             )}
           </div>
         )}
+        {selfService.leftoverRule ? (
+          <p className="text-xs text-muted-foreground">
+            A branch {hostLink(selfService.leftoverRule.url, "ruleset")} still
+            requires the {selfService.leftoverRule.checkName} check. {appName}{" "}
+            posts it as skipped on every pull request until you remove the rule,
+            or turn self-service on again.
+          </p>
+        ) : null}
         {selfService.enabled ? (
           <RepositoryProtection
             policyPath={source.path ?? "appa.toml"}
@@ -468,7 +477,6 @@ function RepositoryProtection({
   onFinishSetup?: () => void;
 }) {
   const { data } = useAppaRepositoryProtection(true);
-  const appName = useAppName();
   if (!data) return null;
   const policyFile = policyPath.slice(policyPath.lastIndexOf("/") + 1);
   const unfinished =
@@ -476,7 +484,12 @@ function RepositoryProtection({
   return (
     <>
       <p className="text-xs text-muted-foreground">
-        {protectionSentence(data.branchRules, appName, branchUrl, data.app)}
+        {protectionSentence({
+          rules: data.branchRules,
+          checkName: data.checkName,
+          branchUrl,
+          app: data.app,
+        })}
       </p>
       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         {includeSentence(data.include, policyFile, folderUrl)}
@@ -564,12 +577,17 @@ function hostLink(href: string | null | undefined, text: string): ReactNode {
   );
 }
 
-function protectionSentence(
-  rules: Protection["branchRules"],
-  appName: string,
-  branchUrl: string | null,
-  app: Protection["app"],
-): ReactNode {
+function protectionSentence({
+  rules,
+  checkName,
+  branchUrl,
+  app,
+}: {
+  rules: Protection["branchRules"];
+  checkName: string;
+  branchUrl: string | null;
+  app: Protection["app"];
+}): ReactNode {
   const ruleset = hostLink(rules.url, "ruleset");
   // The App by its own name, linked to its page; "GitHub App" before it is known.
   const githubApp = app ? (
@@ -593,18 +611,24 @@ function protectionSentence(
         </>
       );
     case "incomplete":
+      return (
+        <>
+          The Self-service branch protection {ruleset} needs a change:{" "}
+          {rules.detail}
+        </>
+      );
     case "missing":
       return (
         <>
-          {appName} sets the Self-service branch protection {ruleset} up at the
-          next sync.
+          No branch ruleset requires the {checkName} check yet. Import it with
+          Finish setup.
         </>
       );
     case "needs_permission":
       return (
         <>
           The Self-service branch protection ruleset waits for the {githubApp}
-          &apos;s Administration permission.
+          &apos;s Checks permission.
         </>
       );
     default:

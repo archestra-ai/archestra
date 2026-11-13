@@ -546,18 +546,36 @@ async function readChangeStatus(params: {
         held: true,
       },
     });
-  if (readiness.state === "waiting")
+  // A merge that has not come for as long as a refusal holds is not waited
+  // on any longer: people take it from here, and the App keeps trying.
+  const completedAt = run.completed_at ? Date.parse(run.completed_at) : NaN;
+  const waitedLong =
+    !Number.isNaN(completedAt) &&
+    Date.now() - completedAt > RETRY_REFUSED_MERGE;
+  if (readiness.state === "waiting") {
+    // A check that keeps running, or a commit status that keeps failing,
+    // holds the merge without ending: the Keeper says so instead of
+    // following it for good. The App still merges once it passes.
+    if (waitedLong) {
+      const named = readiness.waitingFor;
+      return answer("merge_refused", {
+        check,
+        mergeRefused: {
+          reason:
+            named.length > 0
+              ? `${named.join(", ")} ${named.length > 1 ? "have" : "has"} not passed in the fifteen minutes since the ${POLICY_CHECK_NAME} check passed, so the App has not merged the pull request; it merges by itself once ${named.length > 1 ? "they pass" : "that passes"}`
+              : `the pull request's checks have not all passed in the fifteen minutes since the ${POLICY_CHECK_NAME} check passed, so the App has not merged it; it merges by itself once they pass`,
+          at: new Date().toISOString(),
+          held: true,
+        },
+      });
+    }
     return answer("merge_pending", {
       check,
       waitingFor: readiness.waitingFor,
     });
-  // A merge that has not come for as long as a refusal holds is not waited
-  // on any longer: people take it from here, and the App keeps trying.
-  const completedAt = run.completed_at ? Date.parse(run.completed_at) : NaN;
-  if (
-    !Number.isNaN(completedAt) &&
-    Date.now() - completedAt > RETRY_REFUSED_MERGE
-  )
+  }
+  if (waitedLong)
     return answer("merge_refused", {
       check,
       mergeRefused: {

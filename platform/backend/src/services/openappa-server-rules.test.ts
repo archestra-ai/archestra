@@ -2881,6 +2881,8 @@ async function serveAutoMergeRepository(params: {
   const openedAt: Record<number, number> = {};
   /** Whether a pull request is a draft; none is unless set. */
   const drafts: Record<number, boolean> = {};
+  /** When this deployment's check completed on a head; now unless set. */
+  const checkCompletedAt: Record<string, number> = {};
   /** How many check runs GitHub counts on a head, where it differs from those listed. */
   const checkTotals: Record<string, number> = {};
   /** Each pull request's test-merge commit, while `testMerges` is on. */
@@ -2973,7 +2975,9 @@ async function serveAutoMergeRepository(params: {
             name: CHECK,
             status: "completed",
             conclusion: run.conclusion,
-            completed_at: new Date(Date.now()).toISOString(),
+            completed_at: new Date(
+              checkCompletedAt[params.sha as string] ?? Date.now(),
+            ).toISOString(),
           })),
         ...(otherChecks[params.sha as string] ?? []),
       ];
@@ -3015,6 +3019,7 @@ async function serveAutoMergeRepository(params: {
     openedAt,
     drafts,
     checkTotals,
+    checkCompletedAt,
     mergeStatuses,
     repo,
     pullStates,
@@ -3505,11 +3510,17 @@ test("under auto-merge a self-served pull request merges only once every check o
   const org = await makeOrganization();
   const admin = await makeUser({ email: "admin@example.com" });
   await makeMember(admin.id, org.id, { role: "admin" });
-  const { results, merges, otherChecks, mergeableStates, openedAt } =
-    await serveAutoMergeRepository({
-      organizationId: org.id,
-      requester: admin.email,
-    });
+  const {
+    results,
+    merges,
+    otherChecks,
+    mergeableStates,
+    openedAt,
+    checkCompletedAt,
+  } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+  });
   await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
   const catalog = await InternalMcpCatalogModel.create(
     {
@@ -3581,6 +3592,29 @@ test("under auto-merge a self-served pull request merges only once every check o
   mergeableStates[1] = "unstable";
   await checkDueAppaGithubSyncs();
   expect(merges).toEqual([]);
+  expect(await status()).toMatchObject({
+    phase: "merge_pending",
+    done: false,
+    waitingFor: ["a commit status"],
+  });
+  // Still failing a quarter of an hour after the check passed: the Keeper
+  // is told what holds the merge and stops following it, while the App
+  // keeps waiting for the status to pass.
+  checkCompletedAt[head] = Date.now() - 16 * 60_000;
+  expect(await status()).toMatchObject({
+    phase: "merge_refused",
+    done: true,
+    mergeRefused: {
+      held: true,
+      reason: expect.stringContaining(
+        "a commit status has not passed in the fifteen minutes",
+      ),
+    },
+    instruction: expect.stringContaining("what holds it and who resolves it"),
+  });
+  await checkDueAppaGithubSyncs();
+  expect(merges).toEqual([]);
+  delete checkCompletedAt[head];
 
   // All of it passes: merged.
   mergeableStates[1] = "clean";

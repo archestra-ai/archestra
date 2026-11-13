@@ -311,6 +311,13 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 
 These variables set each provider's deployment-wide endpoint and authentication. A base URL saved on a key in **Settings → LLM → Model providers** overrides the variable for that key. See [Supported LLM Providers](/docs/llm-proxy/providers) for setup.
 
+- **`ARCHESTRA_LLM_SYSTEM_KEYS_AUTO_DELETE_ENABLED`** - Deletes the automatic provider key of a keyless provider once that provider is no longer enabled in this deployment's environment, along with the key's virtual key mappings and model pool members. Keyless providers are Gemini on Vertex AI, Azure with Entra ID, keyless Anthropic and Bedrock with IAM.
+  - Default: `true`
+  - Values: `true`, `false`
+  - Set it to `false` on every deployment that shares one database with another. Otherwise a deployment deletes the keys of providers that only the other one enables.
+  - A deployment that does not enable a provider still lists that provider's key. Requests it sends with the key fail, and **Refresh models** reports the key as failed there. Send that provider's traffic to a deployment that enables it.
+  - While it is `false`, the key of a provider you turn off everywhere stays listed and fails when used. Set it to `true` for one restart to remove it.
+
 ### OpenAI
 
 - **`ARCHESTRA_OPENAI_BASE_URL`** - Base URL for OpenAI API requests.

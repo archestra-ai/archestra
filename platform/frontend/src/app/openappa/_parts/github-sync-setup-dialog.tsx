@@ -4,7 +4,6 @@ import {
   DocsPage,
   type GitProvider,
   getGithubApiBaseUrl,
-  gitChangeRequestNoun,
 } from "@archestra/shared";
 import {
   AlertTriangle,
@@ -77,18 +76,19 @@ import {
   useAppaGithubAppRepositories,
   useAppaGithubRepositoryStatus,
   useAppaGithubSync,
+  useAppaGithubSyncing,
   useConfigureAppaGithubSync,
   useCreateAppaGithubRepository,
   useDiscardAppaGithubApp,
   useInstallAppaGithubApp,
   usePendingAppaGithubApp,
   useStartAppaGithubApp,
+  useUpdateAppaGithubSync,
 } from "@/lib/openappa-github-sync.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
 import { onGithubAppSetup } from "./github-app-channel";
-import { SelfServiceOutcomeStep } from "./self-service-setup-dialog";
-import { OpenAppaSetupPullRequestDialog } from "./setup-pull-request-dialog";
+import { SetupChecklist } from "./self-service-setup-dialog";
 
 /**
  * Sets up Git sync for the policy. The admin first picks GitHub or GitLab.
@@ -148,6 +148,19 @@ export function GithubSyncSetupDialog({
   const discard = useDiscardAppaGithubApp();
   const create = useCreateAppaGithubRepository();
   const configure = useConfigureAppaGithubSync();
+  const update = useUpdateAppaGithubSync();
+  const syncing = useAppaGithubSyncing();
+  const saving = configure.isPending || create.isPending;
+  // Done syncs at once, so the card shows what the setup brought about.
+  const done = () => {
+    if (!syncing) update.mutate({ action: "sync" });
+    onOpenChange(false);
+  };
+  /** Steps leave the Finish step's run behind: opened again, it only reads. */
+  const goTo = (target: Step) => {
+    if (target === "connect" || step === "connect") setOutcome(null);
+    setStep(target);
+  };
 
   const [step, setStep] = useState<Step>(editing ? "repo" : "provider");
   const [origin, setOrigin] = useState<Origin | null>(
@@ -202,13 +215,9 @@ export function GithubSyncSetupDialog({
   const [interval, setSyncInterval] = useState<SyncInterval>(
     editing?.interval ?? DEFAULT_INTERVAL,
   );
-  // With self-service on, the connect step stays open on what the save
-  // brought: the ruleset and the include pull request.
+  // The save or connect the Finish step runs first; none when the step
+  // is opened again to read what is in place.
   const [outcome, setOutcome] = useState<(() => Promise<unknown>) | null>(null);
-  const [pullRequest, setPullRequest] = useState<{
-    repo: string;
-    number: number;
-  } | null>(null);
 
   const accounts = useAppaGithubAppAccounts(
     (step === "app" || step === "repo") &&
@@ -397,14 +406,12 @@ export function GithubSyncSetupDialog({
 
   function connect() {
     if (!appId || (!repo && !creatingProject)) return;
-    const onError = () => setStep("repo");
     const credential = gitlab
       ? { gitlabTokenId: appId }
       : { githubAppConfigId: appId };
     setStep("connect");
-    const withSelfService = !gitlab && selfService;
-    // With self-service on, a setup pull request that carries the current
-    // policy is one more row of the checklist, beside the ruleset to import.
+    // The Finish step runs the save or the connect first; a setup pull request
+    // that carries the current policy is named on its first row.
     const setupPullOf = (data: {
       source?: {
         repo?: string | null;
@@ -433,13 +440,7 @@ export function GithubSyncSetupDialog({
         gitlabTokenId: null,
         ...credential,
       };
-      if (withSelfService)
-        setOutcome(() => () => configure.mutateAsync(body).then(setupPullOf));
-      else
-        configure.mutate(body, {
-          onSuccess: () => onOpenChange(false),
-          onError,
-        });
+      setOutcome(() => () => configure.mutateAsync(body).then(setupPullOf));
       return;
     }
     // GitLab nests groups: the project is the last segment, its group the rest.
@@ -455,25 +456,7 @@ export function GithubSyncSetupDialog({
       ...((!creatingProject || editing) && { replace: !!editing }),
       ...location,
     };
-    const setupPull = (
-      data: Awaited<ReturnType<typeof create.mutateAsync>>,
-    ) => {
-      const number = data?.source?.setupPullRequestNumber;
-      if (number && data.source?.repo) {
-        setPullRequest({ repo: data.source.repo, number });
-        return true;
-      }
-      return false;
-    };
-    if (withSelfService)
-      setOutcome(() => () => create.mutateAsync(body).then(setupPullOf));
-    else
-      create.mutate(body, {
-        onSuccess: (data) => {
-          if (!setupPull(data)) onOpenChange(false);
-        },
-        onError,
-      });
+    setOutcome(() => () => create.mutateAsync(body).then(setupPullOf));
   }
 
   function back() {
@@ -495,14 +478,6 @@ export function GithubSyncSetupDialog({
     // An existing repository has nothing to do on the first step: go back to the choice.
     if (origin === "existing") setOrigin(null);
   }
-
-  if (pullRequest)
-    return (
-      <OpenAppaSetupPullRequestDialog
-        pullRequest={pullRequest}
-        onOpenChange={onOpenChange}
-      />
-    );
 
   const policyDocsUrl = getFrontendDocsUrl(
     DocsPage.PlatformAiToolGuardrailsGitSync,
@@ -542,19 +517,14 @@ export function GithubSyncSetupDialog({
               <span>Back</span>
             </Button>
           ) : null}
-          {step === "connect" && outcome ? (
-            <Button
-              type="button"
-              disabled={configure.isPending || create.isPending}
-              onClick={() => onOpenChange(false)}
-            >
+          {step === "connect" ? (
+            <Button type="button" disabled={saving} onClick={done}>
               <span>Done</span>
             </Button>
           ) : (
             <Button
               type="button"
               variant="outline"
-              disabled={step === "connect"}
               onClick={() => onOpenChange(false)}
             >
               <span>Cancel</span>
@@ -602,20 +572,19 @@ export function GithubSyncSetupDialog({
     >
       <SetupStepper
         steps={wizardSteps.map((entry) => entry.label)}
-        current={
-          step === "connect"
-            ? wizardSteps.length
-            : wizardSteps.findIndex((entry) => entry.id === step)
-        }
-        // Done steps open again; editing a source unlocks every step.
+        current={wizardSteps.findIndex((entry) => entry.id === step)}
+        // Done steps open again; editing a source unlocks every step, the
+        // Finish step included. A connect that just ran ends the setup.
         onSelect={(index) => {
           const target = wizardSteps[index];
-          if (target && step !== "connect") setStep(target.id);
+          if (target && !saving) goTo(target.id);
         }}
         selectable={(index) =>
-          step !== "connect" &&
-          (index < wizardSteps.findIndex((entry) => entry.id === step) ||
-            (!!editing && index < wizardSteps.length))
+          !saving &&
+          (editing
+            ? index < wizardSteps.length
+            : step !== "connect" &&
+              index < wizardSteps.findIndex((entry) => entry.id === step))
         }
       />
 
@@ -956,11 +925,10 @@ export function GithubSyncSetupDialog({
             {createdApp ? (
               <AppLogoTip settingsUrl={createdApp.settingsUrl} />
             ) : null}
-            {/* Checks is for the policy check self-service posts on pull
-                requests, asked for up front so turning self-service on later
-                changes nothing. Off github.com the App also writes the
-                validation workflow into the new repository. */}
-            <AccessSummary workflows={!github?.dotCom} />
+            {/* Checks posts the policy check on each pull request, asked for
+                up front so turning self-service on later changes nothing;
+                Workflows keeps the repository's validation workflow current. */}
+            <AccessSummary />
           </div>
         ) : (
           <InlineNotice variant="info">
@@ -1361,49 +1329,41 @@ export function GithubSyncSetupDialog({
         </div>
       ) : null}
 
-      {step === "connect" && outcome ? (
-        <SelfServiceOutcomeStep
-          run={outcome}
+      {step === "connect" ? (
+        <SetupChecklist
+          key={outcome ? "run" : "read"}
+          run={outcome ?? undefined}
           labels={{
             pending: editing
               ? "Save Git sync and pull the policy"
-              : "Connect the repository and pull the policy",
+              : gitlab
+                ? "Connect the project and pull the policy"
+                : "Connect the repository and pull the policy",
             done: editing
               ? "Git sync saved and the policy pulled"
-              : "Repository connected and the policy pulled",
-            proposed: editing ? "Git sync saved" : "Repository connected",
+              : gitlab
+                ? "Project connected and the policy pulled"
+                : "Repository connected and the policy pulled",
+            proposed: editing
+              ? "Git sync saved"
+              : gitlab
+                ? "Project connected"
+                : "Repository connected",
             failed: editing
               ? "Could not save Git sync"
-              : "Could not connect the repository",
+              : gitlab
+                ? "Could not connect the project"
+                : "Could not connect the repository",
           }}
-          directory={serversFolder}
-          policyFile={location.path?.split("/").pop() ?? "appa.toml"}
+          // What was just saved; opened again, the saved setting.
+          {...(outcome
+            ? {
+                selfService: !gitlab && selfService,
+                directory: serversFolder || DEFAULT_SELF_SERVICE_FOLDER,
+                policyFile: location.path?.split("/").pop() ?? "appa.toml",
+              }
+            : {})}
         />
-      ) : null}
-      {step === "connect" && !outcome ? (
-        <ul
-          className="space-y-3 rounded-lg border bg-card p-4"
-          aria-live="polite"
-        >
-          {[
-            gitlab ? "Check the project" : "Check the repository",
-            "Sync the policy",
-            `Open a setup ${gitChangeRequestNoun(gitlab ? "gitlab" : "github")} if rules require one`,
-          ].map((label, index) => (
-            <li key={label} className="flex items-center gap-3 text-sm">
-              {index === 0 ? (
-                <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
-              ) : (
-                <span className="flex size-4 items-center justify-center">
-                  <span className="size-1.5 rounded-full bg-muted-foreground/40" />
-                </span>
-              )}
-              <span className={cn(index > 0 && "text-muted-foreground")}>
-                {label}
-              </span>
-            </li>
-          ))}
-        </ul>
       ) : null}
     </StandardDialog>
   );
@@ -1750,7 +1710,7 @@ function AppLogoTip({ settingsUrl }: { settingsUrl: string }) {
 }
 
 /** Off github.com the App also writes the validation workflow into the new repository. */
-function AccessSummary({ workflows }: { workflows: boolean }) {
+function AccessSummary() {
   return (
     <div className="flex items-start gap-3 rounded-lg bg-muted/40 px-4 py-3">
       <ShieldCheck className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -1760,19 +1720,20 @@ function AccessSummary({ workflows }: { workflows: boolean }) {
           organization:
         </p>
         <div className="flex flex-wrap gap-1.5">
-          {[
-            "Contents",
-            "Pull requests",
-            "Checks",
-            ...(workflows ? ["Workflows"] : []),
-          ].map((permission) => (
-            <Badge key={permission} variant="outline" className="bg-background">
-              <span>{permission}</span>
-              <span className="font-normal text-muted-foreground">
-                Read &amp; write
-              </span>
-            </Badge>
-          ))}
+          {["Contents", "Pull requests", "Checks", "Workflows"].map(
+            (permission) => (
+              <Badge
+                key={permission}
+                variant="outline"
+                className="bg-background"
+              >
+                <span>{permission}</span>
+                <span className="font-normal text-muted-foreground">
+                  Read &amp; write
+                </span>
+              </Badge>
+            ),
+          )}
         </div>
       </div>
     </div>
@@ -1805,6 +1766,11 @@ function headerFor(params: {
   dotCom: boolean;
   gitlab: boolean;
 }) {
+  if (params.step === "connect")
+    return {
+      title: "Finish setup",
+      description: "What is in place, and what still waits for you.",
+    };
   if (params.step === "provider")
     return {
       title: "Set up Git sync",
@@ -1817,7 +1783,7 @@ function headerFor(params: {
         description:
           "It needs the api scope on the policy project. A project or group token is best.",
       };
-    if (params.editing && (params.step === "repo" || params.step === "connect"))
+    if (params.editing && params.step === "repo")
       return {
         title: "Edit Git sync",
         description: "Change the project or how it syncs.",
@@ -1828,8 +1794,8 @@ function headerFor(params: {
         description: "Create a private one, or use one you have.",
       };
     return {
-      title: "Connecting the project",
-      description: "This takes a few seconds.",
+      title: "Choose the policy project",
+      description: "Create a private one, or use one you have.",
     };
   }
   if (params.step === "start")
@@ -1860,7 +1826,7 @@ function headerFor(params: {
       description: "GitHub creates the App for you. No IDs or keys to copy.",
     };
   }
-  if (params.editing && (params.step === "repo" || params.step === "connect"))
+  if (params.editing && params.step === "repo")
     return {
       title: "Edit Git sync",
       description: "Change the repository or how it syncs.",
@@ -1881,11 +1847,13 @@ const GITHUB_STEPS: { id: Step; label: string }[] = [
   { id: "start", label: "Start" },
   { id: "app", label: "GitHub App" },
   { id: "repo", label: "Repository" },
+  { id: "connect", label: "Finish" },
 ];
 const GITLAB_STEPS: { id: Step; label: string }[] = [
   { id: "provider", label: "Host" },
   { id: "app", label: "Token" },
   { id: "repo", label: "Project" },
+  { id: "connect", label: "Finish" },
 ];
 const PERSONAL = "__personal__";
 /** GitLab project names: letters, digits, and `_ . -`, starting with one of the first two. */

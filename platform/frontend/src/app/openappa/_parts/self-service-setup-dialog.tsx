@@ -9,22 +9,22 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { SetupStepper } from "@/components/git/git-setup-chrome";
 import { openGithubWindow } from "@/components/github-app-setup/github-app-window";
 import { ManifestRow } from "@/components/github-app-setup/manifest-row";
 import { GitHubConnectButton } from "@/components/github-connect-button";
-import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useAppaGithubAppGrants,
+  useAppaGithubSync,
+  useAppaGithubSyncing,
   useFreshAppaRepositoryProtection,
   useUpdateAppaGithubSync,
 } from "@/lib/openappa-github-sync.query";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
+import { appaGitHost } from "./appa-git-host";
 
-type Step = "app" | "enable";
 type Grants = NonNullable<
   archestraApiTypes.GetAppaGithubAppGrantsResponses["200"]
 >;
@@ -32,142 +32,42 @@ type Protection = NonNullable<
   archestraApiTypes.GetAppaRepositoryProtectionResponses["200"]
 >;
 
-const STEPS: { id: Step; label: string }[] = [
-  { id: "app", label: "GitHub App" },
-  { id: "enable", label: "Set up" },
-];
 const NEEDED = ["checks"] as const;
 const GITHUB_WINDOW = "archestra-github-app";
-
-/**
- * Finishing self-service setup, in the Git sync setup's own steps: the
- * GitHub App's permission, then what the switch brings: the pull request
- * that starts the folder and includes it, and the branch ruleset the
- * administrator imports. Release 1.4: the switch and the folder are the
- * deployment's environment variables, so the dialog only brings what is
- * still missing.
- */
-export function SelfServiceSetupDialog({
-  open,
-  onOpenChange,
-  policyPath,
-  directory,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  policyPath: string;
-  /** The deployment's self-service folder. */
-  directory: string;
-}) {
-  const appName = useAppName();
-  const [step, setStep] = useState<Step>("app");
-  const grants = useAppaGithubAppGrants(open);
-  const granted = (name: Grants["permissions"][number]["name"]) =>
-    grants.data?.permissions.find((entry) => entry.name === name)?.granted ===
-    true;
-  const ready = NEEDED.every(granted);
-  const update = useUpdateAppaGithubSync();
-  const policyFile = policyPath.slice(policyPath.lastIndexOf("/") + 1);
-  const header = headerFor(step, appName, grants.data?.name ?? null);
-  return (
-    <StandardDialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next && step === "enable") return;
-        onOpenChange(next);
-      }}
-      title={header.title}
-      description={header.description}
-      size="medium"
-      bodyClassName="space-y-5"
-      footer={
-        <>
-          {step !== "enable" ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              <span>Cancel</span>
-            </Button>
-          ) : null}
-          {step === "app" ? (
-            <Button
-              type="button"
-              disabled={!ready}
-              onClick={() => setStep("enable")}
-            >
-              <span>Continue</span>
-            </Button>
-          ) : null}
-          {step === "enable" ? (
-            <EnableFooter onClose={() => onOpenChange(false)} />
-          ) : null}
-        </>
-      }
-    >
-      <SetupStepper
-        steps={STEPS.map((entry) => entry.label)}
-        current={STEPS.findIndex((entry) => entry.id === step)}
-        onSelect={(index) => {
-          const target = STEPS[index];
-          if (target && step !== "enable") setStep(target.id);
-        }}
-      />
-      {step === "app" ? (
-        <AppStep
-          grants={grants.data ?? null}
-          loading={grants.isPending}
-          error={grants.isError ? grants.error.message : undefined}
-          checking={grants.isFetching}
-          ready={ready}
-          onCheckAgain={() => void grants.refetch()}
-        />
-      ) : null}
-      {step === "enable" ? (
-        <SelfServiceOutcomeStep
-          // The deployment's variable is the switch; the first step brings
-          // the repository's protection in line now, as the next sync would.
-          run={() => update.mutateAsync({ action: "protect" })}
-          labels={{
-            pending: "MCP Guardrails Self-Service is on",
-            done: "MCP Guardrails Self-Service is on",
-            failed: "Could not set up MCP Guardrails Self-Service",
-          }}
-          directory={directory}
-          policyFile={policyFile}
-        />
-      ) : null}
-    </StandardDialog>
-  );
-}
-
-function headerFor(step: Step, appName: string, githubApp: string | null) {
-  if (step === "app")
-    return {
-      title: "MCP Guardrails Self-Service",
-      description: `${appName} posts the policy check on each pull request. The ${githubApp ? `${githubApp} App` : "GitHub App"} needs one more permission for that.`,
-    };
-  return {
-    title: "Finishing MCP Guardrails Self-Service setup",
-    description: "This takes a few seconds.",
-  };
-}
 
 const PERMISSION_LABELS = {
   contents: "Contents",
   pull_requests: "Pull requests",
   checks: "Checks",
+  workflows: "Workflows",
 } as const;
 
-/** The App's permissions: what it has, and where to grant the rest. */
-function AppStep({
+/**
+ * The App's permissions: what it has, and where to grant the rest. Self-
+ * service asks for Administration and Checks; a caller can ask for others,
+ * such as Workflows for the validation workflow's updates.
+ */
+export function GithubAppPermissionsStep({
   grants,
   loading,
   error,
   checking,
   ready,
   onCheckAgain,
+  needed = NEEDED,
+  title = (app) => (
+    <>
+      Grant the <code>Checks</code> permission to the {app} App
+    </>
+  ),
+  hint = (
+    <>
+      Set it to <code>Read and write</code>: the App posts the check&apos;s
+      verdict on each pull request. Making the check required is a branch
+      ruleset you import yourself, so the App needs no Administration.
+    </>
+  ),
+  readyText = "every permission self-service needs",
 }: {
   grants: Grants | null;
   loading: boolean;
@@ -175,6 +75,11 @@ function AppStep({
   checking: boolean;
   ready: boolean;
   onCheckAgain: () => void;
+  needed?: readonly Grants["permissions"][number]["name"][];
+  title?: (app: string) => ReactNode;
+  hint?: ReactNode;
+  /** What the App has once every needed permission is granted. */
+  readyText?: string;
 }) {
   if (loading)
     return (
@@ -188,11 +93,11 @@ function AppStep({
       <InlineNotice variant="warning">
         <InlineNoticeText className="flex-1">
           {error ??
-            "Self-service needs a GitHub App: connect the policy repository through one first."}
+            "This needs a GitHub App: connect the policy repository through one first."}
         </InlineNoticeText>
       </InlineNotice>
     );
-  const missing = NEEDED.filter(
+  const missing = needed.filter(
     (name) =>
       grants.permissions.find((entry) => entry.name === name)?.granted !== true,
   );
@@ -201,19 +106,8 @@ function AppStep({
       <ol className="overflow-hidden rounded-lg border bg-card">
         <ManifestRow
           index={1}
-          title={
-            <>
-              Grant the <code>Checks</code> permission to the {grants.name} App
-            </>
-          }
-          hint={
-            <>
-              Set it to <code>Read and write</code>: the App posts the
-              check&apos;s verdict on each pull request. Making the check
-              required is a branch ruleset you import yourself, so the App needs
-              no Administration.
-            </>
-          }
+          title={title(grants.name)}
+          hint={hint}
           inlineAction
           waiting={false}
           error={error}
@@ -269,7 +163,7 @@ function AppStep({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
         {ready ? (
           <span>
-            The {grants.name} App has every permission self-service needs.
+            The {grants.name} App has {readyText}.
           </span>
         ) : (
           <span>
@@ -278,7 +172,8 @@ function AppStep({
               missing.map((name) => PERMISSION_LABELS[name]),
               " and ",
             )}
-            . Check again once it is accepted.
+            . Check again once {needed.length > 1 ? "they are" : "it is"}{" "}
+            accepted.
           </span>
         )}
         <Button
@@ -312,39 +207,53 @@ function joined(names: string[], separator: string): ReactNode {
 type Progress = "waiting" | "running" | "done" | "failed";
 
 /**
- * A step that brings self-service about and what it brings, each with its
- * own progress: `run` (the switch, or a Git sync save that turns it on), the
- * pull request that starts the folder and includes it, and the branch
- * ruleset, which the administrator imports on GitHub and checks here. Runs
- * once when shown; a failed part offers a retry. The Git sync wizard shows
- * it too, so the dialog stays open on the pull request, and on the setup
- * pull request a connect may open, which carries the include itself.
+ * The setup's Finish step, the last step of every Git sync wizard: what is in
+ * place and what still waits, each with its own progress. With `run` (a
+ * save, a connect, the self-service switch), that work comes first, once,
+ * when the step is shown; the rest reads what it brought about, and with
+ * self-service on, the include it needs is opened. Without `run`, it reads
+ * what is in place now, so the step can be opened again at any time.
  */
-export function SelfServiceOutcomeStep({
+export function SetupChecklist({
   run: first,
   labels,
-  directory,
-  policyFile,
+  selfService: selfServiceGiven,
+  directory: directoryGiven,
+  policyFile: policyFileGiven,
 }: {
   /**
    * The first row's work; the rest reads the protection once it settles.
    * A result with `setupPull` names the pull request that carries the
    * current policy, so the first row waits on its merge.
    */
-  run: () => Promise<unknown>;
-  labels: {
+  run?: () => Promise<unknown>;
+  labels?: {
     pending: string;
     done: string;
     /** The first row with a setup pull request, before its link. */
     proposed?: string;
     failed: string;
   };
-  directory: string;
-  policyFile: string;
+  /** Whether the self-service rows show; the saved setting unless given. */
+  selfService?: boolean;
+  directory?: string;
+  policyFile?: string;
 }) {
+  const words: NonNullable<typeof labels> = labels ?? {
+    pending: "",
+    done: "",
+    failed: "",
+  };
+  const status = useAppaGithubSync().data;
+  const selfService = selfServiceGiven ?? status?.selfService?.enabled === true;
+  const directory = directoryGiven ?? status?.selfService?.directory ?? "mcp";
+  const policyFile =
+    policyFileGiven ?? status?.source?.path?.split("/").pop() ?? "appa.toml";
   const update = useUpdateAppaGithubSync();
   const fresh = useFreshAppaRepositoryProtection();
-  const [switched, setSwitched] = useState<Progress>("waiting");
+  const [switched, setSwitched] = useState<Progress>(
+    first ? "waiting" : "done",
+  );
   const [setupPull, setSetupPull] = useState<SetupPull | null>(null);
   const [rules, setRules] = useState<{
     /** `action`: the administrator imports or edits the ruleset on GitHub. */
@@ -354,7 +263,8 @@ export function SelfServiceOutcomeStep({
     name?: string;
   }>({ state: "waiting" });
   const [include, setInclude] = useState<{
-    state: Progress;
+    /** `action`: the include is missing and waits for its pull request. */
+    state: Progress | "action";
     detail?: Protection["include"];
     error?: string;
   }>({ state: "waiting" });
@@ -365,20 +275,22 @@ export function SelfServiceOutcomeStep({
   const refetch = fresh.mutateAsync;
 
   async function run() {
-    try {
-      setSwitched("running");
-      const outcome = await first();
-      setSetupPull(setupPullOf(outcome));
-      setSwitched("done");
-    } catch (error) {
-      setSwitched("failed");
-      setRules({ state: "waiting" });
-      setInclude({
-        state: "waiting",
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return;
-    }
+    if (first)
+      try {
+        setSwitched("running");
+        const outcome = await first();
+        setSetupPull(setupPullOf(outcome));
+        setSwitched("done");
+      } catch (error) {
+        setSwitched("failed");
+        setRules({ state: "waiting" });
+        setInclude({
+          state: "waiting",
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+    if (!selfService) return;
     // The switch is done whatever the reads after it bring: a read that
     // fails shows on its own row, with a check-again.
     setRules({ state: "running" });
@@ -386,6 +298,10 @@ export function SelfServiceOutcomeStep({
     const read = await readProtection();
     if (read === undefined) return setInclude({ state: "waiting" });
     setRules(rulesStateOf(read));
+    // Opened again, the checklist only reads: a missing include waits for
+    // its button rather than opening a pull request on its own.
+    if (!first && read?.include.state === "missing")
+      return setInclude({ state: "action", detail: read.include });
     await settleInclude(read);
   }
   /** The protection from GitHub, or undefined once a failed read is shown. */
@@ -518,6 +434,12 @@ export function SelfServiceOutcomeStep({
           {include.error ? `: ${include.error}` : "."}
         </span>
       );
+    if (include.state === "action")
+      return (
+        <span>
+          {policyFile} does not include <code>{directory}/*.toml</code> yet.
+        </span>
+      );
     return (
       <span>
         Open the pull request that starts <code>{directory}/</code> and adds{" "}
@@ -531,35 +453,44 @@ export function SelfServiceOutcomeStep({
         className="space-y-3 rounded-lg border bg-card p-4"
         aria-live="polite"
       >
-        <ProgressRow state={switched}>
-          {switched === "done" && setupPull ? (
-            <span>
-              {labels.proposed ?? labels.done}.{" "}
-              <a
-                href={setupPull.url}
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium text-foreground underline underline-offset-4"
-              >
-                Pull request #{setupPull.number}
-              </a>{" "}
-              carries the current policy: merge it, and the next sync finishes
-              setup.
-            </span>
-          ) : (
-            <span>
-              {switched === "done"
-                ? labels.done
-                : switched === "failed"
-                  ? `${labels.failed}${include.error ? `: ${include.error}` : "."}`
-                  : labels.pending}
-            </span>
-          )}
-        </ProgressRow>
-        <ProgressRow state={rules.state}>{rulesLine}</ProgressRow>
-        <ProgressRow state={include.state}>{includeLine}</ProgressRow>
+        {first ? (
+          <ProgressRow state={switched}>
+            {switched === "done" && setupPull ? (
+              <span>
+                {words.proposed ?? words.done}.{" "}
+                <a
+                  href={setupPull.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-foreground underline underline-offset-4"
+                >
+                  Pull request #{setupPull.number}
+                </a>{" "}
+                carries the current policy: merge it, and the next sync finishes
+                setup.
+              </span>
+            ) : (
+              <span>
+                {switched === "done"
+                  ? words.done
+                  : switched === "failed"
+                    ? `${words.failed}${include.error ? `: ${include.error}` : "."}`
+                    : words.pending}
+              </span>
+            )}
+          </ProgressRow>
+        ) : null}
+        {switched === "done" ? <SourceRows /> : null}
+        {selfService ? (
+          <>
+            <ProgressRow state={rules.state}>{rulesLine}</ProgressRow>
+            <ProgressRow state={include.state}>{includeLine}</ProgressRow>
+          </>
+        ) : null}
       </ul>
-      {switched === "failed" || include.state === "failed" ? (
+      {switched === "failed" ||
+      include.state === "failed" ||
+      include.state === "action" ? (
         <Button
           type="button"
           variant="outline"
@@ -588,10 +519,181 @@ export function SelfServiceOutcomeStep({
             }
           }}
         >
-          <span>Try again</span>
+          <span>
+            {include.state === "action" ? "Open the pull request" : "Try again"}
+          </span>
         </Button>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The rows every source has, as the last sync left them: the repository and
+ * the setup pull request it may wait on, the policy check on its pull
+ * requests, and the files beside the policy. A setup pull request that
+ * waits is checked again on coming back to this tab.
+ */
+function SourceRows() {
+  const query = useAppaGithubSync();
+  const status = query.data;
+  const source = status?.source;
+  const files = status?.templateFiles;
+  const app = !!source?.githubAppConfigId;
+  const lacksGrant =
+    status?.check?.state === "refused" ||
+    files?.state === "needs_permission" ||
+    (files?.withheld?.length ?? 0) > 0;
+  const grants = useAppaGithubAppGrants(app && lacksGrant);
+  const update = useUpdateAppaGithubSync();
+  const syncing = useAppaGithubSyncing();
+  const waiting = !!source?.setupPullRequestNumber;
+  const { mutate } = update;
+  useEffect(() => {
+    if (!waiting) return;
+    const check = () => {
+      if (document.visibilityState === "visible" && !syncing)
+        mutate({ action: "sync" });
+    };
+    window.addEventListener("focus", check);
+    return () => window.removeEventListener("focus", check);
+  }, [waiting, syncing, mutate]);
+  if (!status || !source?.repo) return null;
+  const git = appaGitHost(status);
+  const urls = git.urls(source.repo);
+  const link = (href: string, text: string) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="font-medium text-foreground underline underline-offset-4"
+    >
+      {text}
+    </a>
+  );
+  const grantActions = grants.data ? (
+    <span className="mt-2 flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="xs"
+        onClick={() =>
+          openGithubWindow(grants.data?.settingsUrl ?? "", GITHUB_WINDOW)
+        }
+      >
+        <span>Update App</span>
+        <ExternalLink aria-hidden />
+      </Button>
+      {grants.data.installationUrl ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          onClick={() =>
+            openGithubWindow(grants.data?.installationUrl ?? "", GITHUB_WINDOW)
+          }
+        >
+          <span>Approve the request</span>
+          <ExternalLink aria-hidden />
+        </Button>
+      ) : null}
+    </span>
+  ) : null;
+  const checked = source.lastSyncedAt
+    ? ` · checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`
+    : "";
+  return (
+    <>
+      <ProgressRow
+        state={source.lastSyncError ? "failed" : waiting ? "action" : "done"}
+      >
+        {source.lastSyncError ? (
+          <span>Could not sync the policy: {source.lastSyncError}</span>
+        ) : waiting && source.setupPullRequestNumber ? (
+          <span>
+            {link(
+              urls.changeRequest(source.setupPullRequestNumber),
+              `${git.changeRequestShort} #${source.setupPullRequestNumber}`,
+            )}{" "}
+            carries the initial policy: waiting for merge{checked}.
+          </span>
+        ) : (
+          <span>
+            The policy syncs from {link(urls.repo, source.repo)}
+            {checked}.
+          </span>
+        )}
+      </ProgressRow>
+      {app && status.check && status.check.state !== "none" ? (
+        <ProgressRow
+          state={status.check.state === "posted" ? "done" : "action"}
+        >
+          {status.check.state === "posted" ? (
+            <span>
+              The {status.check.name} check goes on every {git.changeRequest}.
+            </span>
+          ) : (
+            <span className="block">
+              <span className="block">
+                The {status.check.name} check is not posted: the GitHub App
+                needs the Checks permission.
+              </span>
+              {grantActions}
+            </span>
+          )}
+        </ProgressRow>
+      ) : null}
+      {files && files.state !== "not_applicable" ? (
+        <ProgressRow
+          state={
+            files.state === "current"
+              ? "done"
+              : files.state === "unavailable"
+                ? "failed"
+                : "action"
+          }
+        >
+          {files.state === "current" ? (
+            <span>The files beside the policy are current.</span>
+          ) : files.state === "unavailable" ? (
+            <span>
+              Could not compare the files beside the policy
+              {files.detail ? `: ${files.detail}` : "."}
+            </span>
+          ) : (
+            <span className="block">
+              <span className="block">
+                {files.pull ? (
+                  <span>
+                    {link(
+                      files.pull.url,
+                      `${git.changeRequestShort} #${files.pull.number}`,
+                    )}{" "}
+                    updates the files beside the policy: waiting for merge.
+                  </span>
+                ) : (
+                  <span>
+                    The validation workflow update waits for the Workflows
+                    permission.
+                  </span>
+                )}
+                {files.pull && (files.withheld?.length ?? 0) > 0 ? (
+                  <span>
+                    {" "}
+                    The validation workflow follows once the App may write
+                    workflows.
+                  </span>
+                ) : null}
+              </span>
+              {(files.withheld?.length ?? 0) > 0 ||
+              files.state === "needs_permission"
+                ? grantActions
+                : null}
+            </span>
+          )}
+        </ProgressRow>
+      ) : null}
+    </>
   );
 }
 
@@ -772,15 +874,5 @@ function ProgressRow({
         {children}
       </span>
     </li>
-  );
-}
-
-/** Close, once the last step has settled; the dialog cannot be dismissed before. */
-function EnableFooter({ onClose }: { onClose: () => void }) {
-  const update = useUpdateAppaGithubSync();
-  return (
-    <Button type="button" disabled={update.isPending} onClick={onClose}>
-      <span>Done</span>
-    </Button>
   );
 }

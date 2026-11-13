@@ -6,7 +6,7 @@ import {
   getDocsUrl,
   type gitWebUrls,
 } from "@archestra/shared";
-import { AlertTriangle, ExternalLink, GitBranch } from "lucide-react";
+import { AlertTriangle, GitBranch } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -51,6 +51,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github-credential";
 import {
   useAppaGithubSync,
+  useAppaGithubSyncing,
   useAppaRepositoryProtection,
   useConfigureAppaGithubSync,
   useUpdateAppaGithubSync,
@@ -58,8 +59,8 @@ import {
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { appaGitHost } from "./appa-git-host";
+import { FinishSetupNotice, useFinishSetupPieces } from "./finish-setup-dialog";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
-import { SelfServiceSetupDialog } from "./self-service-setup-dialog";
 
 type Source = NonNullable<
   archestraApiTypes.GetAppaGithubSyncResponses["200"]["source"]
@@ -73,9 +74,11 @@ const intervals = {
 export function AppaGithubSyncPanel() {
   const query = useAppaGithubSync();
   const update = useUpdateAppaGithubSync();
+  const syncing = useAppaGithubSyncing();
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
   });
+  const pieces = useFinishSetupPieces();
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -199,9 +202,7 @@ export function AppaGithubSyncPanel() {
                   connected && canManage
                     ? {
                         onClick: () => update.mutate({ action: "sync" }),
-                        pending:
-                          update.isPending &&
-                          update.variables?.action === "sync",
+                        pending: syncing,
                         tooltip: source.interval
                           ? `Checks ${intervals[source.interval].toLowerCase()}. ${lastChecked}.`
                           : `${lastChecked}.`,
@@ -240,43 +241,44 @@ export function AppaGithubSyncPanel() {
                   ) : undefined
                 }
               >
-                {connected && source.setupPullRequestNumber && (
+                {connected && pieces ? (
                   <GitSourceNotice>
-                    <InlineNotice variant="info">
-                      <GitBranch aria-hidden />
-                      <span className="font-medium">
-                        Merge your initial policy
-                      </span>
-                      <InlineNoticeText className="flex-1">
-                        Your current policy stays active until it merges.
-                      </InlineNoticeText>
-                      <a
-                        href={urls?.changeRequest(
-                          source.setupPullRequestNumber,
-                        )}
-                        target="_blank"
-                        rel="noreferrer"
-                        data-slot="inline-notice-action"
-                        className="ml-auto inline-flex shrink-0 items-center gap-0.5 font-medium underline-offset-4 hover:underline"
-                      >
-                        <span>Review and merge {git.changeRequestShort}</span>
-                        <ExternalLink className="size-3" aria-hidden />
-                      </a>
-                    </InlineNotice>
+                    <FinishSetupNotice pieces={pieces} />
                   </GitSourceNotice>
-                )}
+                ) : null}
                 {source.lastSyncError ? (
                   <GitSourceError
                     title="Could not sync policy"
                     message={source.lastSyncError}
                   />
                 ) : null}
+                {connected &&
+                (query.data.templateFiles?.state === "unavailable" ||
+                  // An access token has no App to grant it Workflows: what
+                  // it lacks shows here, not as a Finish setup step.
+                  (!source.githubAppConfigId &&
+                    (query.data.templateFiles?.state === "needs_permission" ||
+                      !!query.data.templateFiles?.withheld?.length))) ? (
+                  <GitSourceNotice>
+                    <InlineNotice variant="warning">
+                      <AlertTriangle aria-hidden />
+                      <span className="font-medium">
+                        {query.data.templateFiles.state === "unavailable"
+                          ? "Repository files could not be checked"
+                          : "Repository files could not be updated"}
+                      </span>
+                      <InlineNoticeText className="flex-1">
+                        {query.data.templateFiles.detail ??
+                          "Try again at the next sync."}
+                      </InlineNoticeText>
+                    </InlineNotice>
+                  </GitSourceNotice>
+                ) : null}
                 {connected && !source.setupPullRequestNumber && (
                   <SelfServiceRow
                     source={source}
                     urls={urls}
                     selfService={selfService}
-                    canManage={canManage === true}
                   />
                 )}
               </GitSourceCard>
@@ -345,17 +347,14 @@ function SelfServiceRow({
   source,
   urls,
   selfService,
-  canManage,
 }: {
   source: Source;
   /** Browser links into the repository, for the branch and the folder. */
   urls: ReturnType<typeof gitWebUrls> | null;
   selfService: archestraApiTypes.GetAppaGithubSyncResponses["200"]["selfService"];
-  canManage: boolean;
 }) {
   const appName = useAppName();
   const eligible = !!source.githubAppConfigId;
-  const [setup, setSetup] = useState(false);
   const protection = useAppaRepositoryProtection(selfService.enabled);
   const data = selfService.enabled ? (protection.data ?? null) : null;
   // What Finish setup still does: the ruleset, the App's Checks permission
@@ -404,18 +403,6 @@ function SelfServiceRow({
           value={selfService.enabled ? "enabled" : "disabled"}
           disabled
           hideValue
-          action={
-            toFinish && canManage ? (
-              <Button
-                size="xs"
-                type="button"
-                variant="outline"
-                onClick={() => setSetup(true)}
-              >
-                Finish setup
-              </Button>
-            ) : undefined
-          }
           environmentVariable={selfService.environment.variable}
           options={[
             { value: "enabled", label: "On" },
@@ -468,8 +455,8 @@ function SelfServiceRow({
           <p className="pt-2 text-sm leading-5 text-muted-foreground">
             A branch {hostLink(selfService.leftoverRule.url, "ruleset")} still
             requires the {selfService.leftoverRule.checkName} check. {appName}{" "}
-            posts it as skipped on every pull request until you remove the rule,
-            or turn self-service on again.
+            keeps posting it, so pull requests merge once it passes. Remove the
+            rule before you move or stop Git sync.
           </p>
         ) : null}
         {data ? (
@@ -481,14 +468,6 @@ function SelfServiceRow({
           />
         ) : null}
       </div>
-      {setup ? (
-        <SelfServiceSetupDialog
-          open
-          onOpenChange={setSetup}
-          policyPath={source.path ?? "appa.toml"}
-          directory={selfService.directory}
-        />
-      ) : null}
     </GitSourceNotice>
   );
 }

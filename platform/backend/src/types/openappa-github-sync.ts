@@ -122,7 +122,7 @@ export const AppaGithubAppGrantsSchema = z.object({
   installationUrl: z.string().nullable(),
   permissions: z.array(
     z.object({
-      name: z.enum(["contents", "pull_requests", "checks"]),
+      name: z.enum(["contents", "pull_requests", "checks", "workflows"]),
       granted: z.boolean(),
     }),
   ),
@@ -225,7 +225,8 @@ export const AppaSelfServiceSchema = z.object({
   directoryEnvironment: z.object({ variable: z.string(), value: z.string() }),
   /**
    * Off, a branch rule that still requires the policy check: Archestra
-   * posts the check as skipped until the administrator removes the rule.
+   * keeps posting the check, and a move or a stop waits until the
+   * administrator removes the rule.
    */
   leftoverRule: z
     .object({ checkName: z.string(), url: z.string().nullable() })
@@ -242,6 +243,58 @@ export const AppaSelfServiceSchema = z.object({
     }),
   }),
 });
+/**
+ * The files Archestra keeps beside the policy in its repository, from the
+ * bundled template: the validation workflow, the Dependabot configuration and
+ * the READMEs. Read at the accepted commit on each sync; what differs from the
+ * template is proposed as a pull request (a merge request on GitLab).
+ */
+export const AppaTemplateFilesSchema = z.object({
+  /** The template commit the bundled files come from. */
+  templateCommit: z.string(),
+  /**
+   * `current`: every file matches the template. `pull_open`: the pull request
+   * that updates them waits; `withheld` names the files it leaves out for a
+   * permission the GitHub App lacks. `needs_permission`: only such files
+   * differ, so no pull request can open. `not_applicable`: the policy lives
+   * elsewhere than the template's layout, so its files are not compared.
+   * `unavailable`: the files could not be read or proposed for now; `detail`
+   * says why.
+   */
+  state: z.enum([
+    "current",
+    "pull_open",
+    "needs_permission",
+    "not_applicable",
+    "unavailable",
+  ]),
+  /** The files that differ from the template, as repository paths. */
+  paths: z.array(z.string()),
+  /** Of `paths`, the workflow files the pull request leaves out until the App may write workflows. */
+  withheld: z.array(z.string()).optional(),
+  pull: z.object({ number: z.number().int(), url: z.string() }).optional(),
+  detail: z.string().optional(),
+  checkedAt: z.string(),
+});
+export type AppaTemplateFiles = z.infer<typeof AppaTemplateFilesSchema>;
+
+/**
+ * The policy check Archestra posts on the repository's pull requests, whether
+ * the credential may post it, and the ruleset that requires it when
+ * self-service is on.
+ */
+export const AppaPolicyCheckSchema = z.object({
+  name: z.string(),
+  /**
+   * `posted`: the check goes on every pull request. `refused`: the credential
+   * was refused for it, and `detail` says what to grant. `none`: the source has
+   * no credential that posts checks (a token, a public read, or GitLab).
+   */
+  state: z.enum(["posted", "refused", "none"]),
+  detail: z.string().optional(),
+});
+export type AppaPolicyCheck = z.infer<typeof AppaPolicyCheckSchema>;
+
 export const AppaGithubSyncStatusSchema = z.object({
   enabled: z.boolean(),
   source: AppaGithubSyncSchema.nullable(),
@@ -252,6 +305,10 @@ export const AppaGithubSyncStatusSchema = z.object({
   githubWebUrl: z.string(),
   /** Which host the source lives on; links and wording follow it. */
   provider: GitProviderSchema,
+  /** The template files beside the policy, as the last sync found them; absent before the first sync. */
+  templateFiles: AppaTemplateFilesSchema.optional(),
+  /** The policy check on the repository's pull requests; absent without a connected source. */
+  check: AppaPolicyCheckSchema.optional(),
 });
 export const AppaGithubSyncActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("sync") }).strict(),

@@ -112,6 +112,7 @@ for (const viewport of [
         body: {
           batteries: [],
           unusedAliases: [],
+          repositoryFiles: [],
           rootRevision: 1,
           lastError: null,
           composition: {

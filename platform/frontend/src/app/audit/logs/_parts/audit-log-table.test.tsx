@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -236,7 +236,7 @@ describe("AuditLogTable", () => {
     expect(screen.getByText("Deleted user")).toBeInTheDocument();
   });
 
-  it("opens the detail dialog when a row is clicked", async () => {
+  it("opens the event drawer when a row is clicked", async () => {
     mockUseAuditLogs.mockReturnValue(withRows([makeEvent()]));
 
     renderTable();
@@ -246,11 +246,17 @@ describe("AuditLogTable", () => {
     if (!row) throw new Error("expected table row");
     await userEvent.click(row);
 
+    const drawer = await screen.findByRole("dialog");
     expect(
-      await screen.findByRole("heading", { name: /Event details/i }),
+      within(drawer).getByRole("heading", { name: "Agent updated" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("/api/agents/agent-123")).toBeInTheDocument();
-    expect(screen.getByText("10.0.0.1")).toBeInTheDocument();
+    await userEvent.click(
+      within(drawer).getByRole("tab", { name: "Overview" }),
+    );
+    expect(
+      within(drawer).getByText("/api/agents/agent-123"),
+    ).toBeInTheDocument();
+    expect(within(drawer).getByText("10.0.0.1")).toBeInTheDocument();
   });
 
   it("does not render the resource_id in the table — only the resource type", () => {
@@ -341,10 +347,17 @@ describe("AuditLogTable", () => {
       replace: vi.fn(),
     } as unknown as ReturnType<typeof useRouter>);
     mockUseAuditLogs.mockReturnValue(withEmpty());
-    mockUseResourceSearch.mockImplementation(({ enabled }) => ({
-      options: enabled
-        ? [{ resourceType: "mcpServer", resourceId: "mcp-1", name: "context7" }]
-        : [],
+    mockUseResourceSearch.mockImplementation(({ enabled, resourceType }) => ({
+      options:
+        enabled && resourceType === "mcpServer"
+          ? [
+              {
+                resourceType: "mcpServer",
+                resourceId: "mcp-1",
+                name: "context7",
+              },
+            ]
+          : [],
       selected: undefined,
       onSearchQueryChange: vi.fn(),
       isSearching: false,
@@ -355,14 +368,15 @@ describe("AuditLogTable", () => {
       expect.objectContaining({ enabled: true }),
     );
 
-    // The resource picker is one of the secondary filters, so it is reached
-    // through "More filters" until something is selected in it.
-    await userEvent.click(screen.getByRole("button", { name: /More filters/ }));
     await userEvent.click(
-      await screen.findByRole("combobox", { name: "Filter by resource" }),
+      screen.getByRole("button", { name: "Resource filter: All resources" }),
+    );
+    // Types on the left, that type's names on the right.
+    await userEvent.click(
+      await screen.findByRole("button", { name: "MCP servers" }),
     );
     await userEvent.click(
-      await screen.findByRole("option", { name: /context7/i }),
+      await screen.findByRole("button", { name: /context7/i }),
     );
 
     expect(push).toHaveBeenCalled();
@@ -390,18 +404,17 @@ describe("AuditLogTable", () => {
 
     renderTable();
 
-    expect(mockUseResourceSearch).toHaveBeenCalledWith({
-      enabled: false,
-      selectedResourceId: "team-9",
-    });
+    expect(mockUseResourceSearch).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false, selectedResourceId: "team-9" }),
+    );
     expect(
-      screen.getByRole("combobox", { name: "Filter by resource" }),
-    ).toHaveTextContent("Ops");
+      screen.getByRole("button", { name: "Resource filter: Ops" }),
+    ).toBeInTheDocument();
   });
 
-  it("keeps an applied secondary filter on the bar rather than behind More filters", () => {
+  it("names an applied actor kind on the Actor filter", () => {
     vi.mocked(useSearchParams).mockReturnValue(
-      new URLSearchParams("actorType=user") as unknown as ReturnType<
+      new URLSearchParams("actorType=service_account") as unknown as ReturnType<
         typeof useSearchParams
       >,
     );
@@ -409,12 +422,12 @@ describe("AuditLogTable", () => {
 
     renderTable();
 
-    // Applied, so it is inline and readable without opening anything —
-    // a filter narrowing the table from inside a closed popover would leave
-    // the empty result unexplained.
     expect(
-      screen.getByRole("combobox", { name: "Filter by actor type" }),
+      screen.getByRole("button", { name: "Actor filter: Service accounts" }),
     ).toBeInTheDocument();
+    expect(mockUseAuditLogs).toHaveBeenCalledWith(
+      expect.objectContaining({ actorType: "service_account" }),
+    );
   });
 
   it("keeps structured URL filters and removes retired free-text search", () => {

@@ -31,14 +31,24 @@ export const AUDIT_LOG_QUERY_KEY = ["audit-logs"] as const;
 export function useAuditLogResourceSearch(params: {
   enabled: boolean;
   selectedResourceId?: string;
+  /** Offer only these resource types (comma-separated), e.g. the event filter's. */
+  resourceType?: string;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const search = useDebouncedValue(searchQuery.trim(), 250);
   const options = useQuery({
-    queryKey: [...AUDIT_LOG_QUERY_KEY, "resources", { search }],
+    queryKey: [
+      ...AUDIT_LOG_QUERY_KEY,
+      "resources",
+      { search, resourceType: params.resourceType },
+    ],
     queryFn: async () => {
       const { data, error } = await getAuditLogResources({
-        query: { search: search || undefined, limit: RESOURCE_OPTION_LIMIT },
+        query: {
+          search: search || undefined,
+          resourceType: params.resourceType,
+          limit: RESOURCE_OPTION_LIMIT,
+        },
       });
       throwOnApiError(error, { toastOnError: false });
       return data?.data ?? [];
@@ -67,6 +77,8 @@ export function useAuditLogResourceSearch(params: {
       selected.data?.[0],
     onSearchQueryChange: setSearchQuery,
     isSearching: searchQuery.trim() !== search || options.isFetching,
+    /** The page is full, so more resources may match than are listed. */
+    isTruncated: (options.data?.length ?? 0) >= RESOURCE_OPTION_LIMIT,
   };
 }
 

@@ -2993,6 +2993,17 @@ const config = {
     subscriptionAutodetect:
       process.env.ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT !== "false",
   },
+  // The automatic keys of keyless providers (Vertex AI, Entra ID, IAM). Kept
+  // out of `llm` for the same reason as `llmCost`.
+  llmSystemKeys: {
+    // On (default): this deployment deletes a provider's system key once the
+    // provider is no longer enabled in its environment. Off: it never deletes
+    // one. For deployments sharing a database, where a provider enabled in
+    // only one of them would otherwise lose its key, virtual key mappings and
+    // model pool members whenever another one starts.
+    autoDeleteEnabled:
+      process.env.ARCHESTRA_LLM_SYSTEM_KEYS_AUTO_DELETE_ENABLED !== "false",
+  },
   llm: {
     openai: {
       baseUrl:

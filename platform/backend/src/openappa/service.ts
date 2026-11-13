@@ -2616,6 +2616,8 @@ export async function loadOfferReview(params: {
    * typed it, or one that joins several authorities: show `text` instead.
    */
   scope?: ReviewScopeItem[];
+  /** The ruling authority's own hint to the reviewer. */
+  hint?: string;
 } | null> {
   try {
     if (
@@ -2646,6 +2648,7 @@ export async function loadOfferReview(params: {
       ...(result.tool ? { tool: result.tool } : {}),
       ...(result.arguments ? { arguments: result.arguments } : {}),
       ...(scope ? { scope } : {}),
+      ...(result.hint ? { hint: result.hint } : {}),
     };
   } catch (error) {
     logger.warn(

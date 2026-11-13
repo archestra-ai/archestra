@@ -71,11 +71,23 @@ def ai_labs(path):
     ) + CI_INPUTS)
 
 
+def archestra_cli(path):
+    """Archestra CLI checks: the archestra program workspace and the toolchain it pins.
+
+    The release lock in that directory pins published binaries for the
+    platform image; Cargo never reads it.
+    """
+    if path == "platform/archestra-cli/release.lock.json":
+        return False
+    return path.startswith(("platform/archestra-cli/",) + CI_INPUTS) or path == "platform/rust-toolchain.toml"
+
+
 FAMILIES = {
     "backend": backend,
     "frontend": frontend,
     "platform_rust": platform_rust,
     "ai_labs": ai_labs,
+    "archestra_cli": archestra_cli,
 }
 
 

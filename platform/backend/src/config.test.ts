@@ -3880,6 +3880,24 @@ describe("OpenAPPA feature configuration", () => {
     );
   });
 
+  test("auto-merge of self-served pull requests is unset by default, and set only to enabled or disabled", () => {
+    expect(parseOpenAppaConfig()).not.toHaveProperty("selfServiceAutoMerge");
+    expect(
+      parseOpenAppaConfig({ selfServiceAutoMerge: "" }),
+    ).not.toHaveProperty("selfServiceAutoMerge");
+    expect(
+      parseOpenAppaConfig({ selfServiceAutoMerge: " enabled " })
+        .selfServiceAutoMerge,
+    ).toBe("enabled");
+    expect(
+      parseOpenAppaConfig({ selfServiceAutoMerge: "disabled" })
+        .selfServiceAutoMerge,
+    ).toBe("disabled");
+    expect(() => parseOpenAppaConfig({ selfServiceAutoMerge: "on" })).toThrow(
+      "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE must be one of: enabled, disabled",
+    );
+  });
+
   test("reporting defaults on and supports an explicit opt-out", () => {
     expect(parseOpenAppaConfig().yellEnabled).toBe(true);
     expect(parseOpenAppaConfig({ yellEnabled: "true" }).yellEnabled).toBe(true);

@@ -6,6 +6,7 @@ import AgentModel from "@/models/agent";
 import OrganizationModel from "@/models/organization";
 import { getAgentCredentialReadiness } from "@/services/agent-credential-readiness";
 import { describe, expect, test } from "@/test";
+import { recordQueries } from "@/test/query-counter";
 import { useRouteTestApp } from "@/test/route-test-app";
 import agentRoutes from "./agent";
 import agentToolRoutes from "./agent-tool";
@@ -14,6 +15,47 @@ describe("agent metadata reads", () => {
   const ctx = useRouteTestApp(async (app) => {
     await app.register(agentRoutes);
     await app.register(agentToolRoutes);
+  });
+
+  test("subresource authorization does not hydrate assigned tools or the system prompt", async ({
+    makeMember,
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      systemPrompt: "Large prompt ".repeat(1000),
+    });
+    for (let i = 0; i < 10; i++) {
+      const tool = await makeTool({ name: `access_budget_${i}` });
+      await makeAgentTool(agent.id, tool.id);
+    }
+    for (const [subroute, payload] of [
+      ["tool-exclusions", { excludedToolIds: [] }],
+      ["subagent-exclusions", { excludedSubagentIds: [] }],
+      ["knowledge-source-exclusions", { excludedConnectorIds: [] }],
+    ] as const) {
+      for (const method of ["GET", "PUT"] as const) {
+        const { result, statements } = await recordQueries(() =>
+          ctx.app.inject({
+            method,
+            url: `/api/agents/${agent.id}/${subroute}`,
+            ...(method === "PUT" ? { payload } : {}),
+          }),
+        );
+        expect(result.statusCode, result.body).toBe(200);
+        expect(result.json()).toEqual(payload);
+        // The full-agent join multiplies large prompts by the tool count.
+        expect(
+          statements.filter((sql) =>
+            /select.*system_prompt.*join.*agent_tools/i.test(sql),
+          ),
+        ).toEqual([]);
+      }
+    }
   });
 
   test("delegation graph preserves organization, agent type, deletion and exact roster ordering", async ({

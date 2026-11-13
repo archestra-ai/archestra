@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import { auth as betterAuth } from "@/auth/better-auth";
+import { authPlugin } from "@/auth/fastify-plugin";
 import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -12,40 +13,90 @@ describe("PATCH /api/organization/connection-settings", () => {
   let adminUser: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeAdmin, makeMember, makeOrganization }) => {
-    config.enterpriseFeatures.core = true;
-    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
-      async () => ({ user: { id: adminUser.id } }) as never,
-    );
+  beforeEach(
+    async ({ makeAdmin, makeMember, makeOrganization, makeSession }) => {
+      config.enterpriseFeatures.core = true;
+      adminUser = await makeAdmin();
+      const organization = await makeOrganization();
+      organizationId = organization.id;
+      await makeMember(adminUser.id, organizationId, { role: "admin" });
+      const session = await makeSession(adminUser.id, {
+        activeOrganizationId: organizationId,
+      });
+      vi.spyOn(betterAuth.api, "getSession").mockResolvedValue({
+        response: { user: adminUser, session },
+        headers: new Headers(),
+      } as never);
 
-    adminUser = await makeAdmin();
-    const organization = await makeOrganization();
-    organizationId = organization.id;
-    await makeMember(adminUser.id, organizationId, { role: "admin" });
-
-    app = createFastifyInstance();
-    app.addHook("onRequest", async (request) => {
-      (
-        request as typeof request & {
-          user: unknown;
-          organizationId: string;
-        }
-      ).user = adminUser;
-      (
-        request as typeof request & {
-          user: { id: string };
-          organizationId: string;
-        }
-      ).organizationId = organizationId;
-    });
-
-    const { default: organizationRoutes } = await import("./organization");
-    await app.register(organizationRoutes);
-  });
+      app = createFastifyInstance();
+      await app.register(authPlugin);
+      const { default: organizationRoutes } = await import("./organization");
+      await app.register(organizationRoutes);
+    },
+  );
 
   afterEach(async () => {
     vi.restoreAllMocks();
     await app.close();
+  });
+
+  test("Connect starts visible, can be hidden, survives unrelated saves and can be shown again", async () => {
+    const read = () => app.inject({ method: "GET", url: "/api/organization" });
+    const save = (payload: Record<string, unknown>) =>
+      app.inject({
+        method: "PATCH",
+        url: "/api/organization/connection-settings",
+        payload,
+      });
+    expect((await read()).json().connectionPageHidden).toBe(false);
+    const hidden = await save({ connectionPageHidden: true });
+    expect(hidden.statusCode, hidden.body).toBe(200);
+    expect(hidden.json().connectionPageHidden).toBe(true);
+    expect((await read()).json().connectionPageHidden).toBe(true);
+    expect(
+      await OrganizationModel.findByIdForAudit(organizationId, organizationId),
+    ).toMatchObject({
+      connectionPageHidden: true,
+    });
+    expect(
+      (await save({ connectionDefaultClientId: "cursor" })).statusCode,
+    ).toBe(200);
+    expect((await read()).json()).toMatchObject({
+      connectionPageHidden: true,
+      connectionSkillsEnabled: true,
+      connectionLlmProxyEnabled: true,
+      connectionPluginsEnabled: true,
+    });
+    expect((await save({ connectionPageHidden: false })).statusCode).toBe(200);
+    expect((await read()).json().connectionPageHidden).toBe(false);
+  });
+
+  test("a member can read visibility but cannot change it", async ({
+    makeUser,
+    makeMember,
+    makeSession,
+  }) => {
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "member" });
+    const session = await makeSession(user.id, {
+      activeOrganizationId: organizationId,
+    });
+    vi.mocked(betterAuth.api.getSession).mockResolvedValue({
+      response: { user, session },
+      headers: new Headers(),
+    } as never);
+    const read = await app.inject({ method: "GET", url: "/api/organization" });
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.json().connectionPageHidden).toBe(false);
+    const save = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: { connectionPageHidden: true },
+    });
+    expect(save.statusCode, save.body).toBe(403);
+    expect(
+      (await OrganizationModel.getById(organizationId))?.connectionPageHidden,
+    ).toBe(false);
   });
 
   test("persists admin defaults and hidden lists", async ({ makeAgent }) => {

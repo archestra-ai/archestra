@@ -2,7 +2,7 @@
 title: Sharing Skills
 description: Install Archestra skills in your coding agents from one shared marketplace
 order: 3
-lastUpdated: 2026-10-14
+lastUpdated: 2026-11-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -69,6 +69,10 @@ What to know:
 - Each skill becomes a slash command named after it. "Build App" becomes `/build-app`.
 - The marketplace name looks like `archestra-acme-skills`.
 - Access ends when you leave the organization or lose read access to skills.
+
+### OAuth Access Tokens
+
+Use a user OAuth access token from MCP gateway browser sign-in (`mcp` scope) as Git's HTTP Basic password or in an `Authorization: Bearer` header. It reads every skill you can access in the marketplace. Git does not reuse your MCP client's OAuth cache or refresh tokens; your integration must supply a current token.
 
 ### Anonymous Access
 

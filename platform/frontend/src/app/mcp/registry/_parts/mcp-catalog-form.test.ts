@@ -583,3 +583,110 @@ describe("inactive authentication validation", () => {
     }
   });
 });
+
+describe("desktop MCP servers", () => {
+  const desktop = {
+    name: "matlab",
+    description: "Runs on the user's own computer",
+    serverType: "desktop_mcp" as const,
+    authMethod: "none" as const,
+    includeBearerPrefix: true,
+  };
+
+  it("needs a name and nothing about a connection", () => {
+    const result = formSchema.safeParse({ ...desktop, serverUrl: "" });
+    expect(result.success).toBe(true);
+    expect(formSchema.safeParse({ ...desktop, name: "" }).success).toBe(false);
+  });
+
+  it("ignores whatever another hosting choice left in the form", () => {
+    // The user filled in a remote server, then a self-hosted one, and then
+    // chose Desktop: none of those drafts may block the save or be submitted.
+    const result = formSchema.safeParse({
+      ...desktop,
+      serverUrl: "not-a-url",
+      multitenant: true,
+      authMethod: "enterprise_managed",
+      authHeaderName: "Invalid Header",
+      enterpriseManagedConfig: {},
+      oauthConfig: {
+        grantType: "authorization_code",
+        supports_resource_metadata: true,
+        redirect_uris: "",
+        authorizationEndpoint: "invalid-url",
+      },
+      additionalHeaders: [
+        {
+          headerName: "Invalid Header",
+          promptOnInstallation: true,
+          required: true,
+        },
+      ],
+      localConfig: {
+        command: "",
+        arguments: "",
+        environment: [],
+        dockerImage: "",
+        transportType: "stdio",
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toMatchObject({
+        serverType: "desktop_mcp",
+        serverUrl: "",
+        multitenant: false,
+        authMethod: "none",
+        additionalHeaders: [],
+      });
+      expect(result.data.oauthConfig).toBeUndefined();
+      expect(result.data.enterpriseManagedConfig).toBeUndefined();
+      expect(result.data.localConfig).toBeUndefined();
+    }
+  });
+
+  it("accepts a command, a URL, or neither", () => {
+    for (const desktopConfig of [
+      { kind: "command", value: "" },
+      { kind: "command", value: "/Users/$USER/bins/mcp --home $HOME" },
+      { kind: "url", value: "http://127.0.0.1:8080/mcp" },
+      { kind: "url", value: "" },
+    ]) {
+      const result = formSchema.safeParse({ ...desktop, desktopConfig });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.desktopConfig).toEqual(desktopConfig);
+      }
+    }
+  });
+
+  it("rejects a URL that is not http(s), on the input that holds it", () => {
+    const result = formSchema.safeParse({
+      ...desktop,
+      desktopConfig: { kind: "url", value: "127.0.0.1:8080" },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((issue) => issue.path)).toEqual([
+        ["desktopConfig", "value"],
+      ]);
+    }
+  });
+
+  it("ignores a desktop draft once another hosting is chosen", () => {
+    // The user wrote a bad URL for a desktop MCP server, then chose Remote.
+    const result = formSchema.safeParse({
+      ...desktop,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      desktopConfig: { kind: "url", value: "not a url" },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.desktopConfig).toBeUndefined();
+    }
+  });
+});

@@ -2,9 +2,7 @@
 
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import Link from "next/link";
-import { OpenAppaIcon } from "@/components/openappa-icon";
 import { Button, type ButtonProps } from "@/components/ui/button";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useChatAgentBootstrap } from "@/lib/agent.query";
 import { useFeature } from "@/lib/config/config.query";
 import { resolveOpenAppaLaunchPrompt } from "@/lib/openappa-chat-prompts";
@@ -13,35 +11,14 @@ import { openAppaChatHref } from "@/lib/openappa-routes";
 
 export type ServerRulesCatalog = { id: string; name: string };
 
-export const SERVER_RULES_LABEL = "Edit Guardrails rules";
+export const SERVER_RULES_LABEL = "Edit Guardrails";
 
 /**
  * For a server's editors: change its own Guardrails rules with the APPA
  * Keeper, which opens a pull request on the policy repository. It takes edit
  * access to the server, not a Guardrails permission, so it sits beside the
- * server's other edit actions.
- */
-export function ServerRulesMenuItem({
-  catalog,
-}: {
-  catalog: ServerRulesCatalog;
-}) {
-  const href = useServerRulesHref(catalog);
-  if (!href) return null;
-  return (
-    <DropdownMenuItem asChild>
-      <Link href={href}>
-        <OpenAppaIcon />
-        {SERVER_RULES_LABEL}
-      </Link>
-    </DropdownMenuItem>
-  );
-}
-
-/**
- * The same launch as a button, for the setup wizard's last step: there a
- * server editor without a Guardrails permission configures the server's
- * Guardrails through its own rules file.
+ * server's other edit actions, on its page and on the setup wizard's last
+ * step.
  */
 export function ServerRulesButton({
   catalog,

@@ -26,7 +26,10 @@ import {
   githubFetch,
   isEmptyGithubRepository,
 } from "@/services/openappa-github";
-import { resolveOpenAppaGitlabAccess } from "@/services/openappa-github-access";
+import {
+  resolveOpenAppaGitlabAccess,
+  templateExampleBlob,
+} from "@/services/openappa-github-access";
 import { openappaGitlab } from "@/services/openappa-gitlab";
 import { ApiError } from "@/types";
 import type {
@@ -46,9 +49,7 @@ import { decryptSecretValue, encryptSecretValue } from "@/utils/crypto";
  *    as an organization credential the sync can use.
  */
 class OpenAppaGithubAppSetup {
-  async start(
-    params: Owner & { githubUrl: string; owner: string; selfService?: boolean },
-  ) {
+  async start(params: Owner & { githubUrl: string; owner: string }) {
     await this.assertAllowed(params);
     const { web, api } = parseGithubUrl(params.githubUrl);
     const account = await lookupAccount({ api, login: params.owner });
@@ -79,10 +80,6 @@ class OpenAppaGithubAppSetup {
           appName: await OrganizationModel.getAppName(),
           // Off github.com there is no template; setup writes the workflow itself.
           seedsWorkflow: api !== GITHUB_API_URL,
-          // The environment variable, while set, decides for every source.
-          selfService: config.openappa.selfService
-            ? config.openappa.selfService === "enabled"
-            : params.selfService === true,
         }),
       ),
     };
@@ -360,23 +357,34 @@ class OpenAppaGithubAppSetup {
     if (await isEmptyGithubRepository({ api: app.api, repo, token }))
       return { status: "empty", validations: null };
     const directory = params.validationDirectory ?? VALIDATION_DIRECTORY;
-    if (
+    const fresh =
       !ref &&
       path === "appa.toml" &&
       directory === VALIDATION_DIRECTORY &&
-      found.data.private &&
+      found.data.private;
+    if (
+      fresh &&
       found.data.template_repository?.full_name.toLowerCase() === TEMPLATE_REPO
     )
       return { status: "template", validations: null };
-    const contents = (entry: string) =>
+    const contents = (entry: string, method: "GET" | "HEAD") =>
       get(
         `${app.api}/repos/${repo}/contents/${entry.split("/").map(encodeURIComponent).join("/")}${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`,
-        "HEAD",
+        method,
       );
     const [policy, validations] = await Promise.all([
-      contents(path),
-      contents(directory),
+      contents(path, fresh ? "GET" : "HEAD"),
+      contents(directory, "HEAD"),
     ]);
+    // A private repository holding the template's example unchanged is a
+    // fresh copy too, however it was made: setup seeds it.
+    if (fresh && policy?.ok) {
+      const file = (await policy.json().catch(() => null)) as {
+        sha?: string;
+      } | null;
+      if (file?.sha === templateExampleBlob())
+        return { status: "template", validations: null };
+    }
     return {
       status: policy?.ok ? "policy" : "other",
       validations: !!validations?.ok,
@@ -543,12 +551,7 @@ type Installation = {
   repository_selection: "all" | "selected";
 };
 
-function manifest(params: {
-  appName: string;
-  seedsWorkflow: boolean;
-  /** Self-service Guardrails: checks on pull requests and the branch ruleset. */
-  selfService: boolean;
-}) {
+function manifest(params: { appName: string; seedsWorkflow: boolean }) {
   const { appName } = params;
   const callbackUrl = `${config.frontendBaseUrl}/github/app-setup`;
   return {
@@ -560,16 +563,16 @@ function manifest(params: {
     redirect_url: callbackUrl,
     setup_url: callbackUrl,
     public: false,
-    // Contents and pull requests on the policy repository; with self-service,
-    // checks on its pull requests and Administration for the branch ruleset
-    // Archestra keeps. Each job's token carries only its own part; it never
-    // creates repositories.
+    // Contents and pull requests on the policy repository, and checks on its
+    // pull requests for self-service Guardrails, asked for up front so that
+    // turning self-service on later needs no change to the App. The branch
+    // ruleset that requires the check is the administrator's to import, so
+    // no Administration. Each job's token carries only its own part; it
+    // never creates repositories.
     default_permissions: {
       contents: "write",
       pull_requests: "write",
-      ...(params.selfService
-        ? { checks: "write", administration: "write" }
-        : {}),
+      checks: "write",
       metadata: "read",
       ...(params.seedsWorkflow ? { workflows: "write" } : {}),
     },

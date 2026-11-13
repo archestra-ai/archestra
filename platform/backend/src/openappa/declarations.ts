@@ -37,7 +37,10 @@ import {
   declaredAnnotators,
   declaredCredentials,
 } from "./battery-target";
-import { withHostToolRules } from "./host-tool-rules";
+import {
+  withHostClientCodingAliases,
+  withHostToolRules,
+} from "./host-tool-rules";
 import { parsePolicyToml } from "./policy-text";
 
 /** How each resolved entry deploys here, by its `include` spelling. */
@@ -504,21 +507,33 @@ class OpenAppaDeclarations {
   }): Promise<ComposedPolicy> {
     const native = await loadNative();
     const tokenEnv = this.publishBridgeToken();
-    const composed = await native.composeOpenappaPolicy({
-      root: params.root,
-      memberRosters: params.memberRosters,
-      batteries: this.composeInputs({
-        entries: params.resolution.entries,
-        deployed: params.deployed,
-        helpers: (entry, deployed) => {
-          if (params.held?.has(entry.name)) return "stub";
-          if (deployed.externals.length === 0) return null;
-          const owner =
-            params.helperOwner?.(entry, deployed) ?? CHECKED_HELPER_OWNER;
-          return { urlBase: helperUrlBase(owner), tokenEnv };
-        },
-      }),
+    const batteries = this.composeInputs({
+      entries: params.resolution.entries,
+      deployed: params.deployed,
+      helpers: (entry, deployed) => {
+        if (params.held?.has(entry.name)) return "stub";
+        if (deployed.externals.length === 0) return null;
+        const owner =
+          params.helperOwner?.(entry, deployed) ?? CHECKED_HELPER_OWNER;
+        return { urlBase: helperUrlBase(owner), tokenEnv };
+      },
     });
+    const augmentedRoot = withHostClientCodingAliases({
+      root: params.root,
+      batteries,
+    });
+    let composed = await native.composeOpenappaPolicy({
+      root: augmentedRoot,
+      memberRosters: params.memberRosters,
+      batteries,
+    });
+    if ((composed.content ?? null) === null && augmentedRoot !== params.root) {
+      composed = await native.composeOpenappaPolicy({
+        root: params.root,
+        memberRosters: params.memberRosters,
+        batteries,
+      });
+    }
     // A check answers as the served composition does, its host tool rules (yell
     // and the peer read) included.
     const content = composed.content ?? null;

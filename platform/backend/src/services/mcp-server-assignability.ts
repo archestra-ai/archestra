@@ -11,6 +11,7 @@ import TeamModel from "@/models/team";
 import {
   type AgentScope,
   ApiError,
+  type InternalMcpCatalogServerType,
   type ResourceVisibilityScope,
   type ToolOwnerContext,
 } from "@/types";
@@ -21,7 +22,7 @@ export type PrefetchedMcpServer = {
   catalogId: string | null;
   teamId?: string | null;
   scope: ResourceVisibilityScope;
-  serverType?: "app" | "builtin" | "local" | "remote";
+  serverType?: InternalMcpCatalogServerType;
 };
 
 /** Whether one MCP server connection may be assigned to this agent or app. */

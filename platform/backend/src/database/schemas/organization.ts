@@ -319,6 +319,11 @@ const organizationsTable = pgTable("organization", {
     .notNull()
     .default(DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS),
 
+  /** Hide Connect from navigation without disabling existing connections. */
+  connectionPageHidden: boolean("connection_page_hidden")
+    .notNull()
+    .default(false),
+
   /**
    * Admin-selected MCP gateway pre-filled on /connection.
    * FK to agents(id) ON DELETE SET NULL — enforced by migration only

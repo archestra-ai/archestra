@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { withHostToolRules } from "./host-tool-rules";
-import { toolEntries } from "./policy-text";
+import {
+  formatHostClientCodingAliases,
+  withHostClientCodingAliases,
+  withHostToolRules,
+} from "./host-tool-rules";
+import { asRecord, parsePolicyToml, toolEntries } from "./policy-text";
 
 const ANNOTATED_CATCH_ALL = `[policy]
 version = 2
@@ -124,6 +128,222 @@ annotator = "tool-call"
       "mcp/appa/yell",
       "mcp/acme/read_peer_message",
       "*",
+    ]);
+  });
+});
+
+const ACTIVE_CODING_BATTERIES = [
+  {
+    name: "coding",
+    policy: `[policy]
+version = 2
+
+[[policy.tool]]
+name = "tool/coding/read_file"
+delta = {}
+`,
+  },
+  {
+    name: "claude-code",
+    policy: `[aliases.tool.coding]
+read_file = [{ name = "host/claude-code/Read", args = { file_path = "file_path" } }]
+
+[policy]
+version = 2
+`,
+  },
+];
+
+describe("withHostClientCodingAliases", () => {
+  test("fills missing client coding targets into a legacy saved root without duplicating existing entries", () => {
+    const legacyRoot = `include = [
+  "batteries/coding/appa.toml",
+  "batteries/claude-code/appa.toml",
+]
+
+[aliases.host]
+claude-code = ["archestra"]
+
+[aliases.tool.coding]
+read_file = [{ name = "host/archestra/read", args = { file_path = "filePath" } }]
+
+[policy]
+version = 2
+`;
+
+    const augmented = withHostClientCodingAliases({
+      root: legacyRoot,
+      batteries: ACTIVE_CODING_BATTERIES,
+    });
+    const codingAliases = asRecord(
+      asRecord(asRecord(parsePolicyToml(augmented)?.aliases)?.tool)?.coding,
+    );
+
+    expect(codingAliases?.read_file).toEqual([
+      { name: "host/archestra/read", args: { file_path: "filePath" } },
+      { name: "host/archestra/read_file", args: { file_path: "target_file" } },
+      { name: "host/archestra/view", args: { file_path: "file_path" } },
+    ]);
+    expect(codingAliases?.write_file).toEqual([
+      { name: "host/archestra/write", args: { file_path: "filePath" } },
+      { name: "host/archestra/create", args: { file_path: "file_path" } },
+    ]);
+    expect(codingAliases?.edit_file).toEqual([
+      { name: "host/archestra/edit", args: { file_path: "filePath" } },
+    ]);
+    expect(codingAliases?.fetch_url).toEqual([
+      { name: "host/archestra/webfetch", args: { url: "url" } },
+      {
+        name: "host/archestra/mcp__workspace__web_fetch",
+        args: { url: "url" },
+      },
+      { name: "host/archestra/FetchURL", args: { url: "url" } },
+      { name: "host/archestra/web_fetch", args: { url: "url" } },
+    ]);
+    expect(
+      withHostClientCodingAliases({
+        root: augmented,
+        batteries: ACTIVE_CODING_BATTERIES,
+      }),
+    ).toBe(augmented);
+  });
+
+  test("returns a current initial policy root byte-for-byte unchanged", () => {
+    const currentRoot = `include = [
+  "batteries/coding/appa.toml",
+  "batteries/claude-code/appa.toml",
+]
+
+[aliases.host]
+claude-code = ["archestra"]
+
+# Operator comment stays untouched when all targets are present.
+${formatHostClientCodingAliases()}
+
+[policy]
+version = 2
+`;
+
+    expect(
+      withHostClientCodingAliases({
+        root: currentRoot,
+        batteries: ACTIVE_CODING_BATTERIES,
+      }),
+    ).toBe(currentRoot);
+  });
+
+  test("leaves the root untouched when coding is absent, stubbed, or claude-code does not bind archestra", () => {
+    const rootWithoutAliases = `[aliases.host]
+claude-code = ["archestra"]
+
+[policy]
+version = 2
+`;
+    expect(
+      withHostClientCodingAliases({
+        root: rootWithoutAliases,
+        batteries: [],
+      }),
+    ).toBe(rootWithoutAliases);
+    expect(
+      withHostClientCodingAliases({
+        root: rootWithoutAliases,
+        batteries: [{ name: "coding", policy: "[policy]\nversion = 2\n" }],
+      }),
+    ).toBe(rootWithoutAliases);
+
+    const otherHostRoot = `[aliases.host]
+claude-code = ["custom-host"]
+
+[policy]
+version = 2
+`;
+    expect(
+      withHostClientCodingAliases({
+        root: otherHostRoot,
+        batteries: ACTIVE_CODING_BATTERIES,
+      }),
+    ).toBe(otherHostRoot);
+  });
+
+  test("preserves custom operator mappings for a client tool name without adding a duplicate", () => {
+    const customRoot = `[aliases.host]
+claude-code = ["archestra"]
+
+[aliases.tool.custom]
+reader = [{ name = "host/archestra/view", args = { target = "path" } }]
+
+[aliases.tool.coding]
+read_file = [{ name = "host/archestra/read_file", args = { file_path = "custom_arg" } }]
+
+[policy]
+version = 2
+`;
+    const augmented = withHostClientCodingAliases({
+      root: customRoot,
+      batteries: ACTIVE_CODING_BATTERIES,
+    });
+    const codingAliases = asRecord(
+      asRecord(asRecord(parsePolicyToml(augmented)?.aliases)?.tool)?.coding,
+    );
+
+    expect(codingAliases?.read_file).toEqual([
+      { name: "host/archestra/read_file", args: { file_path: "custom_arg" } },
+      { name: "host/archestra/read", args: { file_path: "filePath" } },
+    ]);
+  });
+
+  test("scans active targetPolicy aliases so multi-user target mappings are not duplicated", () => {
+    const rootWithoutCodingAliases = `[aliases.host]
+claude-code = ["archestra"]
+
+[policy]
+version = 2
+`;
+    const batteriesWithTargetAliases = [
+      {
+        name: "coding",
+        policy: "[policy]\nversion = 2\n",
+        targetPolicy: `[policy]
+version = 2
+
+[[policy.tool]]
+name = "tool/coding/read_file"
+delta = {}
+`,
+      },
+      {
+        name: "claude-code",
+        policy: `[aliases.tool.coding]
+read_file = [{ name = "host/claude-code/Read", args = { file_path = "file_path" } }]
+
+[policy]
+version = 2
+`,
+        targetPolicy: `[aliases.tool.coding]
+read_file = [{ name = "host/claude-code/view", args = { file_path = "file_path" } }]
+
+[policy]
+version = 2
+`,
+      },
+    ];
+
+    const augmented = withHostClientCodingAliases({
+      root: rootWithoutCodingAliases,
+      batteries: batteriesWithTargetAliases,
+    });
+    const codingAliases = asRecord(
+      asRecord(asRecord(parsePolicyToml(augmented)?.aliases)?.tool)?.coding,
+    );
+
+    expect(codingAliases?.read_file).toEqual([
+      { name: "host/archestra/read", args: { file_path: "filePath" } },
+      { name: "host/archestra/read_file", args: { file_path: "target_file" } },
+    ]);
+    expect(codingAliases?.write_file).toEqual([
+      { name: "host/archestra/write", args: { file_path: "filePath" } },
+      { name: "host/archestra/create", args: { file_path: "file_path" } },
     ]);
   });
 });

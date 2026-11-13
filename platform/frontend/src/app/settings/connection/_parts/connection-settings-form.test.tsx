@@ -130,6 +130,38 @@ beforeEach(() => {
 });
 
 describe("ConnectionSettingsForm", () => {
+  it("starts with an off Hide Connect switch, discards edits, saves and restores the saved state", async () => {
+    const user = userEvent.setup();
+    const view = render(<ConnectionSettingsForm />);
+    const toggle = () =>
+      screen.getByRole("switch", { name: "Hide Connect page" });
+    expect(screen.getAllByRole("heading")[0]).toHaveTextContent(
+      "Hide Connect page",
+    );
+    expect(toggle()).not.toBeChecked();
+    await user.click(toggle());
+    expect(toggle()).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    expect(toggle()).not.toBeChecked();
+    expect(mutate).not.toHaveBeenCalled();
+    await user.click(toggle());
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    const saved = mutate.mock.lastCall?.[0];
+    expect(saved.connectionPageHidden).toBe(true);
+    view.unmount();
+    const organization = vi.mocked(useOrganization)();
+    vi.mocked(useOrganization).mockReturnValue({
+      ...organization,
+      data: { ...organization.data, ...saved },
+    } as ReturnType<typeof useOrganization>);
+    render(<ConnectionSettingsForm />);
+    expect(toggle()).toBeChecked();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    await user.click(toggle());
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(mutate.mock.lastCall?.[0].connectionPageHidden).toBe(false);
+  });
+
   it("reorders with the handle, saves through settings, and restores that order after reload", async () => {
     const user = userEvent.setup();
     const view = render(<ConnectionSettingsForm />);

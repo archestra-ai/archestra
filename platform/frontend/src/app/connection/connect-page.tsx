@@ -18,7 +18,6 @@ import { DocsPage, resolveMcpClientServerName } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { NATIVE_SESSION_CLIENT_LABELS } from "@archestra/shared/connection-setup";
 import {
-  ArrowDown,
   BookOpen,
   ChartColumn,
   ChevronDown,
@@ -104,6 +103,14 @@ import {
   TextButton,
   useCopy,
 } from "./connect-page-parts";
+import {
+  Band,
+  ChipIcon,
+  Connector,
+  STEP_GAP,
+  StepHeading,
+  StepPill,
+} from "./connect-step-parts";
 import {
   type ConnectedAgent,
   DisconnectLine,
@@ -613,29 +620,6 @@ function Tile({
 }
 
 // === Between the steps ===
-
-// Same gap between every step.
-const STEP_GAP = 32;
-
-/** The line between the cards, fading in toward the connect card. */
-function Connector() {
-  return (
-    <div
-      aria-hidden
-      className="mx-auto w-px bg-linear-to-b from-transparent to-primary"
-      style={{ height: STEP_GAP }}
-    />
-  );
-}
-
-/** Names a step on its card's top edge, where the connector arrives. */
-function StepPill({ children }: { children: ReactNode }) {
-  return (
-    <span className="absolute top-0 left-1/2 z-10 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-xs font-semibold whitespace-nowrap shadow-xs">
-      {children}
-    </span>
-  );
-}
 
 // === Connect area: the command, download, prompt or manual steps ===
 
@@ -1234,52 +1218,6 @@ function currentStep(
     case "prompt":
       return `Paste the prompt into ${name}`;
   }
-}
-
-function Band({
-  busy,
-  dim,
-  children,
-}: {
-  /** Settings are being re-read: hold actions until they land. */
-  busy?: boolean;
-  /** Connected: the next step is in the card below. */
-  dim?: boolean;
-  children: ReactNode;
-}) {
-  // Same accent as the heading's marker.
-  return (
-    <section
-      aria-label="Connect"
-      aria-busy={busy}
-      inert={busy}
-      className={cn(
-        "relative rounded-3xl border border-primary/40 bg-card p-5 shadow-sm ring-1 ring-primary/15 transition-[color,background-color,border-color,opacity] duration-300",
-        dim && "opacity-50",
-      )}
-    >
-      {children}
-    </section>
-  );
-}
-
-function StepHeading({ step }: { step: string }) {
-  return (
-    // Times the fade-in alone: a transition duration would also apply to
-    // visibility, so a heading OneOf hides would stay painted over the next.
-    <h2
-      key={step}
-      className="inline-flex items-center gap-2.5 text-sm font-semibold tracking-tight motion-safe:animate-in motion-safe:fade-in motion-safe:animation-duration-300"
-    >
-      <span
-        aria-hidden
-        className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground [&_svg]:size-3.5"
-      >
-        <ArrowDown strokeWidth={2.5} />
-      </span>
-      {step}
-    </h2>
-  );
 }
 
 function ManualSteps({
@@ -2017,31 +1955,6 @@ function InfoTip({ label, children }: { label: string; children: ReactNode }) {
       </TooltipTrigger>
       <TooltipContent className="max-w-60">{children}</TooltipContent>
     </Tooltip>
-  );
-}
-
-function ChipIcon({
-  children,
-  tone,
-}: {
-  children: ReactNode;
-  tone?: "ok" | "warn" | "block";
-}) {
-  return (
-    <span
-      className={cn(
-        "flex size-8 shrink-0 items-center justify-center rounded-lg border [&_svg]:size-4",
-        tone === "ok"
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-          : tone === "warn"
-            ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-            : tone === "block"
-              ? "border-destructive/30 bg-destructive/10 text-destructive"
-              : "bg-muted/50 text-muted-foreground",
-      )}
-    >
-      {children}
-    </span>
   );
 }
 

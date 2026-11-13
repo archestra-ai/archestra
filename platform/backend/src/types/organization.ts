@@ -616,6 +616,7 @@ export const UpdateAuthSettingsSchema = z.object({
 });
 
 export const UpdateConnectionSettingsSchema = z.object({
+  connectionPageHidden: z.boolean().optional(),
   connectionDefaultMcpGatewayId: z.string().uuid().nullable().optional(),
   connectionClientFutureProviders:
     ConnectionClientFutureProvidersSchema.nullable().optional(),

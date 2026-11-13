@@ -2901,8 +2901,8 @@ export class ChatOpsManager {
   }
 
   /**
-   * Post a reply, finishing the live streamed message instead when there is
-   * one, so the answer is not posted twice.
+   * Post a reply through its stream when one was opened. The stream waits for
+   * pending Slack calls and owns the fallback when it has not started.
    */
   private async deliverReply(params: {
     provider: ChatOpsProvider;
@@ -2910,7 +2910,7 @@ export class ChatOpsManager {
     options: ChatReplyOptions;
   }): Promise<void> {
     const { provider, replyStream, options } = params;
-    if (replyStream?.isLive) {
+    if (replyStream) {
       await replyStream.finish(options);
       return;
     }

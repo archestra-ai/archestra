@@ -1,5 +1,11 @@
+import { createHash } from "node:crypto";
 import { parseFullToolName } from "@archestra/shared";
-import { LRUCacheManager } from "@/cache-manager";
+import {
+  type AllowedCacheKey,
+  CacheKey,
+  cacheManager,
+  LRUCacheManager,
+} from "@/cache-manager";
 import {
   type GitAccess,
   gitClient,
@@ -26,6 +32,7 @@ import {
   serverRulesFolderOf,
   withoutRepositoryIncludes,
 } from "@/openappa/policy-text";
+import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import { githubFetch } from "@/services/openappa-github";
 import {
@@ -44,10 +51,7 @@ import { mapWithConcurrency } from "@/utils/concurrency";
  * App token carries, by GitHub's permission names.
  */
 export type GithubJobPermissions = Partial<
-  Record<
-    "contents" | "pull_requests" | "checks" | "administration",
-    "read" | "write"
-  >
+  Record<"contents" | "pull_requests" | "checks" | "metadata", "read" | "write">
 >;
 
 /**
@@ -72,7 +76,7 @@ function describePermissions(permissions: GithubJobPermissions): string {
     contents: "Contents",
     pull_requests: "Pull requests",
     checks: "Checks",
-    administration: "Administration",
+    metadata: "Metadata",
   };
   return Object.entries(permissions)
     .map(
@@ -393,6 +397,11 @@ class OpenAppaRepositoryIncludes {
     maxSize: 256,
     defaultTtl: 60_000,
   });
+  /** The setup request's head commit, by repository and number, for a minute. */
+  private readonly pendingSetups = new LRUCacheManager<string>({
+    maxSize: 64,
+    defaultTtl: 60_000,
+  });
 
   /** Whether an `include` entry names a file in the policy repository. */
   isRepositoryFile(entry: string): boolean {
@@ -494,16 +503,118 @@ class OpenAppaRepositoryIncludes {
     paths: readonly string[];
   }): Promise<Map<string, string>> {
     const source = await OpenAppaGithubSyncModel.find(params.organizationId);
-    if (!source?.repo || !source.sourceCommit)
+    // While a setup pull request carries the policy and its files to a
+    // repository, nothing is accepted there yet: the files are read from
+    // the request's commit, which holds what was accepted before, until the
+    // merge accepts a commit.
+    const commit =
+      source?.repo &&
+      (source.sourceCommit ??
+        (source.setupPullRequestNumber
+          ? await this.pendingSetupCommit({
+              ...source,
+              repo: source.repo,
+              setupPullRequestNumber: source.setupPullRequestNumber,
+            })
+          : null));
+    if (!source?.repo || !commit)
       throw new ApiError(
         409,
         `include: ${JSON.stringify(params.paths[0])} is a file in the policy repository, and Git sync has accepted no repository commit. Connect Git sync, or remove the include.`,
       );
     return this.read({
       source: { ...source, repo: source.repo },
-      commit: source.sourceCommit,
+      commit,
       paths: params.paths,
     });
+  }
+
+  /**
+   * The commit a pending setup pull or merge request is read at: the one
+   * Archestra opened it with, kept when the request was opened, while the
+   * request is open or merged and not pulled yet. Whatever was pushed onto
+   * the request's branch since is not read; a request closed unmerged, or
+   * one whose commit is not kept, has none, and the last composition that
+   * opened stays in force.
+   */
+  private async pendingSetupCommit(
+    source: RepositorySource & { setupPullRequestNumber: number },
+  ): Promise<string | null> {
+    const number = source.setupPullRequestNumber;
+    const gitlab = source.gitlabTokenId
+      ? gitClient(
+          await resolveOpenAppaGitlabAccess({
+            organizationId: source.organizationId,
+            gitlabTokenId: source.gitlabTokenId,
+          }),
+        )
+      : null;
+    const github = gitlab
+      ? null
+      : await resolveOpenAppaGithubAccess(source, { pull_requests: "read" });
+    const key = setupCommitKey({
+      organizationId: source.organizationId,
+      host: gitlab ? "gitlab" : "github",
+      api: gitlab ? gitlab.host.apiUrl : (github?.api ?? ""),
+      repo: source.repo,
+      number,
+    });
+    const cached = this.pendingSetups.get(key);
+    if (cached !== undefined) return cached;
+    const kept = await cacheManager.get<string>(key);
+    if (typeof kept !== "string" || !/^[a-f0-9]{40}$/.test(kept)) return null;
+    const state = gitlab
+      ? await this.gitlabSetupState(gitlab, source.repo, number)
+      : await this.githubSetupState(
+          github as { token: string | null; api: string },
+          source.repo,
+          number,
+        );
+    if (state === "closed") return null;
+    this.pendingSetups.set(key, kept);
+    return kept;
+  }
+
+  private async githubSetupState(
+    access: { token: string | null; api: string },
+    repo: string,
+    number: number,
+  ): Promise<"open" | "merged" | "closed"> {
+    const response = await githubFetch({
+      url: `${access.api}/repos/${repo}/pulls/${number}`,
+      token: access.token || undefined,
+    });
+    if (!response.ok)
+      throw new ApiError(
+        502,
+        `GitHub returned HTTP ${response.status} for the setup pull request. Check repository access and App permissions.`,
+      );
+    const pull = (await response.json()) as {
+      state?: string;
+      merged?: boolean;
+    };
+    return pull.merged === true
+      ? "merged"
+      : pull.state === "open"
+        ? "open"
+        : "closed";
+  }
+
+  private async gitlabSetupState(
+    client: ReturnType<typeof gitClient>,
+    repo: string,
+    number: number,
+  ): Promise<"open" | "merged" | "closed"> {
+    try {
+      return (await client.gitlabMergeRequest(repo, number)).state;
+    } catch (error) {
+      if (error instanceof GitHostError)
+        throw new ApiError(
+          502,
+          `GitLab returned HTTP ${error.status} for the setup merge request. Check project access and the token.`,
+        );
+      throw error;
+    }
   }
 
   /**
@@ -616,6 +727,153 @@ export function repositoryPath(
 }
 
 export const openappaRepositoryIncludes = new OpenAppaRepositoryIncludes();
+
+/**
+ * The files setup writes, one per path: the first given at a path is kept,
+ * so the policy, given first, wins over a transferred file at its path.
+ */
+export function firstFileAtEachPath<T extends { path: string }>(
+  files: readonly T[],
+): T[] {
+  const kept = new Map<string, T>();
+  for (const file of files) if (!kept.has(file.path)) kept.set(file.path, file);
+  return [...kept.values()];
+}
+
+/**
+ * The git blob id of the bundled template's example `appa.toml`: a repository
+ * holding exactly that file is a fresh template copy, however it was made.
+ */
+export function templateExampleBlob(): string {
+  const example =
+    OPENAPPA_TEMPLATE.files.find((file) => file.path === "appa.toml")
+      ?.content ?? "";
+  return createHash("sha1")
+    .update(`blob ${Buffer.byteLength(example)}\0`)
+    .update(example)
+    .digest("hex");
+}
+
+/**
+ * The files a repository already holds that `content`'s include globs would
+ * read beside the policy file at `policyPath`, and that setup does not write:
+ * left there, they would join the policy after the merge without ever having
+ * been in it, so setup removes them in the same commit, where the reviewer
+ * sees them go and can keep any on the branch.
+ */
+/**
+ * The one commit Archestra opened a setup pull or merge request with, kept
+ * in the shared cache until the request is long merged: what a pending read
+ * reads, whatever the request's branch holds later.
+ */
+export async function rememberSetupCommit(
+  params: SetupRequest & { sha: string },
+): Promise<void> {
+  try {
+    await cacheManager.set(
+      setupCommitKey(params),
+      params.sha,
+      SETUP_COMMIT_TTL,
+    );
+  } catch (error) {
+    // Without it the request's files are not read until the merge is
+    // pulled, which is the safe side.
+    logger.warn(
+      { repo: params.repo, number: params.number, error },
+      "OpenAPPA could not keep the setup request's commit",
+    );
+  }
+}
+
+/** The commit a setup request was opened with, as kept; null once forgotten. */
+export async function keptSetupCommit(
+  params: SetupRequest,
+): Promise<string | null> {
+  const kept = await cacheManager
+    .get<string>(setupCommitKey(params))
+    .catch(() => undefined);
+  return typeof kept === "string" && /^[a-f0-9]{40}$/.test(kept) ? kept : null;
+}
+
+/** A setup request: one organization's, on one host, by repository and number. */
+type SetupRequest = {
+  organizationId: string;
+  host: "github" | "gitlab";
+  /** The host's API origin: one GitHub Enterprise Server or GitLab from another. */
+  api: string;
+  repo: string;
+  number: number;
+};
+
+function setupCommitKey(request: SetupRequest): AllowedCacheKey {
+  return `${CacheKey.OpenAppaPolicyCheck}-setup-${createHash("sha256")
+    .update(
+      JSON.stringify([
+        request.organizationId,
+        request.host,
+        request.api.replace(/\/+$/, "").toLowerCase(),
+        request.repo.toLowerCase(),
+        request.number,
+      ]),
+    )
+    .digest("hex")}`;
+}
+
+/** Long past any review; a merge pulls the files from the accepted commit anyway. */
+const SETUP_COMMIT_TTL = 90 * 24 * 60 * 60_000;
+
+/** Whether the policy's include list has a glob over repository files. */
+export function hasRepositoryIncludeGlob(content: string): boolean {
+  return repositoryIncludePaths(content).some((entry) => {
+    try {
+      return parseIncludeGlob(entry) !== null;
+    } catch {
+      return false;
+    }
+  });
+}
+
+export function strayGlobMatches(params: {
+  content: string;
+  policyPath: string;
+  /** Every blob path the repository holds at the commit setup writes over. */
+  paths: Iterable<string>;
+  /** The paths setup writes. */
+  written: Iterable<string>;
+}): string[] {
+  const globs = repositoryIncludePaths(params.content).flatMap((entry) => {
+    try {
+      const glob = parseIncludeGlob(entry);
+      return glob
+        ? [
+            {
+              folder: repositoryPath({ path: params.policyPath }, glob.folder),
+              pattern: glob.pattern,
+            },
+          ]
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  if (globs.length === 0) return [];
+  const written = new Set(params.written);
+  const stray: string[] = [];
+  for (const path of params.paths) {
+    if (written.has(path)) continue;
+    const slash = path.lastIndexOf("/");
+    const folder = slash < 0 ? "" : path.slice(0, slash);
+    const name = path.slice(slash + 1);
+    if (
+      globs.some(
+        (glob) =>
+          glob.folder === folder && globFileNameMatches(glob.pattern, name),
+      )
+    )
+      stray.push(path);
+  }
+  return stray.sort();
+}
 
 /** The self-service folder of the organization's source, or the default. */
 async function serverRulesFolderFor(organizationId: string): Promise<string> {

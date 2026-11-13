@@ -449,7 +449,7 @@ async function fetchAzureManagementDeploymentsForAccount(params: {
       name?: string;
       properties?: {
         provisioningState?: string;
-        model?: { name?: string };
+        model?: { name?: string; format?: string };
       };
     }[];
   };
@@ -468,6 +468,7 @@ async function fetchAzureManagementDeploymentsForAccount(params: {
       capabilities: azureMediaCapabilities(deployment.properties?.model?.name),
       azureCapabilities: azureModelEvidence({
         underlyingModelName: deployment.properties?.model?.name,
+        modelFormat: deployment.properties?.model?.format,
         source: "deployment",
       }),
       // Management deployments expose the backing model name; use it for pricing.

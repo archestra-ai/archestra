@@ -34,6 +34,8 @@ export class FakeGitlab {
     path: string;
     files?: Record<string, string>;
     branch?: string;
+    /** Paths among `files` that are symbolic links (mode 120000). */
+    symlinks?: string[];
   }): FakeProject {
     const project: FakeProject = {
       id: this.nextId++,
@@ -42,6 +44,8 @@ export class FakeGitlab {
       branches: new Map(),
       commits: new Map(),
       parents: new Map(),
+      authors: new Map(),
+      symlinks: new Set(params.symlinks ?? []),
       mergeRequests: [],
     };
     this.projects.set(params.path, project);
@@ -57,7 +61,12 @@ export class FakeGitlab {
   }
 
   /** A commit on `branch` that sets `files` over its tip; returns its sha. */
-  commit(path: string, branch: string, files: Record<string, string>): string {
+  commit(
+    path: string,
+    branch: string,
+    files: Record<string, string>,
+    author = FAKE_USER.email,
+  ): string {
     const project = this.mustProject(path);
     const parent = project.branches.get(branch) ?? null;
     const next = new Map(parent ? project.commits.get(parent) : []);
@@ -66,8 +75,32 @@ export class FakeGitlab {
     const sha = commitSha(Object.fromEntries(next), parent);
     project.commits.set(sha, next);
     project.parents.set(sha, parent);
+    project.authors.set(sha, author);
     project.branches.set(branch, sha);
     return sha;
+  }
+
+  /** A branch's tip. */
+  branchHead(path: string, branch: string): string {
+    const sha = this.mustProject(path).branches.get(branch);
+    if (!sha) throw new Error(`No branch ${branch}`);
+    return sha;
+  }
+
+  /** Point a branch at a commit it had before, as a force push would. */
+  setBranch(path: string, branch: string, sha: string) {
+    const project = this.mustProject(path);
+    if (!project.commits.has(sha)) throw new Error(`No commit ${sha}`);
+    project.branches.set(branch, sha);
+  }
+
+  /** A merge request's source branch. */
+  sourceBranch(path: string, iid: number): string {
+    const request = this.mustProject(path).mergeRequests.find(
+      (entry) => entry.iid === iid,
+    );
+    if (!request) throw new Error(`No merge request !${iid}`);
+    return request.sourceBranch;
   }
 
   addGroup(fullPath: string) {
@@ -79,6 +112,14 @@ export class FakeGitlab {
     const project = this.mustProject(path);
     const sha = project.branches.get(branch);
     return sha ? Object.fromEntries(project.commits.get(sha) ?? []) : {};
+  }
+
+  /** Remove a merge request's source branch, as GitLab does after a merge. */
+  deleteSourceBranch(path: string, iid: number) {
+    const project = this.mustProject(path);
+    const request = project.mergeRequests.find((entry) => entry.iid === iid);
+    if (!request) throw new Error(`No merge request !${iid}`);
+    project.branches.delete(request.sourceBranch);
   }
 
   /** Merge a merge request: its branch's files land on the target branch. */
@@ -132,6 +173,7 @@ export class FakeGitlab {
     const [resource, id, ...rest] = segments;
     if (resource === "personal_access_tokens" && id === "self")
       return HttpResponse.json({ scopes: ["api"], active: true });
+    if (resource === "user" && !id) return HttpResponse.json(FAKE_USER);
     if (resource === "groups" && method === "GET")
       return HttpResponse.json(this.groups);
     if (resource !== "projects") return notFound();
@@ -197,6 +239,7 @@ export class FakeGitlab {
           iid: project.mergeRequests.length + 1,
           sourceBranch: body.source_branch,
           targetBranch: body.target_branch,
+          baseSha: project.branches.get(body.target_branch) ?? null,
           title: body.title,
           state: "opened",
         };
@@ -211,9 +254,23 @@ export class FakeGitlab {
       const found = project.mergeRequests.find(
         (entry) => entry.iid === Number(kind),
       );
-      return found
-        ? HttpResponse.json(mergeRequestJson(this.webUrl, project, found))
-        : notFound();
+      if (!found) return notFound();
+      if (name === "commits") {
+        // The source branch's commits past the target's, newest first.
+        const base = found.baseSha;
+        const commits: { id: string; author_email: string }[] = [];
+        for (
+          let at = found.mergedSha ?? project.branches.get(found.sourceBranch);
+          at && at !== base;
+          at = project.parents.get(at) ?? undefined
+        )
+          commits.push({
+            id: at,
+            author_email: project.authors.get(at) ?? FAKE_USER.email,
+          });
+        return HttpResponse.json(commits);
+      }
+      return HttpResponse.json(mergeRequestJson(this.webUrl, project, found));
     }
     if (area !== "repository") return notFound();
     const ref = url.searchParams.get("ref");
@@ -267,6 +324,7 @@ export class FakeGitlab {
       const sha = commitSha(Object.fromEntries(files), parent);
       project.commits.set(sha, files);
       project.parents.set(sha, parentOf);
+      project.authors.set(sha, FAKE_USER.email);
       project.branches.set(body.branch, sha);
       project.defaultBranch ??= body.branch;
       return HttpResponse.json({ id: sha }, { status: 201 });
@@ -304,7 +362,7 @@ export class FakeGitlab {
     if (kind === "tree") {
       const prefix = url.searchParams.get("path");
       const recursive = url.searchParams.get("recursive") === "true";
-      const entries = treeEntries(files).filter((entry) =>
+      const entries = treeEntries(files, project.symlinks).filter((entry) =>
         prefix
           ? entry.path.startsWith(`${prefix}/`) &&
             (recursive || !entry.path.slice(prefix.length + 1).includes("/"))
@@ -357,6 +415,10 @@ export interface FakeProject {
   commits: Map<string, Map<string, string>>;
   /** Each commit's parent, null for a first commit. */
   parents: Map<string, string | null>;
+  /** Each commit's author email; the token's user unless a test says otherwise. */
+  authors: Map<string, string>;
+  /** Paths that are symbolic links, in every commit. */
+  symlinks: Set<string>;
   mergeRequests: FakeMergeRequest[];
 }
 
@@ -366,9 +428,18 @@ interface FakeMergeRequest {
   targetBranch: string;
   title: string;
   state: "opened" | "merged" | "closed";
+  /** The target branch's tip when the request was opened. */
+  baseSha: string | null;
   /** What merging put on the target branch. */
   mergedSha?: string;
 }
+
+/** Who the fake's token acts as. */
+const FAKE_USER = {
+  username: "sync-bot",
+  name: "Sync Bot",
+  email: "sync-bot@example.test",
+};
 
 function commitSha(files: Record<string, string>, parent?: string | null) {
   return createHash("sha1")
@@ -376,7 +447,7 @@ function commitSha(files: Record<string, string>, parent?: string | null) {
     .digest("hex");
 }
 
-function treeEntries(files: Map<string, string>) {
+function treeEntries(files: Map<string, string>, symlinks?: Set<string>) {
   const folders = new Set<string>();
   for (const path of files.keys()) {
     const parts = path.split("/");
@@ -398,7 +469,7 @@ function treeEntries(files: Map<string, string>) {
       name: nameOf(path),
       path,
       type: "blob",
-      mode: "100644",
+      mode: symlinks?.has(path) ? "120000" : "100644",
     })),
   ];
 }

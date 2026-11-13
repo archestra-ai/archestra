@@ -1189,6 +1189,243 @@ describe("transformFormToApiData - secret env var preservation", () => {
   });
 });
 
+describe("desktop MCP servers", () => {
+  const desktopItem = {
+    id: "catalog-desktop",
+    name: "matlab",
+    description: "Runs on the user's own computer",
+    icon: null,
+    serverType: "desktop_mcp",
+    serverUrl: null,
+    requiresAuth: false,
+    multitenant: false,
+    oauthConfig: null,
+    enterpriseManagedConfig: null,
+    localConfig: null,
+    deploymentSpecYaml: null,
+    userConfig: null,
+    scope: "org",
+    teams: [],
+    labels: [{ key: "team", value: "hardware" }],
+    environmentId: null,
+  };
+
+  it("submits no connection field, whatever else the form holds", () => {
+    // The drafts of a remote and a self-hosted server the user tried first.
+    const values: McpCatalogFormValues = {
+      name: "matlab",
+      description: "Runs on the user's own computer",
+      icon: null,
+      serverType: "desktop_mcp",
+      multitenant: true,
+      serverUrl: "https://mcp.example.com",
+      requiresAuth: true,
+      authMethod: "oauth",
+      includeBearerPrefix: true,
+      authHeaderName: "x-api-key",
+      additionalHeaders: [
+        {
+          headerName: "x-tenant-id",
+          promptOnInstallation: false,
+          required: false,
+          value: "tenant-42",
+        },
+      ],
+      oauthConfig: {
+        client_id: "client-id",
+        client_secret: "secret",
+        redirect_uris: "https://app.example.com/oauth-callback",
+        scopes: "read",
+        supports_resource_metadata: true,
+        grantType: "authorization_code",
+      },
+      enterpriseManagedConfig: { identityProviderId: "idp-1" },
+      localConfig: {
+        command: "node",
+        arguments: "server.js",
+        environment: [],
+        dockerImage: "registry.example.com/mcp:1",
+        transportType: "streamable-http",
+      },
+      labels: [{ key: "team", value: "hardware" }],
+      scope: "personal",
+      teams: [],
+      environmentId: null,
+    };
+
+    expect(transformFormToApiData(values)).toEqual({
+      name: "matlab",
+      description: "Runs on the user's own computer",
+      serverType: "desktop_mcp",
+      icon: null,
+      labels: [{ key: "team", value: "hardware" }],
+      environmentId: null,
+      desktopConfig: { command: null, url: null },
+    });
+  });
+
+  const desktopValues: McpCatalogFormValues = {
+    name: "peekaboo",
+    description: "",
+    serverType: "desktop_mcp",
+    authMethod: "none",
+    includeBearerPrefix: true,
+  };
+
+  it("submits the command", () => {
+    const data = transformFormToApiData({
+      ...desktopValues,
+      desktopConfig: {
+        kind: "command",
+        value: " /Users/$USER/bins/peekaboo mcp serve ",
+      },
+    });
+
+    expect(data.desktopConfig).toEqual({
+      command: "/Users/$USER/bins/peekaboo mcp serve",
+      url: null,
+    });
+  });
+
+  it("submits the URL and never a command with it", () => {
+    const data = transformFormToApiData({
+      ...desktopValues,
+      desktopConfig: {
+        kind: "url",
+        value: "http://127.0.0.1:8080/mcp",
+      },
+    });
+
+    expect(data.desktopConfig).toEqual({
+      command: null,
+      url: "http://127.0.0.1:8080/mcp",
+    });
+  });
+
+  it("does not submit a command for devices with another server type", () => {
+    const data = transformFormToApiData({
+      ...desktopValues,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      desktopConfig: {
+        kind: "command",
+        value: "/Users/$USER/bins/mcp",
+      },
+    });
+
+    expect(data).not.toHaveProperty("desktopConfig");
+  });
+
+  it("opens the command of an existing item", () => {
+    const values = transformCatalogItemToFormValues({
+      ...desktopItem,
+      desktopConfig: {
+        command: "/Users/$USER/bins/peekaboo mcp serve",
+        url: null,
+      },
+    } as never);
+
+    expect(values.desktopConfig).toEqual({
+      kind: "command",
+      value: "/Users/$USER/bins/peekaboo mcp serve",
+    });
+  });
+
+  it("opens the URL of an existing item", () => {
+    const values = transformCatalogItemToFormValues({
+      ...desktopItem,
+      desktopConfig: {
+        url: "http://127.0.0.1:8080/mcp",
+      },
+    } as never);
+
+    expect(values.desktopConfig).toEqual({
+      kind: "url",
+      value: "http://127.0.0.1:8080/mcp",
+    });
+  });
+
+  it("opens an item that has no command as an empty command", () => {
+    expect(
+      transformCatalogItemToFormValues({
+        ...desktopItem,
+        desktopConfig: null,
+      } as never).desktopConfig,
+    ).toEqual({ kind: "command", value: "" });
+  });
+
+  it("gives no desktop config to another server type", () => {
+    expect(
+      transformCatalogItemToFormValues({
+        ...desktopItem,
+        serverType: "remote",
+        serverUrl: "https://mcp.example.com",
+      } as never).desktopConfig,
+    ).toBeUndefined();
+  });
+
+  it("opens an existing item as a desktop MCP server, not as a remote one", () => {
+    const values = transformCatalogItemToFormValues(desktopItem as never);
+
+    expect(values).toMatchObject({
+      name: "matlab",
+      serverType: "desktop_mcp",
+      serverUrl: "",
+      multitenant: false,
+      authMethod: "none",
+      additionalHeaders: [],
+    });
+    expect(values.localConfig).toBeUndefined();
+    expect(values.oauthConfig).toBeUndefined();
+  });
+
+  it("round-trips an edit without changing the type or adding connection fields", () => {
+    const values = transformCatalogItemToFormValues(desktopItem as never);
+    const data = transformFormToApiData({ ...values, name: "matlab-2026" });
+
+    expect(data).toEqual({
+      name: "matlab-2026",
+      description: "Runs on the user's own computer",
+      serverType: "desktop_mcp",
+      icon: null,
+      labels: [{ key: "team", value: "hardware" }],
+      environmentId: null,
+      desktopConfig: { command: null, url: null },
+    });
+  });
+
+  it("round-trips the command through an edit", () => {
+    const desktopConfig = {
+      command: "/Users/$USER/bins/peekaboo mcp serve",
+      url: null,
+    };
+    const values = transformCatalogItemToFormValues({
+      ...desktopItem,
+      desktopConfig,
+    } as never);
+
+    expect(transformFormToApiData(values).desktopConfig).toEqual(desktopConfig);
+  });
+
+  it("has no authentication even when its name suggests a token", () => {
+    // Other types named after GitHub fall back to a bearer token.
+    expect(
+      transformCatalogItemToFormValues({
+        ...desktopItem,
+        name: "github-desktop",
+        requiresAuth: undefined,
+      } as never).authMethod,
+    ).toBe("none");
+  });
+
+  it("clones as a desktop MCP server", () => {
+    expect(buildCloneFormValues(desktopItem as never)).toMatchObject({
+      name: "matlab-copy",
+      serverType: "desktop_mcp",
+    });
+  });
+});
+
 describe("buildCloneFormValues", () => {
   it("suffixes the name with -copy", () => {
     const values = buildCloneFormValues({

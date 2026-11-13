@@ -21,12 +21,15 @@ import { getPublicRequestOrigin } from "@/routes/request-origin";
 import {
   AGENT_WORKSPACE_TRANSFER_PREFIX,
   ARCHESTRA_CATALOG_PROXY_PREFIX,
+  ARCHESTRA_CLI_DOWNLOAD_PREFIX,
   AUTH_STATE_PATH,
   CONNECTION_HEALTH_PATH,
   CONNECTION_INSTRUCTIONS_PATH,
   CONNECTION_RUNTIME_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
   CONNECTION_STARTUP_GUARD_PATH,
+  DESKTOP_DEVICE_SIGN_IN_PATH,
+  DESKTOP_TUNNEL_PREFIX,
   GITHUB_ACTIONS_TOKEN_PATH,
   GUARDRAILS_NOOP_ANNOTATOR_PATH,
   HEALTH_PATH,
@@ -200,6 +203,14 @@ export class Authnz {
       (method === "POST" &&
         (url === "/api/client-connections" ||
           url === "/api/client-connections/poll")) ||
+      // Tunnel client of a desktop device: the tunnel endpoints check the
+      // device key in-route, and sign-in start and poll carry a polling proof.
+      url.startsWith(`${DESKTOP_TUNNEL_PREFIX}/`) ||
+      (method === "POST" &&
+        (url === DESKTOP_DEVICE_SIGN_IN_PATH ||
+          url === `${DESKTOP_DEVICE_SIGN_IN_PATH}/poll`)) ||
+      // The download of the `archestra` program is not secret.
+      (isGetOrHead && url.startsWith(`${ARCHESTRA_CLI_DOWNLOAD_PREFIX}/`)) ||
       // Public connection-setup script endpoint: one-time token in URL, no session
       (isGetOrHead && url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) ||
       // Public Archestra VAF Add On install bootstrap and package proxy:

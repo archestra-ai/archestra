@@ -69,12 +69,19 @@ export const AppaGithubSourceSchema = z
     gitlabTokenId: z.string().uuid().nullable().default(null),
     /**
      * Let each MCP server's editors change its own rules through pull
-     * requests: the policy check and the branch ruleset. GitHub App sources
+     * requests: the policy check, and the branch ruleset an administrator
+     * imports to require it. GitHub App sources
      * only; ARCHESTRA_OPENAPPA_SELF_SERVICE, while set, wins over it.
      */
     selfService: z.boolean().default(false),
     /** Where each server's rules file lives, beside the policy file. */
     selfServiceDirectory: SelfServiceDirectorySchema.default("mcp"),
+    /**
+     * Merge each self-served rules pull request once its policy check
+     * passes. GitHub App sources only; ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE,
+     * while set, wins over it.
+     */
+    selfServiceAutoMerge: z.boolean().default(false),
   })
   .strict()
   .refine(
@@ -122,6 +129,8 @@ export const CreateAppaGithubRepositorySchema = z
     selfService: z.boolean().optional(),
     /** Where each server's rules file lives, beside the policy file; mcp unless set. */
     selfServiceDirectory: SelfServiceDirectorySchema.optional(),
+    /** Merge each self-served rules pull request once its check passes; off unless set. */
+    selfServiceAutoMerge: z.boolean().optional(),
   })
   .strict()
   .refine(
@@ -133,8 +142,8 @@ const AppaGithubSyncSchema = createSelectSchema(openappaGithubSyncTable, {
 }).omit({ content: true });
 /**
  * How the policy repository protects its server rules files: the branch
- * ruleset Archestra keeps, which makes the policy check the gate. Null while
- * self-service is off, or without a connected GitHub App source.
+ * ruleset an administrator imports, which makes the policy check the gate.
+ * Null while self-service is off, or without a connected GitHub App source.
  */
 /**
  * The GitHub App's grants against what self-service needs, with where to
@@ -149,10 +158,42 @@ export const AppaGithubAppGrantsSchema = z.object({
   installationUrl: z.string().nullable(),
   permissions: z.array(
     z.object({
-      name: z.enum(["contents", "pull_requests", "checks", "administration"]),
+      name: z.enum(["contents", "pull_requests", "checks"]),
       granted: z.boolean(),
     }),
   ),
+});
+
+/**
+ * The branch ruleset an administrator imports on the policy repository, as
+ * GitHub's "Import a ruleset" takes it: one rule, the policy check required
+ * from the GitHub App that posts it.
+ */
+export const AppaBranchRulesetSchema = z.object({
+  name: z.string(),
+  target: z.literal("branch"),
+  /** As GitHub's export writes them, so the import takes the file as is. */
+  source_type: z.literal("Repository").optional(),
+  source: z.string().optional(),
+  enforcement: z.literal("active"),
+  conditions: z.object({
+    ref_name: z.object({
+      include: z.array(z.string()),
+      exclude: z.array(z.string()),
+    }),
+  }),
+  bypass_actors: z.array(z.unknown()),
+  rules: z.array(
+    z.object({
+      type: z.string(),
+      parameters: z.record(z.string(), z.unknown()).optional(),
+    }),
+  ),
+});
+
+/** `fresh=true` reads GitHub now, past the minute the last read is kept. */
+export const AppaRepositoryProtectionQuerySchema = z.object({
+  fresh: z.enum(["true", "false"]).optional(),
 });
 
 export const AppaRepositoryProtectionSchema = z
@@ -161,6 +202,12 @@ export const AppaRepositoryProtectionSchema = z
     checkName: z.string(),
     /** The GitHub App's grants against what the feature needs, and where to change them. */
     app: AppaGithubAppGrantsSchema.optional(),
+    /**
+     * Whether a rule on the synced branch requires the policy check, as
+     * GitHub evaluates the branch. Archestra reads the rules and writes
+     * none: `missing` and `incomplete` come with the ruleset to import and
+     * the repository's Rulesets page, where an administrator imports it.
+     */
     branchRules: z.object({
       state: z.enum([
         "active",
@@ -170,12 +217,15 @@ export const AppaRepositoryProtectionSchema = z
         "unavailable",
         "error",
       ]),
+      /** The ruleset that requires the check, on its host. */
       url: z.string().optional(),
       detail: z.string().optional(),
-      /** Bypass entries an administrator added on GitHub; they skip the rules. */
-      bypassActors: z.number().int().positive().optional(),
-      /** A ruleset requires the check while the GitHub App cannot post it. */
+      /** A rule requires the check while the GitHub App cannot post it. */
       checkRule: z.enum(["unposted"]).optional(),
+      /** The repository's Rulesets page, where a ruleset is imported or edited. */
+      settingsUrl: z.string().optional(),
+      /** The ruleset to import, while no rule requires the check as it should. */
+      ruleset: AppaBranchRulesetSchema.optional(),
     }),
     /**
      * Whether the policy file includes the self-service folder, which is
@@ -207,6 +257,27 @@ export const AppaSelfServiceSchema = z.object({
   environment: z
     .object({ variable: z.string(), value: SelfServiceChoiceSchema })
     .optional(),
+  /**
+   * Off, a branch rule that still requires the policy check: Archestra
+   * posts the check as skipped until the administrator removes the rule.
+   */
+  leftoverRule: z
+    .object({ checkName: z.string(), url: z.string().nullable() })
+    .optional(),
+  /**
+   * Whether the GitHub App merges each self-served rules pull request once
+   * its policy check passes, and what decides it.
+   */
+  autoMerge: z.object({
+    /** In force: the environment variable while one is set, else the saved setting. */
+    enabled: z.boolean(),
+    /** The setting saved with the Git sync source. */
+    setting: z.boolean(),
+    /** The environment variable that sets it, while one does, with its value. */
+    environment: z
+      .object({ variable: z.string(), value: SelfServiceChoiceSchema })
+      .optional(),
+  }),
 });
 export const AppaGithubSyncStatusSchema = z.object({
   enabled: z.boolean(),
@@ -232,6 +303,16 @@ export const AppaGithubSyncActionSchema = z.discriminatedUnion("action", [
       enabled: z.boolean(),
       /** The self-service folder to use when turning on; the saved one unless set. */
       directory: SelfServiceDirectorySchema.optional(),
+    })
+    .strict(),
+  /**
+   * Turn auto-merge of self-served pull requests on or off; refused while
+   * the environment variable sets it, and while self-service is off.
+   */
+  z
+    .object({
+      action: z.literal("self_service_auto_merge"),
+      enabled: z.boolean(),
     })
     .strict(),
   /**

@@ -147,7 +147,7 @@ jobs:
 
       - name: Generate a token
         id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
+        uses: archestra-ai/.github/actions/github-app-token@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
         with:
           # Read scanned queue artifacts from other runs.
           permission-actions: read
@@ -167,7 +167,7 @@ jobs:
       - name: Generate a publisher token
         if: ${{ !inputs.handoff-fixture }}
         id: publisher-token
-        uses: archestra-ai/.github/actions/github-app-token@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
+        uses: archestra-ai/.github/actions/github-app-token@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
         with:
           owner: archestra-ai
           repositories: release-publisher
@@ -662,7 +662,7 @@ jobs:
 
       - name: Generate a release token
         id: release-token
-        uses: archestra-ai/.github/actions/github-app-token@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
+        uses: archestra-ai/.github/actions/github-app-token@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
         with:
           # Draft releases are listed only with push access.
           permission-contents: write

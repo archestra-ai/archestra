@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   getGithubWebOrigin,
   gitHostFromUrl,
+  isBuiltInCatalogId,
+  parseFullToolName,
   slugifyMcpServerName,
   TimeInMs,
 } from "@archestra/shared";
@@ -13,7 +15,10 @@ import {
   cacheManager,
   LRUCacheManager,
 } from "@/cache-manager";
-import config, { OPENAPPA_SELF_SERVICE_VARIABLE } from "@/config";
+import config, {
+  OPENAPPA_SELF_SERVICE_AUTO_MERGE_VARIABLE,
+  OPENAPPA_SELF_SERVICE_VARIABLE,
+} from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { RuntimeCredentialDefinitionModel } from "@/models";
@@ -37,6 +42,7 @@ import {
 } from "@/openappa/declarations";
 import {
   asRecord,
+  isServerRulesBranch,
   isServerRulesFile,
   isServerRulesFolder,
   repositoryIncludePaths,
@@ -60,14 +66,20 @@ import {
   withGithubMessage,
 } from "@/services/openappa-github";
 import {
+  firstFileAtEachPath,
   githubAppLogin,
   githubAppProfile,
+  hasRepositoryIncludeGlob,
+  keptSetupCommit,
   MissingGithubPermission,
   openappaRepositoryIncludes,
   type RepositorySource,
+  rememberSetupCommit,
   repositoryPath,
   resolveOpenAppaGithubAccess,
   resolveOpenAppaGitlabAccess,
+  strayGlobMatches,
+  templateExampleBlob,
 } from "@/services/openappa-github-access";
 import { openappaGitlab } from "@/services/openappa-gitlab";
 import { ApiError } from "@/types";
@@ -100,7 +112,7 @@ export async function getAppaGithubSync(organizationId: string) {
   return {
     enabled: enterpriseTier.isOpenappaActive(),
     source,
-    selfService: selfServiceState(row),
+    selfService: { ...selfServiceState(row), ...(await leftoverRule(row)) },
     hasPolicy: content !== null,
     validationDirectory,
     githubWebUrl,
@@ -118,8 +130,19 @@ type SyncRow = NonNullable<
  * set, else the setting saved with the source. Off by default.
  */
 function selfServiceState(
-  row: Pick<SyncRow, "selfService" | "selfServiceDirectory"> | null,
-) {
+  row: Pick<
+    SyncRow,
+    "selfService" | "selfServiceDirectory" | "selfServiceAutoMerge"
+  > | null,
+): {
+  enabled: boolean;
+  setting: boolean;
+  directory: string;
+  environment?: { variable: string; value: "enabled" | "disabled" };
+  /** Off, a branch rule that still requires the check; see `leftoverRule`. */
+  leftoverRule?: LeftoverRule;
+  autoMerge: ReturnType<typeof autoMergeState>;
+} {
   const value = config.openappa.selfService;
   const setting = row?.selfService ?? false;
   return {
@@ -129,13 +152,38 @@ function selfServiceState(
     ...(value
       ? { environment: { variable: OPENAPPA_SELF_SERVICE_VARIABLE, value } }
       : {}),
+    autoMerge: autoMergeState(row),
+  };
+}
+
+/**
+ * Whether the GitHub App merges each self-served rules pull request once its
+ * policy check passes, and what decides it:
+ * ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE while it is set, else the
+ * setting saved with the source. Off by default.
+ */
+function autoMergeState(row: Pick<SyncRow, "selfServiceAutoMerge"> | null) {
+  const value = config.openappa.selfServiceAutoMerge;
+  const setting = row?.selfServiceAutoMerge ?? false;
+  return {
+    enabled: value ? value === "enabled" : setting,
+    setting,
+    ...(value
+      ? {
+          environment: {
+            variable: OPENAPPA_SELF_SERVICE_AUTO_MERGE_VARIABLE,
+            value,
+          },
+        }
+      : {}),
   };
 }
 
 /**
  * Whether self-service is in force on a source: on, and a GitHub App
- * source that syncs, since the policy check and the branch ruleset are the
- * App's. A token or a GitLab source never gets them.
+ * source that syncs, since the policy check is the App's and the branch
+ * ruleset requires it from the App. A token or a GitLab source never gets
+ * them.
  */
 export function selfServiceActive(row: SyncRow | null): row is SyncRow & {
   interval: NonNullable<SyncRow["interval"]>;
@@ -150,6 +198,14 @@ export function selfServiceActive(row: SyncRow | null): row is SyncRow & {
     !!row.githubAppConfigId &&
     selfServiceState(row).enabled
   );
+}
+
+/**
+ * Whether the GitHub App merges each self-served rules pull request once its
+ * policy check passes: on, with self-service in force on the source.
+ */
+export function selfServiceAutoMergeActive(row: SyncRow | null): boolean {
+  return selfServiceActive(row) && autoMergeState(row).enabled;
 }
 
 /** What the MCP registry asks: whether its servers' editors may change their rules now. */
@@ -236,6 +292,7 @@ export async function createAppaGithubRepository(params: {
   replace?: boolean;
   selfService?: boolean;
   selfServiceDirectory?: string;
+  selfServiceAutoMerge?: boolean;
 }) {
   assertEnabled();
   if (
@@ -248,6 +305,10 @@ export async function createAppaGithubRepository(params: {
     );
   const selfService = params.selfService ?? false;
   const selfServiceDirectory = params.selfServiceDirectory ?? "mcp";
+  // Auto-merge rides on self-service: saved off with it, so turning
+  // self-service on later merges nothing nobody asked for.
+  const selfServiceAutoMerge =
+    selfService && (params.selfServiceAutoMerge ?? false);
   if (selfService) checkSelfServiceDirectory(selfServiceDirectory, params);
   if (
     !(await userHasPermission(
@@ -266,6 +327,13 @@ export async function createAppaGithubRepository(params: {
   if (!params.githubAppConfigId)
     throw new ApiError(400, "Choose a GitHub App or a GitLab token");
   const githubAppConfigId = params.githubAppConfigId;
+  // A rule on the branch left behind refuses the move before anything is
+  // created on GitHub; the save checks again with the branch resolved.
+  await beforeSourceChange(params.organizationId, {
+    repo: `${params.owner}/${params.name}`,
+    ref: params.ref ?? null,
+    githubAppConfigId,
+  });
   // The installation-wide token: the repository does not exist yet.
   const { token: appToken, api } = await resolveOpenAppaGithubAccess({
     organizationId: params.organizationId,
@@ -285,6 +353,18 @@ export async function createAppaGithubRepository(params: {
       400,
       "The current policy exceeds the 1 MiB Git sync limit",
     );
+  // A policy kept elsewhere than appa.toml on the default branch is never a fresh copy.
+  const validationDirectory =
+    params.validationDirectory ?? VALIDATION_DIRECTORY;
+  // Everything the policy reads from its repository is read before anything
+  // is written, so a transfer that cannot be complete creates nothing. The
+  // seed's include list decides, so a servers' folder the seed starts
+  // including comes along with the files already in it.
+  const transfer = await collectSetupTransfer({
+    organizationId: params.organizationId,
+    seed,
+    current: policy.content,
+  });
 
   let created: {
     full_name?: string;
@@ -293,10 +373,8 @@ export async function createAppaGithubRepository(params: {
   };
   const repo = `${params.owner}/${params.name}`;
   let setupPullRequestNumber: number | undefined;
+  let setupCommit: string | undefined;
   let seededEmpty = false;
-  // A policy kept elsewhere than appa.toml on the default branch is never a fresh copy.
-  const validationDirectory =
-    params.validationDirectory ?? VALIDATION_DIRECTORY;
   const custom =
     params.existing &&
     (!!params.ref ||
@@ -314,9 +392,14 @@ export async function createAppaGithubRepository(params: {
       repo,
       token,
       policy: seed,
+      transferred: transferredFiles(transfer, {
+        path: "appa.toml",
+        validationDirectory,
+      }),
     });
     created = { full_name: repo, default_branch: seeded.branch, private: true };
     setupPullRequestNumber = seeded.setupPullRequestNumber;
+    setupCommit = seeded.setupCommit;
     seededEmpty = true;
   } else if (params.existing) {
     const notTemplate = new ApiError(400, "Not a template copy");
@@ -330,23 +413,26 @@ export async function createAppaGithubRepository(params: {
       });
     } catch (error) {
       if (error !== notTemplate) throw error;
-      // A repository that already holds a policy becomes the policy source.
-      return connectAppaGithubRepository({
+      // A repository that already holds a policy keeps it until the pull
+      // request that carries the current policy and its files is merged.
+      return proposeSetupPullRequest({
         organizationId: params.organizationId,
-        userId: params.userId,
-        replace: params.replace,
+        api,
+        repo,
+        token,
+        ref: params.ref ?? null,
+        path: params.path ?? "appa.toml",
+        seed,
+        transfer,
+        policy,
         source: {
-          repo,
-          ref: params.ref ?? null,
-          path: params.path ?? "appa.toml",
           interval: params.interval,
-          githubPatId: null,
           githubAppConfigId,
-          gitlabTokenId: null,
           // Kept even before the folder exists: validations run once it does.
           validationDirectory,
           selfService,
           selfServiceDirectory,
+          selfServiceAutoMerge,
         },
       });
     }
@@ -393,95 +479,42 @@ export async function createAppaGithubRepository(params: {
   if (!seededEmpty)
     try {
       const base = `${api}/repos/${repo}`;
-      const existing = await githubSetupRead<{ sha?: string }>({
-        url: `${base}/contents/appa.toml?ref=${encodeURIComponent(created.default_branch)}`,
+      const branch = created.default_branch;
+      const parent = await branchHead({ base, token, branch, setup: true });
+      const files = firstFileAtEachPath([
+        { path: "appa.toml", content: seed },
+        ...transferredFiles(transfer, {
+          path: "appa.toml",
+          validationDirectory,
+        }),
+      ]);
+      // The template's own example is replaced in one commit with the current
+      // policy and what it reads beside it; identical bytes need no commit.
+      // A copy that already holds files the policy's globs would read, and
+      // that were never in the policy, loses them in the same commit.
+      const outcome = await commitSetupFiles({
+        base,
         token,
+        branch,
+        parent,
+        files,
+        remove: await regularStrayFilesToRemove({
+          base,
+          token,
+          commit: parent,
+          content: seed,
+          policyPath: "appa.toml",
+          files,
+        }),
+        message: "Seed current OpenAPPA policy",
+        pull: {
+          title: "Seed current OpenAPPA policy",
+          body: setupPullBody(transfer, false, "github"),
+        },
+        direct: true,
       });
-      if (!existing.sha || !/^[a-f0-9]{40}$/.test(existing.sha))
-        throw new ApiError(502, "The template has no appa.toml file");
-      // Identical template bytes need no PR: GitHub cannot open an empty diff.
-      const bytes = Buffer.from(seed);
-      const policyBlob = createHash("sha1")
-        .update(`blob ${bytes.length}\0`)
-        .update(bytes)
-        .digest("hex");
-      if (existing.sha !== policyBlob) {
-        let requiresPullRequest = false;
-        try {
-          await githubJson({
-            url: `${base}/contents/appa.toml`,
-            token,
-            method: "PUT",
-            body: {
-              message: "Seed current OpenAPPA policy",
-              content: bytes.toString("base64"),
-              sha: existing.sha,
-              branch: created.default_branch,
-            },
-            errors: withGithubMessage((status, message) => {
-              if (
-                [403, 409, 422].includes(status) &&
-                REPOSITORY_RULES.test(message ?? "")
-              )
-                return new GithubRepositoryRulesError();
-              return new ApiError(
-                502,
-                `GitHub returned HTTP ${status} while committing the initial policy. Check repository access and App permissions.`,
-              );
-            }),
-          });
-        } catch (error) {
-          if (!(error instanceof GithubRepositoryRulesError)) throw error;
-          requiresPullRequest = true;
-        }
-        if (requiresPullRequest) {
-          const branch = await githubSetupRead<{ object?: { sha?: string } }>({
-            url: `${base}/git/ref/heads/${created.default_branch.split("/").map(encodeURIComponent).join("/")}`,
-            token,
-          });
-          const sha = branch.object?.sha;
-          if (!sha || !/^[a-f0-9]{40}$/.test(sha))
-            throw new ApiError(
-              502,
-              "GitHub returned an invalid default branch",
-            );
-          const head = `archestra/openappa-setup-${randomUUID()}`;
-          await githubJson({
-            url: `${base}/git/refs`,
-            token,
-            method: "POST",
-            body: { ref: `refs/heads/${head}`, sha },
-            errors: githubSyncErrors,
-          });
-          await githubJson({
-            url: `${base}/contents/appa.toml`,
-            token,
-            method: "PUT",
-            body: {
-              message: "Seed current OpenAPPA policy",
-              content: bytes.toString("base64"),
-              sha: existing.sha,
-              branch: head,
-            },
-            errors: githubSyncErrors,
-          });
-          const pull = await githubJson<{ number?: number }>({
-            url: `${base}/pulls`,
-            token,
-            method: "POST",
-            errors: githubSyncErrors,
-            body: {
-              title: "Seed current OpenAPPA policy",
-              body: "Review and merge this pull request to finish GitHub policy sync setup. Your current policy stays active until this pull request is merged.",
-              head,
-              base: created.default_branch,
-            },
-          });
-          if (!Number.isSafeInteger(pull.number) || (pull.number ?? 0) <= 0)
-            throw new ApiError(502, "GitHub returned an invalid pull request");
-          setupPullRequestNumber = pull.number;
-        }
-      }
+      setupPullRequestNumber = outcome.setupPullRequestNumber;
+      setupCommit = outcome.setupCommit;
     } catch (error) {
       if (error instanceof ApiError)
         throw new ApiError(
@@ -511,17 +544,147 @@ export async function createAppaGithubRepository(params: {
     setupPullRequestNumber,
     selfService,
     selfServiceDirectory,
+    selfServiceAutoMerge,
   };
   await beforeSourceChange(params.organizationId, source);
   await OpenAppaGithubSyncModel.save(params.organizationId, source);
+  if (setupPullRequestNumber && setupCommit)
+    await rememberSetupCommit({
+      organizationId: params.organizationId,
+      host: "github",
+      api,
+      repo,
+      number: setupPullRequestNumber,
+      sha: setupCommit,
+    });
   await syncAppaGithubPolicy(params.organizationId);
+  return getAppaGithubSync(params.organizationId);
+}
+
+/**
+ * An existing repository that already holds a policy at `path`: the current
+ * policy and what it reads beside it go in as a pull request against the
+ * branch, so the repository's own policy is replaced only by a merge, and the
+ * current one stays in force until then. The merging user combines the two
+ * where they want both. A repository whose files already match connects
+ * without a pull request.
+ */
+async function proposeSetupPullRequest(params: {
+  organizationId: string;
+  api: string;
+  repo: string;
+  token: string;
+  ref: string | null;
+  path: string;
+  seed: string;
+  transfer: SetupTransfer;
+  policy: { revision: number };
+  source: Pick<
+    AppaGithubSource,
+    | "interval"
+    | "githubAppConfigId"
+    | "validationDirectory"
+    | "selfService"
+    | "selfServiceDirectory"
+    | "selfServiceAutoMerge"
+  >;
+}) {
+  const { api, repo, token, path } = params;
+  const base = `${api}/repos/${repo}`;
+  let setupPullRequestNumber: number | undefined;
+  let setupCommit: string | undefined;
+  let branch = params.ref;
+  try {
+    branch ??= await defaultBranch({ token, base });
+    const parent = await branchHead({ base, token, branch });
+    const files = firstFileAtEachPath([
+      { path, content: params.seed },
+      ...transferredFiles(params.transfer, {
+        path,
+        validationDirectory:
+          params.source.validationDirectory ?? VALIDATION_DIRECTORY,
+      }),
+    ]);
+    const outcome = await commitSetupFiles({
+      base,
+      token,
+      branch,
+      parent,
+      files,
+      // Files the repository holds that the policy's globs would read, and
+      // that were never in the policy, go in the same commit.
+      remove: await regularStrayFilesToRemove({
+        base,
+        token,
+        commit: parent,
+        content: params.seed,
+        policyPath: path,
+        files,
+      }),
+      message: "Seed current OpenAPPA policy",
+      pull: {
+        title: "Seed current OpenAPPA policy",
+        body: setupPullBody(params.transfer, true, "github"),
+      },
+      direct: false,
+    });
+    setupPullRequestNumber = outcome.setupPullRequestNumber;
+    setupCommit = outcome.setupCommit;
+  } catch (error) {
+    if (error instanceof ApiError)
+      throw new ApiError(
+        error.statusCode,
+        `Repository ${repo} holds a policy, but the pull request carrying the current one failed: ${error.message}`,
+      );
+    throw error;
+  }
+  if (
+    (await guardrailsPolicyService.get(params.organizationId)).revision !==
+    params.policy.revision
+  )
+    throw new ApiError(
+      409,
+      `The policy changed while proposing it to ${repo}. Review the repository and connect it manually.`,
+    );
+  const source = {
+    ...params.source,
+    repo,
+    // A pull request merges into the branch it was opened against: the
+    // source follows that branch, not a default that may move meanwhile.
+    ref: setupPullRequestNumber ? branch : params.ref,
+    path,
+    githubPatId: null,
+    gitlabTokenId: null,
+    setupPullRequestNumber,
+  };
+  await beforeSourceChange(params.organizationId, source);
+  await OpenAppaGithubSyncModel.save(params.organizationId, source);
+  if (setupPullRequestNumber && setupCommit)
+    await rememberSetupCommit({
+      organizationId: params.organizationId,
+      host: "github",
+      api,
+      repo,
+      number: setupPullRequestNumber,
+      sha: setupCommit,
+    });
+  await syncAppaGithubPolicy(params.organizationId);
+  const row = await OpenAppaGithubSyncModel.find(params.organizationId);
+  if (row?.lastSyncError) {
+    await OpenAppaGithubSyncModel.setInterval(params.organizationId, null);
+    throw new ApiError(
+      400,
+      `Could not connect ${repo}: ${row.lastSyncError} The current policy is unchanged.`,
+    );
+  }
   return getAppaGithubSync(params.organizationId);
 }
 
 /**
  * The GitLab side of creating a policy repository: a new private project (or
  * an existing empty one) seeded from the bundled template, or an existing
- * project that already holds a policy connected as the source.
+ * project that already holds a policy, proposed the current one as a merge
+ * request.
  */
 async function createAppaGitlabProject(params: {
   organizationId: string;
@@ -536,6 +699,12 @@ async function createAppaGitlabProject(params: {
   validationDirectory?: string;
   replace?: boolean;
 }) {
+  // A GitLab project in a GitHub App's place posts no check: a rule on the
+  // branch left behind refuses the move before the project is created.
+  await beforeSourceChange(params.organizationId, {
+    repo: params.owner ? `${params.owner}/${params.name}` : params.name,
+    ref: params.ref ?? null,
+  });
   const access = await resolveOpenAppaGitlabAccess({
     organizationId: params.organizationId,
     gitlabTokenId: params.gitlabTokenId,
@@ -545,8 +714,22 @@ async function createAppaGitlabProject(params: {
     throw new ApiError(400, "The current policy exceeds the 1 MiB sync limit");
   const validationDirectory =
     params.validationDirectory ?? VALIDATION_DIRECTORY;
+  const transfer = await collectSetupTransfer({
+    organizationId: params.organizationId,
+    seed: policy.content,
+    current: policy.content,
+  });
   const repo = params.owner ? `${params.owner}/${params.name}` : params.name;
-  let seeded: { repo: string; branch: string };
+  let seeded: {
+    repo: string;
+    branch: string | null;
+    path?: string;
+    setupPullRequestNumber?: number;
+    setupCommit?: string;
+  };
+  // A project with a policy of its own is connected as a source: a first
+  // pull that fails leaves the sync stopped, as connecting does.
+  let holdsPolicy = false;
   if (params.existing) {
     const status = await openappaGitlab.repositoryStatus({
       access,
@@ -555,39 +738,55 @@ async function createAppaGitlabProject(params: {
       path: params.path ?? "appa.toml",
       validationDirectory,
     });
-    if (status.status !== "empty")
-      return connectAppaGithubRepository({
-        organizationId: params.organizationId,
-        userId: params.userId,
-        replace: params.replace,
-        source: {
-          repo,
-          ref: params.ref ?? null,
-          path: params.path ?? "appa.toml",
-          interval: params.interval,
-          githubPatId: null,
-          githubAppConfigId: null,
-          gitlabTokenId: params.gitlabTokenId,
-          validationDirectory,
-          // A GitLab project never gets the App's check or ruleset.
-          selfService: false,
-          selfServiceDirectory: "mcp",
-        },
-      });
-    seeded = {
-      repo,
-      ...(await openappaGitlab.seedExisting({
+    if (status.status !== "empty") {
+      // A project that already holds a policy keeps it until the merge
+      // request that carries the current policy and its files is merged.
+      holdsPolicy = true;
+      const path = params.path ?? "appa.toml";
+      const proposed = await openappaGitlab.proposeSetup({
         access,
         repo,
-        policy: policy.content,
-      })),
-    };
+        ref: params.ref ?? null,
+        policyPath: path,
+        content: policy.content,
+        files: [
+          { path, content: policy.content },
+          ...transferredFiles(transfer, { path, validationDirectory }),
+        ],
+        title: "Seed current OpenAPPA policy",
+        summary: setupPullBody(transfer, true, "gitlab"),
+      });
+      seeded = {
+        repo,
+        // A merge request merges into the branch it was opened against.
+        branch: proposed ? proposed.branch : (params.ref ?? null),
+        path,
+        setupPullRequestNumber: proposed?.iid,
+        setupCommit: proposed?.sha,
+      };
+    } else
+      seeded = {
+        repo,
+        ...(await openappaGitlab.seedExisting({
+          access,
+          repo,
+          policy: policy.content,
+          transferred: transferredFiles(transfer, {
+            path: "appa.toml",
+            validationDirectory,
+          }),
+        })),
+      };
   } else {
     seeded = await openappaGitlab.createProject({
       access,
       namespace: params.owner || null,
       name: params.name,
       policy: policy.content,
+      transferred: transferredFiles(transfer, {
+        path: "appa.toml",
+        validationDirectory,
+      }),
     });
   }
   if (
@@ -601,24 +800,48 @@ async function createAppaGitlabProject(params: {
   const source = {
     repo: seeded.repo,
     ref: seeded.branch,
-    path: "appa.toml",
+    path: seeded.path ?? "appa.toml",
     interval: params.interval,
     githubPatId: null,
     githubAppConfigId: null,
     gitlabTokenId: params.gitlabTokenId,
     validationDirectory,
+    setupPullRequestNumber: seeded.setupPullRequestNumber,
     // A GitLab project never gets the App's check or ruleset.
     selfService: false,
+    selfServiceAutoMerge: false,
   };
   await beforeSourceChange(params.organizationId, source);
   await OpenAppaGithubSyncModel.save(params.organizationId, source);
+  if (seeded.setupPullRequestNumber && seeded.setupCommit)
+    await rememberSetupCommit({
+      organizationId: params.organizationId,
+      host: "gitlab",
+      api: access.host.apiUrl,
+      repo: seeded.repo,
+      number: seeded.setupPullRequestNumber,
+      sha: seeded.setupCommit,
+    });
   await syncAppaGithubPolicy(params.organizationId);
+  const row = await OpenAppaGithubSyncModel.find(params.organizationId);
+  if (holdsPolicy && row?.lastSyncError) {
+    await OpenAppaGithubSyncModel.setInterval(params.organizationId, null);
+    throw new ApiError(
+      400,
+      `Could not connect ${repo}: ${row.lastSyncError} The current policy is unchanged.`,
+    );
+  }
   return getAppaGithubSync(params.organizationId);
 }
 
 export async function updateAppaGithubSync(params: {
   organizationId: string;
-  action: "sync" | "disconnect" | "schedule" | "self_service";
+  action:
+    | "sync"
+    | "disconnect"
+    | "schedule"
+    | "self_service"
+    | "self_service_auto_merge";
   interval?: AppaGithubSource["interval"];
   enabled?: boolean;
   /** The self-service folder to switch on with; the saved one unless set. */
@@ -637,12 +860,21 @@ export async function updateAppaGithubSync(params: {
     });
     return getAppaGithubSync(params.organizationId);
   }
+  if (params.action === "self_service_auto_merge") {
+    await setSelfServiceAutoMerge({
+      organizationId: params.organizationId,
+      row,
+      enabled: params.enabled === true,
+    });
+    return getAppaGithubSync(params.organizationId);
+  }
   if (params.action === "sync")
     await syncAppaGithubPolicy(params.organizationId);
   else {
-    // A stopped sync posts no check, so the ruleset that requires it goes too.
-    if (params.action === "disconnect" && selfServiceActive(row))
-      await withdrawRepositoryProtection(params.organizationId);
+    // A stopped sync posts no check: a rule that still requires it would
+    // hold every pull request, so the stop waits for the rule's removal.
+    if (params.action === "disconnect")
+      await beforeSourceChange(params.organizationId, null);
     await OpenAppaGithubSyncModel.setInterval(
       params.organizationId,
       params.action === "disconnect" ? null : (params.interval ?? row.interval),
@@ -652,9 +884,10 @@ export async function updateAppaGithubSync(params: {
 }
 
 /**
- * Turn self-service on or off for the source. On brings the branch ruleset
- * at once, and reports an App that still lacks a permission; off takes the
- * ruleset away. The environment variable, while set, is the only switch.
+ * Turn self-service on or off for the source. On reads the branch rules at
+ * once, and reports an App that still lacks a permission; off records a
+ * rule that still requires the check, which Archestra cannot take away. The
+ * environment variable, while set, is the only switch.
  */
 async function setSelfService(params: {
   organizationId: string;
@@ -703,18 +936,70 @@ async function setSelfService(params: {
         : "OpenAPPA self-service Guardrails turned off",
     );
   }
-  if (params.enabled) {
-    if (params.row.repo)
-      await forgetRefusedChecks(params.organizationId, params.row.repo);
-    try {
-      await maintainRepositoryProtection(params.organizationId);
-    } catch (error) {
-      logger.warn(
-        { organizationId: params.organizationId, error },
-        "OpenAPPA could not bring the policy repository's protection in line",
+  // Auto-merge rides on self-service: off together, so the next turn on
+  // merges nothing nobody asked for.
+  if (!params.enabled && params.row.selfServiceAutoMerge)
+    await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(
+      params.organizationId,
+      false,
+    );
+  if (params.enabled && params.row.repo)
+    await forgetRefusedChecks(params.organizationId, params.row.repo);
+  try {
+    await maintainRepositoryProtection(params.organizationId, {
+      turnedOff: !params.enabled,
+    });
+  } catch (error) {
+    logger.warn(
+      { organizationId: params.organizationId, error },
+      "OpenAPPA could not read the policy repository's protection",
+    );
+  }
+}
+
+/**
+ * Turn auto-merge of self-served pull requests on or off for the source.
+ * It takes self-service in force; the environment variable, while set, is
+ * the only switch.
+ */
+async function setSelfServiceAutoMerge(params: {
+  organizationId: string;
+  row: SyncRow;
+  enabled: boolean;
+}) {
+  const state = autoMergeState(params.row);
+  if (state.environment)
+    throw new ApiError(
+      400,
+      `${state.environment.variable} sets auto-merge for this deployment. Unset it to edit this setting.`,
+    );
+  if (params.enabled && !selfServiceActive(params.row))
+    throw new ApiError(
+      409,
+      "Auto-merge needs MCP Guardrails Self-Service in force: a syncing GitHub App source with self-service on.",
+    );
+  // The App may just have been granted what it lacked: the next minute's
+  // round tries the merge rather than waiting out the hold.
+  if (params.enabled && params.row.repo)
+    await cacheManager
+      .delete(heldMergesKey(params.organizationId, params.row.repo))
+      .catch((err) =>
+        logger.warn(
+          { organizationId: params.organizationId, err },
+          "OpenAPPA could not forget a held merge",
+        ),
       );
-    }
-  } else await withdrawRepositoryProtection(params.organizationId);
+  if (state.setting === params.enabled) return;
+  await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(
+    params.organizationId,
+    params.enabled,
+  );
+  logger.info(
+    { organizationId: params.organizationId, enabled: params.enabled },
+    params.enabled
+      ? "OpenAPPA auto-merge of self-served pull requests turned on"
+      : "OpenAPPA auto-merge of self-served pull requests turned off",
+  );
 }
 
 /** Refuse a self-service folder the servers' files cannot live in. */
@@ -783,6 +1068,7 @@ export async function syncAppaGithubPolicy(organizationId: string) {
           repo,
           ref: row.ref,
           path,
+          setupMergeRequest: row.setupPullRequestNumber,
         })
       : await readGithubPolicy({ row, repo, path });
     if (read.pending) {
@@ -792,7 +1078,7 @@ export async function syncAppaGithubPolicy(organizationId: string) {
         outcome: {
           error:
             read.pending === "closed"
-              ? `The initial policy pull request was closed without merging. Reopen and merge it to finish setup, or stop syncing to keep managing the policy locally.`
+              ? `The initial policy ${row.gitlabTokenId ? "merge request" : "pull request"} was closed without merging. Reopen and merge it to finish setup, or stop syncing to keep managing the policy locally.`
               : null,
         },
       });
@@ -838,15 +1124,15 @@ export async function syncAppaGithubPolicy(organizationId: string) {
       },
     });
   }
-  // Every sync also keeps the repository's protection for server rules files
-  // in line: the branch ruleset. A failure there shows
-  // in the protection status and never fails the pull.
+  // Every sync also reads the repository's protection for server rules
+  // files: whether a branch rule requires the policy check. A failure there
+  // shows in the protection status and never fails the pull.
   try {
     await maintainRepositoryProtection(organizationId);
   } catch (error) {
     logger.warn(
       { organizationId, error },
-      "OpenAPPA could not bring the policy repository's protection in line",
+      "OpenAPPA could not read the policy repository's protection",
     );
   }
 }
@@ -957,17 +1243,36 @@ export async function checkDueAppaGithubSyncs() {
   for (const row of await OpenAppaGithubSyncModel.findDue())
     await OpenAppaGithubSyncModel.enqueue(row.organizationId);
   // Open pull requests get a pull's checks every minute, before they merge,
-  // on the repositories whose servers' editors change their own rules.
+  // on the repositories whose servers' editors change their own rules. Off,
+  // a branch rule that still requires the check gets it posted as skipped.
   await mapWithConcurrency(
-    (await OpenAppaGithubSyncModel.findConnected()).filter(selfServiceActive),
+    await OpenAppaGithubSyncModel.findConnected(),
     4,
     async (row) => {
       try {
-        await checkAppaGithubPullRequests(row.organizationId);
+        if (selfServiceActive(row))
+          await checkAppaGithubPullRequests(row.organizationId);
+        else await postLeftoverChecks(row);
       } catch (error) {
         logger.warn(
           { organizationId: row.organizationId, error },
           "OpenAPPA could not check the policy repository's pull requests",
+        );
+      }
+    },
+  );
+  // A setup pull request still open, with a rule that already requires the
+  // check: posted as skipped, so setup can finish.
+  await mapWithConcurrency(
+    await OpenAppaGithubSyncModel.findAwaitingSetup(),
+    4,
+    async (row) => {
+      try {
+        if (selfServiceActive(row)) await postSetupPendingChecks(row);
+      } catch (error) {
+        logger.warn(
+          { organizationId: row.organizationId, error },
+          "OpenAPPA could not post the policy check on the setup pull request",
         );
       }
     },
@@ -980,8 +1285,9 @@ export async function checkDueAppaGithubSyncs() {
 
 /**
  * The check every policy pull request carries, and the name of the branch
- * ruleset that requires it: ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME. A renamed
- * deployment moves the ruleset and its required check over at the next sync.
+ * ruleset an administrator imports to require it:
+ * ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME. A renamed deployment posts the check
+ * under the new name; the imported rule is edited by hand to match.
  */
 export const POLICY_CHECK_NAME = config.openappa.policyCheckName;
 
@@ -1011,6 +1317,15 @@ const REFUSED_TTL = 10 * TimeInMs.Minute;
  */
 const RECHECK_AUTHORSHIP = 15 * TimeInMs.Minute;
 
+/**
+ * How long a self-served pull request GitHub refused to merge twice is left
+ * to people before the App tries again at the same head. The first refusal
+ * is tried again the next minute: a check just posted can take GitHub a
+ * moment to count against the branch rules. The same hold applies to a
+ * repository whose App cannot merge at all.
+ */
+export const RETRY_REFUSED_MERGE = 15 * TimeInMs.Minute;
+
 /** How long a pull request that changes no policy file is left alone, per head. */
 const UNRELATED_TTL = TimeInMs.Day;
 
@@ -1034,8 +1349,16 @@ type CheckedResult = {
    * absent while the pull request changes nothing Git sync reads.
    */
   policy: (Verdict & { deployment: string }) | null;
-  /** What the pull request changes that Git sync reads, and whether it may. */
-  judged: Verdict & { governed: string[] };
+  /**
+   * What the pull request changes that Git sync reads, whether it may, and
+   * whether it is self-served: one MCP server's rules, opened by this
+   * deployment's App for a member who may change them.
+   */
+  judged: Verdict & { governed: string[]; selfServed: boolean };
+  /** When GitHub last refused to merge it at this head, under auto-merge, how often, and why. */
+  mergeRefusedAt?: number;
+  mergeRefusals?: number;
+  mergeRefusedReason?: string;
 };
 
 /** One check's outcome as stored. */
@@ -1058,6 +1381,10 @@ type Verdict = {
  * when a commit moves on either side, or when the deployment it was checked
  * against changes (`deploymentState`), and a refusal every fifteen minutes
  * besides. Only a changed outcome is posted.
+ *
+ * With auto-merge in force, a self-served pull request whose check passed is
+ * merged through the App right after, and on later passes while it stays
+ * open, so a merge that failed for now is tried again.
  */
 async function checkAppaGithubPullRequests(organizationId: string) {
   const row = await OpenAppaGithubSyncModel.find(organizationId);
@@ -1065,7 +1392,14 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   const source = { ...row, repo: row.repo, path: row.path };
   const refused = refusedChecksKey(organizationId, source.repo);
   if (await cacheManager.get(refused)) return;
-  const checkName = POLICY_CHECK_NAME;
+  // A merge whose pull was not queued (the process stopped in between) is
+  // followed up here: the marker set before the merge is still there.
+  if (
+    await cacheManager
+      .get(pendingResyncKey(organizationId, source.repo))
+      .catch(() => null)
+  )
+    await queueSyncAfterMerge(organizationId, source.repo);
   let pulls: CheckedPull[];
   try {
     pulls = await githubPullRequests(source);
@@ -1081,24 +1415,13 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   }
   const deployment = await deploymentState(organizationId, row.sourceCommit);
   const checking = pulls.slice(0, MAX_CHECKED_PULLS);
+  const merger = selfServiceAutoMergeActive(row)
+    ? new AutoMerger(source)
+    : null;
   // What the source reads decides which files a pull request governs, so a
   // policy file or servers' folder moved makes every stored result stale,
   // the unrelated ones included.
-  const keys = checking.map((pull) =>
-    checkKey(
-      "checked",
-      "v3",
-      organizationId,
-      source.repo,
-      source.ref ?? "",
-      source.path,
-      serverRulesFolderOf(source),
-      String(source.githubAppConfigId ?? ""),
-      checkName,
-      pull.head,
-      pull.result,
-    ),
-  );
+  const keys = checking.map((pull) => checkedResultKey(source, pull));
   const checked = await cacheManager.getMany<CheckedResult>(keys);
   for (const [index, pull] of checking.entries()) {
     const key = keys[index] as AllowedCacheKey;
@@ -1121,16 +1444,25 @@ async function checkAppaGithubPullRequests(organizationId: string) {
         (previous.policy.deployment === deployment &&
           (previous.policy.accepted ||
             now - previous.policy.checkedAt < RECHECK_REFUSED)));
-    if (judgedStands && policyStands) continue;
+    if (judgedStands && policyStands) {
+      await merger?.mergeIfDue({ pull, result: previous, key });
+      continue;
+    }
     const judged = judgedStands
       ? previous.judged
       : await (async () => {
-          const read = pull.judge
+          const read: Judged | null = pull.judge
             ? await pull.judge()
             : // A host that cannot tell: check the policy for every request.
-              { governed: ["*"], outcome: { accepted: true } as PullOutcome };
+              {
+                governed: ["*"],
+                outcome: { accepted: true },
+                selfServed: false,
+              };
           const made = verdict(read?.outcome ?? null, { checkedAt: now });
-          return made && read ? { ...made, governed: read.governed } : null;
+          return made && read
+            ? { ...made, governed: read.governed, selfServed: read.selfServed }
+            : null;
         })();
     // A read or a check that failed for now is checked again next minute.
     if (!judged) continue;
@@ -1162,6 +1494,15 @@ async function checkAppaGithubPullRequests(organizationId: string) {
       reason: outcome.accepted ? null : outcome.reason,
       policy,
       judged,
+      ...(previous?.mergeRefusedAt !== undefined
+        ? {
+            mergeRefusedAt: previous.mergeRefusedAt,
+            mergeRefusals: previous.mergeRefusals ?? 1,
+            ...(previous.mergeRefusedReason
+              ? { mergeRefusedReason: previous.mergeRefusedReason }
+              : {}),
+          }
+        : {}),
     };
     // A changed deployment that leaves the outcome as posted posts nothing.
     if (
@@ -1186,6 +1527,12 @@ async function checkAppaGithubPullRequests(organizationId: string) {
         );
         continue;
       }
+    // The verdict stands on GitHub now: a later off round posts skipped over it.
+    await cacheManager
+      .delete(
+        checkKey("leftover-posted", organizationId, source.repo, pull.head),
+      )
+      .catch(() => undefined);
     await cacheManager
       .set(key, result, CHECKED_TTL)
       .catch((err) =>
@@ -1194,6 +1541,473 @@ async function checkAppaGithubPullRequests(organizationId: string) {
           "OpenAPPA could not record a posted policy check; the next pass checks it again",
         ),
       );
+    await merger?.mergeIfDue({ pull, result, key });
+  }
+}
+
+/**
+ * Merges self-served pull requests through the App while auto-merge is in
+ * force. The token that may write, and the merge method the repository
+ * allows, are read once per pass, and only when a pull request is due.
+ */
+class AutoMerger {
+  private access: Promise<{
+    token: string;
+    base: string;
+    method: "merge" | "squash" | "rebase";
+  } | null> | null = null;
+
+  constructor(private readonly source: PolicySource) {}
+
+  /**
+   * Merge a pull request whose check passed when it is self-served, unless
+   * GitHub refused it at this head: once, it is tried again the next
+   * minute; more than once, fifteen minutes later.
+   */
+  async mergeIfDue(params: {
+    pull: CheckedPull;
+    result: CheckedResult;
+    key: AllowedCacheKey;
+  }) {
+    const { pull, result } = params;
+    const { organizationId, repo } = this.source;
+    const skipped = !result.accepted
+      ? "its check did not pass"
+      : result.judged.governed.length === 0
+        ? "it changes no policy file"
+        : !result.judged.selfServed
+          ? "it is not self-served"
+          : !pull.number || !pull.ref || !isServerRulesBranch(pull.ref)
+            ? "it is not on a server rules branch"
+            : result.mergeRefusedAt !== undefined &&
+                Date.now() - result.mergeRefusedAt <
+                  ((result.mergeRefusals ?? 1) > 1 ? RETRY_REFUSED_MERGE : 0)
+              ? "GitHub refused it a moment ago"
+              : null;
+    if (skipped) {
+      logger.debug(
+        { organizationId, repo, number: pull.number, reason: skipped },
+        "OpenAPPA is not merging this pull request",
+      );
+      return;
+    }
+    this.access ??= this.resolveAccess();
+    const access = await this.access;
+    if (!access) return;
+    const merged = await githubCall<{ merged?: boolean }>({
+      token: access.token,
+      url: `${access.base}/pulls/${pull.number}/merge`,
+      method: "PUT",
+      body: { sha: pull.head, merge_method: access.method },
+    }).catch((error: unknown) => ({ ok: false as const, status: 0, error }));
+    if (merged.ok) {
+      logger.info(
+        { organizationId, repo, number: pull.number },
+        "OpenAPPA merged a self-served Guardrails rules pull request",
+      );
+      // A pull applies the merge now rather than at the next schedule.
+      await noteSyncOwed(organizationId, repo);
+      await queueSyncAfterMerge(organizationId, repo);
+      const deleted = await githubFetch({
+        url: `${access.base}/git/refs/heads/${pull.ref}`,
+        token: access.token,
+        method: "DELETE",
+      }).catch(() => null);
+      if (!deleted?.ok)
+        logger.debug(
+          { organizationId, status: deleted?.status, branch: pull.ref },
+          "OpenAPPA could not delete a merged rules branch",
+        );
+      return;
+    }
+    if ([403, 404, 405, 409, 422].includes(merged.status)) {
+      // Merged or closed by someone since the listing: nothing to refuse.
+      const gone = await this.settledMeanwhile(pull, access);
+      if (gone) return;
+      // Another rule blocks it, its head moved, it cannot merge cleanly, or
+      // the App may not merge here: people take it from here, and the App
+      // tries again in a while.
+      logger.warn(
+        {
+          organizationId,
+          repo,
+          number: pull.number,
+          status: merged.status,
+          message: "message" in merged ? merged.message : undefined,
+        },
+        "GitHub refused to merge a self-served Guardrails rules pull request; it is left for people, and tried again later",
+      );
+      await cacheManager
+        .set(
+          params.key,
+          {
+            ...result,
+            mergeRefusedAt: Date.now(),
+            mergeRefusals: (result.mergeRefusals ?? 0) + 1,
+            mergeRefusedReason: refusalReason(merged),
+          },
+          CHECKED_TTL,
+        )
+        .catch((err) =>
+          logger.warn(
+            { organizationId, err },
+            "OpenAPPA could not record a refused merge",
+          ),
+        );
+      return;
+    }
+    logger.warn(
+      {
+        organizationId,
+        repo,
+        number: pull.number,
+        status: merged.status,
+        ...("error" in merged ? { err: merged.error } : {}),
+      },
+      "OpenAPPA could not merge a self-served Guardrails rules pull request; it tries again next minute",
+    );
+  }
+
+  /**
+   * Whether the pull request was merged or closed between the listing and
+   * the merge: a merge by someone else is followed by a pull like the App's
+   * own; a closed one is left alone. False while it is still open, or when
+   * GitHub cannot say for now (the refusal is then recorded as such).
+   */
+  private async settledMeanwhile(
+    pull: CheckedPull,
+    access: { token: string; base: string },
+  ): Promise<boolean> {
+    const { organizationId, repo } = this.source;
+    const read = await githubCall<{ state?: string; merged?: boolean }>({
+      token: access.token,
+      url: `${access.base}/pulls/${pull.number}`,
+    }).catch(() => null);
+    if (!read?.ok) return false;
+    if (read.body.merged === true) {
+      logger.info(
+        { organizationId, repo, number: pull.number },
+        "A self-served Guardrails rules pull request was merged by someone else meanwhile",
+      );
+      await noteSyncOwed(organizationId, repo);
+      await queueSyncAfterMerge(organizationId, repo);
+      return true;
+    }
+    if (read.body.state && read.body.state !== "open") {
+      logger.info(
+        { organizationId, repo, number: pull.number },
+        "A self-served Guardrails rules pull request was closed meanwhile",
+      );
+      return true;
+    }
+    return false;
+  }
+
+  private async resolveAccess() {
+    const { organizationId, repo } = this.source;
+    const held = heldMergesKey(organizationId, repo);
+    // A repository the App cannot merge in is not asked again every minute.
+    if (await cacheManager.get(held).catch(() => null)) return null;
+    const hold = (reason: string) =>
+      cacheManager
+        .set(held, reason, RETRY_REFUSED_MERGE)
+        .catch((err) =>
+          logger.warn(
+            { organizationId, err },
+            "OpenAPPA could not record a held merge",
+          ),
+        );
+    try {
+      const { token, api } = await resolveOpenAppaGithubAccess(this.source, {
+        contents: "write",
+        pull_requests: "write",
+      });
+      if (!token) return null;
+      const base = `${api}/repos/${this.source.repo}`;
+      const repository = await githubJson<{
+        allow_merge_commit?: boolean;
+        allow_squash_merge?: boolean;
+        allow_rebase_merge?: boolean;
+      }>({
+        url: base,
+        token,
+        // A refusal is the App's permissions; anything else is GitHub's for now.
+        errors: async ({ status }) =>
+          new ApiError(
+            [401, 403, 404].includes(status) ? 403 : 502,
+            `GitHub returned HTTP ${status} reading the repository`,
+          ),
+      });
+      // A merge commit keeps the signed commit the check read; squash and
+      // rebase follow where the repository allows only those.
+      const method =
+        repository.allow_merge_commit !== false
+          ? ("merge" as const)
+          : repository.allow_squash_merge !== false
+            ? ("squash" as const)
+            : repository.allow_rebase_merge !== false
+              ? ("rebase" as const)
+              : null;
+      if (!method) {
+        logger.warn(
+          { organizationId, repo },
+          "The policy repository allows no merge method; self-served pull requests are left for people",
+        );
+        await hold(HELD_NO_MERGE_METHOD);
+        return null;
+      }
+      return { token, base, method };
+    } catch (error) {
+      // GitHub failing for now is asked again next minute; a refusal is held.
+      const refused =
+        error instanceof MissingGithubPermission ||
+        (error instanceof ApiError && error.statusCode < 500);
+      logger.warn(
+        { organizationId, repo, error },
+        refused
+          ? "OpenAPPA cannot merge self-served pull requests: the GitHub App needs Contents and Pull requests write"
+          : "OpenAPPA could not reach GitHub to merge self-served pull requests; it tries again next minute",
+      );
+      if (refused) await hold(HELD_NO_PERMISSION);
+      return null;
+    }
+  }
+}
+
+/** The key under which a repository the App cannot merge in waits fifteen minutes. */
+function heldMergesKey(organizationId: string, repo: string) {
+  return checkKey("merge", organizationId, repo);
+}
+
+/** Why the App holds off merging in a repository, in the user's terms. */
+const HELD_NO_PERMISSION =
+  "the GitHub App may not merge in the repository: it needs Contents and Pull requests write, which an administrator grants on GitHub";
+const HELD_NO_MERGE_METHOD =
+  "the repository allows no merge method (merge commits, squash and rebase are all off), which an administrator changes in its settings on GitHub";
+
+/**
+ * Why the App is not merging in the repository for now, if it is held off:
+ * the reason recorded when it last tried, which stands for fifteen minutes.
+ */
+export async function heldMergeReason(source: {
+  organizationId: string;
+  repo: string;
+}): Promise<string | null> {
+  const held = await cacheManager
+    .get<unknown>(heldMergesKey(source.organizationId, source.repo))
+    .catch(() => null);
+  return typeof held === "string" ? held : held ? HELD_NO_PERMISSION : null;
+}
+
+/** The key under which a merge still owes a pull of the synced branch. */
+function pendingResyncKey(organizationId: string, repo: string) {
+  return checkKey("resync", organizationId, repo);
+}
+
+/**
+ * Note that a merge on the synced branch owes a pull, before the pull is
+ * queued: a process that stops in between leaves the note for the next
+ * minute's pass to act on. The note is the repository's, not one pull
+ * request's, so only a queued pull clears it; a refusal never does.
+ */
+async function noteSyncOwed(organizationId: string, repo: string) {
+  await cacheManager
+    .set(pendingResyncKey(organizationId, repo), true, CHECKED_TTL)
+    .catch((err) =>
+      logger.warn(
+        { organizationId, err },
+        "OpenAPPA could not note the pull that is to follow a merge",
+      ),
+    );
+}
+
+/**
+ * Queue the pull that applies a merge, and clear the note that one is owed.
+ * One that cannot be queued stays noted, so the next minute's pass queues
+ * it; the schedule applies the merge in any case.
+ */
+async function queueSyncAfterMerge(organizationId: string, repo: string) {
+  try {
+    // A pull queued or running already may have read the branch before this
+    // merge: the note stays until one queued after the merge is in.
+    if (!(await OpenAppaGithubSyncModel.enqueue(organizationId))) {
+      logger.debug(
+        { organizationId },
+        "A pull is queued or running already; the one a merge owes is queued once it is done",
+      );
+      return;
+    }
+  } catch (err) {
+    logger.warn(
+      { organizationId, err },
+      "OpenAPPA could not queue the pull that applies a merged rules pull request; the next minute queues it again",
+    );
+    return;
+  }
+  await cacheManager
+    .delete(pendingResyncKey(organizationId, repo))
+    .catch(() => null);
+}
+
+/**
+ * The key a pull request's posted verdict is kept under. What the source
+ * reads decides which files a pull request governs, so a policy file or
+ * servers' folder moved makes every stored result stale, the unrelated ones
+ * included.
+ */
+function checkedResultKey(
+  source: PolicySource,
+  pull: Pick<CheckedPull, "head" | "result">,
+) {
+  return checkKey(
+    "checked",
+    "v4",
+    source.organizationId,
+    source.repo,
+    source.ref ?? "",
+    source.path,
+    serverRulesFolderOf(source),
+    String(source.githubAppConfigId ?? ""),
+    POLICY_CHECK_NAME,
+    pull.head,
+    pull.result,
+  );
+}
+
+/**
+ * What the minute's checks stored for one pull request result: the posted
+ * outcome, and under auto-merge the last refused merge. Undefined before the
+ * first check, or once the stored shape has moved on.
+ */
+export async function storedPullCheck(
+  source: PolicySource,
+  pull: { head: string; result: string },
+): Promise<
+  | {
+      accepted: boolean;
+      reason: string | null;
+      mergeRefusedAt?: number;
+      mergeRefusals?: number;
+      mergeRefusedReason?: string;
+    }
+  | undefined
+> {
+  const stored = await cacheManager
+    .get<CheckedResult>(checkedResultKey(source, pull))
+    .catch(() => undefined);
+  if (!stored?.judged) return undefined;
+  return {
+    accepted: stored.accepted,
+    reason: stored.reason,
+    ...(stored.mergeRefusedAt !== undefined
+      ? {
+          mergeRefusedAt: stored.mergeRefusedAt,
+          mergeRefusals: stored.mergeRefusals ?? 1,
+        }
+      : {}),
+    ...(stored.mergeRefusedReason
+      ? { mergeRefusedReason: stored.mergeRefusedReason }
+      : {}),
+  };
+}
+
+/** Why GitHub refused a merge, in its words where it gave any. */
+function refusalReason(refused: { status: number; message?: string }): string {
+  return refused.message
+    ? `GitHub answered ${refused.status}: ${refused.message}`
+    : `GitHub answered ${refused.status}`;
+}
+
+/**
+ * A setup pull request still open while a rule already requires the check:
+ * nothing can be judged before the first commit is accepted, so the check is
+ * posted as skipped on that pull request alone, once, and setup can finish.
+ * Any other pull request waits, as it would without the import: the rule
+ * gates it until the first commit is accepted and the checks begin. Without
+ * such a rule nothing is posted.
+ */
+async function postSetupPendingChecks(row: SyncRow) {
+  if (!row.repo || !row.path || !row.githubAppConfigId) return;
+  const source = {
+    ...row,
+    repo: row.repo,
+    path: row.path,
+    sourceCommit: row.sourceCommit ?? "",
+  };
+  const refused = refusedChecksKey(row.organizationId, source.repo);
+  if (await cacheManager.get(refused)) return;
+  let read: Awaited<ReturnType<typeof readPolicyCheckRule>>;
+  try {
+    read = await readPolicyCheckRule(source, POLICY_CHECK_NAME);
+  } catch {
+    return;
+  }
+  if (!read.ok || !read.found) return;
+  // Only the commit Archestra opened the request with: a commit pushed onto
+  // its branch since would merge unchecked under the skip.
+  const { api } = await resolveOpenAppaGithubAccess(source, {
+    pull_requests: "read",
+  });
+  const kept = await keptSetupCommit({
+    organizationId: row.organizationId,
+    host: "github",
+    api,
+    repo: source.repo,
+    number: row.setupPullRequestNumber ?? 0,
+  });
+  if (!kept) return;
+  let pulls: CheckedPull[];
+  try {
+    pulls = await githubPullRequests(source);
+  } catch (error) {
+    if (
+      !(error instanceof MissingGithubPermission) &&
+      !(error instanceof CheckRefused)
+    )
+      throw error;
+    await refuseChecks({
+      key: refused,
+      organizationId: row.organizationId,
+      reason: error.message,
+    });
+    return;
+  }
+  const outcome: PullOutcome = {
+    accepted: true,
+    skipped: true,
+    title: "Git sync setup in progress",
+    reason: `${archestraMcpBranding.appName} checks this repository's pull requests once its setup pull request has merged and the policy is pulled. A branch rule already requires this check${read.url ? ` (${read.url})` : ""}, so it is posted as skipped until then.`,
+  };
+  for (const pull of pulls.filter(
+    (candidate) =>
+      candidate.number === row.setupPullRequestNumber &&
+      candidate.head === kept,
+  )) {
+    const key = checkKey(
+      "setup-posted",
+      row.organizationId,
+      source.repo,
+      pull.head,
+    );
+    if (await cacheManager.get(key)) continue;
+    try {
+      await pull.post(outcome);
+    } catch (error) {
+      if (error instanceof CheckRefused) {
+        await refuseChecks({
+          key: refused,
+          organizationId: row.organizationId,
+          reason: "a GitHub App needs the Checks permission (read and write)",
+        });
+        return;
+      }
+      logger.warn(
+        { organizationId: row.organizationId, err: error },
+        "OpenAPPA could not post the policy check on the setup pull request; it tries again next minute",
+      );
+      continue;
+    }
+    await cacheManager.set(key, true, CHECKED_TTL).catch(() => undefined);
   }
 }
 
@@ -1218,7 +2032,19 @@ async function forgetRefusedChecks(organizationId: string, repo: string) {
 }
 
 /** A shared cache key for the policy check, from its parts. */
-function checkKey(kind: "checked" | "refused", ...parts: string[]) {
+function checkKey(
+  kind:
+    | "checked"
+    | "refused"
+    | "merge"
+    | "resync"
+    | "leftover"
+    | "leftover-posted"
+    | "leftover-read"
+    | "self-service-seen"
+    | "setup-posted",
+  ...parts: string[]
+) {
   return `${CacheKey.OpenAppaPolicyCheck}-${kind}-${createHash("sha256")
     .update(JSON.stringify(parts))
     .digest("hex")}` as const;
@@ -1274,12 +2100,19 @@ async function deploymentState(
 }
 
 type PullOutcome =
-  /** Passed; `skipped` when the pull request changes nothing Git sync reads. */
-  | { accepted: true; skipped?: true }
+  /**
+   * Passed; `skipped` when the pull request changes nothing Git sync reads,
+   * or when self-service is off and a leftover rule still asks for the
+   * check, which `title` and `reason` then say.
+   */
+  | { accepted: true; skipped?: true; title?: string; reason?: string }
   | { accepted: false; title?: string; reason: string };
 
 type CheckedPull = {
   head: string;
+  /** The pull request's number and head branch, where the host gives them. */
+  number?: number;
+  ref?: string;
   /** The commit checked: GitHub's merge result when it has one, else the head. */
   result: string;
   post: (outcome: PullOutcome) => Promise<void>;
@@ -1292,10 +2125,14 @@ type CheckedPull = {
   judge?: () => Promise<Judged | null>;
 };
 
-/** What a pull request changes that Git sync reads, and whether it may. */
-type Judged = { governed: string[]; outcome: PullOutcome };
+/**
+ * What a pull request changes that Git sync reads, whether it may, and
+ * whether it is self-served: one this deployment's App opened on a server
+ * rules branch, for a member it names.
+ */
+type Judged = { governed: string[]; outcome: PullOutcome; selfServed: boolean };
 
-type PolicySource = RepositorySource & {
+export type PolicySource = RepositorySource & {
   path: string;
   ref: string | null;
   validationDirectory?: string | null;
@@ -1356,6 +2193,8 @@ async function outcomeAt(params: {
 }
 
 function checkSummary(outcome: PullOutcome) {
+  if (outcome.accepted && outcome.title && outcome.reason)
+    return { title: outcome.title, summary: outcome.reason };
   if (outcome.accepted && outcome.skipped)
     return {
       title: "No policy files changed",
@@ -1395,7 +2234,7 @@ async function githubPullRequests(
   const pulls = await githubJson<
     Array<{
       number?: number;
-      head?: { sha?: string };
+      head?: { sha?: string; ref?: string };
       merge_commit_sha?: string | null;
       user?: { id?: number; login?: string; type?: string } | null;
     }>
@@ -1407,14 +2246,17 @@ async function githubPullRequests(
         ? new CheckRefused(status)
         : new ApiError(502, `GitHub returned HTTP ${status}`),
   });
-  return pulls.flatMap((pull) => {
+  const checked = pulls.flatMap((pull): CheckedPull[] => {
     const head = pull.head?.sha;
     if (!head || !/^[a-f0-9]{40}$/.test(head)) return [];
     const merged = pull.merge_commit_sha;
     const number = pull.number;
+    const ref = pull.head?.ref;
     return [
       {
         head,
+        ...(number ? { number } : {}),
+        ...(ref ? { ref } : {}),
         result: merged && /^[a-f0-9]{40}$/.test(merged) ? merged : head,
         post: (outcome) =>
           postGithubCheck({ base, token, head, appId, outcome, checkName }),
@@ -1427,6 +2269,7 @@ async function githubPullRequests(
                   api,
                   base,
                   number,
+                  ref: ref ?? null,
                   user: pull.user ?? null,
                 }),
             }
@@ -1434,6 +2277,7 @@ async function githubPullRequests(
       },
     ];
   });
+  return checked;
 }
 
 // --- Authorship: who asked for a pull request, and whether they may ---
@@ -1472,8 +2316,10 @@ async function judgeGithubPull(params: {
   api: string;
   base: string;
   number: number;
+  /** The head branch: only a server rules branch is self-served. */
+  ref: string | null;
   user: GithubPullUser | null;
-}): Promise<{ outcome: PullOutcome; governed: string[] } | null> {
+}): Promise<Judged | null> {
   const { source, token, base, number } = params;
   const appName = archestraMcpBranding.appName;
   const changed = await pagedGithub<{
@@ -1485,9 +2331,27 @@ async function judgeGithubPull(params: {
     max: MAX_PULL_FILES,
   });
   if (changed === null) return null;
+  // A pull request just opened can list no files for a moment, before GitHub
+  // has its diff: one that says it changes files is checked next minute
+  // rather than passed as changing nothing.
+  if (changed.length === 0) {
+    const opened = await githubCall<{ changed_files?: number }>({
+      token,
+      url: `${base}/pulls/${number}`,
+    }).catch(() => null);
+    if (!opened?.ok) return null;
+    if ((opened.body.changed_files ?? 0) > 0) {
+      logger.debug(
+        { organizationId: source.organizationId, number },
+        "A pull request lists no files yet; its check waits for the next minute",
+      );
+      return null;
+    }
+  }
   if (changed === "over")
     return {
       governed: [],
+      selfServed: false,
       outcome: {
         accepted: false,
         title: "This pull request changes too many files to check",
@@ -1504,13 +2368,14 @@ async function judgeGithubPull(params: {
   );
   const paths = governed.map((file) => file.path);
   if (governed.length === 0)
-    return { governed: paths, outcome: { accepted: true } };
+    return { governed: paths, selfServed: false, outcome: { accepted: true } };
   const own = await ownIdentity({ source });
   if (own === null) return null;
   const byArchestra =
     own !== undefined &&
     own.login.toLowerCase() === params.user?.login?.toLowerCase();
-  if (!byArchestra) return { governed: paths, outcome: { accepted: true } };
+  if (!byArchestra)
+    return { governed: paths, selfServed: false, outcome: { accepted: true } };
   const requester = await archestraPullRequester({
     ...params,
     own,
@@ -1518,38 +2383,46 @@ async function judgeGithubPull(params: {
   });
   if (requester === null) return null;
   if ("refused" in requester)
-    return { governed: paths, outcome: requester.refused };
+    return { governed: paths, selfServed: false, outcome: requester.refused };
   const { userId, email } = requester;
   const prefixes = governed.some((file) => file.prefix !== null)
     ? await catalogToolPrefixes(source.organizationId)
     : null;
   let needsPolicyPermission = false;
   for (const file of governed) {
-    const catalogIds = file.prefix ? prefixes?.byPrefix.get(file.prefix) : null;
-    if (!catalogIds || catalogIds.size !== 1) {
-      // No server of that name, or more than one: the policy's own matter.
+    if (
+      !file.prefix ||
+      !prefixes?.byPrefix.get(file.prefix)?.size ||
+      governsBuiltInTools(file.prefix, prefixes)
+    ) {
+      // No server carries that prefix, or the built-in tools do: the policy's
+      // own matter.
       needsPolicyPermission = true;
       continue;
     }
-    const [catalogId] = [...catalogIds] as [string];
-    const allowed = await (await port("scopedPermissions")).allows({
+    // The file governs every server whose tools carry its prefix, so the
+    // requester needs edit access to each one that owns it.
+    const refused = await ownersNotEditable({
       organizationId: source.organizationId,
       userId,
-      resource: "mcpRegistry",
-      scope: catalogId,
-      action: "update",
+      servers: await rulesFileServers(file.prefix, prefixes),
     });
-    if (!allowed) {
-      const catalog = await InternalMcpCatalogModel.findById(catalogId);
+    if (refused.length > 0)
       return {
         governed: paths,
+        selfServed: false,
         outcome: {
           accepted: false,
           title: "The requester may not change these rules",
-          reason: `${email} may not change ${file.path}: that takes edit access to the MCP server ${catalog?.name ?? file.prefix} in the MCP registry.`,
+          reason: `${email} may not change ${file.path}: that takes edit access to ${await ownersAsNamedFor(
+            {
+              organizationId: source.organizationId,
+              userId,
+              servers: refused,
+            },
+          )} in the MCP registry.`,
         },
       };
-    }
   }
   if (needsPolicyPermission) {
     const permissions = await RoleCompositionModel.getUserPermissions({
@@ -1560,10 +2433,12 @@ async function judgeGithubPull(params: {
       const first = governed.find(
         (file) =>
           !file.prefix ||
-          (prefixes?.byPrefix.get(file.prefix)?.size ?? 0) !== 1,
+          !prefixes?.byPrefix.get(file.prefix)?.size ||
+          governsBuiltInTools(file.prefix, prefixes),
       );
       return {
         governed: paths,
+        selfServed: false,
         outcome: {
           accepted: false,
           title: "The requester may not change the policy",
@@ -1572,7 +2447,13 @@ async function judgeGithubPull(params: {
       };
     }
   }
-  return { governed: paths, outcome: { accepted: true } };
+  return {
+    governed: paths,
+    // Opened by the App for a member who may make the change: auto-merge
+    // takes it only on a server rules branch, never on any other proposal.
+    selfServed: isServerRulesBranch(params.ref ?? ""),
+    outcome: { accepted: true },
+  };
 }
 
 /**
@@ -1832,6 +2713,16 @@ async function saveSource(params: {
   userId: string;
   source: AppaGithubSource & { setupPullRequestNumber?: number };
 }) {
+  // Auto-merge rides on self-service, and both take a GitHub App: a source
+  // saved without either keeps auto-merge off, so a later switch on merges
+  // nothing nobody asked for.
+  params.source = {
+    ...params.source,
+    selfServiceAutoMerge:
+      params.source.selfService &&
+      !!params.source.githubAppConfigId &&
+      params.source.selfServiceAutoMerge,
+  };
   if (
     (params.source.githubPatId ||
       params.source.githubAppConfigId ||
@@ -1904,6 +2795,18 @@ async function saveSource(params: {
   // branch it would have left protected.
   await beforeSourceChange(params.organizationId, params.source);
   await OpenAppaGithubSyncModel.save(params.organizationId, params.source);
+  // Saved with auto-merge on, the App may just have been granted what it
+  // lacked: the next minute's round tries the merge rather than waiting out
+  // a hold. A save that failed above lifts nothing.
+  if (params.source.selfServiceAutoMerge)
+    await cacheManager
+      .delete(heldMergesKey(params.organizationId, params.source.repo))
+      .catch((err) =>
+        logger.warn(
+          { organizationId: params.organizationId, err },
+          "OpenAPPA could not forget a held merge",
+        ),
+      );
 }
 
 /** The policy at a GitHub source's ref, or the setup pull request's state while it is open. */
@@ -2002,12 +2905,6 @@ function assertEnabled() {
       "Enable OpenAPPA on the server before configuring Git sync",
     );
 }
-class GithubRepositoryRulesError extends ApiError {
-  constructor() {
-    super(409, "GitHub repository rules block the initial policy commit");
-  }
-}
-
 async function recoverPristineTemplateRepository(params: {
   api: string;
   repo: string;
@@ -2027,24 +2924,29 @@ async function recoverPristineTemplateRepository(params: {
     });
     if (
       !repository.private ||
-      repository.full_name?.toLowerCase() !== params.repo.toLowerCase() ||
-      repository.template_repository?.full_name?.toLowerCase() !==
-        TEMPLATE_REPO.toLowerCase()
+      repository.full_name?.toLowerCase() !== params.repo.toLowerCase()
     )
       throw params.error;
-    const [existing, template] = await Promise.all([
-      githubJson<{ sha?: string }>({
-        url: `${params.api}/repos/${params.repo}/contents/appa.toml`,
-        token: params.token,
-        errors: githubSyncErrors,
-      }),
-      githubJson<{ sha?: string }>({
-        url: `${params.api}/repos/${TEMPLATE_REPO}/contents/appa.toml`,
-        token: params.token,
-        errors: githubSyncErrors,
-      }),
-    ]);
-    if (!existing.sha || existing.sha !== template.sha) throw params.error;
+    // A copy GitHub made from the template, or any private repository that
+    // holds the template's example unchanged: both are fresh copies to seed.
+    const existing = await githubJson<{ sha?: string }>({
+      url: `${params.api}/repos/${params.repo}/contents/appa.toml`,
+      token: params.token,
+      errors: githubSyncErrors,
+    });
+    if (!existing.sha) throw params.error;
+    if (existing.sha === templateExampleBlob()) return repository;
+    if (
+      repository.template_repository?.full_name?.toLowerCase() !==
+      TEMPLATE_REPO.toLowerCase()
+    )
+      throw params.error;
+    const template = await githubJson<{ sha?: string }>({
+      url: `${params.api}/repos/${TEMPLATE_REPO}/contents/appa.toml`,
+      token: params.token,
+      errors: githubSyncErrors,
+    });
+    if (existing.sha !== template.sha) throw params.error;
     return repository;
   } catch {
     throw params.error;
@@ -2067,7 +2969,12 @@ async function seedEmptyRepository(params: {
   repo: string;
   token: string;
   policy: string;
-}): Promise<{ branch: string; setupPullRequestNumber?: number }> {
+  transferred: SetupFile[];
+}): Promise<{
+  branch: string;
+  setupPullRequestNumber?: number;
+  setupCommit?: string;
+}> {
   const { token } = params;
   const base = `${params.api}/repos/${params.repo}`;
   const files = OPENAPPA_TEMPLATE.files.map((file) =>
@@ -2092,41 +2999,391 @@ async function seedEmptyRepository(params: {
   const parent = initial.commit?.sha;
   if (!branch || !parent || !/^[a-f0-9]{40}$/.test(parent))
     throw new ApiError(502, "GitHub returned an unexpected repository");
+  const message = "Add the OpenAPPA template and current policy";
+  const { setupPullRequestNumber, setupCommit } = await commitSetupFiles({
+    base,
+    token,
+    branch,
+    parent,
+    files: [...rest, ...params.transferred],
+    message,
+    pull: {
+      title: message,
+      body: setupPullBody(params.transferred, false, "github"),
+    },
+    direct: true,
+  });
+  return { branch, setupPullRequestNumber, setupCommit };
+}
+
+/** A file setup writes into the policy repository, by its path there. */
+type SetupFile = { path: string; content: string };
+
+/**
+ * What the current policy reads beside itself in its repository, read at the
+ * commit Git sync accepted so a new repository composes the same policy:
+ * every file its `include` list names (a glob's matches with it), and the
+ * validations in the validation folder. Without a connected repository the
+ * validations are the ones kept locally.
+ */
+type SetupTransfer = {
+  /** By include entry, as the policy names it. */
+  includes: Map<string, string>;
+  /** By file name, each placed in the validation folder. */
+  validations: SetupFile[];
+};
+
+async function collectSetupTransfer(params: {
+  organizationId: string;
+  /** The policy text setup writes, whose include list decides what comes along. */
+  seed: string;
+  /** The current policy, whose own includes must be readable; an entry only the seed adds has no files to carry yet. */
+  current: string;
+}): Promise<SetupTransfer> {
+  const { organizationId } = params;
+  const entries = repositoryIncludePaths(params.seed);
+  const required = new Set(repositoryIncludePaths(params.current));
+  const [current, suite] = await Promise.all([
+    OpenAppaGithubSyncModel.find(organizationId),
+    OpenAppaPolicyTestsModel.find(organizationId),
+  ]);
+  // The commit the files are read at, as a composition reads them: kept
+  // after a disconnect, until another source replaces it.
+  const accepted =
+    current?.repo && current.sourceCommit
+      ? { ...current, repo: current.repo, sourceCommit: current.sourceCommit }
+      : null;
+  const includes = new Map<string, string>();
+  const missing = entries.find((entry) => required.has(entry));
+  if (!accepted && missing !== undefined)
+    throw new ApiError(
+      409,
+      `The current policy includes ${missing} from its repository, and Git sync has accepted no commit to copy it from. Connect the repository that holds it, or remove the include, before setting up another repository.`,
+    );
+  if (entries.length > 0 && accepted) {
+    for (const [path, text] of await openappaRepositoryIncludes.read({
+      source: accepted,
+      commit: accepted.sourceCommit,
+      paths: entries,
+    }))
+      includes.set(path, text);
+  }
+  const validations: SetupFile[] = [];
+  if (accepted?.interval) {
+    const directory = suite?.directory ?? VALIDATION_DIRECTORY;
+    for (const file of await loadAppaGithubPolicyTests({
+      source: accepted,
+      directory,
+      allowEmpty: true,
+    }))
+      validations.push({
+        path: file.path.slice(directory.length + 1),
+        content: file.content,
+      });
+  } else {
+    for (const file of suite?.files ?? []) {
+      const name = file.path.slice(file.path.lastIndexOf("/") + 1);
+      if (validations.some((kept) => kept.path === name))
+        throw new ApiError(
+          400,
+          `Two validations are both named ${name}. Rename one before setting up the repository.`,
+        );
+      validations.push({ path: name, content: file.content });
+    }
+  }
+  return { includes, validations };
+}
+
+/** The transfer's files at their paths beside the policy file at `path`. */
+function transferredFiles(
+  transfer: SetupTransfer,
+  target: { path: string; validationDirectory: string },
+): SetupFile[] {
+  return [
+    ...[...transfer.includes].map(([entry, content]) => ({
+      path: repositoryPath({ path: target.path }, entry),
+      content,
+    })),
+    ...transfer.validations.map((file) => ({
+      path: `${target.validationDirectory}/${file.path}`,
+      content: file.content,
+    })),
+  ];
+}
+
+/** What the setup pull request tells its reviewer. */
+function setupPullBody(
+  transfer: SetupTransfer | SetupFile[],
+  existing: boolean,
+  host: "github" | "gitlab",
+): string {
+  const request = host === "gitlab" ? "merge request" : "pull request";
+  const hostName = host === "gitlab" ? "GitLab" : "GitHub";
+  const carried = Array.isArray(transfer)
+    ? transfer.length
+    : transfer.includes.size + transfer.validations.length;
+  const files =
+    carried === 0
+      ? ""
+      : ` It also carries ${carried === 1 ? "the file" : `the ${carried} files`} the policy reads beside itself.`;
+  return existing
+    ? `This ${request} puts your current OpenAPPA policy in place of the one in this repository.${files} Merge it as it is, or change this branch first to combine the two. Your current policy stays active until this ${request} is merged.`
+    : `Review and merge this ${request} to finish ${hostName} policy sync setup.${files} Your current policy stays active until this ${request} is merged.`;
+}
+
+/** The commit a branch points at; `setup` waits for a repository GitHub is still creating. */
+async function branchHead(params: {
+  base: string;
+  token: string;
+  branch: string;
+  setup?: boolean;
+}): Promise<string> {
+  const request = {
+    url: `${params.base}/git/ref/heads/${params.branch.split("/").map(encodeURIComponent).join("/")}`,
+    token: params.token,
+  };
+  const ref = params.setup
+    ? await githubSetupRead<{ object?: { sha?: string } }>(request)
+    : await githubJson<{ object?: { sha?: string } }>({
+        ...request,
+        errors: githubSyncErrors,
+      });
+  const sha = ref.object?.sha;
+  if (!sha || !/^[a-f0-9]{40}$/.test(sha))
+    throw new ApiError(502, "GitHub returned an invalid branch");
+  return sha;
+}
+
+/** An entry of the repository's tree: a file, a link or a folder, with its mode. */
+type TreeEntry = { path: string; type: string; mode?: string; sha?: string };
+
+/** Everything the repository holds at `commit`, with each entry's mode. */
+async function treeEntries(params: {
+  base: string;
+  token: string;
+  commit: string;
+}): Promise<TreeEntry[]> {
+  const tree = await githubJson<{
+    truncated?: boolean;
+    tree?: Array<{ path?: string; type?: string; mode?: string }>;
+  }>({
+    url: `${params.base}/git/trees/${params.commit}?recursive=1`,
+    token: params.token,
+    errors: githubSyncErrors,
+  });
+  if (tree.truncated)
+    throw new ApiError(
+      400,
+      "The repository holds too many files to read in one pass",
+    );
+  return (tree.tree ?? []).flatMap((entry) =>
+    entry.path && entry.type
+      ? [{ path: entry.path, type: entry.type, mode: entry.mode }]
+      : [],
+  );
+}
+
+/**
+ * What setup removes from a repository whose policy includes globs: the
+ * files those globs would read that it does not write. A path among the
+ * written or removed ones that is not a regular file, a symbolic link or a
+ * folder, is refused, as any proposal refuses it.
+ */
+async function strayFilesToRemove(params: {
+  base: string;
+  token: string;
+  commit: string;
+  content: string;
+  policyPath: string;
+  files: SetupFile[];
+}): Promise<string[]> {
+  if (!hasRepositoryIncludeGlob(params.content)) return [];
+  const entries = await treeEntries(params);
+  const remove = strayGlobMatches({
+    content: params.content,
+    policyPath: params.policyPath,
+    paths: entries
+      .filter((entry) => entry.type === "blob")
+      .map((entry) => entry.path),
+    written: params.files.map((file) => file.path),
+  });
+  return remove;
+}
+
+/**
+ * Refuse a setup write or removal at a path that is not a regular file, or
+ * under a folder that is not a folder: a symbolic link or a submodule there
+ * is left alone, as any proposal leaves it. Only the trees along the paths
+ * are read, so a large repository costs a few small reads, and a path that
+ * does not exist yet is fine: setup creates it.
+ */
+async function assertRegularSetupPaths(params: {
+  base: string;
+  token: string;
+  commit: string;
+  paths: string[];
+}): Promise<void> {
+  const trees = new Map<string, TreeEntry[]>();
+  const read = async (sha: string) => {
+    const cached = trees.get(sha);
+    if (cached) return cached;
+    const tree = await githubJson<{
+      truncated?: boolean;
+      tree?: Array<{
+        path?: string;
+        type?: string;
+        mode?: string;
+        sha?: string;
+      }>;
+    }>({
+      url: `${params.base}/git/trees/${sha}`,
+      token: params.token,
+      errors: githubSyncErrors,
+    });
+    const entries = (tree.tree ?? []).flatMap((entry) =>
+      entry.path && entry.type
+        ? [
+            {
+              path: entry.path,
+              type: entry.type,
+              mode: entry.mode,
+              sha: entry.sha,
+            },
+          ]
+        : [],
+    );
+    trees.set(sha, entries);
+    return entries;
+  };
+  for (const path of new Set(params.paths)) {
+    const segments = path.split("/");
+    let sha = params.commit;
+    for (const [index, segment] of segments.entries()) {
+      const entry = (await read(sha)).find((item) => item.path === segment);
+      if (!entry) break;
+      const last = index === segments.length - 1;
+      const regular = last
+        ? entry.type === "blob" &&
+          (entry.mode === undefined || REGULAR_FILE_MODES.has(entry.mode))
+        : entry.type === "tree";
+      if (!regular)
+        throw new ApiError(
+          400,
+          `${path} is not a regular file in the repository`,
+        );
+      if (last || !entry.sha) break;
+      sha = entry.sha;
+    }
+  }
+}
+
+const REGULAR_FILE_MODES = new Set(["100644", "100755"]);
+
+/** The stray files to remove, once every written and removed path is checked. */
+async function regularStrayFilesToRemove(params: {
+  base: string;
+  token: string;
+  commit: string;
+  content: string;
+  policyPath: string;
+  files: SetupFile[];
+}): Promise<string[]> {
+  const remove = await strayFilesToRemove(params);
+  await assertRegularSetupPaths({
+    base: params.base,
+    token: params.token,
+    commit: params.commit,
+    paths: [...params.files.map((file) => file.path), ...remove],
+  });
+  return remove;
+}
+
+/**
+ * One commit on top of `parent` that writes `files`, advanced onto `branch`
+ * when `direct`, else proposed as a pull request against it; rules that
+ * protect the branch turn a direct write into the pull request too. An App
+ * without the Workflows permission gets everything but the validation
+ * workflow. Files that leave the tree as it is make no commit at all.
+ */
+async function commitSetupFiles(params: {
+  base: string;
+  token: string;
+  branch: string;
+  parent: string;
+  files: SetupFile[];
+  /** Paths the commit removes. */
+  remove?: string[];
+  message: string;
+  pull: { title: string; body: string };
+  direct: boolean;
+}): Promise<{ setupPullRequestNumber?: number; setupCommit?: string }> {
+  const { base, token, branch, parent } = params;
+  const files = firstFileAtEachPath(params.files);
+  const removed = (params.remove ?? []).map((path) => ({
+    path,
+    mode: "100644",
+    type: "blob",
+    sha: null,
+  }));
   const parentCommit = await githubJson<{ tree?: { sha?: string } }>({
     url: `${base}/git/commits/${parent}`,
     token,
     errors: githubSyncErrors,
   });
-  const commitFiles = async (entries: typeof rest) => {
+  const commitFiles = async (entries: SetupFile[]) => {
     const tree = await githubJson<{ sha: string }>({
       url: `${base}/git/trees`,
       token,
       method: "POST",
       body: {
         base_tree: parentCommit.tree?.sha,
-        tree: entries.map((file) => ({
-          path: file.path,
-          mode: "100644",
-          type: "blob",
-          content: file.content,
-        })),
+        tree: [
+          ...entries.map((file) => ({
+            path: file.path,
+            mode: "100644",
+            type: "blob",
+            content: file.content,
+          })),
+          ...removed,
+        ],
       },
       errors: githubSyncErrors,
     });
+    // Identical bytes make the same tree: nothing to commit, and GitHub
+    // cannot open a pull request with an empty diff.
+    if (tree.sha === parentCommit.tree?.sha) return null;
     return githubJson<{ sha: string }>({
       url: `${base}/git/commits`,
       token,
       method: "POST",
-      body: {
-        message: "Add the OpenAPPA template and current policy",
-        tree: tree.sha,
-        parents: [parent],
-      },
+      body: { message: params.message, tree: tree.sha, parents: [parent] },
       errors: githubSyncErrors,
     });
   };
+  const propose = async (sha: string) => {
+    const head = `archestra/openappa-setup-${randomUUID()}`;
+    await githubJson({
+      url: `${base}/git/refs`,
+      token,
+      method: "POST",
+      body: { ref: `refs/heads/${head}`, sha },
+      errors: githubSyncErrors,
+    });
+    const pull = await githubJson<{ number?: number }>({
+      url: `${base}/pulls`,
+      token,
+      method: "POST",
+      errors: githubSyncErrors,
+      body: { ...params.pull, head, base: branch },
+    });
+    if (!Number.isSafeInteger(pull.number) || (pull.number ?? 0) <= 0)
+      throw new ApiError(502, "GitHub returned an invalid pull request");
+    return { setupPullRequestNumber: pull.number, setupCommit: sha };
+  };
+  let commit = await commitFiles(files);
+  if (!commit) return {};
+  if (!params.direct) return propose(commit.sha);
   let outcome: "rules" | "workflow" | null = null;
-  let commit = await commitFiles(rest);
   const advance = (sha: string) =>
     githubJson({
       url: `${base}/git/refs/heads/${branch.split("/").map(encodeURIComponent).join("/")}`,
@@ -2146,7 +3403,7 @@ async function seedEmptyRepository(params: {
           outcome = "rules";
         return new ApiError(
           502,
-          `GitHub returned HTTP ${status} while writing the template. Check repository access and App permissions.`,
+          `GitHub returned HTTP ${status} while committing the initial policy. Check repository access and App permissions.`,
         );
       }),
     });
@@ -2154,41 +3411,22 @@ async function seedEmptyRepository(params: {
     outcome = null;
     try {
       await advance(commit.sha);
-      return { branch };
+      return {};
     } catch (error) {
       if (outcome === "workflow" && attempt === 0) {
+        // Only workflow files need that permission; a validation folder
+        // under .github stays.
         commit = await commitFiles(
-          rest.filter((file) => !file.path.startsWith(".github/")),
+          files.filter((file) => !file.path.startsWith(".github/workflows/")),
         );
+        if (!commit) return {};
         continue;
       }
       if (outcome !== "rules") throw error;
-      const head = `archestra/openappa-setup-${randomUUID()}`;
-      await githubJson({
-        url: `${base}/git/refs`,
-        token,
-        method: "POST",
-        body: { ref: `refs/heads/${head}`, sha: commit.sha },
-        errors: githubSyncErrors,
-      });
-      const pull = await githubJson<{ number?: number }>({
-        url: `${base}/pulls`,
-        token,
-        method: "POST",
-        errors: githubSyncErrors,
-        body: {
-          title: "Add the OpenAPPA template and current policy",
-          body: "Review and merge this pull request to finish GitHub policy sync setup. Your current policy stays active until this pull request is merged.",
-          head,
-          base: branch,
-        },
-      });
-      if (!Number.isSafeInteger(pull.number) || (pull.number ?? 0) <= 0)
-        throw new ApiError(502, "GitHub returned an invalid pull request");
-      return { branch, setupPullRequestNumber: pull.number };
+      return propose(commit.sha);
     }
   }
-  throw new ApiError(502, "GitHub didn't accept the template");
+  throw new ApiError(502, "GitHub didn't accept the initial policy");
 }
 /** Where the template keeps policy validations; also the default elsewhere. */
 const VALIDATION_DIRECTORY = "traces";
@@ -2340,24 +3578,159 @@ const SAFE_PREFIX = /^[A-Za-z0-9_-][A-Za-z0-9_.-]*$/;
 type ToolPrefixes = Awaited<ReturnType<typeof catalogToolPrefixes>>;
 
 /**
- * Whether a server has a rules file of its own: named by its own slug, and
- * only when every one of its tools carries that prefix and no other server's
- * tool does, so no server reaches another's file through its name.
+ * Why a server has no rules file, or `null` when it has one. The file is
+ * named by the server's own slug, which must be a safe file name, and every
+ * one of its tools carries that prefix, so no server reaches another's file,
+ * or the built-in tools, through its name. Other servers whose tools carry
+ * the same prefix share the file.
  */
-export function hasOwnFile(
-  catalog: { id: string; name: string },
-  prefixes: ToolPrefixes,
-): boolean {
+export function rulesFileRefusal(params: {
+  catalog: { id: string; name: string };
+  /** The server's own tool names. */
+  tools: readonly string[];
+  prefixes: ToolPrefixes;
+}): string | null {
+  const { catalog, tools, prefixes } = params;
   const prefix = slugifyMcpServerName(catalog.name);
-  const carried = prefixes.byCatalog.get(catalog.id);
+  if (!SAFE_PREFIX.test(prefix) || prefix.includes("__"))
+    return `${catalog.name} has no rules file: its tool prefix, ${prefix}, is not a safe file name or holds "__".`;
+  const stray = [
+    ...new Set(
+      tools.flatMap((tool) => {
+        const { serverName } = parseFullToolName(tool);
+        if (serverName === prefix) return [];
+        return [
+          serverName === null ? `${tool} (no prefix)` : `${serverName}__`,
+        ];
+      }),
+    ),
+  ].sort();
+  if (stray.length > 0)
+    return `${catalog.name} has no rules file: some of its tools carry other prefixes than ${prefix}__ (${stray.join(", ")}).`;
+  if (governsBuiltInTools(prefix, prefixes))
+    return `${catalog.name} has no rules file: its tools carry the prefix ${prefix}__ of the built-in ${archestraMcpBranding.catalogName} tools, which only the organization's own policy governs.`;
+  if (
+    [...(prefixes.byPrefix.get(prefix) ?? [])].some(
+      (id) => id !== catalog.id && prefixes.conflicting.has(id),
+    )
+  )
+    return `${catalog.name} has no rules file: another MCP server's tools put "__" inside its tool prefix, ${prefix}__.`;
+  return null;
+}
+
+/**
+ * Whether a prefix is the built-in tools' own: their catalog carries it, or it
+ * is one of their names (a white-labeled deployment's, and the default name
+ * they still answer to). A catalog that predates the name check can still
+ * carry it, and a rules file for it would govern the built-in tools too.
+ */
+function governsBuiltInTools(prefix: string, prefixes: ToolPrefixes): boolean {
   return (
-    SAFE_PREFIX.test(prefix) &&
-    !prefix.includes("__") &&
-    !prefixes.conflicting.has(catalog.id) &&
-    carried?.size === 1 &&
-    carried.has(prefix) &&
-    ![...(prefixes.byPrefix.get(prefix) ?? [])].some((id) => id !== catalog.id)
+    archestraMcpBranding.allowedServerNames.includes(prefix) ||
+    [...(prefixes.byPrefix.get(prefix) ?? [])].some(isBuiltInCatalogId)
   );
+}
+
+/** A server a rules file governs, and whether its editors gate the file. */
+type RulesFileServer = {
+  id: string;
+  name: string;
+  scope: "personal" | "team" | "org";
+  owner: boolean;
+};
+
+/**
+ * Every server a rules file governs: each catalog whose tools carry its
+ * prefix, since rules are keyed by tool name. The shared entries (scope
+ * `org` or `team`) own the file; members' personal copies follow it and
+ * gate nothing, unless no shared entry carries the prefix.
+ */
+export async function rulesFileServers(
+  prefix: string,
+  prefixes: ToolPrefixes,
+): Promise<RulesFileServer[]> {
+  const catalogs = await InternalMcpCatalogModel.getByIds([
+    ...(prefixes.byPrefix.get(prefix) ?? []),
+  ]);
+  const shared = [...catalogs.values()].some(
+    (catalog) => catalog.scope !== "personal",
+  );
+  return [...catalogs.values()]
+    .map((catalog) => ({
+      id: catalog.id,
+      name: catalog.name,
+      scope: catalog.scope,
+      owner: !shared || catalog.scope !== "personal",
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+}
+
+/** Names as a sentence lists them: "a", "a and b", "a, b and c". */
+export function listedNames(names: readonly string[]): string {
+  return names.length <= 1
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
+
+/**
+ * Owners as a check summary or pull request body names them: by name when
+ * the member may open them in the MCP registry, counted otherwise, since
+ * everyone who reads the repository reads both.
+ */
+export async function ownersAsNamedFor(params: {
+  organizationId: string;
+  userId: string;
+  servers: readonly RulesFileServer[];
+}): Promise<string> {
+  const permissions = await port("scopedPermissions");
+  const readable = await Promise.all(
+    params.servers.map((server) =>
+      permissions.allows({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        resource: "mcpRegistry",
+        scope: server.id,
+        action: "read",
+      }),
+    ),
+  );
+  const named = params.servers
+    .filter((_, index) => readable[index])
+    .map((server) => server.name);
+  const unseen = params.servers.length - named.length;
+  const hidden =
+    unseen === 0
+      ? []
+      : [
+          unseen === 1
+            ? "an MCP server they cannot see"
+            : `${unseen} MCP servers they cannot see`,
+        ];
+  if (named.length === 0) return listedNames(hidden);
+  const items = [...named, ...hidden];
+  return `the MCP server${items.length > 1 ? "s" : ""} ${listedNames(items)}`;
+}
+
+/** The owners of a rules file a member may not edit in the MCP registry. */
+export async function ownersNotEditable(params: {
+  organizationId: string;
+  userId: string;
+  servers: readonly RulesFileServer[];
+}): Promise<RulesFileServer[]> {
+  const permissions = await port("scopedPermissions");
+  const owners = params.servers.filter((server) => server.owner);
+  const allowed = await Promise.all(
+    owners.map((server) =>
+      permissions.allows({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        resource: "mcpRegistry",
+        scope: server.id,
+        action: "update",
+      }),
+    ),
+  );
+  return owners.filter((_, index) => !allowed[index]);
 }
 
 // =============================================================================
@@ -2365,12 +3738,7 @@ export function hasOwnFile(
 // =============================================================================
 
 /** The permissions the GitHub App needs, each tried as its own job token. */
-const GITHUB_APP_PERMISSIONS = [
-  "contents",
-  "pull_requests",
-  "checks",
-  "administration",
-] as const;
+const GITHUB_APP_PERMISSIONS = ["contents", "pull_requests", "checks"] as const;
 
 export type RepositoryProtection = {
   /** The name of the policy check, and of the ruleset that requires it. */
@@ -2391,7 +3759,12 @@ export type RepositoryProtection = {
       granted: boolean;
     }>;
   };
-  /** The ruleset on the synced branch. */
+  /**
+   * Whether a rule on the synced branch requires the policy check, as GitHub
+   * evaluates the branch. Archestra writes no rule: `missing` and
+   * `incomplete` carry the ruleset an administrator imports, and the page to
+   * import it on.
+   */
   branchRules: {
     state:
       | "active"
@@ -2400,49 +3773,51 @@ export type RepositoryProtection = {
       | "needs_permission"
       | "unavailable"
       | "error";
+    /** The ruleset that requires the check, on its host. */
     url?: string;
     detail?: string;
-    /** Bypass entries an administrator added on GitHub: they skip these rules. */
-    bypassActors?: number;
     /**
-     * A ruleset requires the check while the App cannot post it, so pull
+     * A rule requires the check while the App cannot post it, so pull
      * requests wait on it. Absent while the check is posted.
      */
     checkRule?: "unposted";
+    /** The repository's Rulesets page, where a ruleset is imported or edited. */
+    settingsUrl?: string;
+    /** The ruleset to import, while no rule requires the check as it should. */
+    ruleset?: ImportRuleset;
   };
 };
 
 /**
- * The policy repository's protection while self-service is on, and with
- * `apply` the changes that bring it in line: the branch ruleset that requires
- * the policy check, which is where who may change each file is decided. Null
- * while self-service is off, or without a connected GitHub App source.
- *
- * The ruleset is written with a token limited to the policy repository and
- * Administration. A permission the App was not granted is reported, not
- * raised.
+ * The policy repository's protection while self-service is on: whether a
+ * branch rule requires the policy check, which is where who may change each
+ * file is decided, and what the GitHub App may do. Null while self-service
+ * is off, or without a connected GitHub App source. The rules are read with
+ * Metadata, which every App has; Archestra never writes them.
  */
-async function repositoryProtection(params: {
-  organizationId: string;
-  apply: boolean;
-}): Promise<RepositoryProtection | null> {
-  const row = await OpenAppaGithubSyncModel.find(params.organizationId);
-  if (!row?.sourceCommit || !selfServiceActive(row)) return null;
+async function repositoryProtection(
+  organizationId: string,
+): Promise<RepositoryProtection | null> {
+  const row = await OpenAppaGithubSyncModel.find(organizationId);
+  if (!selfServiceActive(row)) return null;
+  // The branch's rules and the App's grants are there to read as soon as
+  // the repository is connected, a setup pull request still open or not:
+  // the administrator imports the ruleset while it waits.
   const source = {
     ...row,
     repo: row.repo,
     path: row.path,
-    sourceCommit: row.sourceCommit,
+    sourceCommit: row.sourceCommit ?? "",
   };
   const checkName = POLICY_CHECK_NAME;
   const [branchRules, app] = await Promise.all([
-    githubBranchRules(source, params.apply, checkName).catch((error) => ({
+    githubBranchRules(source, checkName).catch((error) => ({
       state: "error" as const,
       detail: protectionError(error),
     })),
     githubAppReadiness(source).catch((error) => {
       logger.warn(
-        { organizationId: params.organizationId, error },
+        { organizationId, error },
         "OpenAPPA could not read the GitHub App's permissions",
       );
       return undefined;
@@ -2479,7 +3854,7 @@ export async function getAppaGithubAppGrants(
   return grants ?? null;
 }
 
-/** The last protection read or applied, by organization, for a minute. */
+/** The last protection read, by organization, for a minute. */
 const protectionStatus = new LRUCacheManager<RepositoryProtection | null>({
   maxSize: 1024,
   defaultTtl: 60_000,
@@ -2487,80 +3862,110 @@ const protectionStatus = new LRUCacheManager<RepositoryProtection | null>({
 
 /**
  * The repository's protection as the Git sync settings show it: read at most
- * once a minute, and replaced by what each sync applies.
+ * once a minute, and replaced by what each sync reads.
  */
 export async function getRepositoryProtection(
   organizationId: string,
+  options: {
+    /** Read GitHub now: the administrator just imported or edited the ruleset. */
+    fresh?: boolean;
+  } = {},
 ): Promise<RepositoryProtection | null> {
-  const cached = protectionStatus.get(organizationId);
+  const cached = options.fresh
+    ? undefined
+    : protectionStatus.get(organizationId);
   if (cached !== undefined) return cached;
-  const read = await repositoryProtection({ organizationId, apply: false });
+  const read = await repositoryProtection(organizationId);
   protectionStatus.set(organizationId, read);
   return read;
 }
 
 /**
- * Bring the repository's protection in line, as each sync does. Off, that
- * means no ruleset of Archestra's left on the repository: one left from when
- * self-service was on, by a setting or by the environment variable, would
- * hold every pull request on a check nobody posts any more.
+ * Read the repository's protection, as each sync does. On, the branch rules
+ * are read and shown. Off, a rule that still requires the check is recorded:
+ * Archestra cannot take it off, so it keeps posting the check as skipped,
+ * and the settings name the rule to remove.
  */
 async function maintainRepositoryProtection(
   organizationId: string,
+  options: {
+    /** Self-service was just turned off: read the rules whatever was seen. */
+    turnedOff?: boolean;
+  } = {},
 ): Promise<RepositoryProtection | null> {
   const row = await OpenAppaGithubSyncModel.find(organizationId);
-  if (
-    row?.interval &&
-    row.repo &&
-    row.githubAppConfigId &&
-    !selfServiceActive(row)
-  ) {
-    await withdrawRepositoryProtection(organizationId);
-    return null;
+  if (selfServiceActive(row)) {
+    const read = await repositoryProtection(organizationId);
+    protectionStatus.set(organizationId, read);
+    await forgetLeftoverRule(organizationId, row.repo);
+    await cacheManager
+      .set(selfServiceSeenKey(organizationId, row.repo), true, LEFTOVER_TTL)
+      .catch(() => undefined);
+    return read;
   }
-  const applied = await repositoryProtection({ organizationId, apply: true });
-  protectionStatus.set(organizationId, applied);
-  return applied;
-}
-
-/**
- * Take the ruleset off the repository: turning self-service off, stopping
- * the sync, or moving it to another repository leaves no rule behind that
- * requires a check nobody posts any more. Best effort: a repository the App
- * can no longer reach is logged, and the setting changes all the same.
- */
-async function withdrawRepositoryProtection(organizationId: string) {
   protectionStatus.set(organizationId, null);
-  const row = await OpenAppaGithubSyncModel.find(organizationId);
-  if (!row?.repo || !row.githubAppConfigId) return;
-  try {
-    await removeGithubBranchRules({ ...row, repo: row.repo });
-  } catch (error) {
-    logger.warn(
-      { organizationId, repo: row.repo, error },
-      "OpenAPPA could not take its ruleset off the policy repository",
-    );
+  if (row?.interval && row.repo && row.path && row.githubAppConfigId) {
+    // Only a repository self-service was on for lately can have a rule left
+    // behind; the rest is not read for one.
+    const source = { ...row, repo: row.repo };
+    if (
+      options.turnedOff ||
+      (await recordedLeftoverRule(source)) ||
+      (await cacheManager
+        .get(selfServiceSeenKey(organizationId, row.repo))
+        .catch(() => undefined))
+    )
+      await recordLeftoverRule(source);
   }
+  return null;
 }
 
 /**
- * Before a source is saved: a repository or branch the sync leaves, or a
- * source saved with self-service off, gives its ruleset back first.
+ * Before a source is saved or stopped: a rule on the branch the sync leaves
+ * that requires the check would hold every pull request there once nothing
+ * posts it, and Archestra cannot take a rule off. The change waits until the
+ * administrator removes the rule; a branch that cannot be read is theirs to
+ * look after.
  */
 async function beforeSourceChange(
   organizationId: string,
-  next: { repo: string; ref?: string | null; selfService: boolean },
+  next: {
+    repo: string;
+    ref?: string | null;
+    githubAppConfigId?: string | null;
+  } | null,
 ) {
   const current = await OpenAppaGithubSyncModel.find(organizationId);
-  if (!selfServiceActive(current)) return;
-  // Another repository, or another branch of the same one: the ruleset on
-  // the branch the sync leaves would require a check nobody posts there.
   if (
-    current?.repo !== next.repo ||
-    (current.ref ?? null) !== (next.ref ?? null) ||
-    !next.selfService
+    !current?.interval ||
+    !current.repo ||
+    !current.path ||
+    !current.githubAppConfigId
   )
-    await withdrawRepositoryProtection(organizationId);
+    return;
+  const source = { ...current, repo: current.repo };
+  // Off, only a rule recorded as left behind can hold the change; it is
+  // read again below, so one removed on GitHub meanwhile holds nothing.
+  if (!selfServiceActive(current) && !(await recordedLeftoverRule(source)))
+    return;
+  const leaves =
+    !next ||
+    current.repo !== next.repo ||
+    (current.ref ?? null) !== (next.ref ?? null) ||
+    // A token or a GitLab project in the App's place posts no check either.
+    !next.githubAppConfigId;
+  if (!leaves) return;
+  let read: Awaited<ReturnType<typeof readPolicyCheckRule>>;
+  try {
+    read = await readPolicyCheckRule(source, POLICY_CHECK_NAME);
+  } catch {
+    return;
+  }
+  if (!read.ok || !read.found) return;
+  throw new ApiError(
+    409,
+    `A branch rule on ${current.repo} still requires the ${POLICY_CHECK_NAME} check${read.url ? ` (${read.url})` : ""}. Remove it first: once ${archestraMcpBranding.appName} stops posting the check there, every pull request would wait on it.`,
+  );
 }
 
 type ConnectedSource = NonNullable<
@@ -2611,252 +4016,188 @@ function protectionError(error: unknown): string {
 
 type Rule = { type: string; parameters?: Record<string, unknown> };
 
-type Ruleset = {
+/**
+ * The ruleset an administrator imports, in the shape GitHub's "Import a
+ * ruleset" takes and its export gives.
+ */
+type ImportRuleset = {
   name: string;
-  target: string;
-  enforcement: string;
-  conditions?: { ref_name?: { include?: string[]; exclude?: string[] } };
-  bypass_actors?: unknown[];
-  rules?: Rule[];
+  target: "branch";
+  source_type: "Repository";
+  source: string;
+  enforcement: "active";
+  conditions: { ref_name: { include: string[]; exclude: string[] } };
+  bypass_actors: unknown[];
+  rules: Rule[];
 };
 
-async function githubBranchRules(
-  source: ConnectedSource,
-  apply: boolean,
-  /** The check's name for this App, and the ruleset's. */
+/** One active rule on a branch, as GitHub lists them, with the ruleset it comes from. */
+type BranchRule = Rule & {
+  ruleset_id?: number;
+  ruleset_source_type?: string;
+  ruleset_source?: string;
+};
+
+type RequiredCheck = { context?: string; integration_id?: number };
+
+/** A source whose branch rules are read: the sync row, connected or not. */
+type RuledSource = {
+  organizationId: string;
+  repo: string;
+  ref: string | null;
+  githubAppConfigId: string | null;
+  githubPatId: string | null;
+};
+
+/**
+ * Whether a rule on the synced branch requires the policy check, read as
+ * GitHub evaluates the branch: every active ruleset counts, the repository's
+ * and the organization's alike, and the read takes Metadata, which every App
+ * has. Writing a ruleset takes Administration over the whole repository, so
+ * Archestra never does: an administrator imports the one returned here on
+ * the repository's Rulesets page, and the next read finds it.
+ */
+async function readPolicyCheckRule(
+  source: RuledSource,
   checkName: string,
-): Promise<RepositoryProtection["branchRules"]> {
-  let access: Awaited<ReturnType<typeof resolveOpenAppaGithubAccess>>;
-  try {
-    access = await resolveOpenAppaGithubAccess(source, {
-      administration: "write",
-    });
-  } catch (error) {
-    if (error instanceof MissingGithubPermission)
-      return { state: "needs_permission", detail: error.message };
-    throw error;
-  }
-  const { token, api, web } = access;
+): Promise<
+  | {
+      ok: true;
+      /** The rule that requires the check from this App, else one that names it. */
+      found: { rule: BranchRule; entry: RequiredCheck } | null;
+      url?: string;
+      integrationId?: number;
+      settingsUrl: string;
+      ruleset: ImportRuleset;
+    }
+  | {
+      ok: false;
+      state: "needs_permission" | "unavailable" | "error";
+      detail: string;
+      settingsUrl?: string;
+      ruleset?: ImportRuleset;
+    }
+> {
+  const { token, api, web } = await resolveOpenAppaGithubAccess(source, {
+    metadata: "read",
+  });
   if (!token)
     return {
+      ok: false,
       state: "needs_permission",
       detail:
-        "The policy repository is read without a credential. Connect a GitHub App with the Administration permission.",
+        "The policy repository is read without a credential. Connect it through a GitHub App, which posts the check.",
     };
   const base = `${api}/repos/${source.repo}`;
   const branch = source.ref ?? (await defaultBranch({ token, base }));
-  const rulesets = await githubCall<
-    Array<{ id: number; name: string; source_type?: string }>
-  >({ token, url: `${base}/rulesets?includes_parents=false&per_page=100` });
-  if (!rulesets.ok) return unavailable(rulesets);
-  const repositoryRulesets = rulesets.body.filter(
-    (ruleset) => (ruleset.source_type ?? "Repository") === "Repository",
-  );
   const integrationId = await checkIntegrationId(source);
-  // Ours by name, or by its shape: a deployment renamed since
-  // (ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME) finds its ruleset again and
-  // renames it, instead of leaving one that holds every pull request.
-  let ours = repositoryRulesets.find((ruleset) => ruleset.name === checkName);
-  let existing: Awaited<ReturnType<typeof githubCall<Ruleset>>> | null = null;
-  if (!ours && integrationId) {
-    for (const candidate of repositoryRulesets.slice(0, 25)) {
-      const read = await githubCall<Ruleset>({
-        token,
-        url: `${base}/rulesets/${candidate.id}`,
-      });
-      if (read.ok && isOurRulesetShape(read.body.rules, integrationId)) {
-        ours = candidate;
-        existing = read;
-        break;
-      }
-    }
-  }
-  const page = (id: number) => `${web}/${source.repo}/rules/${id}`;
-  // The check is required only while this App may post it: a required check
-  // nobody posts holds every pull request for good.
+  const settingsUrl = `${web}/${source.repo}/settings/rules`;
+  const ruleset = desiredRuleset({
+    repo: source.repo,
+    branch,
+    integrationId,
+    checkName,
+  });
+  const rules = await githubCall<BranchRule[]>({
+    token,
+    url: `${base}/rules/branches/${encodeURIComponent(branch)}?per_page=100`,
+  });
+  if (!rules.ok)
+    return { ok: false, ...unavailable(rules), settingsUrl, ruleset };
+  const matches = (Array.isArray(rules.body) ? rules.body : []).flatMap(
+    (rule) =>
+      rule.type !== "required_status_checks"
+        ? []
+        : ((rule.parameters?.required_status_checks ?? []) as RequiredCheck[])
+            .filter((entry) => entry.context === checkName)
+            .map((entry) => ({ rule, entry })),
+  );
+  const found =
+    matches.find(
+      (match) =>
+        integrationId !== undefined &&
+        match.entry.integration_id === integrationId,
+    ) ??
+    matches[0] ??
+    null;
+  const url = found
+    ? rulesetPage({ web, repo: source.repo, rule: found.rule })
+    : undefined;
+  return {
+    ok: true,
+    found,
+    ...(url ? { url } : {}),
+    ...(integrationId !== undefined ? { integrationId } : {}),
+    settingsUrl,
+    ruleset,
+  };
+}
+
+/** The ruleset's page on its host: the repository's, or the organization's. */
+function rulesetPage(params: {
+  web: string;
+  repo: string;
+  rule: BranchRule;
+}): string | undefined {
+  const { rule } = params;
+  if (typeof rule.ruleset_id !== "number") return undefined;
+  return rule.ruleset_source_type === "Organization" && rule.ruleset_source
+    ? `${params.web}/organizations/${rule.ruleset_source}/settings/rules/${rule.ruleset_id}`
+    : `${params.web}/${params.repo}/rules/${rule.ruleset_id}`;
+}
+
+/**
+ * The protection as the settings show it: whether a rule requires the check
+ * from this App, and whether the App may post it. A required check nobody
+ * posts holds every pull request, so without the Checks permission the
+ * import waits, and a rule already there is reported as holding them.
+ */
+async function githubBranchRules(
+  source: RuledSource,
+  checkName: string,
+): Promise<RepositoryProtection["branchRules"]> {
+  const read = await readPolicyCheckRule(source, checkName);
+  if (!read.ok)
+    return {
+      state: read.state,
+      detail: read.detail,
+      ...(read.settingsUrl ? { settingsUrl: read.settingsUrl } : {}),
+      ...(read.ruleset ? { ruleset: read.ruleset } : {}),
+    };
+  const { found, url, integrationId, settingsUrl, ruleset } = read;
   const check = await policyCheckAccess(source, checkName);
-  if (!check.postable) {
-    if (!ours) return { state: "needs_permission", detail: check.detail };
-    existing ??= await githubCall<Ruleset>({
-      token,
-      url: `${base}/rulesets/${ours.id}`,
-    });
+  if (!found) {
+    if (!check.postable)
+      return {
+        state: "needs_permission",
+        detail: check.detail,
+        settingsUrl,
+        ruleset,
+      };
+    return { state: "missing", settingsUrl, ruleset };
+  }
+  // With the App's own id unknown, the rule offered takes the check from
+  // any source, and one that does is what was asked for.
+  const from = found.entry.integration_id;
+  if (integrationId !== undefined && from !== integrationId)
+    return {
+      state: "incomplete",
+      ...(url ? { url } : {}),
+      settingsUrl,
+      ruleset,
+      detail:
+        from === undefined
+          ? `The rule takes the ${checkName} check from any source, so a passing one could be posted with any token. Edit it to take the check from the GitHub App only.`
+          : `The rule takes the ${checkName} check from another app, so the one this GitHub App posts does not count. Edit it to take the check from this App.`,
+    };
+  if (!check.postable)
     return {
       state: "active",
-      url: page(ours.id),
-      ...(existing.ok && requiresPolicyCheck(existing.body.rules, checkName)
-        ? { checkRule: "unposted" as const, detail: check.detail }
-        : { detail: check.detail }),
+      ...(url ? { url } : {}),
+      checkRule: "unposted",
+      detail: check.detail,
     };
-  }
-  const desired = desiredRuleset({ branch, integrationId, checkName });
-  if (!ours) {
-    if (!apply) return { state: "missing" };
-    const created = await githubCall<{ id: number }>({
-      token,
-      url: `${base}/rulesets`,
-      method: "POST",
-      body: desired,
-    });
-    if (!created.ok) return unavailable(created);
-    return { state: "active", url: page(created.body.id) };
-  }
-  existing ??= await githubCall<Ruleset>({
-    token,
-    url: `${base}/rulesets/${ours.id}`,
-  });
-  if (!existing.ok) return unavailable(existing);
-  const { include = [], exclude = [] } =
-    existing.body.conditions?.ref_name ?? {};
-  // Whether `~DEFAULT_BRANCH` names the synced branch, read only when used.
-  const isDefault =
-    source.ref === null ||
-    ([...include, ...exclude].includes("~DEFAULT_BRANCH") &&
-      (await defaultBranch({ token, base })) === branch);
-  const strengthened = strengthenedRuleset(existing.body, desired, {
-    ref: `refs/heads/${branch}`,
-    isDefault,
-  });
-  // Kept as an administrator added them, and shown, since they skip it all.
-  const bypassActors = existing.body.bypass_actors?.length ?? 0;
-  const found = {
-    url: page(ours.id),
-    ...(bypassActors > 0 ? { bypassActors } : {}),
-  };
-  if (!strengthened) return { state: "active", ...found };
-  if (!apply) return { state: "incomplete", ...found };
-  const updated = await githubCall({
-    token,
-    url: `${base}/rulesets/${ours.id}`,
-    method: "PUT",
-    body: strengthened,
-  });
-  if (!updated.ok) return unavailable(updated);
-  return { state: "active", ...found };
-}
-
-/**
- * Delete Archestra's ruleset, and take its check out of any other ruleset
- * that requires it: once the check is no longer posted, a rule that requires
- * it would hold every pull request for good. A ruleset of the repository's
- * own keeps its other rules.
- */
-async function removeGithubBranchRules(source: {
-  organizationId: string;
-  repo: string;
-  githubAppConfigId: string | null;
-  githubPatId: string | null;
-}) {
-  const checkName = POLICY_CHECK_NAME;
-  let access: Awaited<ReturnType<typeof resolveOpenAppaGithubAccess>>;
-  try {
-    access = await resolveOpenAppaGithubAccess(source, {
-      administration: "write",
-    });
-  } catch (error) {
-    if (!(error instanceof MissingGithubPermission)) throw error;
-    // An App without Administration never wrote a ruleset: nothing to take off.
-    logger.debug(
-      { organizationId: source.organizationId, repo: source.repo },
-      `OpenAPPA cannot take its ruleset off the policy repository: ${error.message}`,
-    );
-    return;
-  }
-  const { token, api } = access;
-  if (!token) return;
-  const base = `${api}/repos/${source.repo}`;
-  const rulesets = await githubCall<
-    Array<{ id: number; name: string; source_type?: string }>
-  >({ token, url: `${base}/rulesets?includes_parents=false&per_page=100` });
-  if (!rulesets.ok) throw new ApiError(502, unavailable(rulesets).detail);
-  const integrationId = await checkIntegrationId(source);
-  for (const candidate of rulesets.body
-    .filter((ruleset) => (ruleset.source_type ?? "Repository") === "Repository")
-    .slice(0, 25)) {
-    const read = await githubCall<Ruleset>({
-      token,
-      url: `${base}/rulesets/${candidate.id}`,
-    });
-    if (!read.ok) continue;
-    const ours =
-      candidate.name === checkName ||
-      (integrationId !== undefined &&
-        isOurRulesetShape(read.body.rules, integrationId));
-    const requires =
-      requiresPolicyCheck(read.body.rules, checkName) ||
-      (integrationId !== undefined &&
-        requiresOurCheck(read.body.rules, integrationId));
-    if (!ours && !requires) continue;
-    const written = ours
-      ? await githubCall({
-          token,
-          url: `${base}/rulesets/${candidate.id}`,
-          method: "DELETE",
-        })
-      : await githubCall({
-          token,
-          url: `${base}/rulesets/${candidate.id}`,
-          method: "PUT",
-          body: withoutPolicyCheck(read.body, integrationId, checkName),
-        });
-    // Already gone: the same outcome.
-    if (!written.ok && written.status !== 404)
-      throw new ApiError(502, unavailable(written).detail);
-  }
-}
-
-/** Whether a rule requires a check this App posts, under any name. */
-function requiresOurCheck(
-  rules: Rule[] | undefined,
-  integrationId: number,
-): boolean {
-  return (rules ?? []).some(
-    (rule) =>
-      rule.type === "required_status_checks" &&
-      (
-        (rule.parameters?.required_status_checks ?? []) as Array<{
-          integration_id?: number;
-        }>
-      ).some((check) => check.integration_id === integrationId),
-  );
-}
-
-/**
- * A ruleset without the policy check: the check taken out of its required
- * checks, and the rule taken out when nothing else was required.
- */
-function withoutPolicyCheck(
-  existing: Ruleset,
-  integrationId: number | undefined,
-  checkName: string,
-): Ruleset {
-  const rules = (existing.rules ?? []).flatMap((rule) => {
-    if (rule.type !== "required_status_checks") return [rule];
-    const checks = (rule.parameters?.required_status_checks ?? []) as Array<{
-      context?: string;
-      integration_id?: number;
-    }>;
-    const kept = checks.filter(
-      (check) =>
-        check.context !== checkName &&
-        (integrationId === undefined || check.integration_id !== integrationId),
-    );
-    if (kept.length === 0) return [];
-    return [
-      {
-        type: rule.type,
-        parameters: { ...rule.parameters, required_status_checks: kept },
-      },
-    ];
-  });
-  return {
-    name: existing.name,
-    target: existing.target,
-    enforcement: existing.enforcement,
-    conditions: existing.conditions,
-    bypass_actors: existing.bypass_actors ?? [],
-    rules,
-  };
+  return { state: "active", ...(url ? { url } : {}) };
 }
 
 /**
@@ -2865,7 +4206,7 @@ function withoutPolicyCheck(
  * granted them says so.
  */
 async function policyCheckAccess(
-  source: ConnectedSource,
+  source: RuledSource,
   checkName: string,
 ): Promise<{ postable: true } | { postable: false; detail: string }> {
   if (!source.githubAppConfigId) return { postable: true };
@@ -2886,57 +4227,27 @@ async function policyCheckAccess(
 }
 
 /**
- * Whether a ruleset has the shape Archestra writes, under any name: one
- * rule, the check required from this App and nothing else. A ruleset of the
- * repository's own that requires the check among other things is theirs.
- */
-function isOurRulesetShape(
-  rules: Rule[] | undefined,
-  integrationId: number,
-): boolean {
-  const [rule, ...rest] = rules ?? [];
-  if (!rule || rest.length > 0 || rule.type !== "required_status_checks")
-    return false;
-  const checks = (rule.parameters?.required_status_checks ?? []) as Array<{
-    integration_id?: number;
-  }>;
-  return checks.length === 1 && checks[0]?.integration_id === integrationId;
-}
-
-/** Whether a rule requires the policy check, under any App. */
-function requiresPolicyCheck(
-  rules: Rule[] | undefined,
-  checkName: string,
-): boolean {
-  return (rules ?? []).some(
-    (rule) =>
-      rule.type === "required_status_checks" &&
-      (
-        (rule.parameters?.required_status_checks ?? []) as Array<{
-          context?: string;
-        }>
-      ).some((check) => check.context === checkName),
-  );
-}
-
-/**
- * The ruleset Archestra keeps: one rule, the policy check required from this
- * App, so a pull request that would break the policy, or change a server's
- * rules without its editor asking, cannot merge. Nothing else about the
- * branch is Archestra's: pull requests, reviews, pushes and history are the
- * repository's to rule, and a repository that holds other work beside the
- * policy sees no other change. The check posts on every pull request and is
- * skipped when no policy file changed, so the rule holds nobody up. Archestra
- * adds no one who may bypass it, itself included.
+ * The ruleset an administrator imports on the policy repository's Rulesets
+ * page (New ruleset → Import a ruleset): one rule, the policy check required
+ * from this App, so a pull request that would break the policy, or change a
+ * server's rules without its editor asking, cannot merge. Only this App's
+ * check counts: no one posts a passing one with a token of their own. The
+ * check posts on every pull request and is skipped when no policy file
+ * changed, so the rule holds nobody up. Nothing else about the branch is
+ * Archestra's, and the rule stays the repository's: whoever administers it
+ * adds, edits or removes it.
  */
 function desiredRuleset(params: {
+  repo: string;
   branch: string;
   integrationId?: number;
   checkName: string;
-}): Ruleset & { bypass_actors: unknown[]; rules: Rule[] } {
+}): ImportRuleset {
   return {
     name: params.checkName,
     target: "branch",
+    source_type: "Repository",
+    source: params.repo,
     enforcement: "active",
     conditions: {
       ref_name: { include: [`refs/heads/${params.branch}`], exclude: [] },
@@ -2950,8 +4261,6 @@ function desiredRuleset(params: {
           required_status_checks: [
             {
               context: params.checkName,
-              // Only this App's check counts: no one posts a passing one
-              // with a token of their own.
               ...(params.integrationId
                 ? { integration_id: params.integrationId }
                 : {}),
@@ -2963,133 +4272,182 @@ function desiredRuleset(params: {
   };
 }
 
-/**
- * The existing ruleset with Archestra's rule added where missing, turned
- * back on where turned off, or null when it is in order. What an
- * administrator added stays, bypass entries included; an exclusion that
- * leaves the synced branch out does not. To be rid of the ruleset, turn
- * self-service off: that takes it away.
- */
-function strengthenedRuleset(
-  existing: Ruleset,
-  desired: ReturnType<typeof desiredRuleset>,
-  branch: { ref: string; isDefault: boolean },
-): Ruleset | null {
-  let changed = false;
-  const rules = [...(existing.rules ?? [])].map((rule) => ({
-    type: rule.type,
-    ...(rule.parameters ? { parameters: rule.parameters } : {}),
-  }));
-  for (const wanted of desired.rules) {
-    const at = rules.findIndex((rule) => rule.type === wanted.type);
-    const have = rules[at];
-    if (!have) {
-      rules.push(wanted);
-      changed = true;
-      continue;
-    }
-    if (wanted.type === "required_status_checks") {
-      const ours = (
-        wanted.parameters?.required_status_checks as Array<{
-          context: string;
-          integration_id?: number;
-        }>
-      )[0] as { context: string; integration_id?: number };
-      const checks = (have.parameters?.required_status_checks ?? []) as Array<{
-        context: string;
-        integration_id?: number;
-      }>;
-      const present = checks.some(
-        (check) =>
-          check.context === ours.context &&
-          (ours.integration_id === undefined ||
-            check.integration_id === ours.integration_id),
-      );
-      // A check this App posted under an earlier name is ours, renamed.
-      const renamed = checks.filter(
-        (check) =>
-          ours.integration_id !== undefined &&
-          check.integration_id === ours.integration_id &&
-          check.context !== ours.context,
-      );
-      // Whether the branch must be up to date is the repository's choice.
-      if (!present || renamed.length > 0) {
-        const kept = checks.filter(
-          (check) => check.context !== ours.context && !renamed.includes(check),
-        );
-        rules[at] = {
-          type: have.type,
-          parameters: {
-            strict_required_status_checks_policy: false,
-            ...have.parameters,
-            required_status_checks: [...kept, ours],
-          },
-        };
-        changed = true;
-      }
-    }
-  }
-  // The synced branch is protected when an include names it and no
-  // exclusion takes it out again.
-  const include = existing.conditions?.ref_name?.include ?? [];
-  const exclude = existing.conditions?.ref_name?.exclude ?? [];
-  const names = (pattern: string) => refPatternMatches(pattern, branch);
-  const covers = include.some(names);
-  const kept = exclude.filter((pattern) => !names(pattern));
-  if (!covers || kept.length < exclude.length) changed = true;
-  if (existing.name !== desired.name) changed = true;
-  if (existing.enforcement !== "active") changed = true;
-  if (!changed) return null;
-  return {
-    name: desired.name,
-    target: existing.target,
-    enforcement: "active",
-    conditions: {
-      ref_name: {
-        include: covers ? include : [...include, branch.ref],
-        exclude: kept,
-      },
-    },
-    bypass_actors: existing.bypass_actors ?? [],
-    rules,
-  };
+// === A rule left behind with self-service off ===
+
+/** Off, a branch rule that still requires the check: shown, and posted as skipped. */
+type LeftoverRule = { checkName: string; url: string | null };
+
+/** How long a leftover rule stands recorded between syncs. */
+const LEFTOVER_TTL = 2 * TimeInMs.Day;
+
+function leftoverRuleKey(organizationId: string, repo: string) {
+  return checkKey("leftover", organizationId, repo);
+}
+
+/** Self-service was on for the repository lately: a rule may be left behind. */
+function selfServiceSeenKey(organizationId: string, repo: string) {
+  return checkKey("self-service-seen", organizationId, repo);
+}
+
+async function recordedLeftoverRule(
+  source: Pick<RuledSource, "organizationId" | "repo">,
+): Promise<LeftoverRule | undefined> {
+  return cacheManager
+    .get<LeftoverRule>(leftoverRuleKey(source.organizationId, source.repo))
+    .catch(() => undefined);
 }
 
 /**
- * Whether a ruleset's ref pattern names the branch, as GitHub reads one:
- * `~ALL`, `~DEFAULT_BRANCH`, or an fnmatch pattern over the full ref, where
- * `*` and `?` stay within one path segment and `**` crosses segments.
+ * Self-service off: whether a branch rule still requires the check. Archestra
+ * cannot take the rule off (that takes Administration, which it never
+ * holds), so the record keeps the check posted as skipped and tells the
+ * administrator which rule to remove. Read at each sync; a read that fails
+ * keeps the last record.
  */
-function refPatternMatches(
-  pattern: string,
-  branch: { ref: string; isDefault: boolean },
-): boolean {
-  if (pattern === "~ALL") return true;
-  if (pattern === "~DEFAULT_BRANCH") return branch.isDefault;
-  let source = "";
-  for (let at = 0; at < pattern.length; at++) {
-    const char = pattern[at] as string;
-    if (char === "*" && pattern[at + 1] === "*") {
-      source += ".*";
-      at++;
-    } else if (char === "*") source += "[^/]*";
-    else if (char === "?") source += "[^/]";
-    else if (char === "[" && pattern.indexOf("]", at + 2) > at) {
-      const close = pattern.indexOf("]", at + 2);
-      const set = pattern.slice(at + 1, close).replace(/[\\^]/g, "\\$&");
-      source += set.startsWith("!") ? `[^${set.slice(1)}]` : `[${set}]`;
-      at = close;
-    } else source += char.replace(/[.+^${}()|[\]\\]/g, "\\$&");
-  }
+async function recordLeftoverRule(source: RuledSource) {
+  const checkName = POLICY_CHECK_NAME;
+  const key = leftoverRuleKey(source.organizationId, source.repo);
+  let read: Awaited<ReturnType<typeof readPolicyCheckRule>>;
   try {
-    return new RegExp(`^${source}$`).test(branch.ref);
-  } catch {
-    return false;
+    read = await readPolicyCheckRule(source, checkName);
+  } catch (error) {
+    logger.debug(
+      { organizationId: source.organizationId, error },
+      "OpenAPPA could not read the policy repository's branch rules",
+    );
+    return;
+  }
+  if (!read.ok) return;
+  if (read.found) {
+    const leftover: LeftoverRule = { checkName, url: read.url ?? null };
+    await cacheManager.set(key, leftover, LEFTOVER_TTL);
+    // Just read: the settings need no second look for a minute.
+    await cacheManager
+      .set(
+        checkKey("leftover-read", source.organizationId, source.repo),
+        true,
+        TimeInMs.Minute,
+      )
+      .catch(() => undefined);
+  } else {
+    // Nothing left behind: the repository needs no read until self-service
+    // is on again.
+    await cacheManager.delete(key);
+    await cacheManager.delete(
+      selfServiceSeenKey(source.organizationId, source.repo),
+    );
+  }
+}
+
+async function forgetLeftoverRule(organizationId: string, repo: string) {
+  await cacheManager
+    .delete(leftoverRuleKey(organizationId, repo))
+    .catch((err) =>
+      logger.warn(
+        { organizationId, err },
+        "OpenAPPA could not forget a leftover branch rule",
+      ),
+    );
+}
+
+/** The leftover rule recorded for a source with self-service off, for the settings. */
+async function leftoverRule(
+  row: SyncRow,
+): Promise<{ leftoverRule?: LeftoverRule }> {
+  if (selfServiceActive(row) || !row.repo || !row.githubAppConfigId) return {};
+  const source = { ...row, repo: row.repo };
+  const found = await recordedLeftoverRule(source);
+  if (!found) return {};
+  // Read again, at most once a minute: a rule removed on GitHub leaves the
+  // settings without waiting for the next sync.
+  const read = checkKey("leftover-read", row.organizationId, row.repo);
+  if (await cacheManager.get(read).catch(() => true))
+    return { leftoverRule: found };
+  await cacheManager.set(read, true, TimeInMs.Minute).catch(() => undefined);
+  await recordLeftoverRule(source);
+  const again = await recordedLeftoverRule(source);
+  return again ? { leftoverRule: again } : {};
+}
+
+/**
+ * Self-service off, with a rule that still requires the check: every open
+ * pull request gets the check as skipped, saying so, so none waits on a
+ * check that no longer checks anything. Each head once.
+ */
+async function postLeftoverChecks(row: SyncRow) {
+  if (!row.repo || !row.path || !row.githubAppConfigId) return;
+  const leftover = await cacheManager.get<LeftoverRule>(
+    leftoverRuleKey(row.organizationId, row.repo),
+  );
+  if (!leftover) return;
+  const source = { ...row, repo: row.repo, path: row.path };
+  const refused = refusedChecksKey(row.organizationId, source.repo);
+  if (await cacheManager.get(refused)) return;
+  let pulls: CheckedPull[];
+  try {
+    pulls = await githubPullRequests(source);
+  } catch (error) {
+    if (
+      !(error instanceof MissingGithubPermission) &&
+      !(error instanceof CheckRefused)
+    )
+      throw error;
+    await refuseChecks({
+      key: refused,
+      organizationId: row.organizationId,
+      reason: error.message,
+    });
+    return;
+  }
+  const outcome: PullOutcome = {
+    accepted: true,
+    skipped: true,
+    title: "MCP Guardrails Self-Service is off",
+    reason: `${archestraMcpBranding.appName} no longer checks this repository's pull requests, and a branch rule still requires this check${leftover.url ? ` (${leftover.url})` : ""}. Remove the rule, or turn MCP Guardrails Self-Service on again under Settings → Guardrails → Git sync.`,
+  };
+  for (const pull of pulls.slice(0, MAX_CHECKED_PULLS)) {
+    const key = checkKey(
+      "leftover-posted",
+      row.organizationId,
+      source.repo,
+      pull.head,
+    );
+    if (await cacheManager.get(key)) continue;
+    try {
+      await pull.post(outcome);
+    } catch (error) {
+      if (error instanceof CheckRefused) {
+        await refuseChecks({
+          key: refused,
+          organizationId: row.organizationId,
+          reason: "a GitHub App needs the Checks permission (read and write)",
+        });
+        return;
+      }
+      logger.warn(
+        { organizationId: row.organizationId, err: error },
+        "OpenAPPA could not post the skipped policy check on a pull request; it tries again next minute",
+      );
+      continue;
+    }
+    // Skipped stands on GitHub now: on again, the verdict is posted afresh
+    // rather than taken as still standing.
+    await cacheManager
+      .delete(checkedResultKey(source, pull))
+      .catch(() => undefined);
+    await cacheManager
+      .set(key, true, CHECKED_TTL)
+      .catch((err) =>
+        logger.warn(
+          { organizationId: row.organizationId, err },
+          "OpenAPPA could not record a skipped policy check; the next pass posts it again",
+        ),
+      );
   }
 }
 
 /** The App whose check the ruleset requires, or none for a token. */
-async function checkIntegrationId(source: {
+export async function checkIntegrationId(source: {
   organizationId: string;
   githubAppConfigId: string | null;
 }): Promise<number | undefined> {
@@ -3103,10 +4461,10 @@ async function checkIntegrationId(source: {
 }
 
 /** A refusal GitHub explains: a plan without rulesets, or a missing permission. */
-function unavailable(response: {
-  status: number;
-  message?: string;
-}): RepositoryProtection["branchRules"] & { detail: string } {
+function unavailable(response: { status: number; message?: string }): {
+  state: "unavailable" | "error";
+  detail: string;
+} {
   return {
     state:
       response.status === 403 || response.status === 404

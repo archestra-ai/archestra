@@ -777,6 +777,21 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Set it below your proxy's maximum request duration, which Archestra cannot detect. A GKE Ingress backend without `timeoutSec` allows 30 seconds.
   - Some clients stop reconnecting after repeated ends and then miss tool-list changes. Test your client first.
 
+## MCP Bridge
+
+- **`ARCHESTRA_MCP_BRIDGE_POLL_MAX_WAIT_MS`** - Longest time Archestra holds one poll of a user's MCP bridge open while it has no work, in milliseconds.
+  - Default: `8000` (8 seconds)
+  - Keep it below the request timeout of the load balancer in front of the API. Otherwise the load balancer ends every idle poll with an error.
+
+- **`ARCHESTRA_MCP_BRIDGE_AUTO_UPDATE_ENABLED`** - Lets the MCP bridge on a user's computer update by itself when Archestra serves another version. Set it to `false` to make each user run `archestra update`.
+  - Default: `true`
+  - On macOS and Linux the MCP bridge does not update by itself. The user runs `archestra update`.
+
+- **`ARCHESTRA_CLI_DIR`** - Folder that holds the `archestra` programs that the Device tab of Personal Settings offers for download. Users run `archestra bridge start` to start the MCP bridge.
+  - Default: `/app/archestra-cli`, where the platform image keeps the programs. If the folder does not exist, the download answers "not found".
+  - One file per system and CPU, named `archestra-<system>-<cpu>`: `archestra-darwin-arm64`, `archestra-darwin-x86_64`, `archestra-linux-x86_64`, `archestra-linux-arm64`, `archestra-windows-x86_64.exe`, `archestra-windows-arm64.exe`. A system with no file gets no download.
+  - `manifest.json` in the folder holds the version of the programs, as `{ "version": "0.2.0" }`. The Device tab of Personal Settings shows it when a device needs an update.
+
 ## MCP Servers
 
 - **`ARCHESTRA_MCP_OAUTH_ENFORCE_OUTBOUND_VALIDATION`** - Enables optional hardening for backend requests to upstream MCP OAuth providers, for both remote and self-hosted MCP servers.
@@ -1549,13 +1564,17 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Values: at least 32 characters, the same on every replica. A shorter value stops startup.
   - Set it to rotate this key separately from the session secret. See [Guardrails Signing Key](/docs/admin/deployment/secret-rotation#guardrails-signing-key).
 
-- **`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`** - Name of the check Archestra posts on the policy repository's pull requests with [Git sync](/docs/agents/guardrails/git-sync#the-check-and-the-ruleset), and of the branch ruleset that requires it.
+- **`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`** - Name of the check Archestra posts on the policy repository's pull requests with [Git sync](/docs/agents/guardrails/git-sync#the-check-and-the-ruleset), and of the branch ruleset you import to require it.
   - Default: `Check OpenAPPA Guardrails`.
-  - Values: up to 100 characters. A rename moves the ruleset and its required check over at the next sync.
+  - Values: up to 100 characters. After a rename, edit the imported ruleset so it requires the check under the new name.
 
 - **`ARCHESTRA_OPENAPPA_SELF_SERVICE`** - Controls the MCP Guardrails Self-Service feature - whether the MCP owners can edit Guardrail policies for these MCPs themselves. Overrides related configuration from Settings.
   - Default: unset.
   - Values: `enabled`, `disabled`.
+
+- **`ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE`** - Sets [Auto-merge](/docs/agents/guardrails/git-sync#auto-merge) for MCP Guardrails Self-Service: the GitHub App merges each MCP server's rules pull request once its policy check passes. While it is set, it overrides the setting saved in Git sync setup, which cannot be edited there.
+  - Default: unset (the saved setting applies, off unless changed).
+  - Values: `enabled`, `disabled`. Other values stop startup.
 
 - **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Sets **Human approval** under [Break the glass](/docs/agents/guardrails/policies#yells) for the whole deployment. While it is set, it overrides the value saved in **Settings → Guardrails**, and the setting cannot be edited there. Unset it to edit the setting again.
   - Default: unset (the saved setting applies, `block` unless changed)

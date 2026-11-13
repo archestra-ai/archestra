@@ -70,6 +70,7 @@ vi.mock("@/lib/auth/use-is-authenticated", () => ({
 }));
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/organization.query");
 vi.mock("@/lib/limits-access");
 // Read only when a grant on one credential might open Settings.
 vi.mock("@/lib/runtime-credentials.query", () => ({
@@ -237,6 +238,7 @@ import { act } from "react";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import { hasPagePermissions } from "@/lib/auth/auth.utils";
 import { useFeature } from "@/lib/config/config.query";
+import { useOrganization } from "@/lib/organization.query";
 import { ConversationSearchPalette } from "./conversation-search-palette";
 
 describe("ConversationSearchPalette", () => {
@@ -247,6 +249,9 @@ describe("ConversationSearchPalette", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { connectionPageHidden: false },
+    } as ReturnType<typeof useOrganization>);
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
     } as unknown as ReturnType<typeof useRouter>);
@@ -847,6 +852,22 @@ describe("ConversationSearchPalette", () => {
         ).not.toBeInTheDocument();
       }
     });
+  });
+
+  it("removes the Connect destination when the saved setting hides it", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    const view = render(<ConversationSearchPalette {...defaultProps} />);
+    expect(screen.getByText("Connect")).toBeInTheDocument();
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { connectionPageHidden: true },
+    } as ReturnType<typeof useOrganization>);
+    view.rerender(<ConversationSearchPalette {...defaultProps} />);
+    expect(screen.queryByText("Connect")).not.toBeInTheDocument();
+    expect(screen.getByText("MCP Registry")).toBeInTheDocument();
   });
 
   it("routes Connect to the connection page", () => {

@@ -1465,7 +1465,7 @@ test("a server's editors propose its rules as a pull request; readers and outsid
   expect(
     await follow({ wait: true, since: "merge_pending", waitMs: 300 }),
   ).toMatchObject({ phase: "merge_pending", done: false });
-  expect(Date.now() - started).toBeLessThan(2_500);
+  expect(Date.now() - started).toBeLessThan(1_500);
   slowAfterFirst = false;
   // A merge that has not come in fifteen minutes is not waited on for ever.
   runs[0] = {
@@ -3267,24 +3267,38 @@ test("a self-served pull request GitHub refuses to merge is logged and left for 
     ),
   ).toHaveLength(2);
   // Saving the source with auto-merge on, as the setup wizard does, lifts
-  // the hold as well.
+  // the hold as well; a save that fails does not.
   const row = await OpenAppaGithubSyncModel.find(org.id);
+  const saved = {
+    repo: "example/policies",
+    ref: "main",
+    path: "appa.toml",
+    interval: "1h" as const,
+    validationDirectory: "",
+    githubPatId: null,
+    githubAppConfigId: row?.githubAppConfigId ?? null,
+    gitlabTokenId: null,
+    selfService: true,
+    selfServiceDirectory: "mcp",
+    selfServiceAutoMerge: true,
+  };
+  await expect(
+    configureAppaGithubSync({
+      organizationId: org.id,
+      userId: admin.id,
+      source: { ...saved, validationDirectory: "tests-nobody-wrote" },
+    }),
+  ).rejects.toThrow();
+  await checkDueAppaGithubSyncs();
+  expect(
+    warn.mock.calls.filter(([, message]) =>
+      String(message).includes("allows no merge method"),
+    ),
+  ).toHaveLength(2);
   await configureAppaGithubSync({
     organizationId: org.id,
     userId: admin.id,
-    source: {
-      repo: "example/policies",
-      ref: "main",
-      path: "appa.toml",
-      interval: "1h",
-      validationDirectory: "",
-      githubPatId: null,
-      githubAppConfigId: row?.githubAppConfigId ?? null,
-      gitlabTokenId: null,
-      selfService: true,
-      selfServiceDirectory: "mcp",
-      selfServiceAutoMerge: true,
-    },
+    source: saved,
   });
   // The save queues a pull, which the minute's checks wait on.
   await syncAppaGithubPolicy(org.id);
@@ -3429,9 +3443,17 @@ test("a merge while a pull is already running keeps the pull it owes until one t
   await checkDueAppaGithubSyncs();
   expect(merges).toHaveLength(1);
   expect(await queuedSyncs()).toHaveLength(1);
-  // Nothing else merges from here; the owed pull waits for the running one.
+  // Nothing else merges from here; the owed pull waits for the running one,
+  // and for one queued before the merge, which may be claimed and read the
+  // branch before the merge is in.
   mergeStatuses[1] = 405;
   pullStates[1] = { state: "closed", merged: false };
+  await checkDueAppaGithubSyncs();
+  expect(await queuedSyncs()).toHaveLength(1);
+  await db
+    .update(schema.tasksTable)
+    .set({ status: "pending" })
+    .where(eq(schema.tasksTable.id, running?.id ?? ""));
   await checkDueAppaGithubSyncs();
   expect(await queuedSyncs()).toHaveLength(1);
   await db

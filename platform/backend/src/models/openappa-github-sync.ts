@@ -230,21 +230,6 @@ class OpenAppaGithubSyncModel {
       .returning({ id: schema.tasksTable.id });
     return queued.length > 0;
   }
-  /** Whether a pull is queued and has not started: it sees everything merged so far. */
-  static async hasPendingSync(organizationId: string): Promise<boolean> {
-    const [pending] = await db
-      .select({ id: schema.tasksTable.id })
-      .from(schema.tasksTable)
-      .where(
-        and(
-          eq(schema.tasksTable.taskType, "openappa_github_sync"),
-          eq(schema.tasksTable.status, "pending"),
-          sql`${schema.tasksTable.payload}->>'organizationId' = ${organizationId}`,
-        ),
-      )
-      .limit(1);
-    return pending !== undefined;
-  }
   static async findByIdForAudit(id: string, organizationId: string) {
     if (id !== organizationId) return null;
     const row = await OpenAppaGithubSyncModel.find(organizationId);

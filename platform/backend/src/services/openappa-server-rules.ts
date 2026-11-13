@@ -323,6 +323,8 @@ export async function getServerRulesChangeStatus(
   for (let read = 0; ; read += 1) {
     // Git sync may have applied the merge since the last look.
     if (read > 0) source = await requireSource(params.organizationId);
+    // No look starts once the wait is over: the last one's answer stands.
+    if (last && Date.now() >= deadline) return last;
     let status: Awaited<ReturnType<typeof readChangeStatus>>;
     try {
       status = await readChangeStatus({
@@ -332,8 +334,8 @@ export async function getServerRulesChangeStatus(
         token,
         base,
         appId,
-        // A later look is bounded by the wait: the first has GitHub's time.
-        ...(read > 0 ? { deadline } : {}),
+        // Every look in a wait is bounded by what the wait has left.
+        ...(params.wait ? { deadline } : {}),
       });
     } catch (error) {
       // A host that fails for now is asked again while the wait lasts; a
@@ -379,15 +381,17 @@ async function readChangeStatus(params: {
   token: string;
   base: string;
   appId: number | undefined;
-  /** When the caller's wait ends: no request outlives it by more than a second. */
+  /** When the caller's wait ends: no request outlives it. */
   deadline?: number;
 }) {
   const { source, token, base } = params;
-  const signal = params.deadline
-    ? AbortSignal.timeout(
-        Math.min(15_000, Math.max(1_000, params.deadline - Date.now())),
-      )
-    : undefined;
+  // One signal for the look: GitHub's usual time, or what the wait has left.
+  const signal =
+    params.deadline !== undefined
+      ? AbortSignal.timeout(
+          Math.min(15_000, Math.max(1, params.deadline - Date.now())),
+        )
+      : undefined;
   const pull = await github<{
     number: number;
     html_url: string;

@@ -1777,16 +1777,12 @@ async function noteSyncOwed(organizationId: string, repo: string) {
  */
 async function queueSyncAfterMerge(organizationId: string, repo: string) {
   try {
-    // A pull already running may have read the branch before this merge:
-    // the note stays until one that sees it is queued. One still pending
-    // will see it.
-    const queued =
-      (await OpenAppaGithubSyncModel.enqueue(organizationId)) ||
-      (await OpenAppaGithubSyncModel.hasPendingSync(organizationId));
-    if (!queued) {
+    // A pull queued or running already may have read the branch before this
+    // merge: the note stays until one queued after the merge is in.
+    if (!(await OpenAppaGithubSyncModel.enqueue(organizationId))) {
       logger.debug(
         { organizationId },
-        "A pull is running already; the one a merge owes is queued once it is done",
+        "A pull is queued or running already; the one a merge owes is queued once it is done",
       );
       return;
     }
@@ -2567,18 +2563,6 @@ async function saveSource(params: {
       !!params.source.githubAppConfigId &&
       params.source.selfServiceAutoMerge,
   };
-  // Saved with auto-merge on, the App may just have been granted what it
-  // lacked: the next minute's round tries the merge rather than waiting out
-  // a hold.
-  if (params.source.selfServiceAutoMerge)
-    await cacheManager
-      .delete(heldMergesKey(params.organizationId, params.source.repo))
-      .catch((err) =>
-        logger.warn(
-          { organizationId: params.organizationId, err },
-          "OpenAPPA could not forget a held merge",
-        ),
-      );
   if (
     (params.source.githubPatId ||
       params.source.githubAppConfigId ||
@@ -2651,6 +2635,18 @@ async function saveSource(params: {
   // branch it would have left protected.
   await beforeSourceChange(params.organizationId, params.source);
   await OpenAppaGithubSyncModel.save(params.organizationId, params.source);
+  // Saved with auto-merge on, the App may just have been granted what it
+  // lacked: the next minute's round tries the merge rather than waiting out
+  // a hold. A save that failed above lifts nothing.
+  if (params.source.selfServiceAutoMerge)
+    await cacheManager
+      .delete(heldMergesKey(params.organizationId, params.source.repo))
+      .catch((err) =>
+        logger.warn(
+          { organizationId: params.organizationId, err },
+          "OpenAPPA could not forget a held merge",
+        ),
+      );
 }
 
 /** The policy at a GitHub source's ref, or the setup pull request's state while it is open. */

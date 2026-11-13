@@ -15,6 +15,7 @@ describe("GET /api/agent-runtime-templates/settings", () => {
     expect(response.json()).toEqual({
       revision: 0,
       templates: [],
+      builtIns: {},
       popularAgentOverrides: null,
     });
     ctx.caller = ctx.member;

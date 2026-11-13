@@ -16,6 +16,7 @@ import {
   TOOL_LIST_LLM_MODELS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
+  withAgentRuntimeDefaults,
 } from "@archestra/shared";
 import { z } from "zod";
 import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
@@ -34,6 +35,7 @@ import {
   KnowledgeBaseModel,
   OrganizationModel,
 } from "@/models";
+import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import {
@@ -48,6 +50,7 @@ import {
   assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
+import { applyAgentRuntimeLock } from "@/services/agent-runtime/agent-runtime-lock";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { SKILL_CATALOG_UNTRUSTED_NOTE } from "@/skills/skill-catalog-prompt";
@@ -1023,13 +1026,18 @@ async function resolveRuntimeAndModelForWrite(params: {
     throw new ApiError(400, "user/organization context not available.");
   }
 
-  const runtime =
-    runtimeInput == null
-      ? runtimeInput
-      : await resolveAgentRuntimeToolInput({
-          input: runtimeInput,
-          organizationId: context.organizationId,
-        });
+  const runtime = await applyAgentRuntimeLock({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    previous: existing?.runtime,
+    runtime:
+      runtimeInput == null
+        ? runtimeInput
+        : await resolveAgentRuntimeToolInput({
+            input: runtimeInput,
+            organizationId: context.organizationId,
+          }),
+  });
   await requireAgentRuntimePermission({
     agentType: params.agentType,
     runtime,
@@ -1121,10 +1129,16 @@ async function resolveAgentRuntimeToolInput(params: {
       "claudeCode settings apply only to the claude-code template.",
     );
   }
+  const { builtIns } = await AgentRuntimeTemplateModel.getSettings(
+    params.organizationId,
+  );
   return AgentRuntimeSchema.parse({
-    ...buildAgentCatalogRuntime({
-      id: template,
-      image: config.agentRuntime.catalogImages[template],
+    ...withAgentRuntimeDefaults({
+      runtime: buildAgentCatalogRuntime({
+        id: template,
+        image: config.agentRuntime.catalogImages[template],
+      }),
+      defaults: builtIns[template]?.settings,
     }),
     ...overrides,
   });

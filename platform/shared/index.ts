@@ -1,5 +1,6 @@
 export * from "./agent-catalog-images";
 export * from "./agent-run-transcript";
+export * from "./agent-runtime-lock";
 export * from "./agent-runtime-tiers";
 export * from "./agent-skills";
 export * from "./agents";

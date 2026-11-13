@@ -60,6 +60,9 @@ const server = setupServer(
   http.get("http://localhost:9000/api/credentials", () =>
     HttpResponse.json([]),
   ),
+  http.get("http://localhost:9000/api/agent-runtime-templates/built-ins", () =>
+    HttpResponse.json([]),
+  ),
 );
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
@@ -90,6 +93,49 @@ beforeEach(() => {
 });
 
 describe("AgentRuntimePicker", () => {
+  it("starts a maintained runtime from the administrator's settings", async () => {
+    let served = false;
+    server.use(
+      http.get(
+        "http://localhost:9000/api/agent-runtime-templates/built-ins",
+        () => {
+          served = true;
+          return HttpResponse.json([
+            { id: "codex", locked: false, settings: { ttlHours: 6 } },
+          ]);
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    await renderPicker("claude-code");
+    await waitFor(() => expect(served).toBe(true));
+    await user.click(screen.getByRole("radio", { name: "Codex" }));
+    expect(savedRuntime()).toMatchObject({
+      command: ["archestra-codex"],
+      ttlHours: 6,
+    });
+  });
+
+  it("shows a locked runtime's limits read-only and keeps its ports editable", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgentRuntimePicker
+        selectedId="codex"
+        value={runtimeFor("codex")}
+        onSelect={vi.fn()}
+        onChange={vi.fn()}
+        modelBlock={<div>Model settings content</div>}
+        modelSummary="summary"
+        lockedBy="Codex"
+      />,
+      { wrapper: QueryWrapper },
+    );
+    expect(await screen.findByText("Set by the Codex runtime")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /^Limits/ }));
+    expect(screen.getByLabelText(/Maximum duration/)).toBeDisabled();
+    expect(screen.getByLabelText("Ports to forward")).toBeEnabled();
+  });
+
   it("keeps a custom template's icon in its summary and editing choices", async () => {
     const id = "00000000-0000-4000-8000-000000000001";
     const runtime = {

@@ -21,6 +21,8 @@ vi.mock("@/lib/agent-runtime-templates.query", () => ({
     refetch: vi.fn(),
   }),
   useResolveRuntimeTemplate: () => ({ isPending: false, mutate: vi.fn() }),
+  useBuiltInRuntimeDefaults: () => () => undefined,
+  useLockedRuntimeName: () => null,
 }));
 vi.mock("next/navigation");
 vi.mock("@/lib/organization.query");

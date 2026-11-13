@@ -1,13 +1,23 @@
-import { RouteId } from "@archestra/shared";
+import {
+  agentCatalogIdForImage,
+  PopularAgentIdSchema,
+  RouteId,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth/utils";
+import config from "@/config";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import { assertAgentRuntimeTiersExist } from "@/services/agent-runtime/agent-config-validation";
+import {
+  applyLockedRuntimesToAgents,
+  assertLockedRuntimesFitAgents,
+} from "@/services/agent-runtime/agent-runtime-lock";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
   AgentRuntimeTemplateSchema,
   AgentRuntimeTemplateSummarySchema,
+  BuiltInRuntimeSummarySchema,
   RuntimeTemplateEditorSettingsSchema,
   SaveRuntimeTemplateSettingsSchema,
 } from "@/types/agent-runtime-template";
@@ -39,6 +49,29 @@ const agentRuntimeTemplateRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/agent-runtime-templates/built-ins",
+    {
+      schema: {
+        operationId: RouteId.ListBuiltInAgentRuntimeSettings,
+        description:
+          "List the settings administrators chose for the maintained runtimes, and which of them are locked.",
+        tags: ["Agents"],
+        response: constructResponseSchema(z.array(BuiltInRuntimeSummarySchema)),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      const { builtIns } =
+        await AgentRuntimeTemplateModel.getSettings(organizationId);
+      return reply.send(
+        PopularAgentIdSchema.options.flatMap((id) => {
+          const builtIn = builtIns[id];
+          return builtIn ? [{ id, ...builtIn }] : [];
+        }),
+      );
+    },
+  );
+
+  fastify.get(
     "/api/agent-runtime-templates/settings",
     {
       schema: {
@@ -58,24 +91,52 @@ const agentRuntimeTemplateRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.SaveRuntimeTemplateSettings,
         description:
-          "Save custom templates and the combined runtime order. Existing agents retain their runtime configuration. The revision prevents overwriting concurrent edits.",
+          "Save custom templates, the maintained templates' settings, and the combined runtime order. Saving a locked runtime applies its settings to every agent of its type; an unlocked runtime's settings only start new agents. The revision prevents overwriting concurrent edits.",
         tags: ["Organization"],
         body: SaveRuntimeTemplateSettingsSchema,
         response: constructResponseSchema(RuntimeTemplateEditorSettingsSchema),
       },
     },
-    async ({ organizationId, body }, reply) => {
-      for (const template of body.templates) {
-        await assertAgentRuntimeTiersExist({
-          runtime: template.runtime,
-          organizationId,
-        });
+    async ({ organizationId, user, body }, reply) => {
+      for (const runtime of [
+        ...body.templates.map((template) => template.runtime),
+        ...Object.values(body.builtIns).map((builtIn) => builtIn.settings),
+      ]) {
+        await assertAgentRuntimeTiersExist({ runtime, organizationId });
       }
+      const previous =
+        await AgentRuntimeTemplateModel.getSettings(organizationId);
+      for (const template of body.templates) {
+        if (
+          template.locked &&
+          agentCatalogIdForImage({
+            image: template.runtime.image,
+            catalogImages: config.agentRuntime.catalogImages,
+          })
+        )
+          throw new ApiError(
+            400,
+            `${template.name} uses a maintained image, so it runs as that built-in runtime. Lock the built-in runtime instead.`,
+          );
+      }
+      await assertLockedRuntimesFitAgents({
+        organizationId,
+        userId: user.id,
+        settings: body,
+        previous,
+      });
       return reply.send(
         await AgentRuntimeTemplateModel.saveSettings({
           organizationId,
           settings: body,
           popularAgentOverrides: body.popularAgentOverrides,
+          afterWrite: ({ tx, settings, previous }) =>
+            applyLockedRuntimesToAgents({
+              organizationId,
+              settings,
+              previous,
+              tx,
+            }),
         }),
       );
     },

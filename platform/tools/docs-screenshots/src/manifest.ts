@@ -529,7 +529,7 @@ export const SHOTS: Shot[] = [
   },
   {
     asset: "automated_screenshots/agents-runtime-setup_runtime-tiers",
-    route: () => "/settings/agents",
+    route: () => "/settings/agents/runtimes",
     beforeNavigate: showRuntimeTierSettings,
     prepare: async (page) => {
       const block = page.locator("#runtime-tiers");
@@ -541,7 +541,7 @@ export const SHOTS: Shot[] = [
   },
   {
     asset: "automated_screenshots/agents-runtime-setup_tier-memory",
-    route: () => "/settings/agents",
+    route: () => "/settings/agents/runtimes",
     beforeNavigate: showRuntimeTierSettings,
     prepare: async (page) => {
       await page

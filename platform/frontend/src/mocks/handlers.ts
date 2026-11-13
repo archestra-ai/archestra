@@ -414,6 +414,7 @@ export const handlers: HttpHandler[] = [
   }),
   ...getJson("/api/organization", organizationSeed),
   ...getJson("/api/agent-runtime-templates", []),
+  ...getJson("/api/agent-runtime-templates/built-ins", []),
   ...getJson("/api/agent-runtime-templates/settings", {
     revision: 0,
     templates: [],

@@ -1554,6 +1554,22 @@ test("a server's editors propose its rules as a pull request; readers and outsid
       HttpResponse.json({ status: "behind" }),
     ),
   );
+  // A pull that failed for now (the host, not the policy) is pulled again,
+  // and the merge is still followed.
+  await db
+    .update(schema.openappaGithubSyncTable)
+    .set({
+      lastSyncError: "GitHub returned HTTP 502. Check repository access.",
+      lastSyncedAt: new Date(Date.now()),
+    })
+    .where(eq(schema.openappaGithubSyncTable.organizationId, org.id));
+  expect(await follow()).toMatchObject({
+    phase: "merged",
+    done: false,
+    applied: false,
+    syncRetried: expect.stringContaining("HTTP 502"),
+    instruction: expect.stringContaining("pulling again"),
+  });
   await db
     .update(schema.openappaGithubSyncTable)
     .set({

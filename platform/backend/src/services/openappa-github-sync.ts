@@ -1554,17 +1554,31 @@ class AutoMerger {
       }
       return { token, base, method };
     } catch (error) {
-      // GitHub failing for now is asked again next minute; a refusal is held.
-      const refused =
+      // GitHub failing for now is asked again next minute. A permission the
+      // App lacks is held as such; a credential that cannot be used (gone,
+      // or without its key) is held with its own words, so nobody is sent
+      // to grant a permission the App may well have.
+      const permission =
         error instanceof MissingGithubPermission ||
-        (error instanceof ApiError && error.statusCode < 500);
+        (error instanceof ApiError && error.statusCode === 403);
+      const credential =
+        !permission &&
+        error instanceof ApiError &&
+        error.statusCode < 500 &&
+        error.statusCode !== 403;
       logger.warn(
         { organizationId, repo, error },
-        refused
+        permission
           ? "OpenAPPA cannot merge self-served pull requests: the GitHub App needs Contents and Pull requests write"
-          : "OpenAPPA could not reach GitHub to merge self-served pull requests; it tries again next minute",
+          : credential
+            ? "OpenAPPA cannot merge self-served pull requests: the GitHub App credential cannot be used"
+            : "OpenAPPA could not reach GitHub to merge self-served pull requests; it tries again next minute",
       );
-      if (refused) await hold(HELD_NO_PERMISSION);
+      if (permission) await hold(HELD_NO_PERMISSION);
+      else if (credential)
+        await hold(
+          `the GitHub App credential cannot be used (${(error as ApiError).message}), which an administrator fixes under Settings → Guardrails → Git sync`,
+        );
       return null;
     }
   }

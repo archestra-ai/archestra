@@ -434,18 +434,21 @@ async function readChangeStatus(params: {
         ).status ?? "",
       );
     if (applied) return answer("applied");
-    // A pull since the merge that failed is what keeps it from applying:
-    // nothing moves on until that is put right.
+    // A pull since the merge that the policy itself failed is what keeps it
+    // from applying: nothing moves on until that is put right. A host that
+    // failed for now is pulled again, and the merge followed on.
     const mergedAt = pull.merged_at ? Date.parse(pull.merged_at) : Number.NaN;
-    if (
+    const failedSince =
       source.lastSyncError &&
       source.lastSyncedAt &&
       (Number.isNaN(mergedAt) || source.lastSyncedAt.getTime() > mergedAt)
-    )
-      return answer("merged", { syncFailed: { reason: source.lastSyncError } });
+        ? source.lastSyncError
+        : null;
+    if (failedSince && !isTransientSyncError(failedSince))
+      return answer("merged", { syncFailed: { reason: failedSince } });
     // A pull applies what is merged; queue one rather than wait for the schedule.
     await OpenAppaGithubSyncModel.enqueue(params.organizationId);
-    return answer("merged");
+    return answer("merged", failedSince ? { syncRetried: failedSince } : {});
   }
   if (pull.state !== "open") return answer("closed");
   const head = pull.head?.sha ?? "";
@@ -525,7 +528,20 @@ type StatusExtra = {
   mergeRefused?: { reason: string; at: string };
   /** Git sync failed on a pull since the merge: the rules are not active. */
   syncFailed?: { reason: string };
+  /** The last pull since the merge failed for now; another is queued. */
+  syncRetried?: string;
 };
+
+/**
+ * Whether a pull's error is the host's for now (unreachable, a 5xx, a
+ * timeout) rather than the policy's: the next pull may well apply the merge
+ * by itself, so the Keeper keeps following rather than giving up.
+ */
+function isTransientSyncError(reason: string): boolean {
+  return /could not reach|HTTP 5\d\d|timed out|timeout|ECONN|fetch failed|socket/i.test(
+    reason,
+  );
+}
 
 /** What the Keeper does next at each phase, and what it tells the user. */
 function changeInstruction(phase: ChangePhase, extra: StatusExtra): string {
@@ -547,7 +563,9 @@ function changeInstruction(phase: ChangePhase, extra: StatusExtra): string {
     case "merged":
       return extra.syncFailed
         ? `Merged, but Git sync could not apply it: ${extra.syncFailed.reason} The rules are not active until an administrator puts the policy repository right; the Git sync card shows the same error. Tell the user, and stop here.`
-        : `Merged; Git sync is pulling it now. ${again(phase)}`;
+        : extra.syncRetried
+          ? `Merged; the last pull failed for now (${extra.syncRetried}) and Git sync is pulling again. ${again(phase)}`
+          : `Merged; Git sync is pulling it now. ${again(phase)}`;
     case "applied":
       return "Done: the pull request is merged and the rules are active. Tell the user, and stop here.";
     case "closed":

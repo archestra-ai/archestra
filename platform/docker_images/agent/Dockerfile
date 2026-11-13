@@ -224,7 +224,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-codex
 USER root
-RUN pnpm add --global @openai/codex@0.166.0 \
+RUN pnpm add --global @openai/codex@0.167.0 \
  && codex --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
@@ -265,8 +265,8 @@ USER root
 # required MCP startup guard and refreshes runtime bindings on session resume.
 COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
 RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
-    hermes_version=0.22.7 \
- && hermes_commit=b200f5bc60e31588ba2cb60e288029c4a54ba5fa \
+    hermes_version=0.23.0 \
+ && hermes_commit=2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19 \
  && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
  && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
  && case "${TARGETARCH}" in amd64) python_target=linux-x64 ;; arm64) python_target=linux-arm64 ;; *) exit 1 ;; esac \
@@ -390,8 +390,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /tmp/kimi \
  && cd /tmp/kimi \
- && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.5.0)" kimi-code.tgz \
- && echo "018b93e1f5bba73640ab12080e3c7eca92c936800bd3b359094c8f0e57ff26b8322ab8b7e5e56af660ee8687bfc515fbc0d1cbfb57d7f87d038ffac1dc7d3862  kimi-code.tgz" | sha512sum -c - \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.5.1)" kimi-code.tgz \
+ && echo "71f2b03758b2dd246fb414a531d12b533fdcdf14dbe869f908b1c4c0eee70457390cbc4d6c8dd2d4a0b32bf5785c985e219b79cb22804ec213f67277a2e0f6aa  kimi-code.tgz" | sha512sum -c - \
  && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
  && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
  && cd / && rm -rf /tmp/kimi /root/.npm \
@@ -415,13 +415,13 @@ FROM agent-base AS agent-copilot
 USER root
 ENV COPILOT_AUTO_UPDATE=false
 RUN case "$TARGETARCH" in \
-      amd64) copilot_arch=x64; copilot_checksum=dedae5ca2b104009e5372dc2bd85510d5582fd62bed027c321dedd0f035bc53149f4880cddaa023f283e41b18f0547ae60db38b2382d4ea167e65e727f21d50e ;; \
-      arm64) copilot_arch=arm64; copilot_checksum=2fbff84aad626de51d0fc684fbe72e6c18ebda859f00519ed322a3b98e687b41c3670f101d800fad9841da9efd36483694807cf1112772c7fea96b9554354f8c ;; \
+      amd64) copilot_arch=x64; copilot_checksum=b57e1cb65a393051298daa4271c363c4f2da124337d55002e2c99b54833a37b30363f3ab7c436628c3d4f32a77256c2c2ceef8741b9cceda7d54e710b582bc61 ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=c675a429ddf5a39be86333f63372982947b3458d369517e94311a70e5bcfebb4d3222fde251dea6ac2e507f18bb6fa22e1412473bb8577dc22342ea23127e504 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /opt/copilot \
  && cd /tmp \
- && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.105)" copilot.tgz \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.106)" copilot.tgz \
  && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
  && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
  && test -s /opt/copilot/LICENSE.md \

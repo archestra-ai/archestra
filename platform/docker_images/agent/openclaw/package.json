@@ -1,6 +1,6 @@
 {
   "private": true,
   "dependencies": {
-    "openclaw": "2026.10.10"
+    "openclaw": "2026.11.1"
   }
 }

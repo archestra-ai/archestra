@@ -945,7 +945,11 @@ async function launchDelegatedTask(params: {
       }
       if (error instanceof ApiError) {
         return failedLaunch(
-          error.statusCode >= 500 ? "failed" : "credentials_misconfigured",
+          error.statusCode === 403
+            ? "not_allowed"
+            : error.statusCode === 400
+              ? "credentials_misconfigured"
+              : "failed",
           errorResult(error.message),
         );
       }
@@ -980,7 +984,10 @@ async function launchDelegatedTask(params: {
         );
       }
       if (error instanceof ApiError) {
-        return failedLaunch("model_unready", errorResult(error.message));
+        return failedLaunch(
+          error.statusCode >= 500 ? "failed" : "model_unready",
+          errorResult(error.message),
+        );
       }
       throw error;
     }

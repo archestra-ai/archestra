@@ -462,7 +462,31 @@ test("asks to reconnect on a stale refresh grant while surfacing admin misconfig
       "GitHub authorization failed. Connect GitHub again and ensure expiring user tokens are enabled.",
   });
 
-  // Transient GitHub 502 on refresh -> surfaces 502 instead of falsely asking to reconnect.
+  // Transient GitHub 502 or malformed HTTP-200 body -> surfaces 502 instead of 400 or reconnect.
+  const callbackFlow = await start();
+  server.use(
+    http.post(
+      "https://github.com/login/oauth/access_token",
+      () =>
+        new HttpResponse("<html>upstream proxy error</html>", {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        }),
+    ),
+  );
+  const malformedCallback = await complete(callbackFlow);
+  expect(malformedCallback.statusCode).toBe(502);
+  await expect(
+    resolveAgentRuntimeCredentials({
+      runtime,
+      organizationId,
+      userId: user.id,
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 502,
+    message: "Could not exchange GitHub authorization token",
+  });
+
   server.use(
     http.post("https://github.com/login/oauth/access_token", () =>
       HttpResponse.json({ message: "Bad Gateway" }, { status: 502 }),

@@ -240,7 +240,12 @@ class GitHubUserConnectionManager {
     );
     if (!response.ok)
       throw new ApiError(502, "Could not exchange GitHub authorization token");
-    const raw: unknown = await response.json().catch(() => null);
+    let raw: unknown;
+    try {
+      raw = await response.json();
+    } catch {
+      throw new ApiError(502, "Could not exchange GitHub authorization token");
+    }
     const payload = TokenResponseSchema.safeParse(raw);
     if (!payload.success) {
       const oauthError = OAuthErrorResponseSchema.safeParse(raw);

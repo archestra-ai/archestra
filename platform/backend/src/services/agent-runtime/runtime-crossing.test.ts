@@ -15,6 +15,7 @@ import { vi } from "vitest";
 import { executeArchestraTool } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { startDelegatedTask } from "@/archestra-mcp-server/tasks";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -38,6 +39,7 @@ import {
   setRuntimeCredentialConnection,
 } from "@/services/agent-runtime/runtime-credentials";
 import * as workspaceFiles from "@/services/agent-runtime/workspace-files";
+import { githubUserConnectionManager } from "@/services/github-user-connection";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
@@ -926,6 +928,169 @@ describe("model-facing runtime tools", () => {
     expect(await recordedLaunch(org.id)).toEqual({
       kind: "failed",
       reason: "credentials_admin_only",
+    });
+  });
+
+  test("records not_allowed for service-account shared-credential denials and failed for contended GitHub connection leases", async ({
+    makeAdmin,
+    makeAgent,
+    makeCustomRole,
+    makeMember,
+    makeOrganization,
+    makeServiceAccount,
+    makeUser,
+    removeObjectPolicies,
+  }) => {
+    const admin = await makeAdmin();
+    const org = await makeOrganization();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    await createRuntimeCredentialDefinition({
+      organizationId: org.id,
+      userId: admin.id,
+      definition: {
+        key: "org-shared-secret",
+        name: "Organization shared secret",
+        description: "",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    await removeObjectPolicies(org.id);
+    await setRuntimeCredentialConnection({
+      organizationId: org.id,
+      userId: admin.id,
+      credentialId: "org-shared-secret",
+      scope: "organization",
+      value: "shared-secret-value",
+    });
+    const sharedAgent = await makeAgent({
+      organizationId: org.id,
+      authorId: admin.id,
+      runtime: {
+        ...runtimeConfig(),
+        credentials: [
+          {
+            key: "ORG_SHARED_SECRET",
+            label: "Organization shared secret",
+            scope: "shared",
+            credentialId: "org-shared-secret",
+            required: true,
+          },
+        ],
+      },
+    });
+    const role = await makeCustomRole(org.id, {
+      permission: {
+        agent: ["read", "use", "update"],
+      },
+    });
+    const account = await makeServiceAccount(org.id, { role: role.role });
+    await releasedSpawn(org.id);
+
+    const saDenied = await startDelegatedTask({
+      agentId: sharedAgent.id,
+      message: "Do the work",
+      context: {
+        agent: { id: sharedAgent.id, name: sharedAgent.name },
+        userId: serviceAccountUserId(account.id),
+        organizationId: org.id,
+        openappaRuntimeCall: {
+          session: proofSession(org.id),
+          toolCallId: "call-1",
+          spawn: true,
+        },
+      },
+    });
+
+    expect(saDenied.isError).toBe(true);
+    expect(JSON.stringify(saDenied.content)).toContain(
+      "Service account cannot use this shared credential.",
+    );
+    expect(await recordedLaunch(org.id)).toEqual({
+      kind: "failed",
+      reason: "not_allowed",
+    });
+
+    const busyOrg = await makeOrganization();
+    const busyAdmin = await makeAdmin();
+    const busyMember = await makeUser();
+    await makeMember(busyAdmin.id, busyOrg.id, { role: "admin" });
+    await makeMember(busyMember.id, busyOrg.id, { role: "member" });
+    await createRuntimeCredentialDefinition({
+      organizationId: busyOrg.id,
+      userId: busyAdmin.id,
+      definition: {
+        key: "repository-app",
+        name: "Repository App",
+        description: "",
+        icon: null,
+        kind: "github_app",
+        allowPersonal: false,
+        allowOrganization: true,
+        githubUrl: "https://api.github.com",
+        appId: "123",
+        installationId: "456",
+        githubClientId: "test-client",
+      },
+    });
+    await createRuntimeCredentialDefinition({
+      organizationId: busyOrg.id,
+      userId: busyAdmin.id,
+      definition: {
+        key: "github-user",
+        name: "GitHub",
+        description: "",
+        icon: null,
+        kind: "github_app_user",
+        allowPersonal: true,
+        allowOrganization: false,
+        githubAppCredentialKey: "repository-app",
+      },
+    });
+    const personalAgent = await makeAgent({
+      organizationId: busyOrg.id,
+      authorId: busyAdmin.id,
+      runtime: {
+        ...runtimeConfig(),
+        credentials: [
+          {
+            key: "GITHUB_TOKEN",
+            label: "GitHub",
+            scope: "per_user",
+            credentialId: "github-user",
+            required: false,
+          },
+        ],
+      },
+    });
+    await releasedSpawn(busyOrg.id);
+    vi.spyOn(githubUserConnectionManager, "resolve").mockRejectedValueOnce(
+      new ApiError(409, "GitHub connection is busy. Try again shortly."),
+    );
+
+    const busyResult = await startDelegatedTask({
+      agentId: personalAgent.id,
+      message: "Do the work",
+      context: {
+        agent: { id: personalAgent.id, name: personalAgent.name },
+        userId: busyMember.id,
+        organizationId: busyOrg.id,
+        openappaRuntimeCall: {
+          session: proofSession(busyOrg.id),
+          toolCallId: "call-1",
+          spawn: true,
+        },
+      },
+    });
+
+    expect(busyResult.isError).toBe(true);
+    expect(JSON.stringify(busyResult.content)).toContain(
+      "GitHub connection is busy",
+    );
+    expect(await recordedLaunch(busyOrg.id)).toEqual({
+      kind: "failed",
+      reason: "failed",
     });
   });
 

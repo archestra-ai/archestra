@@ -648,6 +648,7 @@ const layerTable = [
       "src/services/openappa-github-sync.ts",
       "src/services/openappa-gitlab.ts",
       "src/services/openappa-label-changes.ts",
+      "src/services/openappa-leases.ts",
       "src/services/openappa-policy-change.ts",
       "src/services/openappa-policy-tests.ts",
       "src/services/openappa-template-files.ts",

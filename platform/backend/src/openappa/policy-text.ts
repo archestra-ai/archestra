@@ -272,6 +272,12 @@ const SERVER_PREFIX = /^[a-z0-9_-]+$/;
 const SERVER_RULES_BRANCH = "archestra/openappa-server-";
 
 /**
+ * The branch of the pull request this deployment opens to include the
+ * servers' folder in the policy file, for MCP Guardrails Self-Service.
+ */
+export const SELF_SERVICE_INCLUDE_BRANCH = "archestra/openappa-self-service";
+
+/**
  * A repository-relative `.toml` path outside `batteries/`, with no `.` or
  * `..` segment, which the segment pattern rules out by refusing a leading dot.
  */

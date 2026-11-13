@@ -3,7 +3,7 @@ title: Git Sync
 description: Keep the Guardrails policy in a GitHub or GitLab repository and review every change there
 order: 2
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-11-13
+lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -17,7 +17,7 @@ With Git sync, every policy change goes through a pull request in your own GitHu
 
 When setup is done, the card on **Settings → Guardrails** shows **Connected**. While something still waits, such as a GitHub App permission or a pull request to merge, the card shows a **Finish setup** notice. The Guardrails pages show the same notice.
 
-**Finish setup** opens a wizard with one step for each item that waits. Like every Git sync wizard, it ends on the **Finish** step, which lists each part of the setup and what it still needs. While you edit Git sync, **Finish** opens from any step.
+**Finish setup** opens a wizard with one step for each item that waits. On its pull requests step, the wizard checks each pull request again when you return from GitHub. Once they all merge, the wizard goes to **Finish**. Like every Git sync wizard, it ends on the **Finish** step, which lists each part of the setup and what it still needs. While you edit Git sync, **Finish** opens from any step.
 
 ### GitHub
 
@@ -26,7 +26,7 @@ When setup is done, the card on **Settings → Guardrails** shows **Connected**.
    - **Use an existing repository:** one that already holds an OpenAPPA policy. Setup proposes your current policy to it in a pull request.
 2. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with no keys to copy. Install it on the policy repository only.
 3. **MCP Guardrails Self-Service:** tick it to let [MCP owners manage their servers' Guardrails](#mcp-guardrails-self-service), and pick the folder their policy files go to, `mcp` unless you change it. You can turn it on later too.
-4. Choose the repository and click **Connect repository**. To change the **Branch**, **Policy file** (`appa.toml`), **Validations folder** (`traces`), or **Sync schedule**, open **Advanced** first.
+4. Choose the repository and the **Sync schedule**, then click **Connect repository**. To change the **Branch**, **Policy file** (`appa.toml`), or **Validations folder** (`traces`), open **Advanced** first.
 
 The App needs **Read & write** on Contents, Pull requests, Checks, and Workflows. Archestra posts its policy check with Checks, and keeps the validation workflow current with Workflows (see [Repository Files](#repository-files)).
 
@@ -37,11 +37,23 @@ If repository rules block the first commit, setup opens a pull request instead. 
 Git sync works with gitlab.com and self-managed GitLab, through an access token with the `api` scope.
 
 1. Pick a saved token, or click [**Add a GitLab token**](/docs/agents/skills/importing#private-repositories).
-2. Choose the policy project. To change the branch, policy file, validations folder, or schedule, open **Advanced** first.
+2. Choose the policy project and the **Sync schedule**. To change the branch, policy file, or validations folder, open **Advanced** first.
    - **New project:** pick a **Group**, or **Your namespace** for your own account, and enter a **Project name**. Click **Create project**. Setup creates a private project with your current policy.
    - **Existing project:** pick it and click **Connect project**. A project that already holds a policy gets your current policy as a merge request.
 
 If GitLab refuses the first commit to a protected branch, setup stops with an error. Use a token with the Maintainer role, or allow the first push to that branch.
+
+## When Merged Changes Apply
+
+A pull request merged in the repository applies at the next scheduled sync: every 15 minutes, unless you pick every 5 minutes, every hour, or once a day. The Git sync card on **Settings → Guardrails** shows the schedule. Click **Sync now** to pull at once, or **Edit** to change the schedule.
+
+Git sync also pulls at once, without waiting for the schedule, when:
+
+- you save a Git sync or self-service setting;
+- you open **Edit** or **Finish setup**, or close a Git sync wizard with **Done**;
+- the APPA Keeper finds that a pull request it opened for a policy, validation, or MCP server rules change has merged;
+- the GitHub App merges a self-service pull request (see [Auto-merge](#auto-merge));
+- you turn Guardrails enforcement on again.
 
 ## Repository Checks
 
@@ -92,6 +104,8 @@ include = [
   "mcp/*.toml",
 ]
 ```
+
+Git sync proposes that include itself. When the policy file lacks it, the next sync opens a pull request that adds it. If the setup pull request has not merged yet, Git sync adds the include to that pull request instead. **Finish setup** lists the pull request with the others to merge.
 
 MCP servers whose tools carry the same tool prefix share one rules file, because rules match tools by name. To change a shared file, you need edit access to each of these servers that is shared with a team or the organization. Members' personal copies of these servers follow the same file. When only personal copies carry the prefix, a change needs edit access to each copy.
 

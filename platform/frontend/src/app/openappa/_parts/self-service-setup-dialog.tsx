@@ -25,6 +25,7 @@ import {
   useAppaGithubAppGrants,
   useAppaGithubSync,
   useAppaGithubSyncing,
+  useAppaRepositoryProtection,
   useFreshAppaRepositoryProtection,
   useUpdateAppaGithubSync,
 } from "@/lib/openappa-github-sync.query";
@@ -86,7 +87,7 @@ export function SelfServiceSetupDialog({
   alreadyOn: boolean;
 }) {
   const appName = useAppName();
-  const update = useUpdateAppaGithubSync();
+  const update = useUpdateAppaGithubSync({ quiet: true });
   const [step, setStep] = useState<Step>("app");
   const [folder, setFolder] = useState(directory || DEFAULT_FOLDER);
   const chosen = folder.trim().replace(/^\/+|\/+$/g, "");
@@ -259,14 +260,10 @@ export function GithubAppPermissionsStep({
   ready,
   onCheckAgain,
   needed = NEEDED,
-  title = (app) => (
-    <>
-      Grant the <code>Checks</code> permission to the {app} App
-    </>
-  ),
+  title = (app) => `Grant the Checks permission to the ${app} App`,
   hint = (
     <>
-      Set it to <code>Read and write</code>: the App posts the check&apos;s
+      Set it to <strong>Read and write</strong>: the App posts the check&apos;s
       verdict on each pull request. Making the check required is a branch
       ruleset you import yourself, so the App needs no Administration.
     </>
@@ -355,12 +352,10 @@ export function GithubAppPermissionsStep({
       {grants.permissions.some((entry) => entry.granted) ? (
         <p className="text-xs text-muted-foreground">
           Granted:{" "}
-          {joined(
-            grants.permissions
-              .filter((entry) => entry.granted)
-              .map((entry) => PERMISSION_LABELS[entry.name]),
-            ", ",
-          )}
+          {grants.permissions
+            .filter((entry) => entry.granted)
+            .map((entry) => PERMISSION_LABELS[entry.name])
+            .join(", ")}
           .
         </p>
       ) : null}
@@ -372,11 +367,8 @@ export function GithubAppPermissionsStep({
         ) : (
           <span>
             Missing:{" "}
-            {joined(
-              missing.map((name) => PERMISSION_LABELS[name]),
-              " and ",
-            )}
-            . Check again once {needed.length > 1 ? "they are" : "it is"}{" "}
+            {missing.map((name) => PERMISSION_LABELS[name]).join(" and ")}.
+            Check again once {needed.length > 1 ? "they are" : "it is"}{" "}
             accepted.
           </span>
         )}
@@ -396,16 +388,6 @@ export function GithubAppPermissionsStep({
       </div>
     </div>
   );
-}
-
-/** Permission names as code, separated as given. */
-function joined(names: string[], separator: string): ReactNode {
-  return names.map((name, index) => (
-    <span key={name}>
-      {index > 0 ? <span>{separator}</span> : null}
-      <code>{name}</code>
-    </span>
-  ));
 }
 
 type Progress = "waiting" | "running" | "done" | "failed";
@@ -453,7 +435,7 @@ export function SetupChecklist({
   const directory = directoryGiven ?? status?.selfService?.directory ?? "mcp";
   const policyFile =
     policyFileGiven ?? status?.source?.path?.split("/").pop() ?? "appa.toml";
-  const update = useUpdateAppaGithubSync();
+  const update = useUpdateAppaGithubSync({ quiet: true });
   const fresh = useFreshAppaRepositoryProtection();
   const [switched, setSwitched] = useState<Progress>(
     first ? "waiting" : "done",
@@ -467,7 +449,7 @@ export function SetupChecklist({
     name?: string;
   }>({ state: "waiting" });
   const [include, setInclude] = useState<{
-    /** `action`: the include is missing and waits for its pull request. */
+    /** `action`: its pull request waits for a merge on the host. */
     state: Progress | "action";
     detail?: Protection["include"];
     error?: string;
@@ -502,10 +484,8 @@ export function SetupChecklist({
     const read = await readProtection();
     if (read === undefined) return setInclude({ state: "waiting" });
     setRules(rulesStateOf(read));
-    // Opened again, the checklist only reads: a missing include waits for
-    // its button rather than opening a pull request on its own.
-    if (!first && read?.include.state === "missing")
-      return setInclude({ state: "action", detail: read.include });
+    // A missing include opens as a pull request here too: the wizard opens
+    // what setup needs rather than offering a button for it.
     await settleInclude(read);
   }
   /** The protection from GitHub, or undefined once a failed read is shown. */
@@ -529,7 +509,7 @@ export function SetupChecklist({
       read?.include.state === "included" ||
       read?.include.state === "pull_open"
     ) {
-      setInclude({ state: "done", detail: read.include });
+      setInclude(includeProgress(read.include));
       return;
     }
     try {
@@ -538,7 +518,7 @@ export function SetupChecklist({
       setInclude(
         again?.include.state === "included" ||
           again?.include.state === "pull_open"
-          ? { state: "done", detail: again.include }
+          ? includeProgress(again.include)
           : { state: "failed", detail: again?.include },
       );
     } catch (error) {
@@ -565,10 +545,23 @@ export function SetupChecklist({
     void run();
   }, []);
 
+  // What the repository holds now, read again after each pull: a merge or an
+  // import on GitHub shows here without a check-again. The step's own reads
+  // and runs show while they go.
+  const live = useAppaRepositoryProtection(selfService).data;
+  const rulesView =
+    rules.state === "running" || !live ? rules : rulesStateOf(live);
+  const includeView =
+    include.state === "running" || include.state === "failed" || !live
+      ? include
+      : live.include.state === "included" || live.include.state === "pull_open"
+        ? includeProgress(live.include)
+        : include;
+  const git = appaGitHost(status);
   const rulesLine = (() => {
-    const detail = rules.detail;
-    const check = rules.name ?? "policy";
-    if (rules.state === "done")
+    const detail = rulesView.detail;
+    const check = rulesView.name ?? "policy";
+    if (rulesView.state === "done")
       return (
         <span>
           {detail?.url ? (
@@ -586,7 +579,7 @@ export function SetupChecklist({
           requires the {check} check on the branch.
         </span>
       );
-    if (rules.state === "action")
+    if (rulesView.state === "action")
       return (
         <BranchRuleActions
           rules={detail ?? { state: "error" }}
@@ -595,29 +588,21 @@ export function SetupChecklist({
           onCheckAgain={() => void checkRules()}
         />
       );
-    if (rules.state === "running")
+    if (rulesView.state === "running")
       return <span>Reading the branch rules…</span>;
     return <span>Import the branch ruleset on GitHub</span>;
   })();
   const includeLine = (() => {
-    const detail = include.detail;
-    if (include.state === "done" && detail?.state === "included")
+    const detail = includeView.detail;
+    if (includeView.state === "done")
       return (
         <span>
-          {policyFile} already includes <code>{directory}/*.toml</code>.
+          {policyFile} includes <code>{directory}/*.toml</code>.
         </span>
       );
-    if (
-      include.state === "done" &&
-      detail?.pull &&
-      detail.pull.number === setupPull?.number
-    )
-      return (
-        <span>
-          The setup pull request includes <code>{directory}/*.toml</code>.
-        </span>
-      );
-    if (include.state === "done" && detail?.pull)
+    // Merged is the only done: a pull request that carries the include waits
+    // for its merge, the setup pull request among them.
+    if (includeView.state === "action" && detail?.pull)
       return (
         <span>
           <a
@@ -626,27 +611,25 @@ export function SetupChecklist({
             rel="noreferrer"
             className="font-medium text-foreground underline underline-offset-4"
           >
-            Pull request #{detail.pull.number}
+            {`${git.changeRequestShort} #${detail.pull.number}`}
           </a>{" "}
-          opened. Merge it and re-sync to apply the new settings.
+          {detail.pull.number ===
+          (setupPull?.number ?? status?.source?.setupPullRequestNumber)
+            ? "carries the initial policy with"
+            : "adds"}{" "}
+          <code>{directory}/*.toml</code> to {policyFile}: waiting for merge.
         </span>
       );
-    if (include.state === "failed")
+    if (includeView.state === "failed")
       return (
         <span>
           Could not open the pull request
           {include.error ? `: ${include.error}` : "."}
         </span>
       );
-    if (include.state === "action")
-      return (
-        <span>
-          {policyFile} does not include <code>{directory}/*.toml</code> yet.
-        </span>
-      );
     return (
       <span>
-        Open the pull request that starts <code>{directory}/</code> and adds{" "}
+        Opening the pull request that starts <code>{directory}/</code> and adds{" "}
         <code>{directory}/*.toml</code> to {policyFile}
       </span>
     );
@@ -687,14 +670,12 @@ export function SetupChecklist({
         {switched === "done" ? <SourceRows /> : null}
         {selfService ? (
           <>
-            <ProgressRow state={rules.state}>{rulesLine}</ProgressRow>
-            <ProgressRow state={include.state}>{includeLine}</ProgressRow>
+            <ProgressRow state={rulesView.state}>{rulesLine}</ProgressRow>
+            <ProgressRow state={includeView.state}>{includeLine}</ProgressRow>
           </>
         ) : null}
       </ul>
-      {switched === "failed" ||
-      include.state === "failed" ||
-      include.state === "action" ? (
+      {switched === "failed" || include.state === "failed" ? (
         <Button
           type="button"
           variant="outline"
@@ -707,11 +688,12 @@ export function SetupChecklist({
               mutate({ action: "include_servers" })
                 .then(() => refetch())
                 .then((result) =>
-                  setInclude({
-                    state:
-                      result?.include.state === "missing" ? "failed" : "done",
-                    detail: result?.include,
-                  }),
+                  setInclude(
+                    result?.include.state === "included" ||
+                      result?.include.state === "pull_open"
+                      ? includeProgress(result.include)
+                      : { state: "failed", detail: result?.include },
+                  ),
                 )
                 .catch((error: unknown) =>
                   setInclude({
@@ -723,9 +705,7 @@ export function SetupChecklist({
             }
           }}
         >
-          <span>
-            {include.state === "action" ? "Open the pull request" : "Try again"}
-          </span>
+          <span>Try again</span>
         </Button>
       ) : null}
     </div>
@@ -749,19 +729,26 @@ function SourceRows() {
     files?.state === "needs_permission" ||
     (files?.withheld?.length ?? 0) > 0;
   const grants = useAppaGithubAppGrants(app && lacksGrant);
-  const update = useUpdateAppaGithubSync();
+  const update = useUpdateAppaGithubSync({ quiet: true });
   const syncing = useAppaGithubSyncing();
+  const protection = useAppaRepositoryProtection(
+    status?.selfService?.enabled === true,
+  );
+  // Anything that waits for a merge on the host is checked again on coming
+  // back to this tab: the setup pull request, the files update, the include.
   const waiting = !!source?.setupPullRequestNumber;
+  const mergeAwaited =
+    waiting || !!files?.pull || protection.data?.include.state === "pull_open";
   const { mutate } = update;
   useEffect(() => {
-    if (!waiting) return;
+    if (!mergeAwaited) return;
     const check = () => {
       if (document.visibilityState === "visible" && !syncing)
         mutate({ action: "sync" });
     };
     window.addEventListener("focus", check);
     return () => window.removeEventListener("focus", check);
-  }, [waiting, syncing, mutate]);
+  }, [mergeAwaited, syncing, mutate]);
   if (!status || !source?.repo) return null;
   const git = appaGitHost(status);
   const urls = git.urls(source.repo);
@@ -929,6 +916,17 @@ function rulesStateOf(read: Protection | null): {
     : { state: "action", detail: read?.branchRules, name: read?.checkName };
 }
 
+/** The include row from a read: done once merged, else waiting for its merge. */
+function includeProgress(include: Protection["include"]): {
+  state: Progress | "action";
+  detail: Protection["include"];
+} {
+  return {
+    state: include.state === "included" ? "done" : "action",
+    detail: include,
+  };
+}
+
 /**
  * What makes the check required to merge: a branch ruleset. Archestra reads
  * the branch's rules and writes none, so the administrator downloads the
@@ -1083,7 +1081,7 @@ function ProgressRow({
 
 /** Close, once the last step has settled; the dialog cannot be dismissed before. */
 function EnableFooter({ onClose }: { onClose: () => void }) {
-  const update = useUpdateAppaGithubSync();
+  const update = useUpdateAppaGithubSync({ quiet: true });
   const syncing = useAppaGithubSyncing();
   return (
     <Button

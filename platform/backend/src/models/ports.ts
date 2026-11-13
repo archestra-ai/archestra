@@ -120,6 +120,17 @@ export interface ScopedPermissionsPort {
   }) => Promise<boolean>;
 }
 
+/**
+ * Proposes the include of the servers' folder in the policy file when
+ * MCP Guardrails Self-Service needs it (services/openappa-server-rules), for
+ * the Git sync pull that finds it missing.
+ */
+export interface SelfServiceIncludePort {
+  proposeSelfServiceInclude: (
+    organizationId: string,
+  ) => Promise<{ number: number; url: string } | null>;
+}
+
 /** Every port, by name. */
 export interface Ports {
   mcpServerRuntime: McpServerRuntimePort;
@@ -133,6 +144,7 @@ export interface Ports {
   mountedSkillsReadability: MountedSkillsReadabilityPort;
   embeddingFinalization: EmbeddingFinalizationPort;
   scopedPermissions: ScopedPermissionsPort;
+  selfServiceInclude: SelfServiceIncludePort;
 }
 
 /** A binding for each port: loads the implementation when the port is first used. */
@@ -191,6 +203,7 @@ const PORT_NAMES = [
   "mountedSkillsReadability",
   "scopedPermissions",
   "embeddingFinalization",
+  "selfServiceInclude",
 ] as const satisfies readonly (keyof Ports)[];
 
 /** Fails to compile when a port is missing from PORT_NAMES. */

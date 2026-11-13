@@ -46,6 +46,7 @@ const BINDINGS: PortBindings = {
     );
     return { allows: (params) => ResourcePermissions.allows(params) };
   },
+  selfServiceInclude: () => import("@/services/openappa-server-rules"),
 };
 
 bindPorts(BINDINGS);

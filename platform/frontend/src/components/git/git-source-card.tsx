@@ -3,6 +3,7 @@
 import type { GitProvider } from "@archestra/shared";
 import {
   AlertTriangle,
+  Clock,
   ExternalLink,
   GitBranch,
   RefreshCw,
@@ -155,6 +156,16 @@ export function GitSourceBranch({ branch }: { branch: string | null }) {
     <span className="inline-flex items-center gap-1">
       <GitBranch className="size-3.5" />
       {branch || "Default branch"}
+    </span>
+  );
+}
+
+/** How often a source is checked, such as "Every 15 minutes". */
+export function GitSourceSchedule({ schedule }: { schedule: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Clock className="size-3.5" aria-hidden />
+      {schedule}
     </span>
   );
 }

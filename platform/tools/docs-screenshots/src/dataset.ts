@@ -148,6 +148,18 @@ expect allow
 ] as const;
 
 /** Yells on Guardrails → Yells: agents that could not finish a task because of the policy. */
+/**
+ * The persona's linked device. Only the MCP bridge can link one, when it runs
+ * on a real device, so the row is seeded as SQL.
+ */
+export const DESKTOP_DEVICE = {
+  id: "de51ce00-0000-4000-8000-000000000001",
+  name: "Jordans-MacBook-Pro",
+  platform: "macos",
+  version: "0.1.2",
+  daysAgo: 2,
+};
+
 export const YELLS = [
   {
     id: "5e11a0e1-0000-4000-8000-000000000001",

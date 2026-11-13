@@ -1428,6 +1428,17 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     check: { state: "failed", title: "Git sync would refuse this policy" },
     instruction: expect.stringContaining("cannot merge"),
   });
+  // Only success counts: a skipped check (no policy file changed) is as final.
+  runs.splice(0, runs.length, {
+    status: "completed",
+    conclusion: "skipped",
+    output: { title: "No policy files changed" },
+  });
+  expect(await follow()).toMatchObject({
+    phase: "check_failed",
+    done: true,
+    check: { state: "failed", title: "No policy files changed" },
+  });
   // Waiting past "check_pending": the first read fails for now, the next
   // sees the check passed and the App's merge due.
   runs.splice(0, runs.length, {
@@ -1441,18 +1452,52 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     done: false,
     check: { state: "passed" },
   });
-  // Merged and applied: the accepted commit contains the merge.
+  // A merge that has not come in fifteen minutes is not waited on for ever.
+  runs[0] = {
+    ...runs[0],
+    completed_at: new Date(Date.now() - 20 * 60_000).toISOString(),
+  };
+  expect(await follow()).toMatchObject({
+    phase: "merge_refused",
+    done: true,
+    mergeRefused: { reason: expect.stringContaining("has not merged it") },
+  });
+  // Merged, but the pull since failed: nothing is active until that is fixed.
+  const mergedPull = {
+    number: 8,
+    html_url: "https://github.com/example/policies/pull/8",
+    state: "closed",
+    merged: true,
+    merged_at: new Date(Date.now() - 2 * 60_000).toISOString(),
+    merge_commit_sha: "b".repeat(40),
+    head: { ref: refs[2]?.ref.replace("refs/heads/", ""), sha: head8 },
+  };
   server.use(
-    http.get(`${REPO}/pulls/8`, () =>
-      HttpResponse.json({
-        number: 8,
-        html_url: "https://github.com/example/policies/pull/8",
-        state: "closed",
-        merged: true,
-        merge_commit_sha: "b".repeat(40),
-        head: { ref: refs[2]?.ref.replace("refs/heads/", ""), sha: head8 },
-      }),
+    http.get(`${REPO}/pulls/8`, () => HttpResponse.json(mergedPull)),
+    http.get(`${REPO}/compare/${"b".repeat(40)}...${FIRST}`, () =>
+      HttpResponse.json({ status: "behind" }),
     ),
+  );
+  await db
+    .update(schema.openappaGithubSyncTable)
+    .set({
+      lastSyncError: "appa.toml: line 3: unknown key `includes`.",
+      lastSyncedAt: new Date(Date.now()),
+    })
+    .where(eq(schema.openappaGithubSyncTable.organizationId, org.id));
+  expect(await follow()).toMatchObject({
+    phase: "merged",
+    done: true,
+    applied: false,
+    syncFailed: { reason: expect.stringContaining("unknown key") },
+    instruction: expect.stringContaining("could not apply it"),
+  });
+  // Merged and applied: the accepted commit contains the merge.
+  await db
+    .update(schema.openappaGithubSyncTable)
+    .set({ lastSyncError: null })
+    .where(eq(schema.openappaGithubSyncTable.organizationId, org.id));
+  server.use(
     http.get(`${REPO}/compare/${"b".repeat(40)}...${FIRST}`, () =>
       HttpResponse.json({ status: "identical" }),
     ),
@@ -3010,7 +3055,7 @@ test("with auto-merge on, a self-served pull request whose check passes is merge
   });
 });
 
-test("a self-served pull request GitHub refuses to merge is logged and left for people: tried once more the next minute, then fifteen minutes later; an App that cannot merge is not asked again every minute", async ({
+test("a self-served pull request GitHub refuses to merge is logged and left for people: tried once more the next minute, then fifteen minutes later; an App that cannot merge is not asked again every minute; the Keeper's status says so at each step", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -3019,11 +3064,48 @@ test("a self-served pull request GitHub refuses to merge is logged and left for 
   const org = await makeOrganization();
   const admin = await makeUser({ email: "admin@example.com" });
   await makeMember(admin.id, org.id, { role: "admin" });
-  const { results, merges, merge } = await serveAutoMergeRepository({
+  const { results, runs, merges, merge } = await serveAutoMergeRepository({
     organizationId: org.id,
     requester: admin.email,
   });
   await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
+  // The server the pull request is for, so the Keeper can ask after it.
+  const catalog = await InternalMcpCatalogModel.create(
+    {
+      name: "payments_api",
+      serverType: "remote",
+      serverUrl: "https://payments.example.com/mcp",
+      scope: "org",
+    },
+    { organizationId: org.id },
+  );
+  await ToolModel.createToolIfNotExists({
+    name: "payments_api__refund_payment",
+    description: "refund",
+    parameters: {},
+    catalogId: catalog.id,
+  });
+  server.use(
+    // The checks the minute posted, as GitHub lists them on the head.
+    http.get(`${REPO}/commits/:sha/check-runs`, ({ params }) =>
+      HttpResponse.json({
+        check_runs: runs
+          .filter((run) => run.head_sha === params.sha)
+          .map((run) => ({
+            status: "completed",
+            conclusion: run.conclusion,
+            completed_at: new Date(Date.now()).toISOString(),
+          })),
+      }),
+    ),
+  );
+  const status = () =>
+    getServerRulesChangeStatus({
+      organizationId: org.id,
+      userId: admin.id,
+      catalogId: catalog.id,
+      number: 1,
+    });
   merge.status = 405;
   const warn = vi.spyOn(logger, "warn");
 
@@ -3031,6 +3113,15 @@ test("a self-served pull request GitHub refuses to merge is logged and left for 
   expect(merges).toEqual([
     { number: 1, sha: results[1], merge_method: "squash" },
   ]);
+  // One refusal is not final: the Keeper keeps following.
+  expect(await status()).toMatchObject({
+    phase: "merge_pending",
+    done: false,
+    mergeRefused: {
+      reason: expect.stringContaining("Repository rule violations found"),
+    },
+    instruction: expect.stringContaining("tries again within a minute"),
+  });
   expect(warn).toHaveBeenCalledWith(
     expect.objectContaining({
       number: 1,
@@ -3042,9 +3133,15 @@ test("a self-served pull request GitHub refuses to merge is logged and left for 
   expect(await queuedSyncs()).toHaveLength(0);
 
   // A check just posted can take GitHub a moment to count: the next minute
-  // tries once more. Refused again, the pull request is left alone.
+  // tries once more. Refused again, the pull request is left alone, and the
+  // Keeper is told to stop following it.
   await checkDueAppaGithubSyncs();
   expect(merges).toHaveLength(2);
+  expect(await status()).toMatchObject({
+    phase: "merge_refused",
+    done: true,
+    instruction: expect.stringContaining("Stop following it"),
+  });
   await checkDueAppaGithubSyncs();
   await checkDueAppaGithubSyncs();
   expect(merges).toHaveLength(2);
@@ -3056,6 +3153,31 @@ test("a self-served pull request GitHub refuses to merge is logged and left for 
   await checkDueAppaGithubSyncs();
   expect(merges).toHaveLength(3);
   expect(await queuedSyncs()).toHaveLength(1);
+
+  // GitHub failing for now on the repository read holds nothing: the next
+  // minute merges.
+  let repositoryDown = 1;
+  server.use(
+    http.get(REPO, () =>
+      repositoryDown-- > 0
+        ? HttpResponse.json({ message: "down" }, { status: 502 })
+        : HttpResponse.json({
+            default_branch: "main",
+            allow_merge_commit: false,
+            allow_squash_merge: true,
+            allow_rebase_merge: true,
+          }),
+    ),
+  );
+  warn.mockClear();
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(3);
+  expect(warn).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.stringContaining("could not reach GitHub to merge"),
+  );
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(4);
 
   // An App without the permission to merge: one warning, then the
   // repository is left alone for fifteen minutes rather than asked again
@@ -3081,12 +3203,18 @@ test("a self-served pull request GitHub refuses to merge is logged and left for 
   warn.mockClear();
   await checkDueAppaGithubSyncs();
   await checkDueAppaGithubSyncs();
-  expect(merges).toHaveLength(3);
+  expect(merges).toHaveLength(4);
   expect(
     warn.mock.calls.filter(([, message]) =>
       String(message).includes("allows no merge method"),
     ),
   ).toHaveLength(1);
+  // The Keeper learns why the App holds off, in words for the user.
+  expect(await status()).toMatchObject({
+    phase: "merge_refused",
+    done: true,
+    mergeRefused: { reason: expect.stringContaining("allows no merge method") },
+  });
   await updateAppaGithubSync({
     organizationId: org.id,
     action: "self_service_auto_merge",
@@ -3106,7 +3234,7 @@ test("a self-served pull request GitHub refuses to merge is logged and left for 
   ).toHaveLength(2);
 });
 
-test("a merge GitHub refuses because someone merged or closed the pull request meanwhile completes gracefully, and every merge on the synced branch is followed by a pull within a minute", async ({
+test("a merge GitHub refuses because someone merged or closed the pull request meanwhile completes gracefully, and a merge whose pull could not be queued is followed up the next minute", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -3115,11 +3243,12 @@ test("a merge GitHub refuses because someone merged or closed the pull request m
   const org = await makeOrganization();
   const admin = await makeUser({ email: "admin@example.com" });
   await makeMember(admin.id, org.id, { role: "admin" });
-  const { results, merges, merge, repo, pullStates } =
-    await serveAutoMergeRepository({
+  const { results, merges, merge, pullStates } = await serveAutoMergeRepository(
+    {
       organizationId: org.id,
       requester: admin.email,
-    });
+    },
+  );
   await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
   const warn = vi.spyOn(logger, "warn");
   const info = vi.spyOn(logger, "info");
@@ -3155,16 +3284,25 @@ test("a merge GitHub refuses because someone merged or closed the pull request m
   await checkDueAppaGithubSyncs();
   expect(merges).toHaveLength(3);
 
-  // The synced branch moved on without the queue hearing of it: the next
-  // minute's pass queues the pull; a branch at the accepted commit does not.
+  // Merged, but the pull could not be queued (the process stopped in
+  // between): the next minute's pass queues it; once queued, nothing more
+  // is owed.
   pullStates[1] = { state: "open", merged: false };
-  repo.head = "c".repeat(40);
+  merge.status = 200;
+  const enqueue = vi
+    .spyOn(OpenAppaGithubSyncModel, "enqueue")
+    .mockRejectedValueOnce(new Error("the database went away"));
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(4);
+  expect(await queuedSyncs()).toHaveLength(0);
+  enqueue.mockRestore();
+  merge.status = 405;
+  pullStates[1] = { state: "closed", merged: false };
   await checkDueAppaGithubSyncs();
   expect(await queuedSyncs()).toHaveLength(1);
   await db
     .delete(schema.tasksTable)
     .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
-  repo.head = FIRST;
   await checkDueAppaGithubSyncs();
   expect(await queuedSyncs()).toHaveLength(0);
 });

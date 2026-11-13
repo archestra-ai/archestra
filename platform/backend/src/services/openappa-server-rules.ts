@@ -38,10 +38,12 @@ import {
 } from "@/services/openappa-github-access";
 import {
   checkIntegrationId,
+  heldMergeReason,
   listedNames,
   ownersAsNamedFor,
   ownersNotEditable,
   POLICY_CHECK_NAME,
+  RETRY_REFUSED_MERGE,
   rulesFileRefusal,
   rulesFileServers,
   selfServiceActive,
@@ -259,8 +261,12 @@ export async function proposeServerRulesChange(
   };
 }
 
-/** How long one status call may wait for the pull request to move on, and how often it looks. */
-const STATUS_WAIT = 55 * 1000;
+/**
+ * How long one status call may wait for the pull request to move on, and
+ * how often it looks. The wait stays well inside the minute an MCP client
+ * gives a call, GitHub's own answers included.
+ */
+const STATUS_WAIT = 40 * 1000;
 const STATUS_POLL = 5 * 1000;
 
 /** Where a server's rules pull request stands, from opened to applied. */
@@ -289,8 +295,8 @@ const SETTLED: ReadonlySet<ChangePhase> = new Set([
  * Where a server's rules pull request stands: its policy check, whether the
  * App merges it or someone must, the merge, and whether Git sync has applied
  * it. With `wait`, the call returns once the phase moves on from `since` (or
- * from the phase first seen), or settles, or after a minute; the Keeper
- * follows an auto-merged pull request by calling it again until `done`.
+ * from the phase first seen), or settles, or after some forty seconds; the
+ * Keeper follows an auto-merged pull request by calling it again until `done`.
  */
 export async function getServerRulesChangeStatus(
   params: Caller & {
@@ -302,15 +308,18 @@ export async function getServerRulesChangeStatus(
     pollMs?: number;
   },
 ) {
-  const source = await requireSource(params.organizationId);
+  let source = await requireSource(params.organizationId);
   const server = await serverFor(params, serverRulesFolderOf(source));
   // The check posted on the head is read too, which takes Checks.
   const { token, api } = await githubWriter(source, { checks: "read" });
   const base = `${api}/repos/${source.repo}`;
   const appId = await checkIntegrationId(source);
+  const poll = params.pollMs ?? STATUS_POLL;
   const deadline = Date.now() + (params.wait ? STATUS_WAIT : 0);
   let baseline = params.since ?? null;
-  for (;;) {
+  for (let read = 0; ; read += 1) {
+    // Git sync may have applied the merge since the last look.
+    if (read > 0) source = await requireSource(params.organizationId);
     let status: Awaited<ReturnType<typeof readChangeStatus>>;
     try {
       status = await readChangeStatus({
@@ -325,19 +334,21 @@ export async function getServerRulesChangeStatus(
       // A host that fails for now is asked again while the wait lasts; a
       // refusal of the request itself (no such pull request) is not.
       const transient = error instanceof ApiError && error.statusCode >= 500;
-      if (!params.wait || !transient || Date.now() >= deadline) throw error;
-      await pause(params.pollMs ?? STATUS_POLL, deadline);
+      if (!params.wait || !transient || Date.now() + poll >= deadline)
+        throw error;
+      await pause(poll, deadline);
       continue;
     }
     baseline ??= status.phase;
+    // No look is started that the wait has no room for.
     if (
       !params.wait ||
       status.done ||
       status.phase !== baseline ||
-      Date.now() >= deadline
+      Date.now() + poll >= deadline
     )
       return status;
-    await pause(params.pollMs ?? STATUS_POLL, deadline);
+    await pause(poll, deadline);
   }
 }
 
@@ -362,6 +373,7 @@ async function readChangeStatus(params: {
     html_url: string;
     state: string;
     merged?: boolean;
+    merged_at?: string | null;
     merge_commit_sha?: string | null;
     head?: { ref?: string; sha?: string };
   }>({ token, url: `${base}/pulls/${params.number}` });
@@ -369,19 +381,13 @@ async function readChangeStatus(params: {
     throw new ApiError(404, "No rules change for this server has that number");
   const merged = pull.merged === true && !!pull.merge_commit_sha;
   const autoMerge = selfServiceAutoMergeActive(source);
-  const answer = (
-    phase: ChangePhase,
-    extra: {
-      check?: { state: string; title?: string; summary?: string };
-      mergeRefused?: { reason: string; at: string };
-    } = {},
-  ) => ({
+  const answer = (phase: ChangePhase, extra: StatusExtra = {}) => ({
     number: pull.number,
     url: pull.html_url,
     state: merged ? "merged" : pull.state === "open" ? "open" : "closed",
     applied: phase === "applied",
     phase,
-    done: SETTLED.has(phase),
+    done: SETTLED.has(phase) || !!extra.syncFailed,
     autoMerge,
     ...extra,
     instruction: changeInstruction(phase, extra),
@@ -398,9 +404,19 @@ async function readChangeStatus(params: {
           })
         ).status ?? "",
       );
+    if (applied) return answer("applied");
+    // A pull since the merge that failed is what keeps it from applying:
+    // nothing moves on until that is put right.
+    const mergedAt = pull.merged_at ? Date.parse(pull.merged_at) : Number.NaN;
+    if (
+      source.lastSyncError &&
+      source.lastSyncedAt &&
+      (Number.isNaN(mergedAt) || source.lastSyncedAt.getTime() > mergedAt)
+    )
+      return answer("merged", { syncFailed: { reason: source.lastSyncError } });
     // A pull applies what is merged; queue one rather than wait for the schedule.
-    if (!applied) await OpenAppaGithubSyncModel.enqueue(params.organizationId);
-    return answer(applied ? "applied" : "merged");
+    await OpenAppaGithubSyncModel.enqueue(params.organizationId);
+    return answer("merged");
   }
   if (pull.state !== "open") return answer("closed");
   const head = pull.head?.sha ?? "";
@@ -410,6 +426,7 @@ async function readChangeStatus(params: {
         check_runs?: Array<{
           status?: string;
           conclusion?: string | null;
+          completed_at?: string | null;
           output?: { title?: string | null; summary?: string | null };
         }>;
       }>({
@@ -419,8 +436,10 @@ async function readChangeStatus(params: {
     : [];
   const run = runs.find((entry) => entry.status === "completed");
   if (!run) return answer("check_pending", { check: { state: "pending" } });
+  // Only success counts for the required check; skipped, cancelled and the
+  // rest leave the pull request where a failure does.
   const check = {
-    state: run.conclusion === "failure" ? "failed" : "passed",
+    state: run.conclusion === "success" ? "passed" : "failed",
     ...(run.output?.title ? { title: run.output.title } : {}),
     ...(run.output?.summary
       ? { summary: run.output.summary.slice(0, 2000) }
@@ -433,25 +452,53 @@ async function readChangeStatus(params: {
     head,
     result: merge && /^[a-f0-9]{40}$/.test(merge) ? merge : head,
   });
-  if (stored?.mergeRefusedAt !== undefined)
+  // The App holds off the whole repository when it may not merge there:
+  // that stands over whatever one pull request's merge met.
+  const held = await heldMergeReason(source);
+  if (held)
+    return answer("merge_refused", {
+      check,
+      mergeRefused: { reason: held, at: new Date().toISOString() },
+    });
+  if (stored?.mergeRefusedAt !== undefined) {
+    const mergeRefused = {
+      reason: stored.mergeRefusedReason ?? "GitHub refused the merge",
+      at: new Date(stored.mergeRefusedAt).toISOString(),
+    };
+    // A check just posted can take GitHub a moment to count: the first
+    // refusal is tried again next minute, and only a second one stands.
+    return answer(
+      (stored.mergeRefusals ?? 1) > 1 ? "merge_refused" : "merge_pending",
+      { check, mergeRefused },
+    );
+  }
+  // A merge that has not come for as long as a refusal holds is not waited
+  // on any longer: people take it from here, and the App keeps trying.
+  const completedAt = run.completed_at ? Date.parse(run.completed_at) : NaN;
+  if (
+    !Number.isNaN(completedAt) &&
+    Date.now() - completedAt > RETRY_REFUSED_MERGE
+  )
     return answer("merge_refused", {
       check,
       mergeRefused: {
-        reason: stored.mergeRefusedReason ?? "GitHub refused the merge",
-        at: new Date(stored.mergeRefusedAt).toISOString(),
+        reason:
+          "the GitHub App has not merged it since the check passed; it keeps trying every minute",
+        at: new Date().toISOString(),
       },
     });
   return answer("merge_pending", { check });
 }
 
+type StatusExtra = {
+  check?: { state: string; title?: string; summary?: string };
+  mergeRefused?: { reason: string; at: string };
+  /** Git sync failed on a pull since the merge: the rules are not active. */
+  syncFailed?: { reason: string };
+};
+
 /** What the Keeper does next at each phase, and what it tells the user. */
-function changeInstruction(
-  phase: ChangePhase,
-  extra: {
-    check?: { title?: string; summary?: string };
-    mergeRefused?: { reason: string };
-  },
-): string {
+function changeInstruction(phase: ChangePhase, extra: StatusExtra): string {
   const again = (since: ChangePhase) =>
     `Call this again with wait=true and since="${since}", and tell the user only when something changes.`;
   switch (phase) {
@@ -462,11 +509,15 @@ function changeInstruction(
     case "check_passed":
       return `The ${POLICY_CHECK_NAME} check passed. The user merges the pull request on GitHub themselves, or anyone with write access to the repository does; Git sync then applies it. Tell the user; follow it further only if they ask.`;
     case "merge_pending":
-      return `The ${POLICY_CHECK_NAME} check passed, and the App merges the pull request within about a minute. ${again(phase)}`;
+      return extra.mergeRefused
+        ? `The ${POLICY_CHECK_NAME} check passed; GitHub refused the first merge (${extra.mergeRefused.reason}), which it does while the check is still being counted, and the App tries again within a minute. ${again(phase)}`
+        : `The ${POLICY_CHECK_NAME} check passed, and the App merges the pull request within about a minute. ${again(phase)}`;
     case "merge_refused":
-      return `GitHub refused the merge${extra.mergeRefused ? `: ${extra.mergeRefused.reason}` : ""}. The pull request stays open and nothing is applied. Tell the user: someone with write access can merge it on GitHub, or an administrator checks the repository's branch rules; the App tries again in fifteen minutes. Stop following it.`;
+      return `The App did not merge the pull request${extra.mergeRefused ? `: ${extra.mergeRefused.reason}` : ""}. It stays open and nothing is applied. Tell the user in plain words why, and that someone with write access can merge it on GitHub meanwhile; the App tries again in fifteen minutes. Stop following it.`;
     case "merged":
-      return `Merged; Git sync is pulling it now. ${again(phase)}`;
+      return extra.syncFailed
+        ? `Merged, but Git sync could not apply it: ${extra.syncFailed.reason} The rules are not active until an administrator puts the policy repository right; the Git sync card shows the same error. Tell the user, and stop here.`
+        : `Merged; Git sync is pulling it now. ${again(phase)}`;
     case "applied":
       return "Done: the pull request is merged and the rules are active. Tell the user, and stop here.";
     case "closed":

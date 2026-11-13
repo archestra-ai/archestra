@@ -114,7 +114,7 @@ const registry = defineArchestraTools([
     shortName: "get_guardrails_server_rules_change_status",
     title: "Follow an MCP server's Guardrails rules pull request",
     annotations: { readOnlyHint: true },
-    description: `Where a pull request propose_guardrails_server_rules_change opened for this server stands: \`phase\` (check_pending, check_failed, check_passed, merge_pending, merge_refused, merged, applied or closed), \`done\` once nothing moves on by itself, the ${config.openappa.policyCheckName} check's outcome (\`check\`), why GitHub refused an automatic merge (\`mergeRefused\`), \`state\` and \`applied\`, and an \`instruction\` for what to do next. With wait=true the call returns as soon as the phase moves on from \`since\` (or from the phase first seen), or settles, or after a minute. While auto-merge is on, follow a proposed pull request by calling this again with wait=true and the last phase as since until \`done\`, and tell the user each change; a merged request not yet applied queues a sync.`,
+    description: `Where a pull request propose_guardrails_server_rules_change opened for this server stands: \`phase\` (check_pending, check_failed, check_passed, merge_pending, merge_refused, merged, applied or closed), \`done\` once nothing moves on by itself, the ${config.openappa.policyCheckName} check's outcome (\`check\`), why GitHub refused an automatic merge (\`mergeRefused\`), \`state\` and \`applied\`, and an \`instruction\` for what to do next. With wait=true the call returns as soon as the phase moves on from \`since\` (or from the phase first seen), or settles, or after some forty seconds. While auto-merge is on, follow a proposed pull request by calling this again with wait=true and the last phase as since until \`done\`, and tell the user each change; a merged request not yet applied queues a sync.`,
     schema: z.strictObject({
       mcpServerId: ServerSchema,
       number: z.number().int().positive(),
@@ -122,7 +122,7 @@ const registry = defineArchestraTools([
         .boolean()
         .optional()
         .describe(
-          "Return only once the phase moves on from `since`, settles, or a minute passes.",
+          "Return only once the phase moves on from `since`, settles, or some forty seconds pass.",
         ),
       since: z
         .enum(CHANGE_PHASES)

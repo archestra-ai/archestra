@@ -406,7 +406,7 @@ Required RBAC permission: None
 |-----------|------|----------|-------------|
 | `mcpServerId` | `string` | Yes | The MCP server's catalog ID, as the MCP registry shows it. |
 | `number` | `integer` | Yes |  |
-| `wait` | `boolean` | No | Return only once the phase moves on from `since`, settles, or a minute passes. |
+| `wait` | `boolean` | No | Return only once the phase moves on from `since`, settles, or some forty seconds pass. |
 | `since` | `"check_pending" \| "check_failed" \| "check_passed" \| "merge_pending" \| "merge_refused" \| "merged" \| "applied" \| "closed"` | No | The `phase` the last call returned, to wait past. |
 
 

@@ -1279,7 +1279,7 @@ const RECHECK_AUTHORSHIP = 15 * TimeInMs.Minute;
  * moment to count against the branch rules. The same hold applies to a
  * repository whose App cannot merge at all.
  */
-const RETRY_REFUSED_MERGE = 15 * TimeInMs.Minute;
+export const RETRY_REFUSED_MERGE = 15 * TimeInMs.Minute;
 
 /** How long a pull request that changes no policy file is left alone, per head. */
 const UNRELATED_TTL = TimeInMs.Day;
@@ -1347,20 +1347,17 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   const source = { ...row, repo: row.repo, path: row.path };
   const refused = refusedChecksKey(organizationId, source.repo);
   if (await cacheManager.get(refused)) return;
-  const autoMerge = selfServiceAutoMergeActive(row);
+  // A merge whose pull was not queued (the process stopped in between) is
+  // followed up here: the marker set before the merge is still there.
+  if (
+    await cacheManager
+      .get(pendingResyncKey(organizationId, source.repo))
+      .catch(() => null)
+  )
+    await queueSyncAfterMerge(organizationId, source.repo);
   let pulls: CheckedPull[];
   try {
-    const listed = await githubPullRequests(source, { branchHead: autoMerge });
-    pulls = listed.pulls;
-    // Every merge on the synced branch is followed by a pull: the one the
-    // App queues right after merging, or this one when that was lost.
-    if (listed.branchHead && listed.branchHead !== row.sourceCommit)
-      await OpenAppaGithubSyncModel.enqueue(organizationId).catch((err) =>
-        logger.warn(
-          { organizationId, err },
-          "OpenAPPA could not queue the pull that follows a merge on the synced branch; the next minute queues it again",
-        ),
-      );
+    pulls = await githubPullRequests(source);
   } catch (error) {
     // A credential the host refuses is not asked again every minute.
     if (
@@ -1373,7 +1370,9 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   }
   const deployment = await deploymentState(organizationId, row.sourceCommit);
   const checking = pulls.slice(0, MAX_CHECKED_PULLS);
-  const merger = autoMerge ? new AutoMerger(source) : null;
+  const merger = selfServiceAutoMergeActive(row)
+    ? new AutoMerger(source)
+    : null;
   // What the source reads decides which files a pull request governs, so a
   // policy file or servers' folder moved makes every stored result stale,
   // the unrelated ones included.
@@ -1544,6 +1543,17 @@ class AutoMerger {
     this.access ??= this.resolveAccess();
     const access = await this.access;
     if (!access) return;
+    // Set before the merge, cleared once its pull is queued: a process that
+    // stops in between leaves it for the next minute's pass to act on.
+    const resync = pendingResyncKey(organizationId, repo);
+    await cacheManager
+      .set(resync, true, CHECKED_TTL)
+      .catch((err) =>
+        logger.warn(
+          { organizationId, err },
+          "OpenAPPA could not note the pull that is to follow a merge",
+        ),
+      );
     const merged = await githubCall<{ merged?: boolean }>({
       token: access.token,
       url: `${access.base}/pulls/${pull.number}/merge`,
@@ -1555,14 +1565,8 @@ class AutoMerger {
         { organizationId, repo, number: pull.number },
         "OpenAPPA merged a self-served Guardrails rules pull request",
       );
-      // A pull applies the merge now rather than at the next schedule; one
-      // that cannot be queued waits for the schedule.
-      await OpenAppaGithubSyncModel.enqueue(organizationId).catch((err) =>
-        logger.warn(
-          { organizationId, err },
-          "OpenAPPA could not queue the pull that applies a merged rules pull request",
-        ),
-      );
+      // A pull applies the merge now rather than at the next schedule.
+      await queueSyncAfterMerge(organizationId, repo);
       const deleted = await githubFetch({
         url: `${access.base}/git/refs/heads/${pull.ref}`,
         token: access.token,
@@ -1575,6 +1579,8 @@ class AutoMerger {
         );
       return;
     }
+    // Nothing merged: no pull is owed.
+    await cacheManager.delete(resync).catch(() => null);
     if ([403, 404, 405, 409, 422].includes(merged.status)) {
       // Merged or closed by someone since the listing: nothing to refuse.
       const gone = await this.settledMeanwhile(pull, access);
@@ -1644,12 +1650,7 @@ class AutoMerger {
         { organizationId, repo, number: pull.number },
         "A self-served Guardrails rules pull request was merged by someone else meanwhile",
       );
-      await OpenAppaGithubSyncModel.enqueue(organizationId).catch((err) =>
-        logger.warn(
-          { organizationId, err },
-          "OpenAPPA could not queue the pull that applies a merged rules pull request",
-        ),
-      );
+      await queueSyncAfterMerge(organizationId, repo);
       return true;
     }
     if (read.body.state && read.body.state !== "open") {
@@ -1667,9 +1668,9 @@ class AutoMerger {
     const held = heldMergesKey(organizationId, repo);
     // A repository the App cannot merge in is not asked again every minute.
     if (await cacheManager.get(held).catch(() => null)) return null;
-    const hold = () =>
+    const hold = (reason: string) =>
       cacheManager
-        .set(held, true, RETRY_REFUSED_MERGE)
+        .set(held, reason, RETRY_REFUSED_MERGE)
         .catch((err) =>
           logger.warn(
             { organizationId, err },
@@ -1687,7 +1688,16 @@ class AutoMerger {
         allow_merge_commit?: boolean;
         allow_squash_merge?: boolean;
         allow_rebase_merge?: boolean;
-      }>({ url: base, token, errors: githubSyncErrors });
+      }>({
+        url: base,
+        token,
+        // A refusal is the App's permissions; anything else is GitHub's for now.
+        errors: async ({ status }) =>
+          new ApiError(
+            [401, 403, 404].includes(status) ? 403 : 502,
+            `GitHub returned HTTP ${status} reading the repository`,
+          ),
+      });
       // A merge commit keeps the signed commit the check read; squash and
       // rebase follow where the repository allows only those.
       const method =
@@ -1703,16 +1713,22 @@ class AutoMerger {
           { organizationId, repo },
           "The policy repository allows no merge method; self-served pull requests are left for people",
         );
-        await hold();
+        await hold(HELD_NO_MERGE_METHOD);
         return null;
       }
       return { token, base, method };
     } catch (error) {
+      // GitHub failing for now is asked again next minute; a refusal is held.
+      const refused =
+        error instanceof MissingGithubPermission ||
+        (error instanceof ApiError && error.statusCode < 500);
       logger.warn(
         { organizationId, repo, error },
-        "OpenAPPA cannot merge self-served pull requests: the GitHub App needs Contents and Pull requests write",
+        refused
+          ? "OpenAPPA cannot merge self-served pull requests: the GitHub App needs Contents and Pull requests write"
+          : "OpenAPPA could not reach GitHub to merge self-served pull requests; it tries again next minute",
       );
-      await hold();
+      if (refused) await hold(HELD_NO_PERMISSION);
       return null;
     }
   }
@@ -1721,6 +1737,51 @@ class AutoMerger {
 /** The key under which a repository the App cannot merge in waits fifteen minutes. */
 function heldMergesKey(organizationId: string, repo: string) {
   return checkKey("merge", organizationId, repo);
+}
+
+/** Why the App holds off merging in a repository, in the user's terms. */
+const HELD_NO_PERMISSION =
+  "the GitHub App may not merge in the repository: it needs Contents and Pull requests write, which an administrator grants on GitHub";
+const HELD_NO_MERGE_METHOD =
+  "the repository allows no merge method (merge commits, squash and rebase are all off), which an administrator changes in its settings on GitHub";
+
+/**
+ * Why the App is not merging in the repository for now, if it is held off:
+ * the reason recorded when it last tried, which stands for fifteen minutes.
+ */
+export async function heldMergeReason(source: {
+  organizationId: string;
+  repo: string;
+}): Promise<string | null> {
+  const held = await cacheManager
+    .get<unknown>(heldMergesKey(source.organizationId, source.repo))
+    .catch(() => null);
+  return typeof held === "string" ? held : held ? HELD_NO_PERMISSION : null;
+}
+
+/** The key under which a merge still owes a pull of the synced branch. */
+function pendingResyncKey(organizationId: string, repo: string) {
+  return checkKey("resync", organizationId, repo);
+}
+
+/**
+ * Queue the pull that applies a merge, and clear the note that one is owed.
+ * One that cannot be queued stays noted, so the next minute's pass queues
+ * it; the schedule applies the merge in any case.
+ */
+async function queueSyncAfterMerge(organizationId: string, repo: string) {
+  try {
+    await OpenAppaGithubSyncModel.enqueue(organizationId);
+  } catch (err) {
+    logger.warn(
+      { organizationId, err },
+      "OpenAPPA could not queue the pull that applies a merged rules pull request; the next minute queues it again",
+    );
+    return;
+  }
+  await cacheManager
+    .delete(pendingResyncKey(organizationId, repo))
+    .catch(() => null);
 }
 
 /**
@@ -1760,6 +1821,7 @@ export async function storedPullCheck(
       accepted: boolean;
       reason: string | null;
       mergeRefusedAt?: number;
+      mergeRefusals?: number;
       mergeRefusedReason?: string;
     }
   | undefined
@@ -1772,7 +1834,10 @@ export async function storedPullCheck(
     accepted: stored.accepted,
     reason: stored.reason,
     ...(stored.mergeRefusedAt !== undefined
-      ? { mergeRefusedAt: stored.mergeRefusedAt }
+      ? {
+          mergeRefusedAt: stored.mergeRefusedAt,
+          mergeRefusals: stored.mergeRefusals ?? 1,
+        }
       : {}),
     ...(stored.mergeRefusedReason
       ? { mergeRefusedReason: stored.mergeRefusedReason }
@@ -1808,7 +1873,10 @@ async function forgetRefusedChecks(organizationId: string, repo: string) {
 }
 
 /** A shared cache key for the policy check, from its parts. */
-function checkKey(kind: "checked" | "refused" | "merge", ...parts: string[]) {
+function checkKey(
+  kind: "checked" | "refused" | "merge" | "resync",
+  ...parts: string[]
+) {
   return `${CacheKey.OpenAppaPolicyCheck}-${kind}-${createHash("sha256")
     .update(JSON.stringify(parts))
     .digest("hex")}` as const;
@@ -1971,15 +2039,12 @@ function checkSummary(outcome: PullOutcome) {
 
 async function githubPullRequests(
   source: PolicySource,
-  options: { branchHead?: boolean } = {},
-): Promise<{ pulls: CheckedPull[]; branchHead?: string }> {
+): Promise<CheckedPull[]> {
   const { token, api } = await resolveOpenAppaGithubAccess(source, {
     pull_requests: "read",
     checks: "write",
-    // The synced branch's head is read with the same token.
-    ...(options.branchHead ? { contents: "read" as const } : {}),
   });
-  if (!token) return { pulls: [] };
+  if (!token) return [];
   const base = `${api}/repos/${source.repo}`;
   const checkName = POLICY_CHECK_NAME;
   const appId = await checkIntegrationId(source);
@@ -2038,28 +2103,7 @@ async function githubPullRequests(
       },
     ];
   });
-  // Under auto-merge the synced branch is read too: a merge, the App's or
-  // anyone's, that the queue did not pick up is pulled within a minute.
-  const branchHead = options.branchHead
-    ? await githubJson<{ sha?: string }>({
-        url: `${base}/commits/${encodeURIComponent(branch)}`,
-        token,
-        errors: githubSyncErrors,
-      })
-        .then((commit) =>
-          typeof commit.sha === "string" && /^[a-f0-9]{40}$/.test(commit.sha)
-            ? commit.sha
-            : undefined,
-        )
-        .catch((error: unknown) => {
-          logger.warn(
-            { organizationId: source.organizationId, error },
-            "OpenAPPA could not read the synced branch's head; the next minute reads it again",
-          );
-          return undefined;
-        })
-    : undefined;
-  return { pulls: checked, ...(branchHead ? { branchHead } : {}) };
+  return checked;
 }
 
 // --- Authorship: who asked for a pull request, and whether they may ---

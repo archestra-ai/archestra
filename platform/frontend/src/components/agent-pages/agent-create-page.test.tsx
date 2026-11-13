@@ -490,6 +490,9 @@ describe("AgentCreatePage", () => {
           isPending: false,
         }) as unknown as ReturnType<typeof useHasPermissions>,
     );
+    vi.mocked(useK8sCapabilities).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useK8sCapabilities>);
     const user = userEvent.setup();
     renderAgentCreatePage();
     await user.click(

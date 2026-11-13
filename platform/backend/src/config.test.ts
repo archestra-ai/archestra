@@ -3694,6 +3694,24 @@ describe("OpenAPPA feature configuration", () => {
     );
   });
 
+  test("auto-merge of self-served pull requests is off by default, and set only to disabled or enabled", () => {
+    expect(parseOpenAppaConfig().selfServiceAutoMerge).toBe("disabled");
+    expect(
+      parseOpenAppaConfig({ selfServiceAutoMerge: " " }).selfServiceAutoMerge,
+    ).toBe("disabled");
+    expect(
+      parseOpenAppaConfig({ selfServiceAutoMerge: " enabled " })
+        .selfServiceAutoMerge,
+    ).toBe("enabled");
+    expect(
+      parseOpenAppaConfig({ selfServiceAutoMerge: "disabled" })
+        .selfServiceAutoMerge,
+    ).toBe("disabled");
+    expect(() => parseOpenAppaConfig({ selfServiceAutoMerge: "on" })).toThrow(
+      "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE must be one of: disabled, enabled",
+    );
+  });
+
   test("the self-service folder is mcp by default, trimmed, and a folder beside the policy file", () => {
     expect(parseOpenAppaSelfServiceDirectory(undefined)).toBe("mcp");
     expect(parseOpenAppaSelfServiceDirectory("  ")).toBe("mcp");
@@ -3777,6 +3795,7 @@ describe("OpenAPPA feature configuration", () => {
       policyCheckName: "Check OpenAPPA Guardrails",
       selfService: "disabled",
       selfServiceDirectory: "mcp",
+      selfServiceAutoMerge: "disabled",
       yellEnabled: true,
       yellForwardingEnabled: false,
       offerSigningSecret: "",

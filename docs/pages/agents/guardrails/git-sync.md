@@ -87,3 +87,11 @@ What to know:
 
 - Turning self-service off leaves the ruleset in place. Archestra posts the check as skipped until you remove the rule, and the Git sync card names the rule.
 - Moving Git sync to another repository or branch, or stopping it, is refused while the rule is still there. Remove the rule first.
+
+### Auto-merge
+
+MCP owners need no access to the policy repository: the GitHub App merges their pull requests itself. Turn it on for the deployment with [`ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE=enabled`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE). The Git sync card then says that admitted self-service pull requests merge automatically.
+
+- The policy check is the only gate. A pull request merges within about a minute of its check passing, and Git sync then applies it. The APPA Keeper follows the pull request in the chat and reports when it is applied, or why it did not merge.
+- Only rules pull requests opened from Archestra for an MCP server merge this way. Pull requests people open on GitHub keep the repository's own review.
+- If another branch rule blocks the merge, the pull request stays open for people to merge. The App tries again a minute later, then every 15 minutes.

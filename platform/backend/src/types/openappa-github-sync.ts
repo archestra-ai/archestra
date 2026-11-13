@@ -230,6 +230,17 @@ export const AppaSelfServiceSchema = z.object({
   leftoverRule: z
     .object({ checkName: z.string(), url: z.string().nullable() })
     .optional(),
+  /**
+   * Whether the GitHub App merges each self-served rules pull request once
+   * its policy check passes, and the environment variable that sets it.
+   */
+  autoMerge: z.object({
+    enabled: z.boolean(),
+    environment: z.object({
+      variable: z.string(),
+      value: SelfServiceChoiceSchema,
+    }),
+  }),
 });
 export const AppaGithubSyncStatusSchema = z.object({
   enabled: z.boolean(),

@@ -445,6 +445,25 @@ function SelfServiceRow({
             },
           ]}
         />
+        {selfService.enabled ? (
+          <DeploymentSettingRow
+            compact
+            title="Auto-merge pull requests"
+            description={
+              selfService.autoMerge.enabled
+                ? "Admitted self-service pull requests merge automatically."
+                : "Someone with write access to the repository merges admitted self-service pull requests."
+            }
+            value={selfService.autoMerge.enabled ? "enabled" : "disabled"}
+            disabled
+            hideValue
+            environmentVariable={selfService.autoMerge.environment.variable}
+            options={[
+              { value: "enabled", label: "On" },
+              { value: "disabled", label: "Off" },
+            ]}
+          />
+        ) : null}
         {selfService.leftoverRule ? (
           <p className="pt-2 text-sm leading-5 text-muted-foreground">
             A branch {hostLink(selfService.leftoverRule.url, "ruleset")} still

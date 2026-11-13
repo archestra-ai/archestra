@@ -63,7 +63,11 @@ const source = {
   lastSyncError: null,
 };
 /** Release 1.4: the status reports the deployment's variables. */
-function selfServiceSetting(enabled: boolean, directory = "mcp") {
+function selfServiceSetting(
+  enabled: boolean,
+  directory = "mcp",
+  autoMerge = false,
+) {
   return {
     enabled,
     directory,
@@ -74,6 +78,13 @@ function selfServiceSetting(enabled: boolean, directory = "mcp") {
     directoryEnvironment: {
       variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY",
       value: directory,
+    },
+    autoMerge: {
+      enabled: autoMerge,
+      environment: {
+        variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE",
+        value: autoMerge ? ("enabled" as const) : ("disabled" as const),
+      },
     },
   };
 }
@@ -549,6 +560,15 @@ test("shows the deployment's self-service settings read-only, naming the variabl
       name: "Self-service folder environment values",
     }),
   ).toBeNull();
+  // Auto-merge too, off here: people merge the pull requests.
+  expect(
+    screen.getByText(
+      "Someone with write access to the repository merges admitted self-service pull requests.",
+    ),
+  ).toBeVisible();
+  expect(
+    code("ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE=disabled"),
+  ).toBeVisible();
   // The ruleset is not up yet: ready, with Finish setup.
   expect(
     await screen.findByRole("heading", {
@@ -556,6 +576,40 @@ test("shows the deployment's self-service settings read-only, naming the variabl
     }),
   ).toBeVisible();
   expect(screen.getByRole("button", { name: "Finish setup" })).toBeEnabled();
+});
+
+test("with auto-merge on, the card says admitted self-service pull requests merge automatically, and names the variable", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: "app-1" },
+    selfService: selfServiceSetting(true, "mcp", true),
+  };
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Guardrails Policy Admission",
+        include: { folder: "mcp", state: "included" },
+        branchRules: { state: "active" },
+      }),
+    ),
+  );
+  show();
+  expect(
+    await screen.findByText(
+      "Admitted self-service pull requests merge automatically.",
+    ),
+  ).toBeVisible();
+  expect(
+    screen.getByText(
+      (_, element) =>
+        element?.tagName === "CODE" &&
+        element.textContent ===
+          "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE=enabled",
+    ),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("combobox", { name: "Auto-merge pull requests" }),
+  ).toBeNull();
 });
 
 test("self-service needs a GitHub App: a source without one gets no check or ruleset", async () => {

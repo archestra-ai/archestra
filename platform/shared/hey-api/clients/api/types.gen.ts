@@ -100449,6 +100449,13 @@ export type GetAppaGithubSyncResponses = {
                 checkName: string;
                 url: string | null;
             };
+            autoMerge: {
+                enabled: boolean;
+                environment: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
+            };
         };
         hasPolicy: boolean;
         validationDirectory: string;
@@ -100581,6 +100588,13 @@ export type UpdateAppaGithubSyncResponses = {
                 checkName: string;
                 url: string | null;
             };
+            autoMerge: {
+                enabled: boolean;
+                environment: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
+            };
         };
         hasPolicy: boolean;
         validationDirectory: string;
@@ -100710,6 +100724,13 @@ export type ConfigureAppaGithubSyncResponses = {
             leftoverRule?: {
                 checkName: string;
                 url: string | null;
+            };
+            autoMerge: {
+                enabled: boolean;
+                environment: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
             };
         };
         hasPolicy: boolean;
@@ -101154,6 +101175,13 @@ export type CreateAppaGithubRepositoryResponses = {
             leftoverRule?: {
                 checkName: string;
                 url: string | null;
+            };
+            autoMerge: {
+                enabled: boolean;
+                environment: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
             };
         };
         hasPolicy: boolean;

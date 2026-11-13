@@ -152,6 +152,7 @@ beforeEach(async ({ makeOrganization }) => {
     policyCheckName: "Guardrails Policy Admission",
     selfService: "disabled" as const,
     selfServiceDirectory: "mcp",
+    selfServiceAutoMerge: "disabled",
     yellEnabled: false,
     yellForwardingEnabled: false,
     offerSigningSecret: "test-offer-signing-secret-32chars",

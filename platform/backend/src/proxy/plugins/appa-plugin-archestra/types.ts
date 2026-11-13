@@ -136,6 +136,17 @@ export type AppaChildTranscriptPath = {
   ownOutputId?: RegExp;
 };
 
+/** A native `<prefix><id><suffix>` file that holds raw child output. */
+export type AppaChildTranscriptPath = {
+  prefix: string;
+  suffix: string;
+  /**
+   * Anchored shape of ids in the same directory that hold the caller's own
+   * non-agent output, such as a background command's.
+   */
+  ownOutputId?: RegExp;
+};
+
 export type AppaClientAdapter = {
   readonly id: string;
   /** Prefix for this client's native spawn/child namespace. */

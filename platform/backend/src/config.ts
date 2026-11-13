@@ -1635,14 +1635,17 @@ export function parseCommaSeparatedList(value: string): string[] {
 export const getAnalyticsConfig = () => {
   return {
     // Analytics (PostHog product analytics, instance heartbeats, and error
-    // reports to Archestra's Sentry) defaults to on only in production builds.
-    // Local dev and test runs (bare `pnpm dev`, vitest — where NODE_ENV isn't
-    // "production") stay silent unless ARCHESTRA_ANALYTICS is explicitly set,
+    // reports to Archestra's Sentry) defaults to on only in production builds
+    // without an activated enterprise license. Local dev and test runs (bare
+    // `pnpm dev`, vitest — where NODE_ENV isn't "production") and enterprise
+    // deployments stay silent unless ARCHESTRA_ANALYTICS is explicitly set,
     // which always wins in both directions ("disabled" → off, any other value
     // → on). Evaluated at call time so tests can exercise both environments.
     enabled: isAnalyticsEnabled({
       analytics: process.env.ARCHESTRA_ANALYTICS,
       nodeEnv: process.env.NODE_ENV,
+      enterpriseLicenseActivated:
+        process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
     }),
     posthog: {
       key:

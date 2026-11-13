@@ -423,7 +423,7 @@ function SelfServiceRow({
             onFinishSetup={canManage ? () => setSetup(true) : undefined}
           />
         ) : null}
-        {selfService.enabled && selfService.autoMerge.enabled ? (
+        {selfService.enabled && selfService.autoMerge?.enabled ? (
           // The setting lives in the wizard; the card says only what holds.
           <p className="text-xs text-muted-foreground">
             Admitted self-service pull requests merge automatically.

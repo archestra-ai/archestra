@@ -215,7 +215,7 @@ export function GithubSyncSetupDialog({
   const [chosenAutoMerge, setAutoMerge] = useState(
     editing?.selfServiceAutoMerge ?? false,
   );
-  const autoMergeEnvironment = syncStatus?.selfService.autoMerge.environment;
+  const autoMergeEnvironment = syncStatus?.selfService?.autoMerge?.environment;
   const autoMerge = autoMergeEnvironment
     ? autoMergeEnvironment.value === "enabled"
     : chosenAutoMerge;

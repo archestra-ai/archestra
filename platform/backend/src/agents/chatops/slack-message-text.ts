@@ -139,7 +139,7 @@ function renderElement(value: unknown): string {
         .join("\n");
     case "text":
       // Match Slack's fallback encoding before cleanBotMention decodes it.
-      return typeof value.text === "string" ? escapeText(value.text) : "";
+      return typeof value.text === "string" ? escapeSlackText(value.text) : "";
     case "user":
       return typeof value.user_id === "string" ? `<@${value.user_id}>` : "";
     case "channel":
@@ -152,7 +152,7 @@ function renderElement(value: unknown): string {
         : "";
     case "link":
       return typeof value.url === "string"
-        ? `<${value.url}${typeof value.text === "string" ? `|${escapeText(value.text)}` : ""}>`
+        ? `<${value.url}${typeof value.text === "string" ? `|${escapeSlackText(value.text)}` : ""}>`
         : "";
     case "emoji":
       return typeof value.name === "string" ? `:${value.name}:` : "";
@@ -160,14 +160,14 @@ function renderElement(value: unknown): string {
       return typeof value.range === "string" ? `<!${value.range}>` : "";
     case "date":
       return typeof value.fallback === "string"
-        ? escapeText(value.fallback)
+        ? escapeSlackText(value.fallback)
         : "";
     default:
       return "";
   }
 }
 
-function escapeText(text: string): string {
+export function escapeSlackText(text: string): string {
   return text
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")

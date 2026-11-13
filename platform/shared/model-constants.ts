@@ -113,12 +113,12 @@ export const OCR_PDF_INPUT_PROVIDERS: readonly SupportedProvider[] = [
 export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
 
 /**
- * Providers whose shared keys can be model pool members. Per-user providers
- * (Copilot) and subscription-only ones are left out: their credential belongs
- * to one user. Cohere has no translator to or from the wires pooled clients
- * speak.
+ * Providers whose credentials can be model pool members. Personal credentials
+ * remain restricted to their owner when a request selects pool members. Cohere
+ * and Microsoft 365 Copilot have no translator for pooled request formats.
  */
 export const MODEL_POOL_PROVIDERS = [
+  "github-copilot",
   "anthropic",
   "bedrock",
   "openai",
@@ -599,6 +599,28 @@ export function isClaudeCodeRuntimeCommand(command?: string | null): boolean {
   );
 }
 
+/** Whether a runtime command invokes the maintained Codex runtime or wrapper. */
+export function isCodexRuntimeCommand(command?: string | null): boolean {
+  return command === "archestra-codex" || command === "archestra-codex-runtime";
+}
+
+/** Whether a runtime command invokes the maintained Grok Build runtime or wrapper. */
+export function isGrokRuntimeCommand(command?: string | null): boolean {
+  return command === "archestra-grok" || command === "archestra-grok-runtime";
+}
+
+/** Whether a runtime command invokes the maintained Kimi Code runtime or wrapper. */
+export function isKimiRuntimeCommand(command?: string | null): boolean {
+  return command === "archestra-kimi" || command === "archestra-kimi-runtime";
+}
+
+/** Whether a runtime command invokes the maintained GitHub Copilot CLI runtime or wrapper. */
+export function isCopilotRuntimeCommand(command?: string | null): boolean {
+  return (
+    command === "archestra-copilot" || command === "archestra-copilot-runtime"
+  );
+}
+
 /** Protocols supported by the maintained runtime entrypoint, or all for custom images. */
 export function getAgentRuntimeAllowedProtocols(
   runtimeCommand?: readonly string[] | null,
@@ -607,17 +629,18 @@ export function getAgentRuntimeAllowedProtocols(
   if (isClaudeCodeRuntimeCommand(command)) {
     return ["anthropic"];
   }
-  switch (command) {
-    case "archestra-codex":
-      return ["openai_responses", "openai_chat"];
-    // These wrappers use Chat Completions on a custom model endpoint.
-    case "archestra-grok":
-    case "archestra-kimi":
-    case "archestra-copilot":
-      return ["openai_chat"];
-    default:
-      return ["openai_responses", "openai_chat", "anthropic"];
+  if (isCodexRuntimeCommand(command)) {
+    return ["openai_responses", "openai_chat"];
   }
+  // These runtimes and wrappers use Chat Completions on a custom model endpoint.
+  if (
+    isGrokRuntimeCommand(command) ||
+    isKimiRuntimeCommand(command) ||
+    isCopilotRuntimeCommand(command)
+  ) {
+    return ["openai_chat"];
+  }
+  return ["openai_responses", "openai_chat", "anthropic"];
 }
 
 /**
@@ -652,13 +675,13 @@ export function getAgentRuntimeProviderCompatibility(params: {
       message: `The maintained Claude Code runtime requires an Anthropic model or a Claude model on AWS Bedrock, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
     };
   }
-  if (runtimeCommand === "archestra-codex" && params.provider !== "openai") {
+  if (isCodexRuntimeCommand(runtimeCommand) && params.provider !== "openai") {
     return {
       compatible: false,
       message: `The maintained Codex runtime requires an OpenAI model, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
     };
   }
-  if (runtimeCommand === "archestra-kimi" && params.provider !== "kimi-code") {
+  if (isKimiRuntimeCommand(runtimeCommand) && params.provider !== "kimi-code") {
     return {
       compatible: false,
       message: `The maintained Kimi Code runtime requires a Kimi Code model, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,

@@ -3,9 +3,12 @@
 import {
   type archestraApiTypes,
   buildSlackManifest,
+  buildSlackSlashCommands,
+  SLACK_SLASH_COMMAND_SUFFIXES,
   slackHandleFor,
+  urlSlugify,
 } from "@archestra/shared";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Info } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
 import { CopyButton } from "@/components/copy-button";
@@ -13,6 +16,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { SetupDialog } from "@/components/setup-dialog";
 import { StepCard } from "@/components/step-card";
 import { FieldDescription } from "@/components/ui/field-description";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretInput } from "@/components/ui/secret-input";
@@ -505,6 +509,7 @@ function StepManifestWebhook({
             onChange={(e) => setAppName(e.target.value)}
             placeholder={defaultAppName}
           />
+          <SlackCommandPrefixNotice appName={appName} enabled={slashCommands} />
         </div>
 
         <ol className="space-y-3">
@@ -628,6 +633,7 @@ function StepManifestSocket({
             onChange={(e) => setAppName(e.target.value)}
             placeholder={defaultAppName}
           />
+          <SlackCommandPrefixNotice appName={appName} enabled={slashCommands} />
         </div>
 
         <ol className="space-y-3">
@@ -691,6 +697,28 @@ function StepManifestSocket({
         </pre>
       </div>
     </div>
+  );
+}
+
+function SlackCommandPrefixNotice({
+  appName,
+  enabled,
+}: {
+  appName: string;
+  enabled: boolean;
+}) {
+  const command = buildSlackSlashCommands(appName).SELECT_AGENT;
+  const unshortenedCommand = `/${urlSlugify(appName)}${SLACK_SLASH_COMMAND_SUFFIXES.SELECT_AGENT}`;
+  if (!enabled || command.length >= unshortenedCommand.length) return null;
+
+  return (
+    <InlineNotice variant="info" role="status">
+      <Info />
+      <InlineNoticeText>
+        Slack commands are automatically shortened to fit Slack’s 32-character
+        limit.
+      </InlineNoticeText>
+    </InlineNotice>
   );
 }
 

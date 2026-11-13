@@ -22,6 +22,8 @@ import {
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
+import { formatHostClientCodingAliases } from "@/openappa/host-tool-rules";
+import { withoutRepositoryIncludes } from "@/openappa/policy-text";
 import {
   classifyRuleTarget,
   type RuleTarget,
@@ -29,6 +31,8 @@ import {
   touchedRuleNames,
 } from "@/openappa/rule-targets";
 import { CredentialAccess } from "@/services/credential-access";
+import { openappaRepositoryIncludes } from "@/services/openappa-github-access";
+import { SKILL_SANDBOX_TOOL_RESULTS_DIR } from "@/skills-sandbox/runtime-image";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import type { PolicyTestFile } from "@/types/openappa-policy-tests";
@@ -177,7 +181,7 @@ export const guardrailsPolicyService = {
    * validation reports its warnings too.
    */
   async validate(
-    content: string,
+    text: string,
     params: {
       organizationId: string;
       previous?: string;
@@ -185,12 +189,32 @@ export const guardrailsPolicyService = {
       userId?: string;
       /** Both documents already resolved, when the caller resolved them itself. */
       resolved?: { submitted: PolicyResolution; previous: PolicyResolution };
+      /** Repository files the text includes, read from elsewhere than the accepted commit. */
+      files?: ReadonlyMap<string, string>;
     },
   ): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
     requireEnabled();
     const { organizationId } = params;
+    // Repository files the texts include are folded in before anything reads
+    // them, as a recompose folds them; a file that cannot be read refuses the
+    // submitted text, and leaves the previous one compared without its files.
+    const submitted = await openappaRepositoryIncludes.expand({
+      organizationId,
+      content: text,
+      files: params.files,
+    });
+    if (submitted.errors.length > 0)
+      return { valid: false, errors: submitted.errors, warnings: [] };
+    const content = submitted.content;
+    const written = params.previous ?? (await this.get(organizationId)).content;
+    const folded = await openappaRepositoryIncludes.expand({
+      organizationId,
+      content: written,
+    });
     const previous =
-      params.previous ?? (await this.get(organizationId)).content;
+      folded.errors.length > 0
+        ? withoutRepositoryIncludes(written)
+        : folded.content;
     const resolved =
       params.resolved ??
       (await resolveBoth({ organizationId, content, previous }));
@@ -439,28 +463,11 @@ ${ARCHESTRA_BATTERY} = ["${archestraMcpBranding.serverName}"]
 ${CLAUDE_CODE_BATTERY} = ["archestra"]
 
 # The coding battery's tools under Codex's, OpenCode's, Claude Desktop
-# Cowork's and Kimi Code's spellings. Kimi Code shares Claude Code's other tool
-# names; the proxy also evaluates its Read, Write and Edit \`path\` as
-# \`file_path\`.
-[aliases.tool.${CODING_BATTERY}]
-shell = [
-  { name = "host/archestra/exec_command", args = { command = "cmd" } },
-  { name = "host/archestra/shell", args = { command = "command" } },
-  { name = "host/archestra/bash", args = { command = "command" } },
-  { name = "host/archestra/mcp__workspace__bash", args = { command = "command" }, confined = true },
-]
-read_file = [
-  { name = "host/archestra/read", args = { file_path = "filePath" } },
-  { name = "host/archestra/read_file", args = { file_path = "target_file" } },
-]
-search_files = [{ name = "host/archestra/grep", args = { path = "path" } }]
-write_file = [{ name = "host/archestra/write", args = { file_path = "filePath" } }]
-edit_file = [{ name = "host/archestra/edit", args = { file_path = "filePath" } }]
-fetch_url = [
-  { name = "host/archestra/webfetch", args = { url = "url" } },
-  { name = "host/archestra/mcp__workspace__web_fetch", args = { url = "url" } },
-  { name = "host/archestra/FetchURL", args = { url = "url" } },
-]
+# Cowork's, Kimi Code's, Copilot CLI's and Grok's spellings. Kimi Code shares
+# Claude Code's other tool names; the proxy also evaluates its Read, Write and
+# Edit \`path\` and Copilot CLI's \`view\` and \`create\` \`path\` as \`file_path\`, and
+# Copilot CLI's lowercase \`edit\` \`path\` as \`filePath\`.
+${formatHostClientCodingAliases()}
 
 [policy]
 version = 2
@@ -488,7 +495,7 @@ trust = { from = "suspicious", to = "trusted" }
 [[policy.annotator]]
 name = "archestra.run-command"
 builtin = "archestra"
-hint = "run_command runs a shell command in this conversation's sandbox, a scratch workspace. A command that only lists, reads or changes ordinary files in the sandbox, with no network access, keeps the neutral annotation unless a file it reads visibly holds credentials or secrets."
+hint = "run_command runs a shell command in this conversation's sandbox, a scratch workspace. For a command that only lists, reads or changes files in the sandbox, with no network access, leave delta.trust and delta.audience null. That includes ${SKILL_SANDBOX_TOOL_RESULTS_DIR}, the results of this conversation's earlier tool calls, labelled when those calls ran. The exception is a file that visibly holds credentials or secrets."
 ranks = ["suspicious", "trusted"]
 marks = []
 effects = []

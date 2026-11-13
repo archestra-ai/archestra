@@ -37,7 +37,7 @@ const layerTable = [
   {
     // Configuration, logging, the database client and the helpers below models.
     name: "core",
-    path: "^src/((config|app-version|cache-manager|in-memory-lru-cache|process-local-cache-registry|constants|templating)\\.ts$|utils/|logging/|database/|log-content/|content-encryption/|secrets-manager/|observability/|integrations/|tokenizers/|git-hosts/)",
+    path: "^src/((config|app-version|cache-manager|in-memory-lru-cache|process-local-cache-registry|constants|templating)\\.ts$|utils/|logging/|database/|log-content/|content-encryption/|secrets-manager/|observability/|integrations/|tokenizers/|git-hosts/|blob-providers/)",
     files: [
       // The API route table config.ts and the request metrics read.
       "src/routes/route-paths.ts",
@@ -197,6 +197,8 @@ const layerTable = [
       "src/models/app.ts",
       "src/models/conversation-enabled-tool.ts",
       "src/models/conversation.ts",
+      // Reads usage facts through the statistics model.
+      "src/models/cost-export.ts",
       "src/models/environment.ts",
       "src/models/external-mcp-skill-usage-event.ts",
       "src/models/hook-file.ts",
@@ -322,6 +324,7 @@ const layerTable = [
       "src/openappa/wire.ts",
       "src/routes/chat/anthropic-provider-options.ts",
       "src/routes/chat/attachment-content-type.ts",
+      "src/routes/chat/bedrock-provider-options.ts",
       "src/routes/chat/augment-last-user-message.ts",
       "src/routes/chat/error-message.ts",
       "src/routes/chat/gemini-provider-options.ts",
@@ -663,6 +666,9 @@ const layerTable = [
       "src/routes/mcp-gateway/tasks.ts",
       "src/services/a2a-outbound-assignments.ts",
       "src/services/a2a-outbound-registry.ts",
+      "src/services/blob-provider.ts",
+      "src/services/cost-export/focus.ts",
+      "src/services/cost-export/index.ts",
       "src/services/active-chat-run-notifier.ts",
       "src/services/active-chat-run.ts",
       "src/services/agent-credential-readiness.ts",

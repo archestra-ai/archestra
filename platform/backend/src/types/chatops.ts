@@ -207,12 +207,8 @@ export interface ChatOpsReplyStream {
   /** Feed one chunk of the agent run. Never throws and never blocks. */
   push(chunk: UIMessageChunk): void;
   /**
-   * Whether the stream put a message in the chat that still needs a final
-   * reply. While false, the manager posts the reply the ordinary way.
-   */
-  readonly isLive: boolean;
-  /**
-   * End the stream with the final reply. The final text is authoritative:
+   * Wait for pending sends and deliver the final reply, posting it normally
+   * if streaming has not started. The final text is authoritative:
    * when it differs from what was streamed (thinking blocks, rewrites), the
    * streamed message is replaced with it.
    */
@@ -243,9 +239,11 @@ export interface AddApprovalRequestFormOptions {
    * is nothing to show.
    */
   toolArgs?: Record<string, unknown>;
+  /** What approving the reviewed call also accepts, one line per item. */
+  alsoAccepts?: string[];
   /**
    * OpenAPPA's review text for a paused `execute_remedy_plan` call whose review
-   * names no structured tool. Shown in place of the tool and its arguments,
+   * names no structured tool, or whose scope is unknown. Shown in place of the tool and its arguments,
    * which only name the remedy.
    */
   reviewText?: string;

@@ -969,6 +969,7 @@ class OrganizationModel {
       sessionMaxAgeSeconds: org.sessionMaxAgeSeconds,
       slimChatErrorUi: org.slimChatErrorUi,
       oauthAccessTokenLifetimeSeconds: org.oauthAccessTokenLifetimeSeconds,
+      connectionPageHidden: org.connectionPageHidden,
       connectionDefaultMcpGatewayId: org.connectionDefaultMcpGatewayId ?? null,
       connectionDefaultLlmProxyId: org.connectionDefaultLlmProxyId ?? null,
       connectionDefaultClientId: org.connectionDefaultClientId ?? null,

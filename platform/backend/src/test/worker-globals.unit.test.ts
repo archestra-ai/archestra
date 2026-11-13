@@ -1,9 +1,11 @@
 import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
 import { expect, test, vi } from "vitest";
+import "./worker-globals";
 
 // Each case simulates what a shared worker does between files: the previous
-// file leaves state behind, then the next file's setup runs.
+// file leaves state behind, then the next file's setup runs. The import above
+// captures the initial baseline before a case creates the previous file's state.
 
 test("the next file starts with the worker's original timers and fetch", async () => {
   const originalSetTimeout = globalThis.setTimeout;

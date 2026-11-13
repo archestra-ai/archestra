@@ -9,6 +9,7 @@ import {
   Container,
   Copy,
   Globe,
+  Laptop,
   MonitorSmartphone,
   Sparkles,
   SquareTerminal,
@@ -26,10 +27,12 @@ import { CreatedByCell } from "@/components/created-by-cell";
 import { Button } from "@/components/ui/button";
 import { copyToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils/tailwind";
+import type { McpServerCardVariant } from "./mcp-server-card";
+import { mcpServerTypeLabel } from "./mcp-server-type";
 
 /** Everything the connection panel states about a server; absent fields are omitted. */
 export type McpServerSpec = {
-  serverType: "builtin" | "local" | "remote";
+  serverType: McpServerCardVariant;
   hosting: string;
   environment: string | null;
   serverUrl?: string;
@@ -41,6 +44,12 @@ export type McpServerSpec = {
   /** Headline and explanation, e.g. "Multi-tenant" / "One shared deployment". */
   deployment?: { label: string; detail: string };
   dockerImage?: string;
+  /**
+   * What a desktop MCP catalog item gives each computer: the command that
+   * starts the server, or the URL where it listens.
+   */
+  desktopCommand?: string;
+  desktopUrl?: string;
   auth: string;
   createdBy: CreatedBy | null;
   toolCount: number;
@@ -197,6 +206,34 @@ function targetOf(spec: McpServerSpec): Target {
       statesTransport: true,
     };
   }
+  if (spec.serverType === "desktop") {
+    // The MCP bridge on each user's computer starts the server with the
+    // command, or connects to the URL, and carries its calls. A catalog item
+    // with neither cannot run yet.
+    const desktopTarget = spec.desktopCommand ?? spec.desktopUrl;
+    if (!desktopTarget) {
+      return {
+        label: mcpServerTypeLabel("desktop_mcp"),
+        icon: <Laptop />,
+        primary: spec.hosting,
+        caption: "Runs through the MCP bridge",
+        statesHosting: true,
+        statesTransport: true,
+      };
+    }
+    return {
+      label: spec.desktopCommand ? "Command" : "URL",
+      icon: <Laptop />,
+      well: {
+        line: desktopTarget,
+        copy: desktopTarget,
+        prompt: Boolean(spec.desktopCommand),
+      },
+      caption: "Runs through the MCP bridge",
+      statesHosting: false,
+      statesTransport: true,
+    };
+  }
   if (spec.command?.length) {
     const [program, ...rest] = spec.command;
     const restLine = rest.map(quoteArg).join(" ");
@@ -247,7 +284,8 @@ function factsOf(spec: McpServerSpec, target: Target) {
       detail: spec.deployment.detail,
     });
   }
-  if (spec.serverType !== "builtin") {
+  // A built-in or desktop MCP server has no authentication to name.
+  if (spec.serverType !== "builtin" && spec.serverType !== "desktop") {
     facts.push({ label: "Auth", value: spec.auth });
   }
   if (spec.createdBy) {

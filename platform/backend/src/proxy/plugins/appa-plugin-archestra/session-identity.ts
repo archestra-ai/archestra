@@ -65,6 +65,12 @@ export function extractAppaSessionIdentity(params: {
   family: AppaWireFamily | undefined;
   body: unknown;
   headers: Readonly<Record<string, string | string[] | undefined>>;
+  /**
+   * True when the request is bound to an authenticated Agent Runtime workspace,
+   * where `X-Appa-Session-ID` carries the workspace name while the client's
+   * native header carries its ephemeral process session ID.
+   */
+  agentRuntimeRun?: boolean;
 }): AppaSessionIdentity {
   const generic = appaSessionIdentity(params);
   const matchContext = {
@@ -77,14 +83,25 @@ export function extractAppaSessionIdentity(params: {
   if (generic.provenance === "appa-header" && adapter?.id !== "grok-build")
     return generic;
   const native = adapter?.extractSessionIdentity?.(matchContext);
-  if (generic.provenance === "appa-header") {
-    if (native?.sessionId && generic.sessionId !== native.sessionId)
+  if (
+    adapter?.id === "grok-build" &&
+    !params.agentRuntimeRun &&
+    native?.sessionId
+  ) {
+    const explicit = Object.entries(params.headers)
+      .filter(([name]) => name.toLowerCase() === "x-appa-session-id")
+      .flatMap(([, value]) => (Array.isArray(value) ? value : [value]));
+    if (
+      explicit.some(
+        (value) => value !== undefined && value !== native.sessionId,
+      )
+    )
       throw new ApiError(
         400,
         "Grok native and MCP session headers must identify the same session.",
       );
-    return generic;
   }
+  if (generic.provenance === "appa-header") return generic;
   if (!native?.sessionId) return generic;
   return {
     ...native,

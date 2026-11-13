@@ -82,7 +82,10 @@ export function ConnectionConsentOptions({
     mode: ConsentProxyMode;
     ownKeyLabel?: string;
     providerLabels: string[];
-    /** The account a per-user provider bills, such as an enterprise plan. */
+    /**
+     * The account a per-user provider bills, as the summary names it:
+     * "GitHub Copilot · Personal subscription" or "GitHub Copilot acme".
+     */
     accountLabel?: string | null;
     /** Provider choice, offered only for the user's own key. */
     providerPicker: ReactNode;
@@ -532,9 +535,10 @@ function proxySummary(
     case "all-providers":
       return `${list} · one virtual key, plus your own sign-ins`;
     case "per-user":
-      return proxy.accountLabel
-        ? `${labels[0] ?? "Your provider"} · ${proxy.accountLabel}`
-        : `Connect your own ${labels[0] ?? "provider"} account`;
+      return (
+        proxy.accountLabel ??
+        `Connect your own ${labels[0] ?? "provider"} account`
+      );
     case "unavailable":
       return "No provider key available";
   }

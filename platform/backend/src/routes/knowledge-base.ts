@@ -1774,10 +1774,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         hasNewSecret: Boolean(body.credentials?.apiToken?.trim()),
       });
       if (salesforceViolation) throw new ApiError(400, salesforceViolation);
-      if (connector.connectorType === "salesforce" && body.config) {
-        const validation = await getConnector("salesforce").validateConfig(
-          body.config,
-        );
+      if (
+        (connector.connectorType === "salesforce" ||
+          connector.connectorType === "github") &&
+        body.config
+      ) {
+        const validation = await getConnector(
+          connector.connectorType,
+        ).validateConfig(body.config);
         if (!validation.valid)
           throw new ApiError(
             400,

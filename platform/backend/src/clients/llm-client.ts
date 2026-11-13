@@ -18,6 +18,7 @@ import {
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
+  getBedrockReasoningFamily,
   isProviderApiKeyOptional,
   LOOPBACK_HOST,
   MODEL_POOL_ID_HEADER,
@@ -38,7 +39,10 @@ import {
   UNATTENDED_HEADER,
   USER_ID_HEADER,
 } from "@archestra/shared";
-import type { AzureModelEvidence } from "@archestra/shared/azure-models";
+import {
+  type AzureModelEvidence,
+  isAzureAnthropicBackingModel,
+} from "@archestra/shared/azure-models";
 import { context, propagation } from "@opentelemetry/api";
 import {
   extractReasoningMiddleware,
@@ -46,7 +50,10 @@ import {
   wrapLanguageModel,
 } from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
-import { isServiceAccountUserId } from "@/auth/service-account-user-id";
+import {
+  isServiceAccountUserId,
+  serviceAccountIdFromUserId,
+} from "@/auth/service-account-user-id";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
@@ -283,7 +290,9 @@ export function createLLMModel(params: {
   // tells OpenAPPA to skip enforcement, so only its own calls send it.
   const clientHeaders: Record<string, string> = params.internalCall
     ? guardrailCallHeader()
-    : internalCallHeader();
+    : internalCallHeader(
+        userId ? (serviceAccountIdFromUserId(userId) ?? undefined) : undefined,
+      );
   if (externalAgentId) {
     clientHeaders[EXTERNAL_AGENT_ID_HEADER] = externalAgentId;
   }
@@ -1049,9 +1058,14 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       if (!baseURL) {
         throw new ApiError(400, "Azure AI Foundry base URL is required.");
       }
-      const useResponses = isAzureOpenAiFirstPartyModelName(
-        azureCapabilities?.underlyingModelName ?? modelName,
-      );
+      // Claude deployments serve Responses but reject Chat Completions.
+      const useResponses =
+        isAzureOpenAiFirstPartyModelName(
+          azureCapabilities?.underlyingModelName ?? modelName,
+        ) ||
+        isAzureAnthropicBackingModel({
+          underlyingModelName: azureCapabilities?.underlyingModelName,
+        });
 
       // Only direct classic Azure calls need the AI SDK to inject api-version.
       // Proxied calls let the adapter choose from the actual upstream URL:
@@ -1483,6 +1497,21 @@ function withCatalogOutputBudget(
       transformParams: async ({ params }) => {
         if (!viaCompletionTokens) {
           if (params.maxOutputTokens !== undefined) return params;
+          // Chat deliberately omits the automatic cap for Nova High, whose
+          // provider contract forbids maxTokens. Do not reinsert it here.
+          // Explicit caller caps are preserved by the guard above.
+          const reasoning = params.providerOptions?.bedrock?.reasoningConfig;
+          if (
+            target.provider === "bedrock" &&
+            getBedrockReasoningFamily(target.modelName) === "nova" &&
+            reasoning !== null &&
+            typeof reasoning === "object" &&
+            !Array.isArray(reasoning) &&
+            reasoning.type === "enabled" &&
+            reasoning.maxReasoningEffort === "high"
+          ) {
+            return params;
+          }
           const maxOutputTokens = await resolveDefault();
           return maxOutputTokens === undefined
             ? params

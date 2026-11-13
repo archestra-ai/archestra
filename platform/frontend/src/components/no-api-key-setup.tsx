@@ -48,13 +48,14 @@ export function NoApiKeySetup({
   onKeyAdded?: () => void;
 }) {
   const [setupOption, setSetupOption] = useState<SetupOption | null>(null);
-  // Nothing here may offer a provider the admins turned off: the create dialog
-  // refuses one, so the button would only open a dead end.
+  // Nothing here may offer a provider, or a GitHub Copilot personal sign-in,
+  // the admins turned off: the create dialog refuses one, so the button would
+  // only open a dead end.
   const providerCatalog = useModelProviderCatalog();
   const subscriptionOptions = useMemo(
     () =>
-      SUBSCRIPTION_SETUP_OPTIONS.filter(
-        (option) => !providerCatalog.isHidden(option.provider),
+      SUBSCRIPTION_SETUP_OPTIONS.filter((option) =>
+        providerCatalog.canAddKey(option.provider),
       ),
     [providerCatalog],
   );

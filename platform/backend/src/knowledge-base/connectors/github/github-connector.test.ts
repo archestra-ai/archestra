@@ -1,5 +1,8 @@
 import { generateKeyPairSync } from "node:crypto";
+import { MockLanguageModelV3 } from "ai/test";
+import pino from "pino";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { makeTestPdf } from "@/test/pdf";
 import type { ConnectorSyncBatch } from "@/types";
 import { GithubConnector } from "./github-connector";
 
@@ -106,6 +109,53 @@ describe("GithubConnector", () => {
         repositoryOverrides: filters,
       });
       expect(result.valid).toBe(false);
+    });
+
+    test.each([
+      ".*",
+      "**/*.md",
+      "docs/*.md",
+      "Dockerfile*",
+      "",
+      "?md",
+      "[ab].md",
+    ])("rejects unsupported File Types %s at default and override levels", async (entry) => {
+      for (const settings of [
+        { fileTypes: [entry] },
+        {
+          repositoryOverrides: [
+            { repository: "test-org/my-repo", fileTypes: [entry] },
+          ],
+        },
+      ]) {
+        const result = await connector.validateConfig({
+          ...validConfig,
+          ...settings,
+        });
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain(
+          "Paths and glob patterns are not supported",
+        );
+      }
+    });
+
+    test("accepts the existing extension and exact-name forms", async () => {
+      expect(
+        await connector.validateConfig({
+          ...validConfig,
+          fileTypes: [
+            "md",
+            ".md",
+            "*.md",
+            ".tm.hcl",
+            "Dockerfile",
+            "config.json",
+            "*",
+            "*.*",
+            " .env ",
+          ],
+        }),
+      ).toEqual({ valid: true });
     });
 
     test("returns valid for correct config", async () => {
@@ -2034,6 +2084,31 @@ describe("GithubConnector", () => {
         .map((d) => d.metadata.filePath);
     }
 
+    test("stored unsupported filters still sync but warn only when repository files exist", async () => {
+      const messages: string[] = [];
+      connector.setLogger(
+        pino(
+          { level: "warn" },
+          {
+            write: (line) => {
+              messages.push(JSON.parse(line).msg);
+            },
+          },
+        ),
+      );
+      const batches = await syncWithFileTypes({
+        fileTypes: ["docs/*.md"],
+        files: { "README.md": "# Readme" },
+      });
+      expect(indexedPaths(batches)).toEqual([]);
+      expect(messages).toEqual([
+        expect.stringContaining("none match File Types"),
+      ]);
+      messages.length = 0;
+      await syncWithFileTypes({ fileTypes: [".md"], files: {} });
+      expect(messages).toEqual([]);
+    });
+
     test("matches exact file names at the root and in nested folders", async () => {
       const batches = await syncWithFileTypes({
         fileTypes: ["Dockerfile", "Makefile"],
@@ -2080,6 +2155,7 @@ describe("GithubConnector", () => {
           "src/index.ts": "export {};",
           Dockerfile: "FROM node:22",
           "assets/logo.png": "\x89PNG\r\n\x1a\n\x00\x00",
+          "docs/manual.pdf": "%PDF-1.4",
           "bin/tool": "\x7fELF\x02\x01\x01\x00\x00\x00",
         },
       });
@@ -2099,6 +2175,185 @@ describe("GithubConnector", () => {
       expect(mockGetContent).not.toHaveBeenCalledWith(
         expect.objectContaining({ path: "assets/logo.png" }),
       );
+      expect(mockGetContent).not.toHaveBeenCalledWith(
+        expect.objectContaining({ path: "docs/manual.pdf" }),
+      );
+    });
+  });
+
+  describe("repository PDFs", () => {
+    async function syncPdfs(params: {
+      files: Record<string, Buffer>;
+      /** Tree-reported sizes; a file over 1 MiB is read through the Blobs API. */
+      sizes?: Record<string, number>;
+      fileTypes?: string[];
+    }): Promise<ConnectorSyncBatch[]> {
+      mockListForRepo.mockResolvedValue({ data: [] });
+      mockGetRef.mockResolvedValueOnce({
+        data: { object: { sha: "abc123" } },
+      });
+      const paths = Object.keys(params.files);
+      mockGetTree.mockResolvedValueOnce({
+        data: {
+          tree: paths.map((path) => ({
+            type: "blob",
+            path,
+            sha: `sha:${path}`,
+            size: params.sizes?.[path] ?? params.files[path].length,
+          })),
+        },
+      });
+      mockGetContent.mockImplementation(async ({ path }: { path: string }) => ({
+        data: { content: params.files[path].toString("base64") },
+      }));
+      mockGetBlob.mockImplementation(
+        async ({ file_sha }: { file_sha: string }) => ({
+          data: {
+            encoding: "base64",
+            content:
+              params.files[file_sha.slice("sha:".length)].toString("base64"),
+          },
+        }),
+      );
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          ...validConfig,
+          includeRepositoryFiles: true,
+          fileTypes: params.fileTypes ?? [".md", ".pdf"],
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+      return batches;
+    }
+
+    function fileDocs(batches: ConnectorSyncBatch[]) {
+      return batches
+        .flatMap((b) => b.documents)
+        .filter((d) => d.metadata.kind === "repository_file");
+    }
+
+    test("indexes the extracted text of a selected PDF, not its raw bytes", async () => {
+      const batches = await syncPdfs({
+        files: {
+          "README.md": Buffer.from("# Readme"),
+          "docs/Runbook.PDF": makeTestPdf([
+            "Rotate the signing key every 90 days.",
+            "Page the on-call engineer for a failed rotation.",
+          ]),
+        },
+      });
+
+      const docs = fileDocs(batches);
+      expect(docs.map((d) => d.metadata.filePath)).toEqual([
+        "README.md",
+        "docs/Runbook.PDF",
+      ]);
+      const pdfDoc = docs[1];
+      expect(pdfDoc.content).toContain("Rotate the signing key every 90 days.");
+      expect(pdfDoc.content).toContain(
+        "Page the on-call engineer for a failed rotation.",
+      );
+      expect(pdfDoc.content).not.toContain("%PDF");
+      expect(pdfDoc.title).toBe("Runbook.PDF (test-org/my-repo)");
+      expect(pdfDoc.sourceUrl).toBe(
+        "https://github.com/test-org/my-repo/blob/main/docs/Runbook.PDF",
+      );
+      expect(batches.flatMap((b) => b.failures ?? [])).toEqual([]);
+      expect(batches.flatMap((b) => b.skipped ?? [])).toEqual([]);
+    });
+
+    test("extracts a PDF read through the Blobs API past the 1 MiB inline limit", async () => {
+      const pdf = makeTestPdf(["Quarterly architecture review notes."]);
+      const batches = await syncPdfs({
+        files: { "reviews/q3.pdf": pdf },
+        sizes: { "reviews/q3.pdf": 2 * 1024 * 1024 },
+      });
+
+      expect(mockGetContent).not.toHaveBeenCalled();
+      expect(mockGetBlob).toHaveBeenCalledWith(
+        expect.objectContaining({ file_sha: "sha:reviews/q3.pdf" }),
+      );
+      const docs = fileDocs(batches);
+      expect(docs).toHaveLength(1);
+      expect(docs[0].content).toContain("Quarterly architecture review notes.");
+      expect(docs[0].content).not.toContain("%PDF");
+    });
+
+    test("skips scanned and unreadable PDFs with the reason, without failing the run", async () => {
+      const batches = await syncPdfs({
+        files: {
+          "scans/contract.pdf": makeTestPdf([null, null]),
+          "broken.pdf": Buffer.from("not a pdf at all"),
+          "README.md": Buffer.from("# Readme"),
+        },
+      });
+
+      expect(fileDocs(batches).map((d) => d.metadata.filePath)).toEqual([
+        "README.md",
+      ]);
+      expect(batches.flatMap((b) => b.failures ?? [])).toEqual([]);
+      expect(batches.flatMap((b) => b.skipped ?? [])).toEqual([
+        expect.objectContaining({
+          itemId: "scans/contract.pdf",
+          sourceId: "my-repo#file:scans/contract.pdf",
+          category: "no_extractable_text",
+          reason: expect.stringContaining(
+            "PDF has 2 page(s) but no extractable text layer",
+          ),
+        }),
+        expect.objectContaining({
+          itemId: "broken.pdf",
+          sourceId: "my-repo#file:broken.pdf",
+          category: "no_extractable_text",
+          reason: expect.stringContaining("PDF could not be parsed"),
+        }),
+      ]);
+    });
+
+    test("transcribes scanned pages when the run has OCR configured", async () => {
+      const model = new MockLanguageModelV3({
+        doGenerate: async () => ({
+          content: [
+            { type: "text" as const, text: "Scanned policy: badge required." },
+          ],
+          finishReason: { unified: "stop" as const, raw: "stop" },
+          usage: {
+            inputTokens: {
+              total: 10,
+              noCache: 10,
+              cacheRead: 0,
+              cacheWrite: 0,
+            },
+            outputTokens: { total: 6, text: 6, reasoning: 0 },
+          },
+          warnings: [],
+        }),
+      });
+      connector.setOcrContext({
+        config: {
+          modelName: "mock-vision",
+          provider: "anthropic",
+          llmModel: model as never,
+          maxOutputTokens: 16_384,
+        },
+        connectorId: null,
+        deadlineAt: Date.now() + 60_000,
+        budget: { remainingPages: 10 },
+      });
+
+      const batches = await syncPdfs({
+        files: { "policies/access.pdf": makeTestPdf([null]) },
+      });
+
+      const docs = fileDocs(batches);
+      expect(docs).toHaveLength(1);
+      expect(docs[0].content).toContain("Scanned policy: badge required.");
+      expect(batches.flatMap((b) => b.skipped ?? [])).toEqual([]);
     });
   });
 

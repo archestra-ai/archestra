@@ -66,6 +66,7 @@ export const RouteId = {
   UpdateAutoRouter: "updateAutoRouter",
   DeleteAutoRouter: "deleteAutoRouter",
   GetAutoRoutingPlans: "getAutoRoutingPlans",
+  GetAutoRoutingUsage: "getAutoRoutingUsage",
   GetAutoRoutingPlan: "getAutoRoutingPlan",
   ReplanAutoRouting: "replanAutoRouting",
   PreviewAutoRouting: "previewAutoRouting",
@@ -810,6 +811,20 @@ export const RouteId = {
   UpdateGithubPat: "updateGithubPat",
   DeleteGithubPat: "deleteGithubPat",
 
+  // Blob providers (organization object storage destinations)
+  ListBlobProviders: "listBlobProviders",
+  CreateBlobProvider: "createBlobProvider",
+  UpdateBlobProvider: "updateBlobProvider",
+  DeleteBlobProvider: "deleteBlobProvider",
+  TestBlobProvider: "testBlobProvider",
+
+  // Scheduled cost exports to blob providers
+  ListCostExports: "listCostExports",
+  CreateCostExport: "createCostExport",
+  UpdateCostExport: "updateCostExport",
+  DeleteCostExport: "deleteCostExport",
+  RunCostExport: "runCostExport",
+
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
   DropEmbeddingConfig: "dropEmbeddingConfig",
@@ -1015,6 +1030,9 @@ export const RouteId = {
   GetGuardrailsDeployment: "getGuardrailsDeployment",
   UpdateGuardrailsDeployment: "updateGuardrailsDeployment",
   GetAppaGithubSync: "getAppaGithubSync",
+  GetAppaRepositoryProtection: "getAppaRepositoryProtection",
+  GetAppaGithubAppGrants: "getAppaGithubAppGrants",
+  GetAppaSelfService: "getAppaSelfService",
   ConfigureAppaGithubSync: "configureAppaGithubSync",
   CreateAppaGithubRepository: "createAppaGithubRepository",
   StartAppaGithubApp: "startAppaGithubApp",
@@ -1153,6 +1171,26 @@ export const RouteId = {
   PollClientConnection: "pollClientConnection",
   GetClientConnection: "getClientConnection",
   DecideClientConnection: "decideClientConnection",
+  // Desktop devices: computers that run the tunnel client for desktop MCP servers
+  GetDesktopDevices: "getDesktopDevices",
+  DeleteDesktopDevice: "deleteDesktopDevice",
+  UpdateDesktopDeviceServer: "updateDesktopDeviceServer",
+  RestartDesktopDeviceServer: "restartDesktopDeviceServer",
+  TestDesktopDeviceServer: "testDesktopDeviceServer",
+  GetDesktopDeviceServerLog: "getDesktopDeviceServerLog",
+  // white-label-ok: wire identifier of the `archestra` program's download, not copy
+  DownloadArchestraCli: "downloadArchestraCli",
+  StartDesktopDeviceSignIn: "startDesktopDeviceSignIn",
+  PollDesktopDeviceSignIn: "pollDesktopDeviceSignIn",
+  GetDesktopDeviceSignIn: "getDesktopDeviceSignIn",
+  DecideDesktopDeviceSignIn: "decideDesktopDeviceSignIn",
+  CreateDesktopDeviceSetupCode: "createDesktopDeviceSetupCode",
+  GetDesktopDeviceSetupSignIn: "getDesktopDeviceSetupSignIn",
+  // Tunnel endpoints the tunnel client calls (OpenAI tunnel-client wire protocol)
+  GetDesktopTunnel: "getDesktopTunnel",
+  PollDesktopTunnel: "pollDesktopTunnel",
+  RespondDesktopTunnel: "respondDesktopTunnel",
+  DeleteDesktopTunnel: "deleteDesktopTunnel",
   CreateConnectionSetup: "createConnectionSetup",
   GetMfilesVafAddOnScript: "getMfilesVafAddOnScript",
   GetMfilesVafAddOnPackage: "getMfilesVafAddOnPackage",

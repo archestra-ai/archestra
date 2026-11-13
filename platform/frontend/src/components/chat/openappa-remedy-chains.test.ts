@@ -9,6 +9,7 @@ import {
   getRemedyChainStatus,
   identifyRemedyChains,
   remedyChainPartIndices,
+  stripAppaPrefixFromRuling,
 } from "./openappa-remedy-chains";
 
 const NOTICE = "archestra__get_remedy_plans";
@@ -322,6 +323,22 @@ describe("identifyRemedyChains", () => {
       "c2",
       "c3",
     ]);
+  });
+});
+
+describe("stripAppaPrefixFromRuling", () => {
+  it("leaves the blocked call's own arguments as they were sent", () => {
+    expect(
+      stripAppaPrefixFromRuling({
+        tool: "fs__write_file",
+        arguments: { content: "[appa] my heading" },
+        ruling: "[appa] Blocked.",
+      }),
+    ).toEqual({
+      tool: "fs__write_file",
+      arguments: { content: "[appa] my heading" },
+      ruling: "Blocked.",
+    });
   });
 });
 

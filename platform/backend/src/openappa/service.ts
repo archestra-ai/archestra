@@ -60,6 +60,10 @@ import {
 } from "@/openappa/failure";
 import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
 import { toolEntries } from "@/openappa/policy-text";
+import {
+  parseReviewScope,
+  type ReviewScopeItem,
+} from "@/openappa/review-scope";
 import { startedUnenforced } from "@/openappa/unenforced";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { readYellResult } from "@/openappa/yell-session";
@@ -74,6 +78,7 @@ import {
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import type { OpenAppaSession } from "@/types/openappa-session";
+import { argumentSpellingConflict } from "./command-normalization";
 import { policyArguments, previewAppToolTarget } from "./policy-arguments";
 import { policyView } from "./result-view";
 import {
@@ -1492,6 +1497,18 @@ export async function evaluateToolCalls(
       ) {
         return { kind: "allow" as const };
       }
+      const conflict = argumentSpellingConflict(
+        target.toolCallName,
+        JSON.parse(target.toolCallArgs),
+      );
+      // Like an unanswered annotator, a refusal no remedy can lift: the
+      // notice says how to correct the call.
+      if (conflict)
+        return {
+          kind: "deny" as const,
+          feedback: conflict,
+          unanswered: true as const,
+        };
       // The target is already canonical, so it is read, not re-canonicalized.
       const canonicalTool = shortName === "yell" ? "yell" : target.toolCallName;
       const spawn =
@@ -2594,6 +2611,13 @@ export async function loadOfferReview(params: {
   tool?: string;
   /** The reviewed call's arguments as JSON text. */
   arguments?: string;
+  /**
+   * What approving accepts. Unknown for a review stored before the runtime
+   * typed it, or one that joins several authorities: show `text` instead.
+   */
+  scope?: ReviewScopeItem[];
+  /** The ruling authority's own hint to the reviewer. */
+  hint?: string;
 } | null> {
   try {
     if (
@@ -2616,12 +2640,15 @@ export async function loadOfferReview(params: {
       ),
     );
     if (!result) return null;
+    const scope = parseReviewScope(result.scope);
     return {
       offer_id: result.offerId,
       text: result.text,
       session_id: result.sessionId,
       ...(result.tool ? { tool: result.tool } : {}),
       ...(result.arguments ? { arguments: result.arguments } : {}),
+      ...(scope ? { scope } : {}),
+      ...(result.hint ? { hint: result.hint } : {}),
     };
   } catch (error) {
     logger.warn(

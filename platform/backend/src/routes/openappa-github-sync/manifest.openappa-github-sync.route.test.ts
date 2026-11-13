@@ -47,6 +47,40 @@ describe("POST /api/openappa/github-app/manifest", () => {
       payload: { githubUrl: "https://github.com", owner },
     });
 
+  test("the manifest asks for the sync's permissions and the policy check's, whether or not self-service is on, never Administration", async () => {
+    server.use(
+      http.get("https://api.github.com/users/:login", ({ params }) =>
+        HttpResponse.json({ login: params.login, type: "Organization" }),
+      ),
+    );
+    const permissions = async () => {
+      const started = await start("acme");
+      expect(started.statusCode, started.body).toBe(200);
+      return (
+        JSON.parse(started.json().manifest) as {
+          default_permissions: Record<string, string>;
+        }
+      ).default_permissions;
+    };
+    // Reading and proposing (Contents, Pull requests), the policy check on
+    // pull requests (Checks); Metadata comes with every App. The branch
+    // ruleset that requires the check is the administrator's to import, so
+    // no Administration, and self-service turned on later changes nothing.
+    const expected = {
+      contents: "write",
+      pull_requests: "write",
+      checks: "write",
+      metadata: "read",
+    };
+    expect(await permissions()).toEqual(expected);
+    config.openappa.selfService = "disabled";
+    try {
+      expect(await permissions()).toEqual(expected);
+    } finally {
+      delete config.openappa.selfService;
+    }
+  });
+
   test("takes an organization GitHub hides behind its enterprise's sign-in", async () => {
     // Anonymous API reads of an Enterprise Managed Users organization get a
     // 404, as for a missing account; only its web profile tells them apart.

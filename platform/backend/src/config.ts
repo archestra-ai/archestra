@@ -28,7 +28,6 @@ import {
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
   type LogContentMode,
-  LogContentModeSchema,
   MAX_CHUNK_SIZE_TOKENS,
   MAX_CONTEXT_EXPANSION_RADIUS,
   MCP_ORCHESTRATOR_DEFAULTS,
@@ -50,6 +49,7 @@ import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-ba
 import dotenv from "dotenv";
 import { getAppVersion } from "@/app-version";
 import logger from "@/logging";
+import { parseLogContentMode as parseApplicationLogContentMode } from "@/logging/content-mode";
 import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
   type EmailProviderType,
@@ -768,14 +768,9 @@ export const parseLogFormat = (
 export const parseLogContentMode = (
   envValue?: string | undefined,
 ): LogContentMode => {
-  const value = envValue?.toLowerCase().trim();
-  if (!value) return "full";
-  const parsed = LogContentModeSchema.safeParse(value);
-  if (parsed.success) return parsed.data;
-  logger.warn(
-    `Invalid ARCHESTRA_LOGS_CONTENT_MODE value "${envValue}", storing metadata only`,
-  );
-  return "metadata_only";
+  return parseApplicationLogContentMode(envValue, () => {
+    logger.warn("Invalid ARCHESTRA_LOGS_CONTENT_MODE, storing metadata only");
+  });
 };
 
 /** @public — exported for testability */
@@ -808,6 +803,17 @@ function parsePoolSize(params: {
 
   return parsed;
 }
+
+/** @public — exported for testability */
+export const isChatMaxOutputTokensConfigured = (envValue?: string): boolean => {
+  if (!envValue?.trim()) return false;
+  const parsed = Number(envValue.trim());
+  return (
+    Number.isInteger(parsed) &&
+    parsed >= 1 &&
+    parsed <= MAX_CHAT_MAX_OUTPUT_TOKENS
+  );
+};
 
 /** @public — exported for testability */
 export const parseChatMaxOutputTokens = (
@@ -843,11 +849,7 @@ const parseOutputTokenCeiling = (params: {
   // Number() (not parseInt) so trailing garbage ("32768abc") and fractions
   // ("1.5") are rejected rather than silently truncated to a tiny cap.
   const parsed = Number(value);
-  if (
-    !Number.isInteger(parsed) ||
-    parsed < 1 ||
-    parsed > MAX_CHAT_MAX_OUTPUT_TOKENS
-  ) {
+  if (!isChatMaxOutputTokensConfigured(value)) {
     logger.warn(
       `Invalid ${envName} value "${value}", using default ${fallback}`,
     );
@@ -2229,9 +2231,15 @@ export function parseOpenAppaConfig({
   authSecret,
   humanApprovalMode,
   softBlockMode,
+  policyCheckName,
+  selfService,
+  selfServiceAutoMerge,
 }: {
   humanApprovalMode?: string;
   softBlockMode?: string;
+  policyCheckName?: string;
+  selfService?: string;
+  selfServiceAutoMerge?: string;
   yellEnabled?: string;
   yellForwardingEnabled?: string;
   offerSigningSecret?: string;
@@ -2284,8 +2292,29 @@ export function parseOpenAppaConfig({
     provider: reviewSummaryProvider,
     model: reviewSummaryModel,
   });
+  // Whether an MCP server's editors change its own Guardrails rules through
+  // Git sync. Release 1.4 sets it only here; from 1.5 on, while it is set it
+  // overrides the setting saved with the Git sync source, so a cluster
+  // upgraded from 1.4 keeps the behaviour it was configured for.
+  const selfServiceOverride = optionalChoice(
+    "selfService",
+    OPENAPPA_SELF_SERVICE_VARIABLE,
+    selfService,
+    ["enabled", "disabled"] as const,
+  );
+  // Whether the GitHub App merges a self-served rules pull request once its
+  // policy check passes. While set, it overrides the saved setting.
+  const selfServiceAutoMergeOverride = optionalChoice(
+    "selfServiceAutoMerge",
+    OPENAPPA_SELF_SERVICE_AUTO_MERGE_VARIABLE,
+    selfServiceAutoMerge,
+    ["enabled", "disabled"] as const,
+  );
   return {
     enabled: true,
+    policyCheckName: parseOpenAppaPolicyCheckName(policyCheckName),
+    ...selfServiceOverride,
+    ...selfServiceAutoMergeOverride,
     yellEnabled: (yellEnabled ?? "true") === "true",
     // External diagnostic delivery requires its own opt-in in every environment.
     yellForwardingEnabled: forwarding === "true",
@@ -2301,6 +2330,13 @@ export function parseOpenAppaConfig({
       : {}),
   };
 }
+
+/** The variable that turns self-service Guardrails on or off for the deployment. */
+export const OPENAPPA_SELF_SERVICE_VARIABLE = "ARCHESTRA_OPENAPPA_SELF_SERVICE";
+
+/** The variable that turns auto-merge of self-served pull requests on or off. */
+export const OPENAPPA_SELF_SERVICE_AUTO_MERGE_VARIABLE =
+  "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE";
 
 /** An unset or empty variable sets nothing; any other value must be a choice. */
 function optionalChoice<
@@ -2347,6 +2383,22 @@ function parseOpenAppaPostgresMaxConnections(envValue?: string): number {
  * from the organization's default provider. Validation errors name variables
  * only, never credential values.
  */
+/**
+ * The name of the check Archestra posts on the policy repository's pull
+ * requests, and of the branch ruleset that requires it. Carries no product
+ * name by default, so a white-labeled deployment shows its users none.
+ * @public — exported for testability
+ */
+export function parseOpenAppaPolicyCheckName(value?: string): string {
+  const name = value?.trim() ?? "";
+  if (name === "") return "Check OpenAPPA Guardrails";
+  if (name.length > 100)
+    throw new Error(
+      "ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME must be at most 100 characters",
+    );
+  return name;
+}
+
 function parseOpenAppaReviewSummary({
   provider,
   model,
@@ -2438,6 +2490,9 @@ const openappa = parseOpenAppaConfig({
   yellEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
   humanApprovalMode: process.env.ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE,
   softBlockMode: process.env.ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE,
+  policyCheckName: process.env.ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME,
+  selfService: process.env.ARCHESTRA_OPENAPPA_SELF_SERVICE,
+  selfServiceAutoMerge: process.env.ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE,
   yellForwardingEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED,
   offerSigningSecret: process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   postgresMaxConnections:
@@ -2620,6 +2675,34 @@ const config = {
      * with no flag of its own.
      */
     skillsEnabled: process.env.ARCHESTRA_BETA === "true",
+  },
+  mcpBridge: {
+    /**
+     * Longest time (ms) a tunnel client's poll is held open while its queue is
+     * empty. Keep it below the timeout of the load balancer in front of the
+     * API, or the load balancer cuts every idle poll.
+     */
+    pollMaxWaitMs: parsePositiveInt(
+      process.env.ARCHESTRA_MCP_BRIDGE_POLL_MAX_WAIT_MS,
+      8000,
+    ),
+    /**
+     * Whether the MCP bridge on a user's computer replaces itself with the
+     * program this deployment serves. Off: the user runs `archestra update`.
+     */
+    autoUpdateEnabled:
+      process.env.ARCHESTRA_MCP_BRIDGE_AUTO_UPDATE_ENABLED !== "false",
+  },
+  archestraCli: {
+    /**
+     * Folder with the `archestra` programs the Device tab offers for
+     * download, one file per target named `archestra-<target>` (for example
+     * `archestra-darwin-arm64`, or `archestra-windows-x86_64.exe` on Windows),
+     * and `manifest.json` with their version. The default is where the
+     * platform image puts them; a deployment that runs outside the image (a
+     * dev stack) has no such folder and offers no download.
+     */
+    downloadDir: process.env.ARCHESTRA_CLI_DIR?.trim() || "/app/archestra-cli",
   },
   mcpServer: {
     /**
@@ -3337,6 +3420,11 @@ const config = {
     ),
     secretScanEnabled:
       process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED !== "false",
+    // Nova high cannot send maxTokens. Distinguish the automatic default from
+    // an operator's explicit cap without adding another configuration option.
+    maxOutputTokensExplicitlyConfigured: isChatMaxOutputTokensConfigured(
+      process.env.ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS,
+    ),
     maxOutputTokensCeiling: parseChatMaxOutputTokens(
       process.env.ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS,
     ),

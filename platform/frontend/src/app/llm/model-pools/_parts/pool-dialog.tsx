@@ -1,12 +1,14 @@
 "use client";
 
-import { Layers, Loader2 } from "lucide-react";
+import { MODEL_POOL_RETRY_DEFAULTS } from "@archestra/shared/model-pool-retries";
+import { Info, Layers, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { FormDialog } from "@/components/form-dialog";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -25,8 +27,9 @@ import {
   usePoolOptions,
   usePoolProblem,
 } from "./pool-form";
+import { MemberRetryOverrides, RetryFields } from "./retry-fields";
 
-export type PoolDialogSection = "pool" | "connect";
+export type PoolDialogSection = "pool" | "failover" | "connect";
 
 /**
  * Creates a pool, or edits `pool`, with a Connect section beside its settings
@@ -61,6 +64,9 @@ export function PoolDialog({
   const { data: pools = [] } = useModelPools({ toastOnError: false });
   const live = pools.find((row) => row.id === pool?.id) ?? pool;
   const isDirty = form.formState.isDirty;
+  const retries =
+    form.watch("retrySettings")?.numRetries ??
+    MODEL_POOL_RETRY_DEFAULTS.numRetries;
 
   const onSubmit = form.handleSubmit(async (values) => {
     if (!pool) {
@@ -98,7 +104,20 @@ export function PoolDialog({
         disabled={disabled}
         savedMembers={live?.members ?? []}
       />
-      <TimeoutFields form={form} disabled={disabled} />
+      {form
+        .watch("members")
+        .some(
+          (member) => options.keysById.get(member.providerApiKeyId)?.userId,
+        ) ? (
+        <InlineNotice variant="info">
+          <Info />
+          <span className="font-medium">Personal connections stay private</span>
+          <InlineNoticeText>
+            Only requests authenticated as their owner use these members. Other
+            callers use the pool's shared connections.
+          </InlineNoticeText>
+        </InlineNotice>
+      ) : null}
     </>
   );
   const saveButton = (
@@ -120,7 +139,7 @@ export function PoolDialog({
         open
         onOpenChange={onOpenChange}
         title={pool.name}
-        description="Edit the pool's members and timeouts, or see how clients call it."
+        description="Edit the pool's members, what happens when one fails, or see how clients call it."
         sidebarLabel={pool.name}
         sidebarDescription="Model pool"
         sidebarIcon={<Layers className="h-4 w-4 text-muted-foreground" />}
@@ -131,6 +150,11 @@ export function PoolDialog({
             id: "pool",
             label: "Pool",
             status: `${memberCount} ${memberCount === 1 ? "member" : "members"}`,
+          },
+          {
+            id: "failover",
+            label: "Failover",
+            status: `${retries} ${retries === 1 ? "retry" : "retries"}`,
           },
           { id: "connect", label: "Connect", status: "Code samples" },
         ]}
@@ -149,6 +173,15 @@ export function PoolDialog({
       >
         <div hidden={activeSection !== "pool"} className="space-y-6">
           {fields}
+        </div>
+        <div hidden={activeSection !== "failover"} className="space-y-6">
+          <TimeoutFields form={form} disabled={disabled} />
+          <RetryFields form={form} disabled={disabled} />
+          <MemberRetryOverrides
+            form={form}
+            options={options}
+            disabled={disabled}
+          />
         </div>
         {activeSection === "connect" && (
           <PoolConnectSection pool={live ?? pool} />
@@ -170,9 +203,9 @@ export function PoolDialog({
       <form onSubmit={onSubmit} className="flex min-h-0 flex-col">
         <DialogBody className="space-y-6">{fields}</DialogBody>
         <DialogStickyFooter className="mt-0">
-          {options.sharedKeys.length === 0 ? (
+          {options.availableKeys.length === 0 ? (
             <p className="mr-auto text-xs text-muted-foreground">
-              <span>Add a shared provider key first.</span>
+              <span>Add a provider connection first.</span>
             </p>
           ) : null}
           <DialogCancelButton>Cancel</DialogCancelButton>

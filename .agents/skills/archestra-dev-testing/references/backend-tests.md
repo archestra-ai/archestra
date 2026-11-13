@@ -28,16 +28,16 @@ file context to select transaction rollback only for `*.rollback.test.ts`.
 
 For values or types from `@archestra/shared`, import a narrow exported subpath (for example `@archestra/shared/consts`) in database-free tests. Its root barrel re-exports a large graph, including generated clients. Biome rejects the root import in `*.unit.test.ts`; when a subpath is missing, add a focused export to `shared/package.json` rather than importing the root. When converting an ordinary test to a database-free test, inspect imports of the code under test as well: a light test file can still load an expensive graph through the module it exercises.
 
-Within each group, `backend/vitest.config.ts` splits files by module mocking at config-load time:
+Within each group, `backend/vitest.config.ts` splits files by module isolation needs at config-load time:
 
-- **`clean` / `unit`** — files with NO `vi.mock`/`vi.doMock`/`vi.hoisted` run with `isolate: false`: files in the same worker process share the module cache. This is the fast path.
-- **`mocked` / `unit-mocked`** — files using module mocking keep full isolation, because Vitest never resets the module-mock registry between files in a shared worker (vitest-dev/vitest#4894).
+- **`clean` / `unit`** — files with NO module mocks or `vi.resetModules` run with `isolate: false`: files in the same worker process share the module cache. This is the fast path.
+- **`mocked` / `unit-mocked`** — files using module mocking or `vi.resetModules` keep full isolation. Vitest never resets the module-mock registry between files in a shared worker (vitest-dev/vitest#4894), and resetting the app module graph leaves external-package singletons alive, which can cause duplicate Prometheus registrations in later files.
 
 Consequences:
 
-- **Prefer not mocking modules at all.** Every file that drops its last `vi.mock` automatically joins the fast project. Mock at the process boundary instead (fetch, network) when possible.
+- **Prefer not mocking modules at all.** A file without module mocks or `vi.resetModules` automatically joins the fast project. Mock at the process boundary instead (fetch, network) when possible.
 - **Import test APIs from `vitest` when the file does not use database fixtures.** `@/test` loads the entire fixture graph even when the test only needs `expect`, `test`, or hooks. This matters most in mock-using files, whose module graph is reloaded for each file. `useRouteTestApp` registers fixture-aware hooks, so files using it must still import `test` from `@/test`. `pnpm --dir backend check:test-imports` rejects fixture-free imports from `@/test`.
-- Database selection follows the explicit filename suffix; mock isolation is automatic. Adding `vi.mock` to a file safely moves it to the isolated project on the next run.
+- Database selection follows the explicit filename suffix; module isolation is automatic. Adding `vi.mock` or `vi.resetModules` to a file safely moves it to the isolated project on the next run.
 - Route tests import `createFastifyInstance` and `FastifyInstanceWithZod` from `@/fastify-instance`, and `useRouteTestApp` from `@/test/route-test-app`. Do not import `@/server` in tests or re-export the route helper from the general `@/test` barrel; both load the server startup graph into unrelated tests.
 
 ## HTTP boundary mocking (instead of vi.mock on client libraries)

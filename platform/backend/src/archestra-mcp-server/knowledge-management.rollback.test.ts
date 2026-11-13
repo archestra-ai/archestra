@@ -1361,6 +1361,49 @@ describe("knowledge-management tool execution", () => {
       );
     });
 
+    test("GitHub MCP filters reject unsupported create and update patterns", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const config = {
+        type: "github" as const,
+        githubUrl: "https://api.github.com",
+        owner: "example-org",
+        fileTypes: ["*.md"],
+      };
+      const invalid = await executeArchestraTool(
+        t("create_knowledge_connector"),
+        {
+          name: "Invalid filter",
+          connector_type: "github",
+          config: { ...config, fileTypes: ["docs/*.md"] },
+        },
+        mockContext,
+      );
+      expect(invalid.isError).toBe(true);
+      expect(JSON.stringify(invalid.content)).toContain(
+        "Paths and glob patterns are not supported",
+      );
+      const kb = await makeKnowledgeBase(mockContext.organizationId!);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        mockContext.organizationId!,
+        { connectorType: "github", config, enabled: false },
+      );
+      const update = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        { id: connector.id, config: { ...config, fileTypes: ["Dockerfile*"] } },
+        mockContext,
+      );
+      expect(update.isError).toBe(true);
+      expect(JSON.stringify(update.content)).toContain(
+        "Paths and glob patterns are not supported",
+      );
+      expect(
+        (await KnowledgeBaseConnectorModel.findById(connector.id))?.config,
+      ).toEqual(config);
+    });
+
     test("create_knowledge_connector succeeds", async () => {
       const result = await executeArchestraTool(
         t("create_knowledge_connector"),

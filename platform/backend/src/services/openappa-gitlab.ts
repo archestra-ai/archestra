@@ -8,6 +8,11 @@ import {
 } from "@/git-hosts/git-host-client";
 import logger from "@/logging";
 import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
+import {
+  firstFileAtEachPath,
+  hasRepositoryIncludeGlob,
+  strayGlobMatches,
+} from "@/services/openappa-github-access";
 import { ApiError } from "@/types";
 import type { AppaGithubRepositoryStatus } from "@/types/openappa-github-app-setup";
 
@@ -18,15 +23,32 @@ import type { AppaGithubRepositoryStatus } from "@/types/openappa-github-app-set
  * template since GitLab can't copy a GitHub template.
  */
 class OpenAppaGitlab {
-  /** The policy file at the source's ref, and the commit it was read at. */
+  /**
+   * The policy file at the source's ref, and the commit it was read at; or,
+   * while the setup merge request that carries the policy is not merged, its
+   * state.
+   */
   async readPolicy(params: {
     access: GitAccess;
     repo: string;
     ref: string | null;
     path: string;
-  }): Promise<{ pending: null; commitSha: string; content: string }> {
+    setupMergeRequest?: number | null;
+  }): Promise<
+    | { pending: "open" | "closed" }
+    | { pending: null; commitSha: string; content: string }
+  > {
     const client = gitClient(params.access);
     return withGitlabErrors(async () => {
+      if (params.setupMergeRequest) {
+        const request = await client.gitlabMergeRequest(
+          params.repo,
+          params.setupMergeRequest,
+        );
+        // The client reads GitLab's states as open, merged or closed, so an
+        // unmerged request is pending as open or closed, like a GitHub one.
+        if (request.state !== "merged") return { pending: request.state };
+      }
       const commitSha = await client.resolveCommit(params.repo, params.ref);
       if (!/^[a-f0-9]{40}$/.test(commitSha))
         throw new ApiError(400, "GitLab returned an invalid commit");
@@ -198,6 +220,8 @@ class OpenAppaGitlab {
     namespace: string | null;
     name: string;
     policy: string;
+    /** What the policy reads beside itself, carried over from its repository. */
+    transferred: { path: string; content: string }[];
   }): Promise<{ repo: string; branch: string }> {
     const client = gitClient(params.access);
     return withGitlabErrors(async () => {
@@ -223,6 +247,7 @@ class OpenAppaGitlab {
         repo: project.path_with_namespace,
         branch: project.default_branch || "main",
         policy: params.policy,
+        transferred: params.transferred,
       });
       return { repo: project.path_with_namespace, ...seeded };
     });
@@ -233,6 +258,7 @@ class OpenAppaGitlab {
     access: GitAccess;
     repo: string;
     policy: string;
+    transferred: { path: string; content: string }[];
   }): Promise<{ branch: string }> {
     const client = gitClient(params.access);
     return withGitlabErrors(async () => {
@@ -244,8 +270,100 @@ class OpenAppaGitlab {
         repo: params.repo,
         branch: project.default_branch || "main",
         policy: params.policy,
+        transferred: params.transferred,
       });
     });
+  }
+
+  /**
+   * Propose the current policy and what it reads beside itself to a project
+   * that already holds a policy: one commit on a new branch from `ref` (the
+   * default branch unless given) and a merge request into it. Null when the
+   * project already holds every file as given, so there is nothing to merge.
+   */
+  async proposeSetup(params: {
+    access: GitAccess;
+    repo: string;
+    ref: string | null;
+    files: { path: string; content: string }[];
+    title: string;
+    summary: string;
+    /** The policy text being written, for the globs it reads by. */
+    policyPath: string;
+    content: string;
+  }): Promise<{
+    iid: number;
+    webUrl: string;
+    branch: string;
+    sha: string;
+  } | null> {
+    const client = gitClient(params.access);
+    const branch = await withGitlabErrors(
+      async () => params.ref ?? (await client.defaultBranch(params.repo)),
+    );
+    const baseSha = await withGitlabErrors(() =>
+      client.gitlabBranchCommit(params.repo, branch),
+    );
+    const files = firstFileAtEachPath(params.files);
+    // Files the project holds that the policy's globs would read, and that
+    // were never in the policy, go with the merge request. Only a glob
+    // needs the project's whole tree; otherwise each file is read alone.
+    const tree = hasRepositoryIncludeGlob(params.content)
+      ? await withGitlabErrors(() => client.listTree(params.repo, baseSha))
+      : null;
+    const remove = tree
+      ? strayGlobMatches({
+          content: params.content,
+          policyPath: params.policyPath,
+          paths: tree
+            .filter((entry) => entry.type === "blob")
+            .map((entry) => entry.path),
+          written: files.map((file) => file.path),
+        })
+      : [];
+    // What is at each path now: the tree's entries with their modes, or,
+    // without a tree, whether the path exists at all; the bounded read
+    // alone would take a file over the limit for a missing one.
+    const present = new Map<string, { type: string; mode?: string }>(
+      tree ? tree.map((entry) => [entry.path, entry]) : [],
+    );
+    const unchanged = await withGitlabErrors(async () => {
+      let same = remove.length === 0;
+      for (const file of files) {
+        if (
+          !tree &&
+          (await client.pathExists({
+            repo: params.repo,
+            ref: baseSha,
+            path: file.path,
+          }))
+        )
+          present.set(file.path, { type: "blob" });
+        const bytes = await client.readFile({
+          repo: params.repo,
+          ref: baseSha,
+          path: file.path,
+          maxBytes: POLICY_MAX_BYTES,
+        });
+        if (!bytes || !bytes.equals(Buffer.from(file.content))) same = false;
+      }
+      return same;
+    });
+    if (unchanged) return null;
+    return {
+      ...(await this.proposeChange({
+        access: params.access,
+        repo: params.repo,
+        branch,
+        baseSha,
+        title: params.title,
+        summary: params.summary,
+        upsert: files,
+        delete: remove,
+        present,
+      })),
+      branch,
+    };
   }
 
   /**
@@ -261,11 +379,22 @@ class OpenAppaGitlab {
     summary: string;
     upsert: { path: string; content: string }[];
     delete: string[];
-  }): Promise<{ iid: number; webUrl: string }> {
+    /**
+     * What the paths are at `baseSha`, when the caller looked already: the
+     * project's tree is not listed then. An entry without a mode was found
+     * by an existence check alone, which does not tell a symbolic link from
+     * a file.
+     */
+    present?: ReadonlyMap<string, { type: string; mode?: string }>;
+  }): Promise<{ iid: number; webUrl: string; sha: string }> {
     const client = gitClient(params.access);
     return withGitlabErrors(async () => {
-      const tree = await client.listTree(params.repo, params.baseSha);
-      const existing = new Map(tree.map((entry) => [entry.path, entry]));
+      let existing: ReadonlyMap<string, { type: string; mode?: string }>;
+      if (params.present) existing = params.present;
+      else {
+        const tree = await client.listTree(params.repo, params.baseSha);
+        existing = new Map(tree.map((entry) => [entry.path, entry]));
+      }
       for (const path of [
         ...params.upsert.map((file) => file.path),
         ...params.delete,
@@ -278,7 +407,7 @@ class OpenAppaGitlab {
           );
       }
       const head = `archestra/openappa-${randomUUID()}`;
-      await client.commitGitlabFiles({
+      const sha = await client.commitGitlabFiles({
         repo: params.repo,
         branch: head,
         startBranch: params.branch,
@@ -297,13 +426,29 @@ class OpenAppaGitlab {
             .map((path) => ({ action: "delete" as const, path })),
         ],
       });
-      return client.createGitlabMergeRequest({
-        repo: params.repo,
-        sourceBranch: head,
-        targetBranch: params.branch,
-        title: params.title,
-        description: params.summary,
-      });
+      try {
+        return {
+          ...(await client.createGitlabMergeRequest({
+            repo: params.repo,
+            sourceBranch: head,
+            targetBranch: params.branch,
+            title: params.title,
+            description: params.summary,
+          })),
+          sha,
+        };
+      } catch (error) {
+        // Without GitLab's answer the request may have opened all the same.
+        const opened =
+          error instanceof GitHostError && error.status === 0
+            ? await openRequestFor({ client, repo: params.repo, head })
+            : null;
+        if (opened) return { ...opened, sha };
+        // A lookup that failed too leaves the branch: it may hold a request.
+        if (opened === null)
+          await deleteBranch({ client, repo: params.repo, branch: head });
+        throw error;
+      }
     });
   }
 
@@ -348,10 +493,12 @@ class OpenAppaGitlab {
     repo: string;
     branch: string;
     policy: string;
+    transferred: { path: string; content: string }[];
   }): Promise<{ branch: string }> {
-    const files = OPENAPPA_TEMPLATE.files.map((file) =>
+    const template = OPENAPPA_TEMPLATE.files.map((file) =>
       file.path === "appa.toml" ? { ...file, content: params.policy } : file,
     );
+    const files = firstFileAtEachPath([...template, ...params.transferred]);
     try {
       await params.client.commitGitlabFiles({
         repo: params.repo,
@@ -376,6 +523,50 @@ class OpenAppaGitlab {
 }
 
 export const openappaGitlab = new OpenAppaGitlab();
+
+/**
+ * The open merge request from `head`, null when there is none, or undefined
+ * when GitLab could not say.
+ */
+async function openRequestFor(params: {
+  client: GitHostClient;
+  repo: string;
+  head: string;
+}): Promise<{ iid: number; webUrl: string } | null | undefined> {
+  try {
+    const requests = await params.client.json<
+      Array<{ iid?: number; web_url?: string }>
+    >(
+      `${params.client.repoApi(params.repo)}/merge_requests?state=opened&source_branch=${encodeURIComponent(params.head)}`,
+    );
+    const request = requests[0];
+    return request?.iid && request.web_url
+      ? { iid: request.iid, webUrl: request.web_url }
+      : null;
+  } catch (err) {
+    logger.warn({ err }, "OpenAPPA could not look for a policy merge request");
+    return undefined;
+  }
+}
+
+/** Remove a branch whose merge request did not open; a failure is logged. */
+async function deleteBranch(params: {
+  client: GitHostClient;
+  repo: string;
+  branch: string;
+}) {
+  const response = await params.client
+    .request(
+      `${params.client.repoApi(params.repo)}/repository/branches/${encodeURIComponent(params.branch)}`,
+      { method: "DELETE" },
+    )
+    .catch(() => null);
+  if (!response?.ok)
+    logger.warn(
+      { status: response?.status, branch: params.branch },
+      "OpenAPPA could not delete a branch whose merge request did not open",
+    );
+}
 
 const POLICY_MAX_BYTES = 1024 * 1024;
 const POLICY_TEST_MAX_BYTES = 65536;

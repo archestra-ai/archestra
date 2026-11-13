@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 8
-lastUpdated: 2026-11-09
+lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -546,7 +546,7 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_JEV_BASE_URL`** - Full Jev decisions endpoint. See [Jev](/docs/llm-proxy/providers#jev).
   - Default: `https://api.typesafe.ai/v1/systemone`
 
-- **`ARCHESTRA_AUTO_ROUTING_ENABLED`** - Turns on the alpha [Auto Routing](/docs/llm-proxy/auto-routing) model for the Unified Model API.
+- **`ARCHESTRA_AUTO_ROUTING_ENABLED`** - Turns on the beta [Auto Routing](/docs/llm-proxy/auto-routing) model for the Unified Model API.
   - Default: unset (off)
   - Values: `true`, `false`. Blank follows [`ARCHESTRA_BETA`](/docs/admin/deployment/configuration#ARCHESTRA_BETA).
 
@@ -711,6 +711,7 @@ At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT
   - Default: `32768`
   - Values: `1` to `1000000`
   - A turn uses the lower of this value and the model's own output limit. Models without a known limit use `8192`.
+  - In Chat, Nova 2 Lite High reasoning omits the automatic output cap. Setting this variable explicitly, even to `32768`, or setting a custom model output limit blocks High; use Low or Medium instead.
 
 - **`ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS`** - Output token limit for Groq, which charges the requested output budget against a per-minute token allowance.
   - Default: `4096`
@@ -775,6 +776,21 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Values: `0` to `2147483647`. Any other value means `0`.
   - Set it below your proxy's maximum request duration, which Archestra cannot detect. A GKE Ingress backend without `timeoutSec` allows 30 seconds.
   - Some clients stop reconnecting after repeated ends and then miss tool-list changes. Test your client first.
+
+## MCP Bridge
+
+- **`ARCHESTRA_MCP_BRIDGE_POLL_MAX_WAIT_MS`** - Longest time Archestra holds one poll of a user's MCP bridge open while it has no work, in milliseconds.
+  - Default: `8000` (8 seconds)
+  - Keep it below the request timeout of the load balancer in front of the API. Otherwise the load balancer ends every idle poll with an error.
+
+- **`ARCHESTRA_MCP_BRIDGE_AUTO_UPDATE_ENABLED`** - Lets the MCP bridge on a user's computer update by itself when Archestra serves another version. Set it to `false` to make each user run `archestra update`.
+  - Default: `true`
+  - On macOS and Linux the MCP bridge does not update by itself. The user runs `archestra update`.
+
+- **`ARCHESTRA_CLI_DIR`** - Folder that holds the `archestra` programs that the Device tab of Personal Settings offers for download. Users run `archestra bridge start` to start the MCP bridge.
+  - Default: `/app/archestra-cli`, where the platform image keeps the programs. If the folder does not exist, the download answers "not found".
+  - One file per system and CPU, named `archestra-<system>-<cpu>`: `archestra-darwin-arm64`, `archestra-darwin-x86_64`, `archestra-linux-x86_64`, `archestra-linux-arm64`, `archestra-windows-x86_64.exe`, `archestra-windows-arm64.exe`. A system with no file gets no download.
+  - `manifest.json` in the folder holds the version of the programs, as `{ "version": "0.2.0" }`. The Device tab of Personal Settings shows it when a device needs an update.
 
 ## MCP Servers
 
@@ -1498,7 +1514,7 @@ Choose whether stored LLM proxy logs, MCP gateway logs, and Guardrails consult r
   - Applies to records written after a restart. Stored records keep their content.
   - Metadata-only mode also omits captured prompt/response and tool argument/result fields from LLM proxy and MCP tool-call trace spans.
 
-Application error logs omit attached SDK request bodies, including those in retry histories. Error messages and provider responses can still contain sensitive content in either mode.
+Application error logs omit attached SDK request bodies, including those in retry histories. In `metadata_only` mode, logged errors keep type, status and retry metadata; free-text messages, stacks, attached payloads and raw provider error diagnostics are withheld from stdout and OTLP logs. In `full` mode, error messages and provider responses can still contain sensitive content.
 
 To disable captured prompt/response and tool argument/result fields on trace spans independently, set [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_CAPTURE_CONTENT) to `false`. MCP trace error messages can still contain sensitive content.
 
@@ -1547,6 +1563,18 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Default: Helm generates one and keeps it across upgrades. Without Helm, it derives from [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SESSION_SECRET).
   - Values: at least 32 characters, the same on every replica. A shorter value stops startup.
   - Set it to rotate this key separately from the session secret. See [Guardrails Signing Key](/docs/admin/deployment/secret-rotation#guardrails-signing-key).
+
+- **`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`** - Name of the check Archestra posts on the policy repository's pull requests with [Git sync](/docs/agents/guardrails/git-sync#the-check-and-the-ruleset), and of the branch ruleset you import to require it.
+  - Default: `Check OpenAPPA Guardrails`.
+  - Values: up to 100 characters. After a rename, edit the imported ruleset so it requires the check under the new name.
+
+- **`ARCHESTRA_OPENAPPA_SELF_SERVICE`** - Controls the MCP Guardrails Self-Service feature - whether the MCP owners can edit Guardrail policies for these MCPs themselves. Overrides related configuration from Settings.
+  - Default: unset.
+  - Values: `enabled`, `disabled`.
+
+- **`ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE`** - Sets [Auto-merge](/docs/agents/guardrails/git-sync#auto-merge) for MCP Guardrails Self-Service: the GitHub App merges each MCP server's rules pull request once its policy check passes. While it is set, it overrides the setting saved in Git sync setup, which cannot be edited there.
+  - Default: unset (the saved setting applies, off unless changed).
+  - Values: `enabled`, `disabled`. Other values stop startup.
 
 - **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Sets **Human approval** under [Break the glass](/docs/agents/guardrails/policies#yells) for the whole deployment. While it is set, it overrides the value saved in **Settings → Guardrails**, and the setting cannot be edited there. Unset it to edit the setting again.
   - Default: unset (the saved setting applies, `block` unless changed)

@@ -86,6 +86,34 @@ describe("NoApiKeySetup", () => {
     ).toBeInTheDocument();
   });
 
+  it("follows the personal subscription switch for GitHub Copilot", () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          "github-copilot": { plans: { personal: { hidden: true } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+    const { unmount } = render(<NoApiKeySetup />);
+    expect(
+      screen.queryByRole("button", { name: "Sign in with GitHub Copilot" }),
+    ).not.toBeInTheDocument();
+    unmount();
+
+    // The enterprise plan's switch has nothing to do with personal sign-ins.
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          "github-copilot": { plans: { enterprise: { hidden: true } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+    render(<NoApiKeySetup />);
+    expect(
+      screen.getByRole("button", { name: "Sign in with GitHub Copilot" }),
+    ).toBeInTheDocument();
+  });
+
   it("offers nothing to add when every provider is turned off", () => {
     vi.mocked(useOrganization).mockReturnValue({
       data: {

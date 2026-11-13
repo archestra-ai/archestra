@@ -26,13 +26,27 @@ export function McpAppAuthBanner({
 }) {
   const expired = authState.kind === "auth-expired";
   const url = expired ? authState.reauthUrl : authState.actionUrl;
+  const addToComputer =
+    authState.kind === "auth-required" &&
+    authState.action === "add_desktop_mcp_server";
 
   return (
     <InlineNotice className="mb-2 items-start">
       <KeyRound className="mt-0.5" />
       <InlineNoticeText className="flex-1 break-words">
-        Tool &ldquo;{toolName}&rdquo; requires{" "}
-        {expired ? "re-authentication" : "authentication"} &mdash; open{" "}
+        {/* A desktop MCP server has no authentication: the user adds it to
+            their computer. */}
+        {addToComputer ? (
+          <span key="add-to-computer">
+            Tool &ldquo;{toolName}&rdquo; runs on your device &mdash; link
+            &ldquo;{authState.catalogName}&rdquo; to it at{" "}
+          </span>
+        ) : (
+          <span key="authentication">
+            Tool &ldquo;{toolName}&rdquo; requires{" "}
+            {expired ? "re-authentication" : "authentication"} &mdash; open{" "}
+          </span>
+        )}
         <a
           href={url}
           target="_blank"

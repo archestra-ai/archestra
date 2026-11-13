@@ -92,6 +92,8 @@ if os.name != 'nt':
       'shared',
       'docker-banner.sh',
       'docker/prev-static-assets',
+      # The Dockerfile's archestra-cli-release stage reads this file.
+      'archestra-cli/release.lock.json',
     ],
     ignore=[
       '**/node_modules',

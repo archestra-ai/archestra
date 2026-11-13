@@ -7,7 +7,10 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import { OrganizationModel } from "@/models";
-import { OAUTH_CALLBACK_PATH } from "@/routes/route-paths";
+import {
+  ARCHESTRA_CLI_DOWNLOAD_PREFIX,
+  OAUTH_CALLBACK_PATH,
+} from "@/routes/route-paths";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import { Authnz } from "./middleware";
@@ -119,6 +122,31 @@ describe("Authnz", () => {
         expect(mockReply.status).not.toHaveBeenCalled();
         expect(mockReply.send).not.toHaveBeenCalled();
       }
+    });
+
+    test("skips auth for GET and HEAD of the archestra program download only", async () => {
+      const handle = (method: string) => {
+        const request = {
+          url: `${ARCHESTRA_CLI_DOWNLOAD_PREFIX}/darwin-arm64`,
+          method,
+          headers: {},
+        } as FastifyRequest;
+        const reply = {
+          status: vi.fn().mockReturnThis(),
+          send: vi.fn(),
+        } as unknown as FastifyReply;
+        return { done: authnz.handle(request, reply), reply };
+      };
+
+      for (const method of ["GET", "HEAD"]) {
+        const { done, reply } = handle(method);
+        await done;
+        expect(reply.status).not.toHaveBeenCalled();
+        expect(reply.send).not.toHaveBeenCalled();
+      }
+      await expect(handle("POST").done).rejects.toMatchObject({
+        statusCode: 401,
+      });
     });
 
     test("requires authentication for the MCP installation OAuth callback", async () => {

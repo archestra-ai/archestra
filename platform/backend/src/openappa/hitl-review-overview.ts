@@ -5,10 +5,13 @@ import { dump as dumpYaml } from "js-yaml";
 import { isCommandExecutionTool } from "./command-normalization";
 import { withoutProxyCopies } from "./derived-arguments";
 import {
+  acceptedScope,
   displayedReview,
   parseReviewedArguments,
+  redactCredentials,
   reviewedToolLabel,
 } from "./review-display";
+import type { ReviewScopeItem } from "./review-scope";
 
 /**
  * The native approval card for a review, and the complete review text a
@@ -73,6 +76,12 @@ type HitlInspectableReview = {
   arguments?: string;
   remedyArguments?: Record<string, unknown>;
   text: string;
+  /**
+   * What approving accepts, `null` when unknown. Absent only on a review
+   * staged before scope was stored, whose coverage is read from `text`.
+   */
+  scope?: ReviewScopeItem[] | null;
+  hint?: string;
   summary?: string;
   /**
    * The reviewed tool's own definition text, shown when the call carries no
@@ -208,14 +217,19 @@ export function renderHitlReviewText(staged: HitlInspectableReview): string {
       ].join("\n\n"),
     );
   }
-  const scope = policyScope(review.text);
-  if (scope.parsed) {
-    const prefix = prefixWithoutEmbeddedCall(review);
+  const scope =
+    review.scope === undefined
+      ? legacyPolicyScope(review)
+      : review.scope && {
+          lines: acceptedScope(review.scope) ?? [],
+          prefix: review.hint ? [redactCredentials(review.hint)] : [],
+        };
+  if (scope) {
     sections.push(
       [
         "### Policy review (authoritative)",
         [
-          ...prefix.map(chatText),
+          ...scope.prefix.map(chatText),
           ...(scope.lines.length > 0
             ? scope.lines
             : ["Approval applies only to this exact call."]
@@ -429,7 +443,7 @@ function cardLayout(
     ...(describedCommand ? { describedCommand } : {}),
     change,
     ...(review.summary ? { summary: summaryEntry(review.summary) } : {}),
-    scope: scopeLines(review.text),
+    scope: scopeLines(review),
   };
 }
 
@@ -448,18 +462,21 @@ function cardArguments(
 }
 
 /**
- * What an approval accepts besides this call: the runtime's coverage without
- * the human-approval mark the card itself answers, or the whole review text
- * verbatim when its coverage is not in the shape read here.
+ * What an approval accepts besides this call, without the attention the card
+ * itself answers, or the whole review text verbatim when that is unknown.
  */
-function scopeLines(text: string): string[] {
-  const scope = policyScope(text);
-  const lines = scope.parsed
-    ? scope.lines.filter((line) => !line.startsWith("attention: "))
-    : scope.lines.slice(0, lastLineWithText(scope.lines) + 1);
+function scopeLines(review: HitlInspectableReview): string[] {
+  const accepted =
+    review.scope === undefined
+      ? legacyPolicyScope(review)?.lines.filter(
+          (line) => !line.startsWith("attention: "),
+        )
+      : acceptedScope(review.scope ?? undefined);
+  const textLines = review.text.split(/\r?\n/);
+  const lines = accepted ?? textLines.slice(0, lastLineWithText(textLines) + 1);
   if (lines.length === 0) return [];
   return [
-    scope.parsed ? "Also accepts:" : "Policy review:",
+    accepted ? "Also accepts:" : "Policy review:",
     ...lines.flatMap((line) =>
       wrap(`${INDENT}${safeText(line)}`, CONTINUATION, INDENT.length),
     ),
@@ -897,6 +914,19 @@ function argumentsFullText(review: HitlInspectableReview): string {
     })
     .filter((part) => part !== undefined)
     .join("\n\n");
+}
+
+/**
+ * The coverage of a review staged before scope was stored, read from its text
+ * as its card was then. Such a stage lives at most HITL_QUESTION_TTL_MS plus
+ * one review window after a deploy; this and the parsers below can go then.
+ */
+function legacyPolicyScope(
+  review: HitlInspectableReview,
+): { lines: string[]; prefix: string[] } | undefined {
+  const scope = policyScope(review.text);
+  if (!scope.parsed) return undefined;
+  return { lines: scope.lines, prefix: prefixWithoutEmbeddedCall(review) };
 }
 
 /**

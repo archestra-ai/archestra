@@ -479,6 +479,34 @@ describe("AgentCreatePage", () => {
     );
   });
 
+  // The form renders the channel editor only for a reader of the org's channel
+  // bindings. A custom role without that read was still walked through a
+  // "Triggers & Channels" step with nothing on it.
+  it("skips Triggers & Channels for a role that cannot read the org's channel bindings", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !("organizationSettings" in permissions),
+          isPending: false,
+        }) as unknown as ReturnType<typeof useHasPermissions>,
+    );
+    const user = userEvent.setup();
+    renderAgentCreatePage();
+    await user.click(
+      screen.getByRole("button", { name: /^archestra built into/i }),
+    );
+
+    expect(
+      screen.queryByTestId(`${E2eTestId.AgentSetupStep}-messaging`),
+    ).toBeNull();
+    const next = () => screen.getByTestId(E2eTestId.AgentSetupNextButton);
+    await user.click(next());
+    expect(formProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ activeSection: "tools" }),
+    );
+    expect(next()).toHaveTextContent("Advanced");
+  });
+
   it("names the create action after what opening the agent starts", async () => {
     const user = userEvent.setup();
     const { rerender } = renderAgentCreatePage();

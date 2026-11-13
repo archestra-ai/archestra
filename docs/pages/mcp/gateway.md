@@ -2,7 +2,7 @@
 title: MCP Gateway
 description: One MCP endpoint that gives a client the tools, knowledge, subagents, and skills you choose
 order: 2
-lastUpdated: 2026-10-21
+lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -45,7 +45,7 @@ Give the client every tool its person can use, or only the ones you pick. Set it
 - **Subagents** go here too. The client gets one `agent__<name>` tool for each [subagent](/docs/agents/subagents), to hand it a task.
 - **Progressive tool loading** is on by default: the client gets [`search_tools`](/docs/reference/archestra-mcp-server#search_tools) and [`run_tool`](/docs/reference/archestra-mcp-server#run_tool). Turn it off in Manual mode when the client needs the full list up front.
 - **Better tool search** runs automatically when your organization has a default LLM key. Archestra sends each MCP tool's name, description, and input schema to that provider once to generate search keywords, and the cost appears in the LLM logs.
-- A team or organization token has no person behind it, so it gets only the tools you picked, even with **All tools**.
+- A service-account key acts with the account's granted access, not the personal access of the person who created the key. Legacy team and organization tokens migrate to these accounts.
 
 <span id="knowledge"></span>
 
@@ -58,7 +58,7 @@ Let Claude Code or Cursor answer from your company's documents, with links to th
 3. Save. The client gets [`query_knowledge_sources`](/docs/reference/archestra-mcp-server#query_knowledge_sources).
 4. Ask the client a question, such as "What is our deployment rollback procedure?". Each result comes with its document title and link.
 
-Each person finds only the documents [they can open](/docs/knowledge#permissions). A team or organization token finds only sources shared with everyone in the organization.
+Each person finds only the documents [they can open](/docs/knowledge#permissions). A service-account key, including a migrated team or organization token, finds sources granted to that account, its team, or everyone in the organization.
 
 <span id="publish-skills"></span>
 

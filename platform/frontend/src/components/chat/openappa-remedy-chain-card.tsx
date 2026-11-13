@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { CheckCircleIcon, ClockIcon } from "lucide-react";
+import { useState } from "react";
 import {
   SectionLabel,
   Tool,
@@ -29,6 +30,9 @@ import {
   type RemedyChain,
   type RemedyChainMember,
   type RemedyChainStatus,
+  stripAppaPrefix,
+  stripAppaPrefixFromOutput,
+  stripAppaPrefixFromRuling,
 } from "./openappa-remedy-chains";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { ToolStatusRow } from "./tool-status-row";
@@ -70,11 +74,12 @@ export function RemedyChainCard({
   const needsAction = chain.steps.some(
     (step) => step.part.state === "approval-requested",
   );
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <Tool
-      open={collapsible ? undefined : true}
-      defaultOpen={collapsible ? needsAction : undefined}
+      open={!collapsible || needsAction || expanded}
+      onOpenChange={setExpanded}
       className={collapsible ? "cursor-pointer" : undefined}
     >
       <ToolHeader
@@ -151,8 +156,10 @@ function RemedyStepCard({
 }) {
   const { part, toolResultPart, toolName } = step;
   const shortName = getToolShortName(toolName);
-  const errorText = getToolErrorText({ part, toolResultPart });
+  const rawErrorText = getToolErrorText({ part, toolResultPart });
+  const errorText = rawErrorText && stripAppaPrefix(rawErrorText);
   const humanRuling = getHumanRulingDisplay({ part, toolResultPart });
+  const [expanded, setExpanded] = useState(false);
   const input = withoutProxyTransportArguments({
     toolName,
     shortName,
@@ -161,7 +168,9 @@ function RemedyStepCard({
         ? withParsedArguments(part.input)
         : part.input,
   });
-  const output = toolResultPart?.output ?? part.output;
+  const output = stripAppaPrefixFromOutput(
+    toolResultPart?.output ?? part.output,
+  );
   const hasInput =
     typeof input === "object" &&
     input !== null &&
@@ -170,10 +179,12 @@ function RemedyStepCard({
   return (
     <Tool
       className="cursor-pointer"
-      defaultOpen={part.state === "approval-requested"}
+      open={part.state === "approval-requested" || expanded}
+      onOpenChange={setExpanded}
     >
       <ToolHeader
         type={`tool-${toolName}`}
+        title={getToolCardTitle(toolName, shortName)}
         state={
           humanRuling?.ruling === "deny"
             ? "output-denied"
@@ -186,8 +197,9 @@ function RemedyStepCard({
         statusLabel={humanRuling?.label}
       />
       <ToolContent>
-        {hasInput ? <ToolInput input={input} /> : null}
-        {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
+        {hasInput ? (
+          <ToolInput input={stripAppaPrefixFromRuling(input)} />
+        ) : null}
         {output !== undefined ? (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
@@ -196,6 +208,7 @@ function RemedyStepCard({
           />
         ) : null}
       </ToolContent>
+      {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
       <ApprovalRow
         part={part}
         onToolApprovalResponse={onToolApprovalResponse}

@@ -122,6 +122,33 @@ function TierSplit({
   tokenShare: number[];
   tierModels: Record<TierName, string>;
 }) {
+  return (
+    <TierShareBars
+      title="Where sessions go"
+      rows={[
+        { name: "Sessions", shares: sessionShare },
+        { name: "Tokens", shares: tokenShare },
+      ]}
+      tierModels={tierModels}
+      legend={(i) =>
+        `${formatPercent(sessionShare[i])} sessions, ${formatPercent(tokenShare[i])} tokens`
+      }
+    />
+  );
+}
+
+/** Stacked fast / normal / smart shares, one bar per row, with a legend line per tier. */
+export function TierShareBars({
+  title,
+  rows,
+  tierModels,
+  legend,
+}: {
+  title: string;
+  rows: { name: string; shares: number[] }[];
+  tierModels: Record<TierName, string>;
+  legend: (index: number) => string;
+}) {
   const config: ChartConfig = Object.fromEntries(
     TIER_NAMES.map((tier) => [
       tier,
@@ -135,12 +162,12 @@ function TierSplit({
     name,
     ...Object.fromEntries(TIER_NAMES.map((tier, i) => [tier, shares[i]])),
   });
-  const data = [row("Sessions", sessionShare), row("Tokens", tokenShare)];
+  const data = rows.map(({ name, shares }) => row(name, shares));
 
   return (
     <Card className="gap-3 py-4">
       <CardHeader className="px-4">
-        <CardTitle className="text-sm">Where sessions go</CardTitle>
+        <CardTitle className="text-sm">{title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 px-4">
         <ChartContainer config={config} className="aspect-auto h-24 w-full">
@@ -175,8 +202,7 @@ function TierSplit({
                 className={`size-2.5 rounded-sm ${TIER_COLOR[tier].swatch}`}
               />
               <span>
-                {config[tier].label}: {formatPercent(sessionShare[i])} sessions,{" "}
-                {formatPercent(tokenShare[i])} tokens
+                {config[tier].label}: {legend(i)}
               </span>
             </span>
           ))}
@@ -186,7 +212,7 @@ function TierSplit({
   );
 }
 
-function SummaryTile({
+export function SummaryTile({
   label,
   children,
 }: {

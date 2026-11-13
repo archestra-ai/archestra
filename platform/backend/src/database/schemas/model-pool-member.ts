@@ -1,7 +1,9 @@
+import type { ModelPoolRetrySettings } from "@archestra/shared/model-pool-retries";
 import {
   boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -32,6 +34,8 @@ const modelPoolMembersTable = pgTable(
     priority: integer("priority").notNull().default(1),
     weight: integer("weight").notNull().default(1),
     enabled: boolean("enabled").notNull().default(true),
+    /** Null preserves legacy behavior (pool) or inherits the pool (member). */
+    retrySettings: jsonb("retry_settings").$type<ModelPoolRetrySettings>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [

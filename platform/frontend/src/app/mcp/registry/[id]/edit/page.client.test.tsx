@@ -1,12 +1,22 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import type React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import { McpCatalogItemEditPage } from "./page.client";
 
 vi.mock("next/navigation");
-vi.mock("@/lib/config/config.query");
+// The same action the server's page and the registry row offer: it renders
+// nothing while self-service is off, which its own tests cover.
+vi.mock("../../_parts/server-rules-launch", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("../../_parts/server-rules-launch")
+  >()),
+  ServerRulesButton: ({ children }: { children: React.ReactNode }) => (
+    <a href="/server-rules">{children}</a>
+  ),
+}));
 vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => "Archestra",
 }));
@@ -52,10 +62,17 @@ describe("McpCatalogItemEditPage", () => {
         name: "filesystem",
         icon: null,
         serverType: "local",
+        effectiveActions: ["read", "update"],
       },
       isPending: false,
     } as unknown as ReturnType<typeof useInternalMcpCatalogItem>);
   });
+
+  function onToolsStep() {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("step=tools") as ReturnType<typeof useSearchParams>,
+    );
+  }
 
   it("does not open an app's backing entry for editing", () => {
     vi.mocked(useInternalMcpCatalogItem).mockReturnValue({
@@ -88,5 +105,37 @@ describe("McpCatalogItemEditPage", () => {
       "/mcp/registry/server-1/edit?step=tools",
       { scroll: false },
     );
+  });
+
+  it("offers the server's editors the same Edit Guardrails action as the server's page", () => {
+    onToolsStep();
+
+    render(<McpCatalogItemEditPage id="server-1" />);
+
+    expect(
+      screen.getByRole("link", { name: "Edit Guardrails" }),
+    ).toHaveAttribute("href", "/server-rules");
+    expect(screen.getByRole("button", { name: "Finish" })).toBeInTheDocument();
+  });
+
+  it("offers no Guardrails action to a viewer who may not edit the server", () => {
+    onToolsStep();
+    vi.mocked(useInternalMcpCatalogItem).mockReturnValue({
+      data: {
+        id: "server-1",
+        name: "filesystem",
+        icon: null,
+        serverType: "local",
+        effectiveActions: ["read"],
+      },
+      isPending: false,
+    } as unknown as ReturnType<typeof useInternalMcpCatalogItem>);
+
+    render(<McpCatalogItemEditPage id="server-1" />);
+
+    expect(
+      screen.queryByRole("link", { name: "Edit Guardrails" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Finish" })).toBeInTheDocument();
   });
 });

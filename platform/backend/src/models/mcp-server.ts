@@ -2117,7 +2117,9 @@ class McpServerModel {
    * revived. Flag-only: single-tenant installs are flagged for per-install
    * reinstall; multitenant installs come back via the catalog-level reinstall
    * (`catalogReinstallRequired`, stamped by the catalog restore), so they are
-   * not per-install flagged here.
+   * not per-install flagged here. Neither is a desktop MCP install: it has no
+   * pod and no credential to redo, and its tunnel client starts the server
+   * again at its next sync.
    */
   static async restoreCascadedForCatalog(
     params: { catalogId: string; deletedAt: Date; multitenant: boolean },
@@ -2130,8 +2132,10 @@ class McpServerModel {
           ? { deletedAt: null }
           : {
               deletedAt: null,
-              reinstallRequired: true,
-              reinstallReason: "new-input",
+              reinstallRequired: sql<boolean>`${schema.mcpServersTable.serverType} <> 'desktop_mcp'`,
+              reinstallReason: sql<
+                "new-input" | null
+              >`case when ${schema.mcpServersTable.serverType} <> 'desktop_mcp' then 'new-input' end`,
             },
       )
       .where(
@@ -2507,6 +2511,24 @@ class McpServerModel {
       .limit(1);
 
     return result || null;
+  }
+
+  /** A user's personal servers of one server type, across all catalogs. */
+  static async getUserPersonalServersOfType(
+    userId: string,
+    serverType: McpServer["serverType"],
+  ): Promise<McpServer[]> {
+    return db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          eq(schema.mcpServersTable.ownerId, userId),
+          eq(schema.mcpServersTable.scope, "personal"),
+          eq(schema.mcpServersTable.serverType, serverType),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
   }
 
   /**

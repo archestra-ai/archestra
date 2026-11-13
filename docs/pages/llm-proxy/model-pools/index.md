@@ -2,7 +2,7 @@
 title: Model Pools
 description: Serve one model name from several provider keys, with load balancing and failover
 order: 5
-lastUpdated: 2026-11-09
+lastUpdated: 2026-11-10
 beta: "Set [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) to turn it on."
 ---
 
@@ -20,9 +20,9 @@ flowchart LR
 
 ## Create a Pool
 
-A pool is a model name and its members. Each member is a shared provider key and the model ID that key uses, since providers spell the same model differently: Bedrock calls `claude-sonnet-5-5` `us.anthropic.claude-sonnet-5-5`.
+A pool is a model name and its members. Each member is a provider connection and the model ID that connection uses, since providers spell the same model differently: Bedrock calls `claude-sonnet-5-5` `us.anthropic.claude-sonnet-5-5`.
 
-Before you start, add a shared key for each provider on [Model Providers](/docs/llm-proxy/providers). Personal and subscription keys can't be members. Creating a pool needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
+Before you start, add provider keys or connect your subscriptions on [Model Providers](/docs/llm-proxy/providers). You can add shared connections and your own personal connections, including GitHub Copilot. Creating a pool needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
 
 1. Go to **LLM → Model Pools** and click **Create pool**.
 2. Under **Model name**, pick or type the name clients ask for.
@@ -37,7 +37,7 @@ The dialog then shows that the pool is ready, with a request you can copy. Send 
 
 ## Order and Weight
 
-Order sets which members a request tries first, and weight splits traffic between members that share an order. Order and weight work as in LiteLLM.
+Order is a member's priority, and weight splits traffic between members of the same priority. A pool picks a member by these two settings alone, not by load, latency, cost, or how much of a key's rate or token limit is left.
 
 - **Order:** requests go to order 1. They go to order 2 only when every member of order 1 has failed or is cooling down. Drag a member into another order to move it, or between two orders to give it an order of its own.
 - **Weight:** members of one order share its traffic by weight.
@@ -46,7 +46,7 @@ For example, a `gpt-6.1-sol` pool with an OpenAI key of weight 3 and an Azure AI
 
 ## When a Member Fails
 
-A request moves to the next member when a member fails before it starts to answer. The client sees an error only when the last member fails, or when the request itself is at fault.
+A request moves to another healthy member when one fails before it starts to answer, within the pool's [retries](#retries). The client sees an error when the last member fails, or when the request itself is at fault.
 
 | When the member | What happens |
 | --- | --- |
@@ -59,13 +59,27 @@ A request moves to the next member when a member fails before it starts to answe
 
 A member with a transient failure cools down for the pool's cooldown time. A longer `Retry-After` header extends it, up to 60 s or the cooldown time if that is longer. With no cooldown time set, the member cools down for 30 s, or for as long as its `Retry-After` header asks, up to 60 s. Other requests skip it while it cools down. The pool's members show **Cooling down** with the seconds left, and the reason on hover.
 
-- The last member has nowhere to move to, so the pool doesn't time it out, and it gets the usual connection retries.
-- Members cooling down after transient failures remain fallback candidates, the one back soonest first. Credit-exhausted members stay excluded; if all eligible members are credit-exhausted, the request fails with `503` without contacting a provider.
+- The last member has nowhere to move to, so the pool does not time it out.
+- Members cooling down are skipped. If every member is cooling down, the request fails with `503` without contacting a provider.
 - A conversation stays on the same member while that member is healthy, which keeps the provider's prompt cache warm.
 
-### Timeouts and Cooldown
+### Retries
 
-Set these under **Timeouts and cooldown** when you create or edit a pool. They apply to every member of the pool, and a blank one keeps its default. They are named after LiteLLM's `stream_timeout`, `timeout`, and `cooldown_time`.
+Retries are always on. After a temporary failure, the pool selects a healthy deployment again. Change the counts and delays under **Failover** when you edit a pool; a blank field keeps its default, shown on hover of its help icon. Each selection uses order and weight: a healthy member in order 1 takes precedence over order 2.
+
+- **Retries:** additional selections after the first, from 0 to 10; the default is 2. Members share this budget, rather than receiving that many attempts each. Once exhausted, each later order gets a separate fallback attempt and retry budget. Set 0 to skip additional selections within the current group, not to disable later-order fallbacks.
+- **Retries by error type:** give connection errors, timeouts, rate limits, or server errors their own retry count. The first failure chooses the budget for that group or order fallback; switching members or encountering a different error does not reset it. Invalid requests are returned immediately; rejected credentials, missing models and exhausted credit move to later-order fallbacks.
+- **Backoff:** starts at 500 ms, doubles up to 8000 ms, and uses 75–100% of that delay. A provider's positive `Retry-After` replaces the delay when within the maximum; longer waits move to a later order instead.
+
+Under **Member overrides**, set a member's retries, delays or retries by error type for when that member has the first failure. Blank fields use the pool's values, and removing a member removes its override. A request can override every retry count with `x-archestra-num-retries: 0` through `10`; it cannot enable retries for permanent failures or after streaming output starts.
+
+- A retry can select a later order when all lower-order members are cooling down. Once an explicit order fallback begins, its retries stay within that order.
+- Cooling members are excluded from selections. If none are healthy, the request fails instead of replaying a cooling member. A pool with only one member gives it its bounded recovery attempts before putting it on cooldown.
+- Each dispatched attempt appears in proxy logs and counts toward `x-archestra-attempts`. Retries can add latency and provider charges, especially after timeouts; set **Retries** to 0 to keep only order fallbacks.
+
+## Timeouts and Cooldown
+
+Set these under **Failover** when you edit a pool; a new pool starts with the defaults. They apply to every member of the pool, and a blank one keeps its default.
 
 | Setting | Default | What it sets |
 | --- | --- | --- |
@@ -88,6 +102,8 @@ A pool skips members whose known input types or estimated context limit cannot a
 A [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) uses a pool only after you add the pool under **Model pools** when you create or edit the key. The same goes for an [OAuth client](/docs/llm-proxy/authentication#oauth-clients) that [calls as the app](/docs/llm-proxy/authentication#call-as-the-app). Which provider keys the key or client maps doesn't matter: the pool answers with its members' keys. Remove the pool, and the key or client can no longer use it.
 
 Credentials that have no pools of their own, such as people who signed in through [Connect](/docs/get-started/connect) or an identity provider's token, use a pool when they can already reach one of its members.
+
+Personal members only serve requests authenticated as their owner, such as a personal virtual key or a signed-in user. A pool grant does not share a subscription: other callers skip personal members and use shared members. If none remain, the request fails with `403` before contacting a provider.
 
 Setting **Model pools** needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
 
@@ -129,7 +145,7 @@ Each attempt is priced as the member that made it, with that member's provider a
 
 ## Limits
 
-- Responses clients, including Codex and OpenCode, can use pools through `/responses` on the OpenAI or Unified Model API. Every enabled member must serve native Responses on OpenAI or Azure AI Foundry; other member providers are rejected rather than translated. Send the full conversation in `input`: Stored response, conversation, item, file, prompt, vector-store, container and skill references are not supported because they belong to one provider account. Use inline inputs and synchronous execution.
+- Responses clients, including Codex and OpenCode, can use pools through `/responses` on the OpenAI or Unified Model API. Every enabled member must serve native Responses on OpenAI, Azure AI Foundry, or GitHub Copilot; other member providers are rejected rather than translated. Send the full conversation in `input`: Stored response, conversation, item, file, prompt, vector-store, container and skill references are not supported because they belong to one provider account. Use inline inputs and synchronous execution.
 - Members can use credentials for Anthropic, AWS Bedrock, Gemini (including Vertex AI), OpenAI, Azure AI Foundry, and OpenAI-compatible providers such as vLLM, OpenRouter, and Mistral AI. OpenAI Chat Completions, Anthropic Messages, and native Gemini clients can mix these providers for text, inline images/PDFs, and client tool calls. Bedrock Converse clients require a Bedrock-only pool; incompatible members produce an error instead of being skipped.
 - Provider-hosted tools, provider-specific cache references, custom Gemini safety settings, structured output, and non-text output are not portable across providers. Incompatible requests fail explicitly; use a pool on the original provider for those features. Reasoning budgets and private thought signatures do not transfer between providers. Each destination uses its own reasoning defaults, so leave room in the output limit for models that think before answering.
-- Timeouts and cooldown are set for the whole pool, not for one member. Pools don't route by a key's rate or token limits.
+- Timeouts and cooldown are set for the whole pool, not for one member.

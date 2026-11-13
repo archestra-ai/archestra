@@ -1,8 +1,13 @@
 "use client";
 
 import { isModelPoolProvider, type SupportedProvider } from "@archestra/shared";
+import {
+  type ModelPoolRetrySettings,
+  ModelPoolRetrySettingsSchema,
+} from "@archestra/shared/model-pool-retries";
 import { useMemo } from "react";
 import type { UseFormReturn } from "react-hook-form";
+import { useSession } from "@/lib/auth/auth.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
@@ -18,6 +23,7 @@ import { isPoolableModel, poolModelName } from "./model-name";
  */
 export type PoolFormValues = {
   name: string;
+  retrySettings?: ModelPoolRetrySettings | null;
   members: PoolFormMember[];
 } & Record<PoolTiming, string>;
 
@@ -49,6 +55,7 @@ export type PoolFormMember = {
   priority: number;
   weight: number;
   enabled: boolean;
+  retrySettings?: ModelPoolRetrySettings | null;
 };
 
 export type PoolForm = UseFormReturn<PoolFormValues>;
@@ -77,6 +84,7 @@ export function toFormValues(pool: ModelPool | null): PoolFormValues {
   const priorities = denseOrders(members);
   return {
     name: pool?.name ?? "",
+    retrySettings: pool?.retrySettings ?? null,
     streamTimeoutSeconds: String(pool?.streamTimeoutSeconds ?? ""),
     timeoutSeconds: String(pool?.timeoutSeconds ?? ""),
     cooldownSeconds: String(pool?.cooldownSeconds ?? ""),
@@ -86,6 +94,7 @@ export function toFormValues(pool: ModelPool | null): PoolFormValues {
       priority: priorities[index] ?? 1,
       weight: member.weight,
       enabled: member.enabled,
+      retrySettings: member.retrySettings ?? null,
     })),
   };
 }
@@ -93,6 +102,7 @@ export function toFormValues(pool: ModelPool | null): PoolFormValues {
 export function toPoolInput(values: PoolFormValues): ModelPoolInput {
   return {
     name: values.name.trim(),
+    retrySettings: values.retrySettings ?? null,
     streamTimeoutSeconds: toSeconds(values.streamTimeoutSeconds),
     timeoutSeconds: toSeconds(values.timeoutSeconds),
     cooldownSeconds: toSeconds(values.cooldownSeconds),
@@ -102,6 +112,7 @@ export function toPoolInput(values: PoolFormValues): ModelPoolInput {
       priority: member.priority,
       weight: member.weight,
       enabled: member.enabled,
+      retrySettings: member.retrySettings ?? null,
     })),
   };
 }
@@ -143,24 +154,26 @@ export function orderShare(
  */
 export function usePoolOptions() {
   const { data: allKeys = [] } = useLlmProviderApiKeys();
-  // Personal keys belong to one user, so only shared keys on providers a pool
-  // can send to can be members.
-  const sharedKeys = useMemo(
+  const { data: session } = useSession();
+  // Personal members are available only to their owner at request time.
+  const availableKeys = useMemo(
     () =>
       allKeys
         .filter(
-          (key) => key.userId === null && isModelPoolProvider(key.provider),
+          (key) =>
+            (key.userId === null || key.userId === session?.user.id) &&
+            isModelPoolProvider(key.provider),
         )
         .sort(
           (a, b) =>
             a.provider.localeCompare(b.provider) ||
             a.name.localeCompare(b.name),
         ),
-    [allKeys],
+    [allKeys, session?.user.id],
   );
   const keysById = useMemo(
-    () => new Map(sharedKeys.map((key) => [key.id, key])),
-    [sharedKeys],
+    () => new Map(availableKeys.map((key) => [key.id, key])),
+    [availableKeys],
   );
 
   const { data: models = [] } = useModelsWithApiKeys({
@@ -203,7 +216,7 @@ export function usePoolOptions() {
   );
 
   return {
-    sharedKeys,
+    availableKeys,
     keysById,
     modelIdsByKey,
     modelIdsByProvider,
@@ -213,6 +226,54 @@ export function usePoolOptions() {
 
 export type PoolOptions = ReturnType<typeof usePoolOptions>;
 
+/** A retry setting a field edits, by its key in the settings or retry policy. */
+export type RetryKey =
+  | "numRetries"
+  | "initialDelayMs"
+  | "maxDelayMs"
+  | keyof NonNullable<ModelPoolRetrySettings["retryPolicy"]>;
+
+const TOP_LEVEL_RETRY_KEYS = new Set<RetryKey>([
+  "numRetries",
+  "initialDelayMs",
+  "maxDelayMs",
+]);
+
+export function getRetryValue(
+  settings: ModelPoolRetrySettings | null | undefined,
+  key: RetryKey,
+): number | undefined {
+  if (!settings) return undefined;
+  if (key === "numRetries" || key === "initialDelayMs" || key === "maxDelayMs")
+    return settings[key];
+  return settings.retryPolicy?.[key];
+}
+
+/**
+ * Sets or clears one retry setting. Settings whose fields are all blank go
+ * back to null: a pool then uses the defaults, and a member the pool's values.
+ */
+export function withRetryValue(
+  settings: ModelPoolRetrySettings | null | undefined,
+  key: RetryKey,
+  value: number | undefined,
+): ModelPoolRetrySettings | null {
+  const next: ModelPoolRetrySettings = { ...settings };
+  if (TOP_LEVEL_RETRY_KEYS.has(key)) {
+    const top = key as "numRetries" | "initialDelayMs" | "maxDelayMs";
+    if (value === undefined) delete next[top];
+    else next[top] = value;
+  } else {
+    const policy = { ...next.retryPolicy };
+    const policyKey = key as keyof typeof policy;
+    if (value === undefined) delete policy[policyKey];
+    else policy[policyKey] = value;
+    if (Object.keys(policy).length > 0) next.retryPolicy = policy;
+    else delete next.retryPolicy;
+  }
+  return Object.keys(next).length > 0 ? next : null;
+}
+
 /**
  * Why the form can't be saved yet, or null when it can. The name is what a
  * request asks for, so it takes one pool.
@@ -220,10 +281,19 @@ export type PoolOptions = ReturnType<typeof usePoolOptions>;
 export function usePoolProblem(
   form: PoolForm,
   poolId: string | null,
-): "name" | "taken" | "members" | "numbers" | "repeated" | "timing" | null {
+):
+  | "name"
+  | "taken"
+  | "members"
+  | "numbers"
+  | "repeated"
+  | "timing"
+  | "retries"
+  | null {
   const name = form.watch("name").trim();
   const members = form.watch("members");
   const timing = form.watch(TIMINGS);
+  const retrySettings = form.watch("retrySettings");
   const { data: pools = [] } = useModelPools({ toastOnError: false });
   if (!name) return "name";
   if (pools.some((other) => other.id !== poolId && other.name === name))
@@ -237,6 +307,14 @@ export function usePoolProblem(
   if (hasRepeatedMember(members)) return "repeated";
   if (TIMINGS.some((key, index) => !isValidSeconds(key, timing[index] ?? "")))
     return "timing";
+  if (
+    [retrySettings, ...members.map((member) => member.retrySettings)].some(
+      (settings) =>
+        settings != null &&
+        !ModelPoolRetrySettingsSchema.safeParse(settings).success,
+    )
+  )
+    return "retries";
   return null;
 }
 

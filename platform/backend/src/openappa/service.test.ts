@@ -149,6 +149,7 @@ beforeEach(async ({ makeOrganization }) => {
   config.llmProxy.plugins = ["appa"];
   config.openappa = {
     enabled: true,
+    policyCheckName: "Guardrails Policy Admission",
     yellEnabled: false,
     yellForwardingEnabled: false,
     offerSigningSecret: "test-offer-signing-secret-32chars",
@@ -594,6 +595,40 @@ describe("APPA feature boundary", () => {
         },
       }),
     );
+  });
+
+  test("refuses a call that spells one argument two ways with different values before ruling on it", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+
+    const decisions = await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "split",
+          name: "Read",
+          arguments: {
+            file_path: "/repo/README.md",
+            path: "/home/u/.ssh/id_rsa",
+          },
+        },
+        {
+          id: "echo",
+          name: "Read",
+          arguments: { path: "C:\\repo\\.env", file_path: "C:/repo/.env" },
+        },
+      ],
+      { canonicalize: (name) => name },
+    );
+
+    expect(decisions[0]).toMatchObject({ kind: "deny", unanswered: true });
+    expect(decisions[1]).toEqual({ kind: "allow" });
+    expect(
+      native.dispatchHook.mock.calls.map(
+        ([raw]) => JSON.parse(raw).operation_id,
+      ),
+    ).toEqual(["call:echo"]);
   });
 
   test("forwards signed child lineage on session_start from processProxyResults and startRuntimeChild", async () => {

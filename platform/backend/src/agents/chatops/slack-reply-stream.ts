@@ -20,9 +20,9 @@ type FinalReply = Pick<ChatReplyOptions, "text" | "footer" | "hint">;
  * message, an echoed footer, or a reply too long for one message), the
  * streamed message is replaced with the ordinary rendering of the final reply.
  *
- * Every Slack call is best-effort. A stream that cannot start leaves `isLive`
- * false, so the manager posts the reply the ordinary way; one that breaks
- * midway is still replaced on `finish`.
+ * Every Slack call is best-effort. `finish` waits for pending sends before
+ * choosing whether to complete the streamed message or post the reply normally;
+ * one that breaks midway is still replaced on `finish`.
  */
 export class SlackReplyStream implements ChatOpsReplyStream {
   private ts: string | null = null;
@@ -45,10 +45,6 @@ export class SlackReplyStream implements ChatOpsReplyStream {
   private readonly awaitingApproval = new Set<string>();
 
   constructor(private readonly deps: SlackReplyStreamDeps) {}
-
-  get isLive(): boolean {
-    return this.ts !== null && !this.closed;
-  }
 
   push(chunk: UIMessageChunk): void {
     if (this.closed || (this.broken && !this.ts)) return;
@@ -135,8 +131,16 @@ export class SlackReplyStream implements ChatOpsReplyStream {
 
   async finish(options: FinalReply): Promise<void> {
     if (this.closed) return;
-    await this.drain();
+    // A startStream may have created a message before returning its ts. Let
+    // it settle before deciding whether an ordinary reply is needed. If the
+    // reply finished before the first flush, keep the single-post fast path.
+    this.clearFlushTimer();
+    await this.sending;
+    if (this.closed) return;
+    if (this.ts) await this.drain();
+    if (this.closed) return;
     this.closed = true;
+    this.queue = [];
 
     const finalText = options.footer
       ? stripDuplicateAgentFooter(options.text, options.footer)

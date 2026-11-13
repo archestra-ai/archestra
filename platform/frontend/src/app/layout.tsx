@@ -14,6 +14,7 @@ import { VisualViewportHeight } from "./_parts/visual-viewport-height";
 import "./globals.css";
 import { DEFAULT_APP_DESCRIPTION } from "@archestra/shared";
 import { DynamicHead } from "@/components/dynamic-head";
+import { McpBridgeSetupHost } from "@/components/mcp-bridge-setup";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
 import { hasSessionCookie } from "@/lib/auth/session-cookie.server";
 import { prefetchShellSeed } from "@/lib/auth/shell-seed.server";
@@ -335,6 +336,7 @@ export default async function RootLayout({
                       <WebsocketInitializer />
                       <RumTracker />
                       <ListReturnUrlTracker />
+                      <McpBridgeSetupHost />
                       <AppShell
                         initialSidebarOpen={parseSidebarOpen(
                           cookieStore.get(SIDEBAR_COOKIE_NAME)?.value,

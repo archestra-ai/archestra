@@ -18,8 +18,13 @@ export { LRUCacheManager } from "@/in-memory-lru-cache";
  */
 export const CacheKey = {
   OpenAppaHitlSummary: "openappa-hitl-summary",
+  /** Policy repository pull request results checked, and repositories that refused a check. */
+  OpenAppaPolicyCheck: "openappa-policy-check",
   ClientConnection: "client-connection",
   ClientConnectionRateLimit: "client-connection-rate-limit",
+  DesktopDeviceSignIn: "desktop-device-sign-in",
+  DesktopDeviceSignInRateLimit: "desktop-device-sign-in-rate-limit",
+  DesktopMcpInstallAttempt: "desktop-mcp-install-attempt",
   /** models.dev sync tracking */
   ModelsDevSync: "models-dev-sync",
   /** Recent scheduled model sync attempt for an LLM provider API key */
@@ -98,6 +103,8 @@ export const CacheKey = {
   OpenAppaUnansweredAnnotationNotice: "openappa-unanswered-annotation-notice",
   /** Host clarification appended to a runtime-confirmed denied call's result. */
   OpenAppaDeniedCallClarification: "openappa-denied-call-clarification",
+  /** How many results followed a ruling when its remedy continuation was last delivered. */
+  OpenAppaRemedyContinuationDelivered: "openappa-remedy-continuation-delivered",
   /** Sessions whose client already waited once for the gateway remedy tools to load */
   OpenAppaRemedyToolsAwaited: "openappa-remedy-tools-awaited",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */

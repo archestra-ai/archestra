@@ -98,8 +98,8 @@ const VirtualApiKeyBodyObjectSchema = z.object({
 
 /**
  * Contextual validation: which fields are accepted depends on the key type.
- * Standard keys map provider API keys; passthrough keys never carry provider
- * credentials.
+ * Standard keys map provider API keys or model pools; passthrough keys never
+ * carry provider credentials.
  */
 function refineVirtualApiKeyBody(
   value: z.infer<typeof VirtualApiKeyBodyObjectSchema>,
@@ -130,17 +130,28 @@ function refineVirtualApiKeyBody(
     return;
   }
 
-  if (value.providerApiKeys.length === 0 && !value.includeFutureProviders) {
+  if (
+    value.providerApiKeys.length === 0 &&
+    !value.includeFutureProviders &&
+    !value.modelPoolIds?.length
+  ) {
     ctx.addIssue({
       code: "custom",
       path: ["providerApiKeys"],
-      message: "At least one provider API key is required",
+      message: "At least one provider API key or model pool is required",
     });
   }
 }
 
-const CreateOrUpdateVirtualApiKeyBodySchema =
-  VirtualApiKeyBodyObjectSchema.superRefine(refineVirtualApiKeyBody);
+const UpdateVirtualApiKeyBodySchema = VirtualApiKeyBodyObjectSchema.superRefine(
+  (value, ctx) => {
+    // An omitted pool list retains existing grants, checked after loading the
+    // key. Passthrough restrictions always apply.
+    if (value.keyType === "passthrough" || value.modelPoolIds !== undefined) {
+      refineVirtualApiKeyBody(value, ctx);
+    }
+  },
+);
 
 const CreateVirtualApiKeyBodySchema = VirtualApiKeyBodyObjectSchema.extend({
   /**
@@ -347,7 +358,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: z.string().uuid(),
         }),
-        body: CreateOrUpdateVirtualApiKeyBodySchema,
+        body: UpdateVirtualApiKeyBodySchema,
         response: constructResponseSchema(UpdateVirtualApiKeyResponseSchema),
       },
     },
@@ -665,7 +676,7 @@ async function validateVirtualKeyInitialGrants(params: {
 
 async function updateVirtualApiKey(params: {
   id: string;
-  body: z.infer<typeof CreateOrUpdateVirtualApiKeyBodySchema>;
+  body: z.infer<typeof UpdateVirtualApiKeyBodySchema>;
   organizationId: string;
   user: User;
 }): Promise<z.infer<typeof UpdateVirtualApiKeyResponseSchema>> {
@@ -745,6 +756,21 @@ async function updateVirtualApiKey(params: {
       billingTeamId: body.billingTeamId,
     });
   } else {
+    if (
+      body.providerApiKeys.length === 0 &&
+      !body.includeFutureProviders &&
+      !(
+        body.modelPoolIds?.length ||
+        (body.modelPoolIds === undefined &&
+          config.llmProxy.modelPoolsEnabled &&
+          (await ModelPoolModel.hasVirtualApiKeyGrant(id)))
+      )
+    ) {
+      throw new ApiError(
+        400,
+        "At least one provider API key or model pool is required",
+      );
+    }
     // An edit changes the key itself, never who can reach it. Access lives in
     // the key's permission policy, which the permissions editor writes on its
     // own. The stored sharing columns are carried through untouched.

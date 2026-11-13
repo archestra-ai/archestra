@@ -2543,4 +2543,265 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       "is not an allowed subagent",
     );
   });
+
+  test("Lobster Env foreground load-balancer agent skips unready *-runtime subagents (Codex without ChatGPT subscription, Copilot without personal GitHub Copilot, Kimi on Moonshot key) and dispatches to ready *-runtime subagents", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeSecret,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const adminUser = await makeUser();
+
+    // Organization has a metered OpenAI key (`llmApiKeyId`), which Lobster Env itself uses,
+    // but the acting user has NO personal ChatGPT subscription connected.
+    // `archestra-codex-runtime` MUST NOT falsely report ready via the metered OpenAI key.
+    const codexRuntimeSubagent = await makeAgent({
+      organizationId,
+      name: "Lobster Codex",
+      agentType: "agent",
+      modelId,
+      llmApiKeyId,
+      environmentId: gateway.environmentId,
+      runtime: runtimeConfig({
+        command: ["archestra-codex-runtime"],
+        inferenceProtocol: "openai_responses",
+      }),
+    });
+
+    // `archestra-copilot-runtime` configured with admin's personal Copilot key while actor has none
+    // must be skipped during preflight (`providerRequiresPerUserCredential("github-copilot")`).
+    const copilotModel = await ModelModel.create({
+      externalId: "github-copilot/claude-sonnet-4.6",
+      provider: "github-copilot",
+      modelId: "claude-sonnet-4.6",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    const adminCopilotSecret = await makeSecret({
+      secret: { apiKey: "ghu_admin_copilot_token" },
+    });
+    const adminCopilotKey = await makeLlmProviderApiKey(
+      organizationId,
+      adminCopilotSecret.id,
+      {
+        provider: "github-copilot",
+        name: "GitHub Copilot",
+        userId: adminUser.id,
+      },
+    );
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+      adminCopilotKey.id,
+      [copilotModel.id],
+    );
+    const unreadyCopilotSubagent = await makeAgent({
+      organizationId,
+      name: "Lobster Copilot",
+      agentType: "agent",
+      modelId: copilotModel.id,
+      llmApiKeyId: adminCopilotKey.id,
+      environmentId: gateway.environmentId,
+      runtime: runtimeConfig({
+        command: ["archestra-copilot-runtime"],
+        inferenceProtocol: "openai_chat",
+      }),
+    });
+
+    // `archestra-kimi-runtime` misconfigured on a Moonshot (`kimi`) model instead of `kimi-code`
+    // must also be marked unready by `getAgentRuntimeProviderCompatibility`.
+    const moonshotModel = await ModelModel.create({
+      externalId: "kimi/kimi-k2-5-moonshot",
+      provider: "kimi",
+      modelId: "kimi-k2.5",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    const moonshotSecret = await makeSecret({
+      secret: { apiKey: "sk-moonshot-test" },
+    });
+    const moonshotKey = await makeLlmProviderApiKey(
+      organizationId,
+      moonshotSecret.id,
+      {
+        provider: "kimi",
+        name: "Moonshot Key",
+        userId: null,
+      },
+    );
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(moonshotKey.id, [
+      moonshotModel.id,
+    ]);
+    const misconfiguredKimiSubagent = await makeAgent({
+      organizationId,
+      name: "Lobster Kimi Misconfigured",
+      agentType: "agent",
+      modelId: moonshotModel.id,
+      llmApiKeyId: moonshotKey.id,
+      environmentId: gateway.environmentId,
+      runtime: runtimeConfig({
+        command: ["archestra-kimi-runtime"],
+        inferenceProtocol: "openai_chat",
+      }),
+    });
+
+    // Ready `archestra-kimi-runtime` subagent with actor's Kimi Code key
+    const kimiCodeModel = await ModelModel.create({
+      externalId: "kimi-code/k3.1-pro",
+      provider: "kimi-code",
+      modelId: "k3.1-pro",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    const kimiCodeSecret = await makeSecret({
+      secret: { apiKey: "sk-kimi-actor" },
+    });
+    const actorKimiKey = await makeLlmProviderApiKey(
+      organizationId,
+      kimiCodeSecret.id,
+      {
+        provider: "kimi-code",
+        name: "Kimi Code",
+        userId: actorId,
+      },
+    );
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(actorKimiKey.id, [
+      kimiCodeModel.id,
+    ]);
+    const readyKimiSubagent = await makeAgent({
+      organizationId,
+      name: "Lobster Kimi",
+      agentType: "agent",
+      modelId: kimiCodeModel.id,
+      llmApiKeyId: actorKimiKey.id,
+      environmentId: gateway.environmentId,
+      runtime: runtimeConfig({
+        command: ["archestra-kimi-runtime"],
+        inferenceProtocol: "openai_chat",
+      }),
+    });
+
+    // Ready `archestra-grok-runtime` subagent configured by admin, substituted with actor's personal SuperGrok subscription
+    const grokRuntimeModel = await ModelModel.create({
+      externalId: "xai/grok-4.7-runtime",
+      provider: "xai",
+      modelId: "grok-4.7-runtime",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    const adminGrokSecret = await makeSecret({
+      secret: { apiKey: "xai-subscription:admin-grok-runtime" },
+    });
+    const adminGrokKey = await makeLlmProviderApiKey(
+      organizationId,
+      adminGrokSecret.id,
+      {
+        provider: "xai",
+        name: "SuperGrok",
+        userId: adminUser.id,
+      },
+    );
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(adminGrokKey.id, [
+      grokRuntimeModel.id,
+    ]);
+    const grokRuntimeSecret = await makeSecret({
+      secret: { apiKey: "xai-subscription:actor-grok-runtime" },
+    });
+    const actorGrokRuntimeKey = await makeLlmProviderApiKey(
+      organizationId,
+      grokRuntimeSecret.id,
+      {
+        provider: "xai",
+        name: "SuperGrok",
+        userId: actorId,
+      },
+    );
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+      actorGrokRuntimeKey.id,
+      [grokRuntimeModel.id],
+    );
+    const readyGrokSubagent = await makeAgent({
+      organizationId,
+      name: "Lobster Grok",
+      agentType: "agent",
+      modelId: grokRuntimeModel.id,
+      llmApiKeyId: adminGrokKey.id,
+      environmentId: gateway.environmentId,
+      runtime: runtimeConfig({
+        command: ["archestra-grok-runtime"],
+        inferenceProtocol: "openai_chat",
+      }),
+    });
+
+    // Runtime-less load-balancer agent (`Lobster Env`)
+    const lobsterEnv = await makeAgent({
+      organizationId,
+      name: "Lobster Env",
+      agentType: "agent",
+      modelId,
+      llmApiKeyId,
+      environmentId: gateway.environmentId,
+      accessAllSubagents: false,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 2,
+        fallbackEnabled: true,
+      },
+    });
+    for (const subagent of [
+      codexRuntimeSubagent,
+      unreadyCopilotSubagent,
+      misconfiguredKimiSubagent,
+      readyKimiSubagent,
+      readyGrokSubagent,
+    ]) {
+      const delegationTool = await ToolModel.findOrCreateDelegationTool(
+        subagent.id,
+      );
+      await AgentToolModel.create(lobsterEnv.id, delegationTool.id);
+    }
+    await seedAndAssignArchestraTools(lobsterEnv.id);
+
+    await mockDetachedTaskStart();
+
+    // Calling `start_agent_run` directly from `Lobster Env` (with `agent_id` omitted)
+    // and delegating via `agent__lobster_codex` both route across ONLY the 2 ready `*-runtime` subagents.
+    const lobsterEnvContext = {
+      ...context,
+      agent: { id: lobsterEnv.id, name: lobsterEnv.name },
+      agentId: lobsterEnv.id,
+    };
+
+    const run1 = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Task 1 via omitted agent_id" },
+      lobsterEnvContext,
+    );
+    expect(run1.isError).toBeFalsy();
+    const run1AgentId = (
+      run1.structuredContent as { run: { agent_id: string } }
+    ).run.agent_id;
+
+    const run2 = await executeArchestraTool(
+      "agent__lobster_codex",
+      { message: "Task 2 via delegation tool" },
+      lobsterEnvContext,
+    );
+    expect(run2.isError).toBeFalsy();
+    const run2AgentId = (
+      run2.structuredContent as { run: { agent_id: string } }
+    ).run.agent_id;
+
+    expect(new Set([run1AgentId, run2AgentId])).toEqual(
+      new Set([readyKimiSubagent.id, readyGrokSubagent.id]),
+    );
+  });
 });

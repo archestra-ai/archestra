@@ -66,7 +66,6 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { SHORTCUT_NEW_CHAT } from "@/consts";
 import { prefetchApps } from "@/lib/app.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIsAuthenticated } from "@/lib/auth/use-is-authenticated";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
@@ -74,6 +73,7 @@ import { useDocsScreenshotMode } from "@/lib/docs-screenshot-mode";
 import { useGithubStars } from "@/lib/github/github.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
+import { useConnectNavigation } from "@/lib/hooks/use-connect-navigation";
 import { useOnce } from "@/lib/hooks/use-once";
 import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
@@ -516,15 +516,7 @@ export function AppSidebar() {
   const formattedStarCount = starCount ?? "";
   const permissionMap = useNavPermissionMap();
   const appIconLogo = useAppIconLogo();
-  // Connect is useful with either half: MCP-only (tools) or proxy-only
-  // (inference). Org settings can hide a section without hiding the page.
-  const { data: canReadLlmProxy } = useHasPermissions({
-    llmProxy: ["read"],
-  });
-  const { data: canReadMcpGateway } = useHasPermissions({
-    mcpGateway: ["read"],
-  });
-  const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
+  const { visible: showConnect } = useConnectNavigation();
   const { data: guardrailsDeployment } = useGuardrailsDeployment();
   const autoRoutingEnabled = useFeature("autoRoutingEnabled");
   const modelPoolsEnabled = useFeature("llmModelPoolsEnabled") === true;
@@ -541,11 +533,11 @@ export function AppSidebar() {
   const showChatsDot = !docsScreenshotMode && onboarding.showChatsDot;
   const showStudioDot = !docsScreenshotMode && onboarding.showStudioDot;
 
-  // Connect is offered when either MCP gateway or LLM proxy is readable.
+  // Connect respects both organization visibility and the user's permissions.
   const filteredChatsNavItems = React.useMemo(
     () =>
       chatsNavItems.filter((item) => {
-        if (item.title === "Connect") return showConnect;
+        if (item.url === "/connection") return showConnect;
         return true;
       }),
     [showConnect],

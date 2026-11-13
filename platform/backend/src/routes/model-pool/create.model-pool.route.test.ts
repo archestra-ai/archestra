@@ -142,6 +142,118 @@ describe("POST /api/model-pools", () => {
     );
   });
 
+  test("creates, edits, and audits a pool with the owner's Copilot subscription", async ({
+    makeLlmProviderApiKey,
+  }) => {
+    const key = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "github-copilot",
+      userId: user.id,
+    });
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/model-pools",
+      payload: {
+        name: "subscription-pool",
+        members: [{ providerApiKeyId: key.id, modelId: "gpt-4.1" }],
+      },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const id = created.json().id;
+    const updated = await app.inject({
+      method: "PUT",
+      url: `/api/model-pools/${id}`,
+      payload: {
+        name: "subscription-pool",
+        members: [{ providerApiKeyId: key.id, modelId: "gpt-5-mini" }],
+      },
+    });
+    expect(updated.statusCode, updated.body).toBe(200);
+    const listed = await app.inject({ method: "GET", url: "/api/model-pools" });
+    expect(listed.json()[0].members).toMatchObject([
+      {
+        providerApiKeyId: key.id,
+        provider: "github-copilot",
+        modelId: "gpt-5-mini",
+      },
+    ]);
+    const audits = await db
+      .select({
+        action: schema.auditLogsTable.action,
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(eq(schema.auditLogsTable.resourceId, id))
+      .orderBy(asc(schema.auditLogsTable.createdAt));
+    expect(audits).toMatchObject([
+      {
+        action: "modelPool.created",
+        after: { members: [{ providerApiKeyId: key.id, modelId: "gpt-4.1" }] },
+      },
+      {
+        action: "modelPool.updated",
+        before: { members: [{ modelId: "gpt-4.1" }] },
+        after: { members: [{ modelId: "gpt-5-mini" }] },
+      },
+    ]);
+  });
+
+  test("retains another owner's member during edits but rejects new foreign members", async ({
+    makeLlmProviderApiKey,
+    makeUser,
+    makeMember,
+  }) => {
+    const ownerKey = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "github-copilot",
+      userId: user.id,
+    });
+    const foreignKey = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "github-copilot",
+      userId: user.id,
+    });
+    const retained = { providerApiKeyId: ownerKey.id, modelId: "gpt-4.1" };
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/model-pools",
+      payload: { name: "owner-pool", members: [retained] },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    user = await makeUser();
+    await makeMember(user.id, organizationId);
+    const editorKey = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "github-copilot",
+      userId: user.id,
+    });
+    const members = [
+      retained,
+      { providerApiKeyId: editorKey.id, modelId: "gpt-4.1" },
+    ];
+    const url = `/api/model-pools/${created.json().id}`;
+    const updated = await app.inject({
+      method: "PUT",
+      url,
+      payload: { name: "renamed-pool", timeoutSeconds: 120, members },
+    });
+    expect(updated.statusCode, updated.body).toBe(200);
+    expect(updated.json()).toMatchObject({
+      name: "renamed-pool",
+      timeoutSeconds: 120,
+    });
+    expect(updated.json().members).toHaveLength(2);
+    for (const addition of [
+      { providerApiKeyId: foreignKey.id, modelId: "gpt-4.1" },
+      { providerApiKeyId: ownerKey.id, modelId: "gpt-5-mini" },
+    ]) {
+      const rejected = await app.inject({
+        method: "PUT",
+        url,
+        payload: { name: "renamed-pool", members: [...members, addition] },
+      });
+      expect(rejected.statusCode, rejected.body).toBe(400);
+      expect(rejected.body).toContain("belongs to another user");
+    }
+  });
+
   test("stores the pool's own timeouts and cooldown, kept when an update leaves them out", async ({
     makeLlmProviderApiKey,
   }) => {
@@ -227,12 +339,100 @@ describe("POST /api/model-pools", () => {
     }
   });
 
-  test("rejects a personal key, a provider pools can't reach, and a repeated member", async ({
+  test("persists, preserves, resets and audits retry settings", async ({
     makeLlmProviderApiKey,
+  }) => {
+    const key = await makeLlmProviderApiKey(organizationId, null);
+    const retrySettings = {
+      numRetries: 3,
+      retryPolicy: { rateLimitError: 0 },
+      initialDelayMs: 100,
+      maxDelayMs: 1000,
+    };
+    const member = {
+      providerApiKeyId: key.id,
+      modelId: "test-model",
+      retrySettings: { numRetries: 1, maxDelayMs: 100 },
+    };
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/model-pools",
+      payload: { name: "retry-pool", retrySettings, members: [member] },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const id = created.json().id;
+    const listed = await app.inject({ method: "GET", url: "/api/model-pools" });
+    expect(listed.json()[0]).toMatchObject({
+      retrySettings,
+      members: [{ retrySettings: { numRetries: 1, maxDelayMs: 100 } }],
+    });
+    const kept = await app.inject({
+      method: "PUT",
+      url: `/api/model-pools/${id}`,
+      payload: { name: "retry-pool", members: [member] },
+    });
+    expect(kept.statusCode, kept.body).toBe(200);
+    expect(kept.json().retrySettings).toEqual(retrySettings);
+    const cleared = await app.inject({
+      method: "PUT",
+      url: `/api/model-pools/${id}`,
+      payload: {
+        name: "retry-pool",
+        retrySettings: null,
+        members: [{ ...member, retrySettings: null }],
+      },
+    });
+    expect(cleared.statusCode, cleared.body).toBe(200);
+    expect(cleared.json()).toMatchObject({
+      retrySettings: null,
+      members: [{ retrySettings: null }],
+    });
+    const audits = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.action, "modelPool.updated"),
+          eq(schema.auditLogsTable.resourceId, id),
+        ),
+      )
+      .orderBy(asc(schema.auditLogsTable.createdAt));
+    expect(audits[1]).toMatchObject({
+      before: {
+        retrySettings,
+        members: [{ retrySettings: { numRetries: 1, maxDelayMs: 100 } }],
+      },
+      after: { retrySettings: null, members: [{ retrySettings: null }] },
+    });
+    for (const invalid of [
+      { numRetries: -1 },
+      { numRetries: 11 },
+      { retryPolicy: { timeoutError: 1.5 } },
+      { initialDelayMs: 99 },
+      { maxDelayMs: 60001 },
+      { initialDelayMs: 1000, maxDelayMs: 500 },
+    ]) {
+      for (const payload of [
+        { retrySettings: invalid, members: [member] },
+        { members: [{ ...member, retrySettings: invalid }] },
+      ]) {
+        const response = await app.inject({
+          method: "PUT",
+          url: `/api/model-pools/${id}`,
+          payload: { name: "retry-pool", ...payload },
+        });
+        expect(response.statusCode, response.body).toBe(400);
+      }
+    }
+  });
+
+  test("rejects another user's key, an unsupported provider, and a repeated member", async ({
+    makeLlmProviderApiKey,
+    makeUser,
   }) => {
     const shared = await makeLlmProviderApiKey(organizationId, null);
     const personal = await makeLlmProviderApiKey(organizationId, null, {
-      userId: user.id,
+      userId: (await makeUser()).id,
     });
     const cohere = await makeLlmProviderApiKey(organizationId, null, {
       provider: "cohere",

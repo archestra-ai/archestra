@@ -31,7 +31,9 @@ pub(crate) const ENGINE_VERSION: &str =
     "06bc9cef7166a0de0885a4607508a9fc6e6a0123:archestra-live-v3";
 const MAX_FILES: usize = 32;
 const MAX_FILE_BYTES: usize = 256 * 1024;
-const MAX_INPUT_BYTES: usize = 2 * 1024 * 1024;
+/// A root policy can be 1 MiB, and composition adds its batteries' contracts to it.
+const MAX_POLICY_BYTES: usize = 2 * 1024 * 1024;
+const MAX_INPUT_BYTES: usize = 4 * 1024 * 1024;
 const MAX_ASSERTIONS: usize = 1000;
 
 #[derive(Deserialize)]
@@ -89,11 +91,11 @@ fn validate_files(files: &[File], max_file_bytes: usize, max_bytes: usize) -> Re
 impl Request {
     pub(crate) fn parse(input: &str) -> Result<Self, String> {
         if input.len() > MAX_INPUT_BYTES {
-            return Err("Replay request exceeds 2 MiB".into());
+            return Err("Replay request exceeds 4 MiB".into());
         }
         let request: Self = serde_json::from_str(input).map_err(|_| "Invalid replay request")?;
-        if request.content.len() > MAX_FILE_BYTES {
-            return Err("Effective policy exceeds 256 KiB".into());
+        if request.content.len() > MAX_POLICY_BYTES {
+            return Err("Effective policy exceeds 2 MiB".into());
         }
         if request.files.is_empty() || request.files.len() > MAX_FILES {
             return Err("Replay needs between 1 and 32 scenario files".into());
@@ -506,6 +508,28 @@ mod tests {
         assert_eq!(response.files[0].status, Status::Passed);
         assert_eq!(response.files[0].steps.len(), 2);
         assert_eq!(response.files[1].status, Status::Passed);
+    }
+
+    #[tokio::test]
+    async fn a_policy_of_thousands_of_contracts_replays() {
+        let mut policy = String::from(
+            "[policy]\nversion = 2\n\n[[policy.tool]]\nname = 'mail__send'\nrequires = { trust = 'trusted' }\n",
+        );
+        for server in 0..6000 {
+            policy.push_str(&format!(
+                "\n[[policy.tool]]\nname = 'server_{server}__read_a_document_by_its_identifier'\ndelta = {{ trust = 'suspicious' }}\n"
+            ));
+        }
+        assert!(policy.len() > 2 * MAX_FILE_BYTES);
+        let response = run(request(
+            &policy,
+            &[(
+                "tainted.appa",
+                "mcp/server_5999/read_a_document_by_its_identifier {}\nexpect allow\nmcp/mail/send {}\nexpect deny",
+            )],
+        ))
+        .await;
+        assert_eq!(response.files[0].status, Status::Passed);
     }
 
     #[tokio::test]
@@ -1087,6 +1111,12 @@ mod tests {
                     .is_err()
             );
         }
+        let files = serde_json::json!([{"path":"scenario.appa","content":""}]);
+        let policy = "#".repeat(MAX_POLICY_BYTES + 1);
+        assert!(
+            Request::parse(&serde_json::json!({"content":policy,"files":files}).to_string())
+                .is_err()
+        );
     }
 
     #[test]

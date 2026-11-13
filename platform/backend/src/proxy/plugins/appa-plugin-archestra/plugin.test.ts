@@ -51,6 +51,7 @@ import {
   LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
   type LlmProxyToolCallsContext,
+  type LlmProxyToolResultsContext,
 } from "@/proxy/plugins/registry";
 import { GrokDeferredTools } from "@/routes/proxy/utils/grok-deferred-tools";
 import * as guardrailsDeployment from "@/services/guardrails-deployment";
@@ -1345,6 +1346,215 @@ describe("asking through the client's own question tool", () => {
     });
   }
 
+  describe("remedy continuation delivery", () => {
+    /**
+     * One session with two offered rulings. Each request gets a fresh plugin
+     * and request context, as separate proxy replicas would, so only shared
+     * state carries between requests.
+     */
+    async function rulingSession(organizationId: string, sessionId: string) {
+      const callIds = ["call_notice", "call_notice_2"] as const;
+      const root = openappaActor(sessionId);
+      await db.insert(schema.openappaSessionsTable).values({
+        organizationId,
+        callerId: "user:user",
+        sessionId,
+        actor: root,
+        root,
+        parentId: null,
+        startDecision: { decision: "ack" },
+      });
+      for (const callId of callIds) {
+        await db.insert(schema.openappaOperationsTable).values({
+          organizationId,
+          callerId: "user:user",
+          sessionId,
+          root,
+          operationId: `call:${callId}`,
+          status: "complete",
+          input: { semantic: { event: "tool_call" } },
+          decision: { decision: "deny_call" },
+        });
+      }
+      const processResults = vi
+        .spyOn(appaService, "processProxyResults")
+        .mockResolvedValue({
+          toolResultUpdates: Object.fromEntries(
+            callIds.map((callId) => [
+              callId,
+              {
+                content: `[appa] Blocked: execute_remedy_plan(offer_id: "offer-${callId}", plan: "Submit for approval")`,
+                outputSource: "runtime" as const,
+              },
+            ]),
+          ),
+        });
+      const ruling = (index: 0 | 1) => ({
+        id: callIds[index],
+        name: "archestra__get_remedy_plans",
+        namespace: "mcp__gateway",
+        content: "client echo",
+        isError: false,
+      });
+      const later = (id: string) => ({
+        id,
+        name: "read_document",
+        namespace: "mcp__foreign",
+        content: "Done",
+        isError: false,
+      });
+      /** Sends one request; true when it told the model to apply the plan. */
+      const guided = async (
+        toolResults: LlmProxyToolResultsContext["toolResults"],
+      ) => {
+        const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+        const context = requestContext({ sessionId, organizationId });
+        context.headers = { originator: "codex_cli_rs" };
+        const trusted = trustedOf(context);
+        trusted.request = {
+          tools: {
+            control: {
+              name: "archestra__execute_remedy_plan",
+              namespace: "mcp__gateway",
+            },
+            notice: {
+              name: "archestra__get_remedy_plans",
+              namespace: "mcp__gateway",
+            },
+            askUser: undefined,
+            platformToolNames: new Set(),
+            namespaces: new Map(),
+          },
+          customTools: new Set(),
+          declaredTools: [],
+          session: {},
+        };
+        await plugin.onSessionInit(context);
+        try {
+          await plugin.onToolResults({ ...context, toolResults });
+          const request = {
+            input: [],
+            tool_choice: "auto",
+            parallel_tool_calls: true,
+          };
+          await plugin.onBeforeModel({
+            ...context,
+            interactionType: "openai:responses",
+            request,
+          });
+          const nudged = JSON.stringify(request.input).includes(
+            "The ruling above offers a remedy plan",
+          );
+          expect(request.tool_choice).toBe(nudged ? "required" : "auto");
+          return nudged;
+        } finally {
+          await plugin.onCleanup(context);
+        }
+      };
+      return {
+        ruling,
+        later,
+        guided,
+        restore: () => processResults.mockRestore(),
+      };
+    }
+
+    test("puts a remedy offer to the model once, not on every later request", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const { ruling, later, guided, restore } = await rulingSession(
+        org.id,
+        "remedy-continuation-once",
+      );
+      try {
+        // The ruling arrives: the model is told to apply a fitting plan.
+        expect(await guided([ruling(0)])).toBe(true);
+        // The same history again (a retry) is told again.
+        expect(await guided([ruling(0)])).toBe(true);
+        // The model read the ruling, declined the plan and went on: not again.
+        expect(await guided([ruling(0), later("later-1")])).toBe(false);
+        expect(
+          await guided([ruling(0), later("later-1"), later("later-2")]),
+        ).toBe(false);
+        // A new ruling arms the nudge once more, and only once.
+        const history = [ruling(0), later("later-1"), later("later-2")];
+        expect(await guided([...history, ruling(1)])).toBe(true);
+        expect(await guided([...history, ruling(1), later("later-3")])).toBe(
+          false,
+        );
+      } finally {
+        restore();
+      }
+    });
+
+    test("keeps every guided history after many ever shorter replays", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const { ruling, later, guided, restore } = await rulingSession(
+        org.id,
+        "remedy-continuation-many-replays",
+      );
+      const history = (laterResults: number) => [
+        ruling(0),
+        ...Array.from({ length: laterResults }, (_, index) =>
+          later(`later-${index + 1}`),
+        ),
+      ];
+      try {
+        // 41 guided histories, each one shorter than the last.
+        for (let laterResults = 40; laterResults >= 0; laterResults--) {
+          expect(await guided(history(laterResults))).toBe(true);
+        }
+        // The oldest, longest ones are still recognized as retries.
+        expect(await guided(history(40))).toBe(true);
+        expect(await guided(history(39))).toBe(true);
+        // A history past every guided one is progress.
+        expect(await guided(history(41))).toBe(false);
+      } finally {
+        restore();
+      }
+    }, 60_000);
+
+    test("guides again every history it guided, after a shorter replay or overlapping requests", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const { ruling, later, guided, restore } = await rulingSession(
+        org.id,
+        "remedy-continuation-replays",
+      );
+      const longer = [ruling(0), later("later-1"), later("later-2")];
+      try {
+        // The ruling first arrives with two results after it in one batch.
+        expect(await guided(longer)).toBe(true);
+        // An older, shorter request is replayed: it was never guided, and the
+        // model had not gone on from it.
+        expect(await guided([ruling(0)])).toBe(true);
+        // The longer history is retried exactly: it gets what it got before.
+        expect(await guided(longer)).toBe(true);
+        expect(await guided([ruling(0)])).toBe(true);
+        // A history that extends the shortest guided one is progress.
+        expect(await guided([ruling(0), later("later-1")])).toBe(false);
+
+        // Two first requests after a new ruling overlap. Which one counts as
+        // progress depends on which record lands first, but a retry of each
+        // must get the answer it got the first time: a lost record would
+        // turn a guided history into "progress".
+        const short = [...longer, ruling(1)];
+        const long = [...short, later("later-3"), later("later-4")];
+        const first = await Promise.all([guided(long), guided(short)]);
+        // Nothing follows the ruling in the short history: never progress.
+        expect(first[1]).toBe(true);
+        expect([await guided(long), await guided(short)]).toEqual(first);
+        expect(await guided([...short, later("later-3")])).toBe(false);
+      } finally {
+        restore();
+      }
+    });
+  });
+
   test("tells Codex to use declared collaboration spawn tools instead of a nested CLI", async () => {
     const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
     const context = requestContext({ sessionId: "codex-native-delegation" });
@@ -1550,10 +1760,316 @@ describe("asking through the client's own question tool", () => {
         expect(text).toContain("retry the exact native tool and arguments");
         expect(text).toContain("search_tool searches MCP tools only");
         expect(text).toContain("Reuse a discovered entry point");
-        expect(history).toHaveLength(5);
+        expect(history).toHaveLength(responses ? 5 : 2);
         expect(history?.[0]).toBe(clientInstructions);
-        if (responses) expect(history?.at(-1)).toBe(prompt);
+        expect(history?.at(-1)).toBe(prompt);
+        expect(
+          history?.some(
+            (item) =>
+              (item as { role?: string } | undefined)?.role === "developer",
+          ),
+        ).toBe(responses);
       }
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("delivers Kimi Code request and turn guidance without developer-role messages on kimi-code:chatCompletions", async () => {
+    const plugin = new AppaPluginArchestra([new AppaKimiCodeAdapter()]);
+    const sessionId = "user:user|kimi-runtime-workspace";
+    const context = requestContext({ sessionId });
+    context.provider = "kimi-code";
+    context.interactionType = "kimi-code:chatCompletions";
+    context.headers = {
+      "user-agent": "kimi-code-cli/2.3.3",
+      "x-appa-session-id": "kimi-runtime-workspace",
+    };
+    const trusted = trustedOf(context);
+    trusted.runtimeSessionId = sessionId;
+    trusted.agentRuntimeRun = true;
+    trusted.request = {
+      session: {
+        sessionId: "kimi-runtime-workspace",
+        provenance: "appa-header",
+      },
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [
+        { name: "AskUserQuestion" },
+        { name: "Bash" },
+        { name: "mcp__archestra__archestra_execute_remedy_plan" },
+        { name: "mcp__archestra__archestra_get_remedy_plans" },
+        { name: "mcp__archestra__archestra_ask_user" },
+      ],
+    };
+    const greeting = {
+      prompt_cache_key: "kimi-session-1",
+      messages: [
+        { role: "system", content: "You are Kimi Code." },
+        { role: "user", content: "Hi" },
+      ] as Array<Record<string, unknown>>,
+    };
+    context.requestBody = greeting;
+
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+
+    try {
+      await plugin.onSessionInit(context);
+      for (let pass = 0; pass < 2; pass++) {
+        await plugin.onBeforeModel({ ...context, request: greeting });
+      }
+      expect(greeting.messages).toHaveLength(2);
+      expect(greeting.messages.map((message) => message.role)).toEqual([
+        "system",
+        "user",
+      ]);
+      expect(String(greeting.messages[0]?.content)).toContain(
+        "You are Kimi Code.",
+      );
+      expect(String(greeting.messages[0]?.content)).toContain(
+        "The organization's guardrails policy can block a tool call",
+      );
+      expect(String(greeting.messages[0]?.content)).toContain(
+        "ask with AskUserQuestion",
+      );
+      expect(greeting.messages[1]).toEqual({ role: "user", content: "Hi" });
+
+      const cachedSystemPrefix = greeting.messages[0]?.content;
+      const offerId = "offer-kimi-remedy";
+      await stageHitlReview({
+        session: trusted.session,
+        review: {
+          offerId,
+          text: "Review Bash call.",
+          tool: "Bash",
+          arguments: '{"command":"whoami"}',
+          remedyArguments: { offer_id: offerId, plan: "Submit for approval" },
+        },
+      });
+      await plugin.onToolResults({
+        ...context,
+        toolResults: [
+          {
+            id: "call_remedy",
+            name: "archestra__execute_remedy_plan",
+            content: JSON.stringify({
+              outcome: "review_required",
+              offer_id: offerId,
+            }),
+            isError: false,
+          },
+        ],
+      });
+      const continuation = {
+        prompt_cache_key: "kimi-session-1",
+        messages: [
+          { role: "system", content: "You are Kimi Code." },
+          { role: "user", content: "Run whoami" },
+          {
+            role: "assistant",
+            reasoning_content: "Call execute_remedy_plan.",
+            content: null,
+            tool_calls: [{ id: "call_remedy", type: "function" }],
+          },
+          {
+            role: "tool",
+            tool_call_id: "call_remedy",
+            content:
+              '{"outcome":"review_required","offer_id":"offer-kimi-remedy"}',
+          },
+        ] as Array<Record<string, unknown>>,
+      };
+      await plugin.onBeforeModel({ ...context, request: continuation });
+      expect(
+        continuation.messages.some((message) => message.role === "developer"),
+      ).toBe(false);
+      expect(continuation.messages[0]?.content).toBe(cachedSystemPrefix);
+      expect(continuation.messages.at(-1)).toEqual({
+        role: "user",
+        content: expect.stringContaining(offerId),
+      });
+    } finally {
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test.each([
+    "kimi:chatCompletions",
+    "deepseek:chatCompletions",
+    "mistral:chatCompletions",
+    "vllm:chatCompletions",
+    "ollama:chatCompletions",
+    "openrouter:chatCompletions",
+    "azure:chatCompletions",
+    "perplexity:responses",
+  ] as const)("preserves OpenAPPA guidance delivery on governed appaWireFamily providers (%s)", async (interactionType) => {
+    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+    const context = requestContext({ sessionId: "user:user|opencode-session" });
+    context.interactionType = interactionType;
+    context.headers = {
+      "user-agent": "opencode/1.18.23",
+      "x-opencode-session": "opencode-session",
+    };
+    trustedOf(context).request = {
+      session: {
+        sessionId: "opencode-session",
+        provenance: "opencode-session-header",
+      },
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [{ name: "bash" }, { name: "question" }],
+    };
+    const request =
+      interactionType === "perplexity:responses"
+        ? {
+            input: [
+              {
+                type: "message",
+                role: "user",
+                content: [{ type: "input_text", text: "Hi" }],
+              },
+            ] as Array<Record<string, unknown>>,
+          }
+        : {
+            messages: [
+              { role: "system", content: "Base system." },
+              { role: "user", content: "Hi" },
+            ] as Array<Record<string, unknown>>,
+          };
+    context.requestBody = request;
+
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onBeforeModel({ ...context, request });
+      const items = "input" in request ? request.input : request.messages;
+      expect(
+        Array.isArray(items) &&
+          items.some(
+            (item) =>
+              item.role === "developer" &&
+              JSON.stringify(item.content).includes(
+                "The organization's guardrails policy can block a tool call",
+              ),
+          ),
+      ).toBe(true);
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test.each([
+    "gemini:generateContent",
+    "cohere:chat",
+  ] as const)("leaves non-APPA interaction types untouched (%s)", async (interactionType) => {
+    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+    const context = requestContext({ sessionId: "user:user|opencode-session" });
+    context.interactionType = interactionType;
+    context.headers = {
+      "user-agent": "opencode/1.18.23",
+      "x-opencode-session": "opencode-session",
+    };
+    trustedOf(context).request = {
+      session: {
+        sessionId: "opencode-session",
+        provenance: "opencode-session-header",
+      },
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [{ name: "bash" }, { name: "question" }],
+    };
+    const request = {
+      messages: [
+        { role: "system", content: "Base system." },
+        { role: "user", content: "Hi" },
+      ],
+    };
+    const original = structuredClone(request);
+    context.requestBody = request;
+
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onBeforeModel({ ...context, request });
+      expect(request).toEqual(original);
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("omits deferred-MCP guidance for Grok in Agent Runtime when gateway tools are declared directly", async () => {
+    const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+    const sessionId = "user:user|grok-runtime-workspace";
+    const context = requestContext({ sessionId });
+    context.provider = "xai";
+    context.interactionType = "xai:chatCompletions";
+    context.headers = {
+      "user-agent": "grok-shell/1.0.70 (linux; x86_64)",
+      "x-grok-client-identifier": "grok-shell",
+      "x-grok-client-mode": "interactive",
+      "x-grok-session-id": "00000000-0000-4000-8000-000000000001",
+      "x-appa-session-id": "grok-runtime-workspace",
+    };
+    const trusted = trustedOf(context);
+    trusted.runtimeSessionId = sessionId;
+    trusted.agentRuntimeRun = true;
+    trusted.request = {
+      session: {
+        sessionId: "grok-runtime-workspace",
+        provenance: "appa-header",
+      },
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [
+        { name: "write" },
+        { name: "ask_user_question" },
+        { name: "archestra__execute_remedy_plan" },
+        { name: "archestra__get_remedy_plans" },
+        { name: "archestra__ask_user" },
+      ],
+    };
+    const request = {
+      messages: [
+        { role: "system", content: "Synthetic runtime instructions." },
+        { role: "user", content: "hi" },
+      ],
+    };
+    context.requestBody = request;
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onBeforeModel({ ...context, request });
+      const text = JSON.stringify(request.messages);
+      expect(text).not.toContain("Grok MCP tools are deferred.");
+      expect(text).toContain(
+        "The organization's guardrails policy can block a tool call",
+      );
+      expect(text).toContain("ask with ask_user_question");
     } finally {
       await plugin.onCleanup(context);
     }
@@ -2834,9 +3350,13 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
-  test("binds an OpenCode native approval to the staged offer", async () => {
-    const questionText =
-      '[OpenAPPA] Approve this call?\nmcp/example/write {"value":1}';
+  test.each([
+    { asked: "with the current heading", headingPrefix: "" },
+    { asked: "before the heading changed", headingPrefix: "[OpenAPPA] " },
+  ])("binds an OpenCode native approval to the staged offer ($asked)", async ({
+    headingPrefix,
+  }) => {
+    const questionText = 'Approve this call?\nmcp/example/write {"value":1}';
     const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
     const context = requestContext({
       sessionId: "user:user|opencode-hitl-session",
@@ -3032,7 +3552,10 @@ describe("asking through the client's own question tool", () => {
             // trajectory stamp before the native HITL claim sees this ID.
             id: outerStamp?.callId ?? question.id,
             name: "question",
-            content: openCodeAnswer(questionText, "Approve"),
+            content: openCodeAnswer(
+              `${headingPrefix}${questionText}`,
+              "Approve",
+            ),
             isError: false,
           },
         ],
@@ -4645,7 +5168,7 @@ describe("asking through the client's own question tool", () => {
   });
 
   const INSPECTABLE_REVIEW_TEXT = [
-    "[OpenAPPA] Approve this call?",
+    "Approve this call?",
     'APPA asks you to rule as the authority "hitl".',
     "",
     "What this ruling would cover:",
@@ -4739,7 +5262,7 @@ describe("asking through the client's own question tool", () => {
       review: {
         offerId,
         text: [
-          "[OpenAPPA] Approve this call?",
+          "Approve this call?",
           "",
           "What this ruling would cover:",
           ...Array(5).fill(wide),

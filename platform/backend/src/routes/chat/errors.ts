@@ -43,6 +43,7 @@ import {
   SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
 } from "@/types";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
+import { BedrockThinkingConfigurationError } from "./bedrock-provider-options";
 import { ContextWindowExceededError } from "./normalization/enforce-context-window-limit";
 import { RequestTooLargeError } from "./normalization/enforce-request-size-limit";
 
@@ -1740,6 +1741,16 @@ export function mapProviderError(
   if (error instanceof RequestTooLargeError) {
     return {
       code: ChatErrorCode.RequestTooLarge,
+      message: error.message,
+      isRetryable: false,
+    };
+  }
+
+  // These messages are authored locally, not arbitrary provider response text.
+  // Retrying unchanged cannot resolve a conflicting Nova reasoning setting.
+  if (error instanceof BedrockThinkingConfigurationError) {
+    return {
+      code: ChatErrorCode.InvalidRequest,
       message: error.message,
       isRetryable: false,
     };

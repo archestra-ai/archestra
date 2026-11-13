@@ -50,11 +50,19 @@ crate-type = ["cdylib"]
 # lower-trust return floor (#803), and recorders in place of the runtime file
 # ledger, with the consult recorder renamed `ConsultTranscriber` (#790); then
 # v0.40.1 and the LLM log tools labeled in the archestra battery (#852); then
-# v0.42.0 and empty child turns settled under their recorded return contract (#807).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "39c2db23d45b074f1b56dfa1cbf058b872575537", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "39c2db23d45b074f1b56dfa1cbf058b872575537" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "39c2db23d45b074f1b56dfa1cbf058b872575537", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "39c2db23d45b074f1b56dfa1cbf058b872575537" }
+# v0.42.0 and empty child turns settled under their recorded return contract (#807);
+# then stale call offers refused as superseded (#884), a typed scope on reviews
+# (#888), and a return declared ahead kept in the family log (#887);
+# then an authority's `except_tags`, and plans that need only stock `approve`
+# authorities applied at the block and recorded (#889); then a remedy whose
+# annotator gave no answer refused as unanswered (#890), and a refusal of numbers
+# whose canonical form is an unsafe integer (#891); then battery sanitizers,
+# which stay off until a root binds them (#791), and logs written before #790
+# replaying (#897).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1a0b18ac8a7e337dbb66c7c4b4b7c0af00024481", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1a0b18ac8a7e337dbb66c7c4b4b7c0af00024481" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1a0b18ac8a7e337dbb66c7c4b4b7c0af00024481", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1a0b18ac8a7e337dbb66c7c4b4b7c0af00024481" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

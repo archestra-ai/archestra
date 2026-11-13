@@ -1,11 +1,17 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  getDocsUrl,
+  type gitWebUrls,
+} from "@archestra/shared";
 import { AlertTriangle, ExternalLink, GitBranch } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   GitSourceBranch,
   GitSourceCard,
@@ -16,6 +22,7 @@ import { OpenAppaGithubAppRequirements } from "@/components/openappa-github-app-
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
+import { DeploymentSettingRow } from "@/components/settings/deployment-setting-row";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
 import { SettingsBlock } from "@/components/settings/settings-block";
 import { StandardFormDialog } from "@/components/standard-dialog";
@@ -39,9 +46,12 @@ import {
 } from "@/components/ui/tooltip";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { getVisibleDocsUrl } from "@/lib/docs/docs";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github-credential";
 import {
   useAppaGithubSync,
+  useAppaRepositoryProtection,
   useConfigureAppaGithubSync,
   useUpdateAppaGithubSync,
 } from "@/lib/openappa-github-sync.query";
@@ -49,6 +59,7 @@ import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { appaGitHost } from "./appa-git-host";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
+import { SelfServiceSetupDialog } from "./self-service-setup-dialog";
 
 type Source = NonNullable<
   archestraApiTypes.GetAppaGithubSyncResponses["200"]["source"]
@@ -91,8 +102,14 @@ export function AppaGithubSyncPanel() {
         className="mb-6 h-auto"
       />
     );
-  const { source, enabled, hasPolicy, validationDirectory, githubWebUrl } =
-    query.data;
+  const {
+    source,
+    enabled,
+    hasPolicy,
+    validationDirectory,
+    githubWebUrl,
+    selfService,
+  } = query.data;
   const git = appaGitHost(query.data);
   const urls = source?.repo ? git.urls(source.repo) : null;
   const lastChecked = source?.lastSyncedAt
@@ -207,7 +224,7 @@ export function AppaGithubSyncPanel() {
                         onClick={() => setEditing(true)}
                       >
                         <span>
-                          {connected ? "Edit source" : `Reconnect ${git.label}`}
+                          {connected ? "Edit" : `Reconnect ${git.label}`}
                         </span>
                       </Button>
                       {connected && (
@@ -254,6 +271,14 @@ export function AppaGithubSyncPanel() {
                     message={source.lastSyncError}
                   />
                 ) : null}
+                {connected && !source.setupPullRequestNumber && (
+                  <SelfServiceRow
+                    source={source}
+                    urls={urls}
+                    selfService={selfService}
+                    canManage={canManage === true}
+                  />
+                )}
               </GitSourceCard>
             ) : null}
           </div>
@@ -278,6 +303,9 @@ export function AppaGithubSyncPanel() {
               interval: source.interval ?? "1h",
               validationDirectory,
               webUrl: githubWebUrl,
+              selfService: source.selfService,
+              selfServiceDirectory: source.selfServiceDirectory,
+              selfServiceAutoMerge: source.selfServiceAutoMerge,
             }}
           />
         ) : (
@@ -301,6 +329,324 @@ export function AppaGithubSyncPanel() {
   );
 }
 
+type Protection = NonNullable<
+  archestraApiTypes.GetAppaRepositoryProtectionResponses["200"]
+>;
+
+/**
+ * The repository's protection for server rules files: the branch ruleset
+ * the administrator imports, which Archestra reads at each sync.
+ */
+/**
+ * The self-service switch: whether each MCP server's editors change its own
+ * rules through pull requests. Locked while the environment variable sets
+ * it, and off for a source without a GitHub App, which posts no check.
+ */
+function SelfServiceRow({
+  source,
+  urls,
+  selfService,
+  canManage,
+}: {
+  source: Source;
+  /** Browser links into the repository, for the branch and the folder. */
+  urls: ReturnType<typeof gitWebUrls> | null;
+  selfService: archestraApiTypes.GetAppaGithubSyncResponses["200"]["selfService"];
+  canManage: boolean;
+}) {
+  const appName = useAppName();
+  const eligible = !!source.githubAppConfigId;
+  const [setup, setSetup] = useState(false);
+  const description = (
+    <>
+      {eligible
+        ? "MCP owners can manage MCP Guardrails. The GitHub App checks their pull requests, and a branch ruleset you import makes the check required."
+        : "Connect the policy repository through a GitHub App so MCP owners can manage MCP Guardrails."}{" "}
+      <SelfServiceDocsLink />
+    </>
+  );
+  return (
+    <GitSourceNotice>
+      <div className="space-y-2">
+        {selfService.environment ? (
+          <DeploymentSettingRow
+            compact
+            title="MCP Guardrails Self-Service"
+            description={description}
+            value={selfService.enabled ? "enabled" : "disabled"}
+            disabled
+            environmentVariable={selfService.environment.variable}
+            options={[
+              { value: "enabled", label: "On" },
+              { value: "disabled", label: "Off" },
+            ]}
+            onChange={() => {}}
+          />
+        ) : (
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 space-y-1">
+              <p className="text-sm font-medium">MCP Guardrails Self-Service</p>
+              <p className="text-xs text-muted-foreground">{description}</p>
+            </div>
+            {/* Once on, Edit on the card changes or turns it off. */}
+            {selfService.enabled ? null : (
+              <Button
+                size="sm"
+                type="button"
+                className="shrink-0"
+                disabled={!canManage || !eligible}
+                onClick={() => setSetup(true)}
+              >
+                <span>Enable</span>
+              </Button>
+            )}
+          </div>
+        )}
+        {selfService.leftoverRule ? (
+          <p className="text-xs text-muted-foreground">
+            A branch {hostLink(selfService.leftoverRule.url, "ruleset")} still
+            requires the {selfService.leftoverRule.checkName} check. {appName}{" "}
+            posts it as skipped on every pull request until you remove the rule,
+            or turn self-service on again.
+          </p>
+        ) : null}
+        {selfService.enabled ? (
+          <RepositoryProtection
+            policyPath={source.path ?? "appa.toml"}
+            branchUrl={urls?.tree(source.ref ?? "HEAD") ?? null}
+            folderUrl={(folder) =>
+              urls?.tree(
+                source.ref ?? "HEAD",
+                policyFolderOf(source.path ?? "appa.toml", folder),
+              ) ?? null
+            }
+            onFinishSetup={canManage ? () => setSetup(true) : undefined}
+          />
+        ) : null}
+        {selfService.enabled && selfService.autoMerge?.enabled ? (
+          // The setting lives in the wizard; the card says only what holds.
+          <p className="text-xs text-muted-foreground">
+            Admitted self-service pull requests merge automatically.
+          </p>
+        ) : null}
+      </div>
+      {setup ? (
+        <SelfServiceSetupDialog
+          open
+          onOpenChange={setSetup}
+          policyPath={source.path ?? "appa.toml"}
+          directory={selfService.directory}
+          alreadyOn={selfService.enabled}
+        />
+      ) : null}
+    </GitSourceNotice>
+  );
+}
+
+/** How self-service works, on the Git sync docs page; the row says only what it is. */
+function SelfServiceDocsLink() {
+  const href = getVisibleDocsUrl(
+    getDocsUrl(
+      DocsPage.PlatformAiToolGuardrailsGitSync,
+      "mcp-guardrails-self-service",
+    ),
+  );
+  if (!href) return null;
+  return (
+    <ExternalDocsLink
+      href={href}
+      showIcon={false}
+      className="text-primary underline underline-offset-2 hover:text-primary/80"
+    >
+      Learn more
+    </ExternalDocsLink>
+  );
+}
+
+/** A folder beside the policy file, as a repository path. */
+function policyFolderOf(policyPath: string, folder: string): string {
+  const slash = policyPath.lastIndexOf("/");
+  return slash < 0 ? folder : `${policyPath.slice(0, slash)}/${folder}`;
+}
+
+function RepositoryProtection({
+  policyPath,
+  branchUrl,
+  folderUrl,
+  onFinishSetup,
+}: {
+  policyPath: string;
+  /** The synced branch on the host, for the ruleset sentence. */
+  branchUrl: string | null;
+  /** The servers' folder on the host, for the include sentence. */
+  folderUrl: (folder: string) => string | null;
+  /** Opens the self-service setup again, for a part that is still missing. */
+  onFinishSetup?: () => void;
+}) {
+  const { data } = useAppaRepositoryProtection(true);
+  if (!data) return null;
+  const policyFile = policyPath.slice(policyPath.lastIndexOf("/") + 1);
+  const unfinished =
+    data.branchRules.state !== "active" || data.include.state === "missing";
+  return (
+    <>
+      <p className="text-xs text-muted-foreground">
+        {protectionSentence({
+          rules: data.branchRules,
+          checkName: data.checkName,
+          branchUrl,
+          app: data.app,
+        })}
+      </p>
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+        {includeSentence(data.include, policyFile, folderUrl)}
+        {unfinished && onFinishSetup ? (
+          <Button
+            size="xs"
+            type="button"
+            variant="outline"
+            onClick={onFinishSetup}
+          >
+            Finish setup
+          </Button>
+        ) : null}
+      </p>
+    </>
+  );
+}
+
+/**
+ * One sentence on the include that makes the servers' files apply: where
+ * they live, or the pull request that adds the line, or that it is missing.
+ */
+function includeSentence(
+  include: Protection["include"],
+  policyFile: string,
+  folderUrl: (folder: string) => string | null,
+): ReactNode {
+  const entry = <code>{`${include.folder}/*.toml`}</code>;
+  switch (include.state) {
+    case "included":
+      return (
+        <span>
+          MCP servers&apos; policy files go to{" "}
+          {hostLink(folderUrl(include.folder), `${include.folder}/`)}
+        </span>
+      );
+    case "pull_open":
+      return (
+        <span>
+          <a
+            href={include.pull?.url}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-foreground underline underline-offset-4 hover:text-foreground/80"
+          >
+            Pull request #{include.pull?.number}
+          </a>{" "}
+          adds {entry} to {policyFile}. Merge it and re-sync.
+        </span>
+      );
+    case "unknown":
+      return (
+        <span>
+          Could not read the policy repository to tell whether {policyFile}{" "}
+          includes {entry}. Try again in a moment.
+        </span>
+      );
+    default:
+      return (
+        <span>
+          {policyFile} does not include {entry} yet.
+        </span>
+      );
+  }
+}
+
+/**
+ * One sentence on the ruleset: on, with a link to it, or why not yet. The
+ * check the App cannot post comes first, since a rule that requires it holds
+ * every pull request.
+ */
+/** A link into the repository on its host, or the text alone without one. */
+function hostLink(href: string | null | undefined, text: string): ReactNode {
+  return href ? (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="font-medium text-foreground underline underline-offset-4 hover:text-foreground/80"
+    >
+      {text}
+    </a>
+  ) : (
+    <span>{text}</span>
+  );
+}
+
+function protectionSentence({
+  rules,
+  checkName,
+  branchUrl,
+  app,
+}: {
+  rules: Protection["branchRules"];
+  checkName: string;
+  branchUrl: string | null;
+  app: Protection["app"];
+}): ReactNode {
+  const ruleset = hostLink(rules.url, "ruleset");
+  // The App by its own name, linked to its page; "GitHub App" before it is known.
+  const githubApp = app ? (
+    <>{hostLink(app.url, app.name)} App</>
+  ) : (
+    <span>GitHub App</span>
+  );
+  if (rules.checkRule === "unposted")
+    return (
+      <>
+        The Self-service branch protection {ruleset} holds pull requests until
+        the {githubApp} can post the check.
+      </>
+    );
+  switch (rules.state) {
+    case "active":
+      return (
+        <>
+          {hostLink(rules.url, "Ruleset")} protects the policy on the{" "}
+          {hostLink(branchUrl, "branch")}
+        </>
+      );
+    case "incomplete":
+      return (
+        <>
+          The Self-service branch protection {ruleset} needs a change:{" "}
+          {rules.detail}
+        </>
+      );
+    case "missing":
+      return (
+        <>
+          No branch ruleset requires the {checkName} check yet. Import it with
+          Finish setup.
+        </>
+      );
+    case "needs_permission":
+      return (
+        <>
+          The Self-service branch protection ruleset waits for the {githubApp}
+          &apos;s Checks permission.
+        </>
+      );
+    default:
+      return (
+        <>
+          The Self-service branch protection ruleset could not be checked
+          {rules.detail ? <span>: {rules.detail}</span> : <span>.</span>}
+        </>
+      );
+  }
+}
 export function OpenAppaSourceForm({
   source,
   onOpenChange,

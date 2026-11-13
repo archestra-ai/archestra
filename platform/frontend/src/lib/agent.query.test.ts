@@ -6,13 +6,16 @@ import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useChatAgentBootstrap,
+  useCloneAgent,
   useCreateProfile,
+  useImportAgent,
   usePinAgent,
   usePinnedAgentIds,
   useProfile,
   useProfilesPaginated,
   useUpdateProfile,
 } from "@/lib/agent.query";
+import { authQueryKeys } from "@/lib/auth/auth.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
 import {
   clearPersistedQueryCache,
@@ -26,6 +29,7 @@ import { isReportedApiError } from "@/lib/utils/api";
 // module at import time, so only the two SDK calls under test are replaced.
 vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  cloneAgent: vi.fn(),
   createAgent: vi.fn(),
   getAgents: vi.fn(),
   getChatAgentRoster: vi.fn(),
@@ -33,6 +37,7 @@ vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
   getChatAgentMcpTools: vi.fn(),
   getMemberDefaultAgent: vi.fn(),
   getOrganization: vi.fn(),
+  importAgent: vi.fn(),
   pinAgent: vi.fn(),
   unpinAgent: vi.fn(),
   updateAgent: vi.fn(),
@@ -51,6 +56,12 @@ function setup<T>(
   const wrapper = ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client: queryClient }, children);
   return { ...renderHook(hook, { wrapper }), queryClient };
+}
+
+function seedCapabilities(queryClient: QueryClient) {
+  queryClient.setQueryData(authQueryKeys.scopedCapabilities(), [
+    { resource: "agent", scope: "*", action: "read" },
+  ]);
 }
 
 const refused = {
@@ -120,6 +131,63 @@ describe("agent write mutations", () => {
     await expect(
       result.current.mutateAsync({ name: "New", agentType: "agent" } as never),
     ).resolves.toMatchObject({ id: "agent-1" });
+  });
+
+  // The author's grants on a new agent are written with it, so the cached
+  // capability list no longer covers it. Left alone, a creator whose update
+  // comes from that grant saw no Edit button and no pencil until the list
+  // happened to refetch.
+  it.each([
+    {
+      name: "create",
+      run: async () => {
+        sdk.createAgent.mockResolvedValue({
+          data: { id: "agent-1", name: "New" },
+          error: undefined,
+        } as never);
+        const { result, queryClient } = setup(() => useCreateProfile());
+        seedCapabilities(queryClient);
+        await result.current.mutateAsync({
+          name: "New",
+          agentType: "agent",
+        } as never);
+        return queryClient;
+      },
+    },
+    {
+      name: "clone",
+      run: async () => {
+        sdk.cloneAgent.mockResolvedValue({
+          data: { id: "agent-2", name: "Copy" },
+          error: undefined,
+        } as never);
+        const { result, queryClient } = setup(() => useCloneAgent());
+        seedCapabilities(queryClient);
+        await result.current.mutateAsync({ id: "agent-1" } as never);
+        return queryClient;
+      },
+    },
+    {
+      name: "import",
+      run: async () => {
+        sdk.importAgent.mockResolvedValue({
+          data: { agent: { id: "agent-3", name: "Imported" }, warnings: [] },
+          error: undefined,
+        } as never);
+        const { result, queryClient } = setup(() => useImportAgent());
+        seedCapabilities(queryClient);
+        await result.current.mutateAsync({} as never);
+        return queryClient;
+      },
+    },
+  ])("refetches the caller's capabilities after an agent $name", async ({
+    run,
+  }) => {
+    const queryClient = await run();
+    expect(
+      queryClient.getQueryState(authQueryKeys.scopedCapabilities())
+        ?.isInvalidated,
+    ).toBe(true);
   });
 
   it("shows a caller-specific message after an update succeeds", async () => {

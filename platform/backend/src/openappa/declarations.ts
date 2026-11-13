@@ -20,6 +20,10 @@ import {
   OPENAPPA_HELPERS_PREFIX,
 } from "@/routes/route-paths";
 import { resolveCredentialValue } from "@/services/credentials";
+import {
+  type ExpandedRoot,
+  openappaRepositoryIncludes,
+} from "@/services/openappa-github-access";
 import { ApiError } from "@/types";
 import type {
   BatteryPackageFile,
@@ -28,8 +32,16 @@ import type {
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import { archestraAudience } from "./archestra-audience";
-import { type DeployedBattery, declaredCredentials } from "./battery-target";
-import { withHostToolRules } from "./host-tool-rules";
+import {
+  type DeployedBattery,
+  declaredAnnotators,
+  declaredCredentials,
+} from "./battery-target";
+import {
+  withHostClientCodingAliases,
+  withHostToolRules,
+} from "./host-tool-rules";
+import { parsePolicyToml } from "./policy-text";
 
 /** How each resolved entry deploys here, by its `include` spelling. */
 export type DeployedEntries = ReadonlyMap<string, DeployedBattery>;
@@ -80,6 +92,10 @@ type BoundPolicy = {
   content: string;
   resolution: PolicyResolution;
   credentialSource: Record<string, CredentialSource>;
+  /** The repository files folded into `content`, when the root includes any. */
+  included?: ExpandedRoot["included"];
+  /** Why they could not be folded in; `content` then leaves them out. */
+  foldErrors?: string[];
 };
 
 /**
@@ -193,6 +209,9 @@ class OpenAppaDeclarations {
       spelling: EntrySpelling;
     }> = [];
     for (const include of declarations.include) {
+      // A repository file is the host's to fold in before composing, not a
+      // battery; resolveWithBindings folds it.
+      if (openappaRepositoryIncludes.isRepositoryFile(include.entry)) continue;
       const spelling = classify(include.entry);
       if (!spelling) {
         errors.push(
@@ -239,6 +258,39 @@ class OpenAppaDeclarations {
   }
 
   /**
+   * The annotators the batteries `content` includes declare, by name, with
+   * the battery that declares each. A battery that does not resolve declares
+   * none here; resolving the root says why.
+   */
+  async batteryHelpers(params: {
+    organizationId: string;
+    content: string;
+  }): Promise<Map<string, string>> {
+    const include = parsePolicyToml(params.content)?.include;
+    const spellings = (Array.isArray(include) ? include : []).flatMap(
+      (entry) => {
+        const spelling = typeof entry === "string" ? classify(entry) : null;
+        return spelling ? [spelling] : [];
+      },
+    );
+    const settled = await mapWithConcurrency(
+      spellings,
+      RESOLVE_CONCURRENCY,
+      (spelling) =>
+        this.resolveSpelling({
+          organizationId: params.organizationId,
+          ...spelling,
+        }),
+    );
+    const helpers = new Map<string, string>();
+    for (const result of settled)
+      if (result.status === "fulfilled" && result.value)
+        for (const name of declaredAnnotators(result.value))
+          helpers.set(name, result.value.name);
+    return helpers;
+  }
+
+  /**
    * Resolve a root document with the organization's stored bindings applied.
    * A `[credentials]` line in the text wins; a stored binding fills a variable
    * the text leaves out, and only when an included battery reads it, since the
@@ -248,9 +300,23 @@ class OpenAppaDeclarations {
     organizationId: string;
     content: string;
   }): Promise<BoundPolicy> {
-    const { organizationId, content } = params;
+    const { organizationId } = params;
+    // The repository files the root includes are folded in first: everything
+    // after this composes a root whose include list names batteries alone.
+    // Files that cannot be read resolve the root without them and say why; a
+    // composition refuses such a root, so the last one that opened stays.
+    const expanded = await openappaRepositoryIncludes.expand(params);
+    const failed = expanded.errors.length > 0;
+    const content = failed
+      ? openappaRepositoryIncludes.withoutFiles(params.content)
+      : expanded.content;
+    const included = failed
+      ? { foldErrors: expanded.errors }
+      : expanded.included.length > 0
+        ? { included: expanded.included }
+        : {};
     const [resolution, bindings] = await Promise.all([
-      this.resolve(params),
+      this.resolve({ organizationId, content }),
       OpenAppaCredentialBindingModel.list(organizationId),
     ]);
     const credentialSource: Record<string, CredentialSource> =
@@ -269,7 +335,8 @@ class OpenAppaDeclarations {
       (binding) =>
         read.has(binding.variable) && !(binding.variable in credentialSource),
     );
-    if (filling.length === 0) return { content, resolution, credentialSource };
+    if (filling.length === 0)
+      return { content, resolution, credentialSource, ...included };
     const native = await loadNative();
     const edited = await native.editOpenappaPolicy(
       content,
@@ -284,9 +351,10 @@ class OpenAppaDeclarations {
         { organizationId, errors: edited.errors },
         "OpenAPPA credential bindings could not be applied to the policy",
       );
-      return { content, resolution, credentialSource };
+      return { content, resolution, credentialSource, ...included };
     }
     return {
+      ...included,
       content: edited.content,
       resolution: {
         ...resolution,
@@ -439,21 +507,33 @@ class OpenAppaDeclarations {
   }): Promise<ComposedPolicy> {
     const native = await loadNative();
     const tokenEnv = this.publishBridgeToken();
-    const composed = await native.composeOpenappaPolicy({
-      root: params.root,
-      memberRosters: params.memberRosters,
-      batteries: this.composeInputs({
-        entries: params.resolution.entries,
-        deployed: params.deployed,
-        helpers: (entry, deployed) => {
-          if (params.held?.has(entry.name)) return "stub";
-          if (deployed.externals.length === 0) return null;
-          const owner =
-            params.helperOwner?.(entry, deployed) ?? CHECKED_HELPER_OWNER;
-          return { urlBase: helperUrlBase(owner), tokenEnv };
-        },
-      }),
+    const batteries = this.composeInputs({
+      entries: params.resolution.entries,
+      deployed: params.deployed,
+      helpers: (entry, deployed) => {
+        if (params.held?.has(entry.name)) return "stub";
+        if (deployed.externals.length === 0) return null;
+        const owner =
+          params.helperOwner?.(entry, deployed) ?? CHECKED_HELPER_OWNER;
+        return { urlBase: helperUrlBase(owner), tokenEnv };
+      },
     });
+    const augmentedRoot = withHostClientCodingAliases({
+      root: params.root,
+      batteries,
+    });
+    let composed = await native.composeOpenappaPolicy({
+      root: augmentedRoot,
+      memberRosters: params.memberRosters,
+      batteries,
+    });
+    if ((composed.content ?? null) === null && augmentedRoot !== params.root) {
+      composed = await native.composeOpenappaPolicy({
+        root: params.root,
+        memberRosters: params.memberRosters,
+        batteries,
+      });
+    }
     // A check answers as the served composition does, its host tool rules (yell
     // and the peer read) included.
     const content = composed.content ?? null;

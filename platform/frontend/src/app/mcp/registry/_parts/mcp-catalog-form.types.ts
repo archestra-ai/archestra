@@ -6,6 +6,7 @@ import {
   ResourcePermissionGrantSchema,
 } from "@archestra/shared";
 import { z } from "zod";
+import { desktopMcpTargetError } from "@/lib/mcp/desktop-mcp";
 
 const SSO_CALLBACK_PATH = "/api/auth/sso/callback";
 
@@ -205,7 +206,7 @@ const activeAuthFormSchema = z
     name: z.string().trim().min(1, "Name is required"),
     description: z.string().optional().or(z.literal("")),
     icon: z.string().nullable().optional(),
-    serverType: z.enum(["remote", "local"]),
+    serverType: z.enum(["remote", "local", "desktop_mcp"]),
     multitenant: z.boolean().optional(),
     serverUrl: HttpUrlSchema.optional().or(z.literal("")),
     // Carried from an existing entry so a save keeps it; choosing "None"
@@ -229,6 +230,15 @@ const activeAuthFormSchema = z
       .nullable()
       .optional(),
     localConfig: LocalConfigFormSchema.optional(),
+    // What a desktop MCP server tells each computer: the command that starts
+    // it or the URL where it listens (`kind` says which `value` is). With an
+    // empty value the item cannot be added to a computer yet.
+    desktopConfig: z
+      .object({
+        kind: z.enum(["command", "url"]),
+        value: z.string(),
+      })
+      .optional(),
     // Kubernetes Deployment spec YAML (for local servers)
     deploymentSpecYaml: z.string().optional(),
     // Original YAML from API (used to detect if user modified the YAML)
@@ -358,24 +368,44 @@ const activeAuthFormSchema = z
         path: ["enterpriseManagedConfig", "identityProviderId"],
       });
     }
+  })
+  .superRefine((data, ctx) => {
+    if (data.serverType !== "desktop_mcp" || !data.desktopConfig) return;
+    const message = desktopMcpTargetError(data.desktopConfig);
+    if (message) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message,
+        path: ["desktopConfig", "value"],
+      });
+    }
   });
 
 export const formSchema = z.preprocess(
-  omitInactiveAuthFields,
+  omitInactiveFields,
   activeAuthFormSchema,
 );
 
 export type McpCatalogFormValues = z.infer<typeof formSchema>;
 
 // RHF retains unmounted fields so switching back restores the user's draft.
-// Validate and submit only the selected method's configuration, without
-// mutating those retained values or suppressing errors in shared fields.
-function omitInactiveAuthFields(value: unknown) {
-  if (!value || typeof value !== "object" || !("authMethod" in value)) {
+// Validate and submit only the selected hosting's and method's configuration,
+// without mutating those retained values or suppressing errors in shared
+// fields.
+function omitInactiveFields(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  if ("serverType" in value && value.serverType === "desktop_mcp") {
+    return omitConnectionFields(value);
+  }
+  if (!("authMethod" in value)) {
     return value;
   }
 
   const data = { ...value } as Record<string, unknown>;
+  // Only a desktop MCP server has a command for computers.
+  delete data.desktopConfig;
   if (
     data.authMethod !== "oauth" &&
     data.authMethod !== "oauth_client_credentials"
@@ -400,5 +430,24 @@ function omitInactiveAuthFields(value: unknown) {
   ) {
     delete data.enterpriseManagedConfig;
   }
+  return data;
+}
+
+// A desktop MCP server runs on each user's own computer: the gateway has no
+// server URL for it, no deployment and no authentication. Whatever the form
+// still holds for those, from a hosting the user chose first, is neither
+// validated nor submitted. Its own `desktopConfig` stays.
+function omitConnectionFields(value: object) {
+  const data = { ...value } as Record<string, unknown>;
+  data.serverUrl = "";
+  data.multitenant = false;
+  data.authMethod = "none";
+  data.authHeaderName = "";
+  data.additionalHeaders = [];
+  delete data.oauthConfig;
+  delete data.enterpriseManagedConfig;
+  delete data.localConfig;
+  delete data.deploymentSpecYaml;
+  delete data.originalDeploymentSpecYaml;
   return data;
 }

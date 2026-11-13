@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  argumentSpellingConflict,
   isCommandExecutionTool,
   normalizeToolArgumentsForPolicy,
   withoutArgumentCopies,
@@ -79,6 +80,110 @@ describe("command-normalization", () => {
         normalizeToolArgumentsForPolicy("read", { filePath: "/repo/.env" }),
       ).toEqual({ filePath: "/repo/.env" });
     });
+
+    test("evaluates Copilot CLI's view, create and edit paths on normalized policy fields", () => {
+      for (const tool of [
+        "view",
+        "create",
+        "host/archestra/view",
+        "host/archestra/create",
+      ]) {
+        expect(
+          normalizeToolArgumentsForPolicy(tool, { path: "/repo/.env" }),
+        ).toEqual({
+          path: "/repo/.env",
+          file_path: "/repo/.env",
+        });
+      }
+      expect(
+        normalizeToolArgumentsForPolicy("view", {
+          path: "C:\\Users\\me\\appa-qa\\.npmrc",
+        }),
+      ).toEqual({
+        path: "C:\\Users\\me\\appa-qa\\.npmrc",
+        file_path: "C:/Users/me/appa-qa/.npmrc",
+      });
+      expect(
+        normalizeToolArgumentsForPolicy("create", {
+          path: "C:\\repo\\.mcp.json",
+          file_text: "{}",
+        }),
+      ).toEqual({
+        path: "C:\\repo\\.mcp.json",
+        file_path: "C:/repo/.mcp.json",
+        file_text: "{}",
+      });
+      for (const tool of ["edit", "host/archestra/edit"]) {
+        expect(
+          normalizeToolArgumentsForPolicy(tool, {
+            path: "/repo/.env",
+            old_str: "a",
+            new_str: "b",
+          }),
+        ).toEqual({
+          path: "/repo/.env",
+          filePath: "/repo/.env",
+          old_str: "a",
+          new_str: "b",
+        });
+      }
+      expect(
+        normalizeToolArgumentsForPolicy("edit", {
+          path: "C:\\Users\\me\\appa-qa\\.npmrc",
+        }),
+      ).toEqual({
+        path: "C:\\Users\\me\\appa-qa\\.npmrc",
+        filePath: "C:/Users/me/appa-qa/.npmrc",
+      });
+      // OpenCode's own lowercase edit call stays untouched.
+      expect(
+        normalizeToolArgumentsForPolicy("edit", { filePath: "/repo/.env" }),
+      ).toEqual({ filePath: "/repo/.env" });
+    });
+  });
+
+  describe("argumentSpellingConflict", () => {
+    test.each([
+      ["Bash", { command: "ls", cmd: "ls" }, false],
+      ["Bash", { command: "ls" }, false],
+      ["exec_command", { cmd: "cat ~/.aws/credentials", command: "ls" }, true],
+      ["Bash", { command: "ls", cmd: null }, false],
+      ["Bash", { command: "ls", cmd: ["ls"] }, true],
+      ["Read", { file_path: "/repo/.env", path: "/repo/.env" }, false],
+      ["Read", { file_path: "C:/repo/.env", path: "C:\\repo\\.env" }, false],
+      ["Read", { file_path: "/repo/README.md", path: "/repo/.env" }, true],
+      ["host/archestra/Edit", { file_path: "", path: "/repo/.env" }, true],
+      ["Read", { file_path: 1, path: "/repo/.env" }, true],
+      ["view", { file_path: "C:/repo/.env", path: "C:\\repo\\.env" }, false],
+      ["view", { file_path: "/repo/README.md", path: "/repo/.env" }, true],
+      [
+        "host/archestra/create",
+        { file_path: "/repo/safe.txt", path: "/repo/.mcp.json" },
+        true,
+      ],
+      ["edit", { filePath: "/repo/.env", path: "/repo/.env" }, false],
+      ["edit", { filePath: "C:/repo/.env", path: "C:\\repo\\.env" }, false],
+      ["edit", { filePath: "/repo/README.md", path: "/repo/.env" }, true],
+      ["host/archestra/edit", { filePath: "", path: "/repo/.env" }, true],
+      ["Grep", { file_path: "/repo/README.md", path: "/repo/.env" }, false],
+    ])("%s %j conflicts: %s", (tool, args, conflict) => {
+      expect(argumentSpellingConflict(tool, args) !== null).toBe(conflict);
+    });
+
+    test("a null spelling is absent, so the other is copied over it", () => {
+      expect(
+        normalizeToolArgumentsForPolicy("Read", {
+          path: "/repo/.env",
+          file_path: null,
+        }),
+      ).toEqual({ path: "/repo/.env", file_path: "/repo/.env" });
+      expect(
+        normalizeToolArgumentsForPolicy("exec_command", {
+          cmd: "ls",
+          command: null,
+        }),
+      ).toEqual({ cmd: "ls", command: "ls" });
+    });
   });
 
   describe("withoutArgumentCopies", () => {
@@ -111,6 +216,36 @@ describe("command-normalization", () => {
       expect(
         withoutArgumentCopies("Read", { file_path: "/repo/README.md" }),
       ).toEqual({ file_path: "/repo/README.md" });
+      expect(
+        withoutArgumentCopies(
+          "view",
+          normalizeToolArgumentsForPolicy("view", {
+            path: "C:\\repo\\.env",
+          }) as Record<string, unknown>,
+        ),
+      ).toEqual({ path: "C:\\repo\\.env" });
+      expect(
+        withoutArgumentCopies(
+          "create",
+          normalizeToolArgumentsForPolicy("create", {
+            path: "C:\\repo\\.mcp.json",
+            file_text: "{}",
+          }) as Record<string, unknown>,
+        ),
+      ).toEqual({ path: "C:\\repo\\.mcp.json", file_text: "{}" });
+      expect(
+        withoutArgumentCopies(
+          "edit",
+          normalizeToolArgumentsForPolicy("edit", {
+            path: "C:\\repo\\.env",
+            old_str: "a",
+            new_str: "b",
+          }) as Record<string, unknown>,
+        ),
+      ).toEqual({ path: "C:\\repo\\.env", old_str: "a", new_str: "b" });
+      expect(
+        withoutArgumentCopies("edit", { filePath: "/repo/README.md" }),
+      ).toEqual({ filePath: "/repo/README.md" });
     });
   });
 });

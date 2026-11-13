@@ -1649,17 +1649,11 @@ describe("ChatOpsManager security validation", () => {
     function createStreamingSetup() {
       const pushed: unknown[] = [];
       const stream = {
-        isLive: false,
         push: vi.fn((chunk: unknown) => {
           pushed.push(chunk);
-          stream.isLive = true;
         }),
-        finish: vi.fn(async () => {
-          stream.isLive = false;
-        }),
-        abandon: vi.fn(async () => {
-          stream.isLive = false;
-        }),
+        finish: vi.fn().mockResolvedValue(undefined),
+        abandon: vi.fn().mockResolvedValue(undefined),
       };
       const sendReply = vi.fn().mockResolvedValue("reply-id");
       const provider: ChatOpsProvider = {

@@ -26,7 +26,10 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
-import { internalCallHeader } from "@/clients/internal-call";
+import {
+  guardrailCallHeader,
+  internalCallHeader,
+} from "@/clients/internal-call";
 import db, { schema } from "@/database";
 import {
   InteractionModel,
@@ -797,6 +800,46 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         { sessionId, source: "chatops:slack" },
       );
       expect(filtered.pagination.total).toBe(1);
+    });
+
+    test.each([
+      ["an external client", "api", () => ({}), true],
+      ["another in-process caller", "api", () => internalCallHeader(), true],
+      [
+        "the platform's guardrail call",
+        "guardrail:sanitizer",
+        () => guardrailCallHeader(),
+        false,
+      ],
+    ] as const)("the sanitizer source from %s is logged as %s", async (_caller, source, proof, storesContent) => {
+      // A guardrail sanitizer's rows keep no content, so only the guardrail
+      // call may claim that source; anyone else is logged as api, with content.
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
+          [SOURCE_HEADER]: "guardrail:sanitizer",
+          ...proof(),
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "the-sanitizer-source-prompt" }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].source).toBe(source);
+      expect(
+        JSON.stringify(rows[0].request).includes("the-sanitizer-source-prompt"),
+      ).toBe(storesContent);
     });
 
     test("persists OpenCode main, title, and child-session sources", async () => {

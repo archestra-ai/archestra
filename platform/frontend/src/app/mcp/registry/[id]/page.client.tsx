@@ -25,7 +25,9 @@ import {
   useRef,
   useState,
 } from "react";
+import { AlphaBadge } from "@/components/alpha-badge";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { OpenAppaIcon } from "@/components/openappa-icon";
 import type { OverviewFact } from "@/components/overview-summary";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -62,6 +64,7 @@ import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { DESKTOP_MCP_COPY } from "@/lib/mcp/desktop-mcp";
 import { useRefreshInternalMcpCatalogImage } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpUsageSummary } from "@/lib/mcp/mcp-agent-usage.query";
 import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
@@ -93,6 +96,12 @@ import {
   getDeploymentLabel,
   getDeploymentStatusChipLabel,
 } from "../_parts/deployment-status";
+import type { DesktopMcpInstallState } from "../_parts/desktop-mcp-install";
+import {
+  DesktopMcpAddedStatus,
+  DesktopMcpNoDeviceStatus,
+  DesktopMcpWaitingStatus,
+} from "../_parts/desktop-mcp-install-status";
 import { buildDetailTabHref } from "../_parts/detail-tab-href";
 import { InlineMcpReauthentication } from "../_parts/inline-mcp-reauthentication";
 import { getLocalInstallationCopy } from "../_parts/local-installation-copy";
@@ -110,7 +119,11 @@ import {
   mcpServerActionHref,
 } from "../_parts/mcp-server-actions-model";
 import { deriveAgentUsage } from "../_parts/mcp-server-agent-usage";
-import type { CatalogItem, InstalledServer } from "../_parts/mcp-server-card";
+import type {
+  CatalogItem,
+  InstalledServer,
+  McpServerCardVariant,
+} from "../_parts/mcp-server-card";
 import {
   McpServerConnectionPanel,
   type McpServerSpec,
@@ -121,10 +134,16 @@ import {
 } from "../_parts/mcp-server-console";
 import { McpServerIssueNotice } from "../_parts/mcp-server-issue-notice";
 import { McpServerToolsSection } from "../_parts/mcp-server-tools-section";
+import { mcpServerVariant, runsInEnvironment } from "../_parts/mcp-server-type";
 import { McpServerPagedUsageTab } from "../_parts/mcp-server-usage-tab";
 import { PlaywrightSavedLoginsTab } from "../_parts/playwright-saved-logins-tab";
+import {
+  SERVER_RULES_LABEL,
+  ServerRulesButton,
+} from "../_parts/server-rules-launch";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
 import { useChatWithCatalogItem } from "../_parts/use-chat-with-catalog-item";
+import { useDesktopInstallState } from "../_parts/use-desktop-install-state";
 import { YamlConfigContent } from "../_parts/yaml-config-dialog";
 
 type DetailTab =
@@ -272,12 +291,7 @@ function CatalogItemDetails({
     onRequestNavigate: requestNavigate,
   });
 
-  const variant =
-    item.serverType === "builtin"
-      ? "builtin"
-      : item.serverType === "remote"
-        ? "remote"
-        : "local";
+  const variant = mcpServerVariant(item.serverType);
   const actionModel = getMcpServerActionModel(item);
   const editAction = mcpServerAction(actionModel, "edit");
   const cloneAction = mcpServerAction(actionModel, "clone");
@@ -392,7 +406,8 @@ function CatalogItemDetails({
     (panel) => panel.id === "yaml" || allInstalls.length > 0,
   );
   // Remote servers manage credentials; local servers manage hosted
-  // installations. Built-ins need neither.
+  // installations; desktop MCP servers list the computers their users added
+  // them to. Built-ins need none of it.
   const showConnectionsTab = variant !== "builtin" && !isPlaywright;
   const connectionsLayout = useConnectionsLayout({
     item,
@@ -457,10 +472,9 @@ function CatalogItemDetails({
   const spec = useMcpServerSpec({
     item,
     appName,
-    environmentName:
-      variant === "builtin"
-        ? null
-        : (environmentLabel ?? defaultEnvironment.name),
+    environmentName: runsInEnvironment(item.serverType)
+      ? (environmentLabel ?? defaultEnvironment.name)
+      : null,
   });
 
   const tabHref = (tab: DetailTab) =>
@@ -477,11 +491,15 @@ function CatalogItemDetails({
     ? undefined
     : allServersForCatalog.length;
   const connectionsTitle =
-    variant !== "local"
+    variant === "remote" || variant === "builtin"
       ? "Credentials"
-      : isMemberView
-        ? "Installation"
-        : "Installations";
+      : variant === "desktop"
+        ? isMemberView
+          ? "Your device"
+          : DESKTOP_MCP_COPY.section
+        : isMemberView
+          ? "Installation"
+          : "Installations";
   const assignedUsage = useMemo(
     () =>
       deriveAgentUsage({
@@ -565,6 +583,13 @@ function CatalogItemDetails({
   };
 
   const install = useCatalogInstall();
+  // A desktop MCP server runs on the computer of the user who installs it:
+  // its state is the viewer's own installation.
+  const desktopState = useDesktopInstallState({
+    items: [item],
+    // Undefined while they load, so the header shows nothing until then.
+    servers: catalogMcpServers ? allServersForCatalog : undefined,
+  })(item);
 
   // "Chat" spins up (or reuses) a personal agent with this catalog's tools —
   // same flow and visibility gate as the registry card. The gate reads
@@ -602,7 +627,12 @@ function CatalogItemDetails({
       // The wizard's column, so Edit opens in the same one this page reads in.
       maxWidth="wizard"
       icon={<McpCatalogIcon icon={item.icon} catalogId={item.id} size={24} />}
-      title={<span className="block min-w-0 truncate">{item.name}</span>}
+      title={
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 truncate">{item.name}</span>
+          {item.serverType === "desktop_mcp" && <AlphaBadge />}
+        </span>
+      }
       status={
         statusIssue ? undefined : (
           <ServerStatus
@@ -611,6 +641,7 @@ function CatalogItemDetails({
             deploymentFeedState={deploymentFeedState}
             isInstalledForViewer={isInstalledForViewer}
             singleInstallation={isMemberView}
+            desktopState={desktopState}
           />
         )
       }
@@ -626,14 +657,15 @@ function CatalogItemDetails({
       actionButton={
         <div className="flex shrink-0 items-center gap-2">
           {/* Once installed, the next step is a client: the Connect page puts
-              these tools into Claude Code, Cursor and the rest. */}
+              these tools into Claude Code, Cursor and the rest. "a client"
+              keeps it apart from a desktop MCP server's "Connected". */}
           {showChatButton && (
             <Button variant="outline" size="sm" asChild>
               <Link href="/connection">
                 <Cable className="h-4 w-4" />
                 {/* On a phone only the icons show, so the actions still fit
                     beside the title; the names stay for screen readers. */}
-                <span className="max-sm:sr-only">Connect</span>
+                <span className="max-sm:sr-only">Connect a client</span>
               </Link>
             </Button>
           )}
@@ -649,6 +681,14 @@ function CatalogItemDetails({
                 {isChatCreating ? "Creating..." : "Chat"}
               </span>
             </Button>
+          )}
+          {/* The server's own Guardrails rules, for its editors while
+              self-service is on: a step of its own, not an overflow item. */}
+          {canModify && variant !== "builtin" && (
+            <ServerRulesButton catalog={item} variant="outline" size="sm">
+              <OpenAppaIcon />
+              <span className="max-sm:sr-only">{SERVER_RULES_LABEL}</span>
+            </ServerRulesButton>
           )}
           {canModify && effectiveTab !== "yaml" && (
             <Button size="sm" asChild>
@@ -754,7 +794,9 @@ function CatalogItemDetails({
                       : variant === "local"
                         ? getLocalInstallationCopy(item.multitenant === true)
                             .section
-                        : "The credentials this server is used with."
+                        : variant === "desktop"
+                          ? "Each person connects it from their linked device."
+                          : "The credentials this server is used with."
                   }
                 >
                   {reauthServer ? (
@@ -771,18 +813,33 @@ function CatalogItemDetails({
                     <Skeleton className="h-14 w-full rounded-lg" />
                   ) : (
                     <ManageUsersContent
-                      personalOnly={connectionsLayout === "personal"}
+                      // A desktop MCP server always names who has it: each
+                      // install is the server running on one user's computer.
+                      personalOnly={
+                        connectionsLayout === "personal" &&
+                        variant !== "desktop"
+                      }
                       isActive
                       onClose={() => {}}
                       label={item.name}
                       catalogId={item.id}
+                      // A desktop MCP server is installed by each user for
+                      // their own computer: never for a team or the
+                      // organization.
                       onAddPersonalConnection={() =>
                         install.addPersonalConnection(item)
                       }
-                      onAddSharedConnection={(teamId) =>
-                        install.addSharedConnection(item, teamId)
+                      onAddSharedConnection={
+                        variant === "desktop"
+                          ? undefined
+                          : (teamId) =>
+                              install.addSharedConnection(item, teamId)
                       }
-                      onAddOrgConnection={() => install.addOrgConnection(item)}
+                      onAddOrgConnection={
+                        variant === "desktop"
+                          ? undefined
+                          : () => install.addOrgConnection(item)
+                      }
                       deploymentStatuses={deploymentStatuses}
                       hideHeader
                       bodyTestId={E2eTestId.McpServerSettingsConnectionsContent}
@@ -919,12 +976,7 @@ function useMcpServerSpec({
   // `localConfig` is textarea-shaped — `arguments` is one newline-joined
   // string there — so everything factual reads the API's own object.
   const local = item.localConfig;
-  const serverType =
-    item.serverType === "builtin"
-      ? "builtin"
-      : item.serverType === "remote"
-        ? "remote"
-        : "local";
+  const serverType = mcpServerVariant(item.serverType);
   // The runtime treats an unset transport as stdio, so only an explicit
   // streamable-http shows the HTTP label.
   const isHttp = local?.transportType === "streamable-http";
@@ -936,7 +988,9 @@ function useMcpServerSpec({
         ? `Built into ${appName}`
         : serverType === "local"
           ? "Managed deployment"
-          : "External server",
+          : serverType === "desktop"
+            ? "User's device"
+            : "External server",
     environment: environmentName,
     serverUrl:
       serverType === "remote" ? (item.serverUrl ?? undefined) : undefined,
@@ -961,6 +1015,14 @@ function useMcpServerSpec({
     command:
       serverType === "local" && local?.command
         ? [local.command, ...(local.arguments ?? [])]
+        : undefined,
+    desktopCommand:
+      serverType === "desktop"
+        ? (item.desktopConfig?.command ?? undefined)
+        : undefined,
+    desktopUrl:
+      serverType === "desktop"
+        ? (item.desktopConfig?.url ?? undefined)
         : undefined,
     auth: AUTH_METHOD_LABEL[values.authMethod],
     createdBy: item.createdBy ?? null,
@@ -1057,8 +1119,9 @@ function ServerStatus({
   deploymentFeedState,
   isInstalledForViewer,
   singleInstallation,
+  desktopState,
 }: {
-  variant: "builtin" | "local" | "remote";
+  variant: McpServerCardVariant;
   deploymentSummary: DeploymentStatusSummary | null;
   /** Whether pod statuses can arrive at all, and whether any have yet. */
   deploymentFeedState: McpDeploymentFeedState;
@@ -1069,9 +1132,29 @@ function ServerStatus({
    * 0/1 or 1/1: the state alone says it.
    */
   singleInstallation: boolean;
+  /** The viewer's state with a desktop MCP item; null for other items. */
+  desktopState: DesktopMcpInstallState | null;
 }) {
   if (variant === "builtin") {
     return <Badge variant="secondary">Built-in</Badge>;
+  }
+  if (desktopState === "waiting") {
+    return <DesktopMcpWaitingStatus className={typeRole({ role: "body" })} />;
+  }
+  if (desktopState === "no-device") {
+    return <DesktopMcpNoDeviceStatus className={typeRole({ role: "body" })} />;
+  }
+  // The viewer's device is still being read: no claim yet.
+  if (desktopState === "checking") return null;
+  if (desktopState === "installed") {
+    return <DesktopMcpAddedStatus className={typeRole({ role: "body" })} />;
+  }
+  if (desktopState === "not-installed" || desktopState === "unavailable") {
+    return (
+      <span className={typeRole({ role: "body" })}>
+        {DESKTOP_MCP_COPY.notAdded}
+      </span>
+    );
   }
   // Somebody else's connection (visible to an admin) does not install the
   // server for the viewer, however its pod is doing.
@@ -1100,8 +1183,9 @@ function ServerStatus({
   // feed's own state decides what that means, never the absence of an entry
   // — the same rule the list's `installedStatusLabel` follows. A remote
   // server has no pod at all, and the page of an installed server needs no
-  // label that says so, so it shows nothing.
-  if (variant === "remote" || deploymentFeedState === "disabled") {
+  // label that says so, so it shows nothing. Neither has a desktop MCP
+  // server, which runs on its user's computer.
+  if (variant !== "local" || deploymentFeedState === "disabled") {
     return null;
   }
   return (

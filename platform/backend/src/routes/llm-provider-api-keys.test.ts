@@ -2022,6 +2022,33 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     });
   });
 
+  test("refuses to reconnect a GitHub Copilot sign-in once personal subscriptions are off", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "gho_old" } });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "github-copilot",
+      userId: memberUser.id,
+    });
+    await OrganizationModel.patch(organizationId, {
+      modelProviderOverrides: {
+        "github-copilot": { plans: { personal: { hidden: true } } },
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${key.id}/reconnect`,
+      payload: { apiKey: "gho_fresh" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("turned off");
+    const { secretManager } = await import("@/secrets-manager");
+    expect(secretManager().updateSecret).not.toHaveBeenCalled();
+  });
+
   test("404s for another user's personal key", async ({
     makeSecret,
     makeLlmProviderApiKey,
@@ -2212,6 +2239,108 @@ describe("LLM Provider API Keys — providers the organization turned off", () =
       url: `/api/llm-provider-api-keys/${keyId}`,
     });
     expect(removal.statusCode).toBe(200);
+  });
+});
+
+describe("LLM Provider API Keys — GitHub Copilot plans the organization turned off", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    vi.clearAllMocks();
+    setupAdminApp();
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    mockAnthropicWifIsEnabled.mockReturnValue(false);
+
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "admin" });
+
+    app = await createApp(organizationId, user);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const turnOffPlan = async (plan: "personal" | "enterprise") => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/integration-settings",
+      payload: {
+        modelProviderOverrides: {
+          "github-copilot": { plans: { [plan]: { hidden: true } } },
+        },
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+  };
+
+  const createCopilotKey = () =>
+    app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "My Copilot",
+        provider: "github-copilot",
+        apiKey: "gho_personal_token",
+      },
+    });
+
+  test("refuses a personal Copilot sign-in once personal subscriptions are off", async () => {
+    await turnOffPlan("personal");
+
+    const response = await createCopilotKey();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "GitHub Copilot personal subscriptions are turned off",
+    );
+  });
+
+  test("still takes a personal Copilot sign-in when only enterprise plans are off", async () => {
+    await turnOffPlan("enterprise");
+
+    const response = await createCopilotKey();
+
+    expect(response.statusCode, response.body).toBe(200);
+  });
+
+  test("freezes an existing personal Copilot key once personal subscriptions are off, but keeps it deletable", async () => {
+    const created = await createCopilotKey();
+    expect(created.statusCode, created.body).toBe(200);
+    const keyId = created.json().id;
+
+    await turnOffPlan("personal");
+
+    const update = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+      payload: { name: "Renamed" },
+    });
+    expect(update.statusCode).toBe(400);
+
+    const removal = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+    });
+    expect(removal.statusCode).toBe(200);
+  });
+
+  test("leaves a personal Copilot key editable when only enterprise plans are off", async () => {
+    const created = await createCopilotKey();
+    const keyId = created.json().id;
+
+    await turnOffPlan("enterprise");
+
+    const update = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+      payload: { name: "Renamed" },
+    });
+    expect(update.statusCode, update.body).toBe(200);
   });
 });
 

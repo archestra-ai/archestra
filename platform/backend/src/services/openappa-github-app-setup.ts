@@ -26,7 +26,10 @@ import {
   githubFetch,
   isEmptyGithubRepository,
 } from "@/services/openappa-github";
-import { resolveOpenAppaGitlabAccess } from "@/services/openappa-github-access";
+import {
+  resolveOpenAppaGitlabAccess,
+  templateExampleBlob,
+} from "@/services/openappa-github-access";
 import { openappaGitlab } from "@/services/openappa-gitlab";
 import { ApiError } from "@/types";
 import type {
@@ -246,16 +249,29 @@ class OpenAppaGithubAppSetup {
     return Promise.all(
       (await this.githubApps(organizationId)).map(async (app) => {
         try {
-          const installation = await fetchAsGithubApp<Installation>({
-            githubUrl: app.api,
-            appId: app.appId,
-            privateKey: app.privateKey,
-            path: `/app/installations/${encodeURIComponent(app.installationId)}`,
-          });
-          return { id: app.id, account: installation.account?.login ?? null };
+          const asApp = <T>(path: `/app${string}`) =>
+            fetchAsGithubApp<T>({
+              githubUrl: app.api,
+              appId: app.appId,
+              privateKey: app.privateKey,
+              path,
+            });
+          const [installation, profile] = await Promise.all([
+            asApp<Installation>(
+              `/app/installations/${encodeURIComponent(app.installationId)}`,
+            ),
+            // The App's own page on GitHub, so setup can link to it.
+            asApp<{ html_url?: unknown }>("/app").catch(() => null),
+          ]);
+          return {
+            id: app.id,
+            account: installation.account?.login ?? null,
+            url:
+              typeof profile?.html_url === "string" ? profile.html_url : null,
+          };
         } catch (err) {
           logger.warn({ err }, "OpenAPPA could not read a GitHub App account");
-          return { id: app.id, account: null };
+          return { id: app.id, account: null, url: null };
         }
       }),
     );
@@ -341,23 +357,34 @@ class OpenAppaGithubAppSetup {
     if (await isEmptyGithubRepository({ api: app.api, repo, token }))
       return { status: "empty", validations: null };
     const directory = params.validationDirectory ?? VALIDATION_DIRECTORY;
-    if (
+    const fresh =
       !ref &&
       path === "appa.toml" &&
       directory === VALIDATION_DIRECTORY &&
-      found.data.private &&
+      found.data.private;
+    if (
+      fresh &&
       found.data.template_repository?.full_name.toLowerCase() === TEMPLATE_REPO
     )
       return { status: "template", validations: null };
-    const contents = (entry: string) =>
+    const contents = (entry: string, method: "GET" | "HEAD") =>
       get(
         `${app.api}/repos/${repo}/contents/${entry.split("/").map(encodeURIComponent).join("/")}${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`,
-        "HEAD",
+        method,
       );
     const [policy, validations] = await Promise.all([
-      contents(path),
-      contents(directory),
+      contents(path, fresh ? "GET" : "HEAD"),
+      contents(directory, "HEAD"),
     ]);
+    // A private repository holding the template's example unchanged is a
+    // fresh copy too, however it was made: setup seeds it.
+    if (fresh && policy?.ok) {
+      const file = (await policy.json().catch(() => null)) as {
+        sha?: string;
+      } | null;
+      if (file?.sha === templateExampleBlob())
+        return { status: "template", validations: null };
+    }
     return {
       status: policy?.ok ? "policy" : "other",
       validations: !!validations?.ok,
@@ -536,10 +563,16 @@ function manifest(params: { appName: string; seedsWorkflow: boolean }) {
     redirect_url: callbackUrl,
     setup_url: callbackUrl,
     public: false,
-    // Contents and pull requests on the policy repository; it never creates repositories.
+    // Contents and pull requests on the policy repository, and checks on its
+    // pull requests for self-service Guardrails, asked for up front so that
+    // turning self-service on later needs no change to the App. The branch
+    // ruleset that requires the check is the administrator's to import, so
+    // no Administration. Each job's token carries only its own part; it
+    // never creates repositories.
     default_permissions: {
       contents: "write",
       pull_requests: "write",
+      checks: "write",
       metadata: "read",
       ...(params.seedsWorkflow ? { workflows: "write" } : {}),
     },

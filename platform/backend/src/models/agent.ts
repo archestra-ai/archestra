@@ -1636,7 +1636,10 @@ class AgentModel {
 
   static async findRuntimeTargets(organizationId: string) {
     return db
-      .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+      })
       .from(schema.agentsTable)
       .where(
         and(
@@ -3639,12 +3642,16 @@ class AgentModel {
     viewerId: string,
   ): Promise<
     | (AgentAccessContext &
-        Pick<Agent, "agentType" | "name" | "createdByServiceAccountId">)
+        Pick<
+          Agent,
+          "agentType" | "name" | "createdByServiceAccountId" | "environmentId"
+        >)
     | null
   > {
     const [agent] = await db
       .select({
         id: schema.agentsTable.id,
+        environmentId: schema.agentsTable.environmentId,
         organizationId: schema.agentsTable.organizationId,
         scope: schema.agentsTable.scope,
         authorId: schema.agentsTable.authorId,
@@ -4128,6 +4135,7 @@ class AgentModel {
   ): Promise<{
     llmApiKeyId: string | null;
     modelId: string | null;
+    modelPoolId: string | null;
     autoRouterId: string | null;
     runtime: Agent["runtime"];
   } | null> {
@@ -4139,6 +4147,7 @@ class AgentModel {
       .select({
         llmApiKeyId: schema.agentsTable.llmApiKeyId,
         modelId: schema.agentsTable.modelId,
+        modelPoolId: schema.agentsTable.modelPoolId,
         autoRouterId: schema.agentsTable.autoRouterId,
         runtime: schema.agentsTable.runtime,
       })

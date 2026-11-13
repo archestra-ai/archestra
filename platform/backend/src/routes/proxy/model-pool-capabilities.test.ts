@@ -12,6 +12,8 @@ const members = ["small-text", "large-vision", "unknown"].map((modelId) => ({
   providerApiKeyId: "00000000-0000-4000-8000-000000000001",
   provider: "openai" as const,
   modelId,
+  priority: 1,
+  weight: 1,
 }));
 const compatible = (request: unknown, wire: PoolWire = "openai-chat") =>
   compatiblePoolMembers({ members, request, wire });

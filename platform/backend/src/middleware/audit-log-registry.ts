@@ -6,9 +6,12 @@ import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
 import AutoRouterModel from "@/models/auto-router";
+import BlobProviderModel from "@/models/blob-provider";
 import BrowserStorageStateModel from "@/models/browser-storage-state";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
+import CostExportModel from "@/models/cost-export";
+import DesktopDeviceModel from "@/models/desktop-device";
 import DevFeedbackConfigModel from "@/models/dev-feedback-config";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
@@ -200,6 +203,23 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "clientPrivacy",
     action: "clientPrivacy.updated",
     onlyWhenChanged: true,
+  },
+  // A user approving or denying the sign-in of a tunnel client (the handler
+  // sets the snapshots), and removing their device.
+  "/api/desktop-devices/sign-in/:id/decision": {
+    resourceType: "desktopDeviceSignIn",
+    action: "desktopDeviceSignIn.updated",
+  },
+  "/api/desktop-devices/:id": {
+    resourceType: "desktopDevice",
+    fetchById: (id, orgId) => DesktopDeviceModel.findByIdForAudit(id, orgId),
+  },
+  // Start and Stop of one MCP server on the device. The snapshot of the
+  // device holds which of its MCP servers are stopped.
+  "/api/desktop-devices/:id/servers/:catalogId": {
+    resourceType: "desktopDevice",
+    action: "desktopDevice.updated",
+    fetchById: (id, orgId) => DesktopDeviceModel.findByIdForAudit(id, orgId),
   },
   // Disconnecting a client: the resource is the user whose client it was;
   // the snapshot names the client.
@@ -697,6 +717,35 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "credential",
     fetchById: (id, orgId) =>
       RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
+  },
+  // Blob providers (organization object storage destinations)
+  "/api/blob-providers": {
+    resourceType: "blobProvider",
+    fetchById: (id, orgId) => BlobProviderModel.findByIdForAudit(id, orgId),
+  },
+  "/api/blob-providers/:id": {
+    resourceType: "blobProvider",
+    fetchById: (id, orgId) => BlobProviderModel.findByIdForAudit(id, orgId),
+  },
+  "/api/blob-providers/:id/test": {
+    resourceType: "blobProvider",
+    action: "blobProvider.tested",
+    fetchById: (id, orgId) => BlobProviderModel.findByIdForAudit(id, orgId),
+  },
+  // Scheduled cost exports
+  "/api/cost-exports": {
+    resourceType: "costExport",
+    fetchById: (id, orgId) => CostExportModel.findByIdForAudit(id, orgId),
+  },
+  "/api/cost-exports/:id": {
+    resourceType: "costExport",
+    fetchById: (id, orgId) => CostExportModel.findByIdForAudit(id, orgId),
+  },
+  // A run moves the watermark and last-run fields, so before/after shows it.
+  "/api/cost-exports/:id/run": {
+    resourceType: "costExport",
+    action: "costExport.run",
+    fetchById: (id, orgId) => CostExportModel.findByIdForAudit(id, orgId),
   },
   // Stored GitHub personal access tokens
   "/api/github-pats": {

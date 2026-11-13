@@ -61,6 +61,7 @@ type DropdownLlmProviderApiKey = Pick<
       | "requiresReauthentication"
       | "isGithubAppKey"
       | "githubOrganization"
+      | "githubOrganizationName"
     >
   > & {
     connectRequired?: boolean;
@@ -150,6 +151,7 @@ export function LlmProviderApiKeyDropdown({
   onSelectPool,
   autoRouters = [],
 }: LlmProviderApiKeyDropdownProps) {
+  const { enterprisePlanName } = useModelProviderCatalog();
   const selectableKeys = useMemo(
     () =>
       availableKeys.filter(
@@ -244,7 +246,10 @@ export function LlmProviderApiKeyDropdown({
                   />
                   <span className="truncate font-medium">
                     {isOrganizationSubscription(selectedKey)
-                      ? organizationSubscriptionName(selectedKey)
+                      ? organizationSubscriptionName(
+                          selectedKey,
+                          enterprisePlanName,
+                        )
                       : selectedKey.name}
                   </span>
                   {selectedKeyIsSubscription && (
@@ -470,6 +475,7 @@ export function LlmProviderApiKeyDropdown({
                       key.provider,
                       key.name,
                       key.githubOrganization ?? "",
+                      key.githubOrganizationName ?? "",
                       "enterprise plan",
                     ]}
                     disabled={providerFilter?.(key.provider) === false}
@@ -483,7 +489,10 @@ export function LlmProviderApiKeyDropdown({
                       />
                       <div className="flex min-w-0 flex-col">
                         <span className="truncate">
-                          {organizationSubscriptionName(key)}
+                          {organizationSubscriptionName(
+                            key,
+                            enterprisePlanName,
+                          )}
                         </span>
                         <span className="truncate text-xs text-muted-foreground">
                           {organizationSubscriptionSubtitle(key)}

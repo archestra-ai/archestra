@@ -10,6 +10,7 @@ import {
   OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   PROXY_STAMPED_TOOL_ARGUMENTS,
   SELF_FORK_TOOL_NAME,
+  type SupportedProviderDiscriminator,
   slugify,
   TimeInMs,
   TOOL_ASK_USER_SHORT_NAME,
@@ -200,6 +201,7 @@ import {
   agentRunUrl,
   submittedRunNextStep,
 } from "@/services/agent-runtime/run-handle";
+import { callerHasCandidateRuntimeSubagents } from "@/services/agent-subagent-exclusions";
 import {
   breakTheGlassActiveIn,
   getGuardrailsDeployment,
@@ -255,6 +257,7 @@ type AppaPluginBinding = {
   reportingRecovery?: boolean;
   reportingRefusal?: string;
   session: OpenAppaSession;
+  profileId: string;
   identity: AppaTrustedContext["toolIdentity"];
   adapter: AppaClientAdapter | undefined;
   request: AppaTrustedContext["request"];
@@ -281,6 +284,8 @@ type AppaPluginBinding = {
   requiresQuestionContinuation: boolean;
   /** A remedy notice requires an immediate control-tool call. */
   requiresRemedyContinuation: boolean;
+  /** The ruling that continuation answers, recorded once the guidance goes out. */
+  pendingRemedyContinuation?: RemedyContinuation;
   /** Offers whose first control call requested a native client review. */
   pendingHitlReviewOfferIds: string[];
   /** Verified native answers that must control the next model action. */
@@ -315,6 +320,8 @@ type AppaRequestShape = AppaRetainedShape &
 /** A request of a governed session, seen while enforcement is off. */
 type AppaPluginObserver = {
   session: OpenAppaSession;
+  profileId: string;
+  chat: boolean;
   adapter: AppaClientAdapter | undefined;
   identity: AppaTrustedContext["toolIdentity"];
   requestBody: unknown;
@@ -416,6 +423,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     });
     const binding: AppaPluginBinding = {
       session: trajectory.session,
+      profileId: trustedContext.profileId,
       identity: trustedContext.toolIdentity,
       adapter: trajectory.adapter,
       request: trustedContext.request,
@@ -932,13 +940,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           offers: [],
         };
     }
-    binding.requiresRemedyContinuation = await hasRemedyOfferResult({
+    binding.pendingRemedyContinuation = await hasRemedyOfferResult({
       binding,
+      session: this.governedSession(binding),
       interactionType: context.interactionType,
       results: toolResults,
       toolResultUpdates: result.toolResultUpdates,
       verifiedNativeQuestionResults,
     });
+    binding.requiresRemedyContinuation =
+      binding.pendingRemedyContinuation !== undefined;
     // A denied call's receipt is history, not withheld output: waiving it
     // would disable enforcement just because a client replayed an old block.
     // Keep those receipts even when a separate result admission is waived.
@@ -1097,7 +1108,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       }
     }
     if (binding?.compaction) return;
-    if (binding?.adapter?.id === "grok-build" && !binding.reportingRecovery) {
+    if (
+      binding?.adapter?.id === "grok-build" &&
+      !binding.reportingRecovery &&
+      !grokUsesDirectGatewayTools(binding)
+    ) {
       insertRequestGuidance({
         request: context.request,
         interactionType: context.interactionType,
@@ -1149,6 +1164,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         onContinue: binding.threadContinue ? "turn" : undefined,
       });
       requireCodexToolCall({ binding, context });
+      const delivered = binding.pendingRemedyContinuation;
+      binding.pendingRemedyContinuation = undefined;
+      if (delivered) {
+        await recordRemedyContinuation({
+          session: this.governedSession(binding),
+          continuation: delivered,
+        });
+      }
     }
     if (binding && binding.nativeHitlRulings.length > 0) {
       const rulings = binding.nativeHitlRulings;
@@ -1718,6 +1741,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const policy = sharedPolicy(session.organization_id);
     const runtimeCalls = await resolveRuntimeCalls({
       organizationId: binding.session.organization_id,
+      profileId: binding.profileId,
+      callerId: binding.session.caller_id,
+      chat: binding.chat,
+      identity: binding.identity,
       calls: calls.filter((call) => !blockedTranscriptCalls.has(call.id)),
       resolution: this.resolution(binding),
     });
@@ -2891,6 +2918,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       if (started !== "governed") return;
       this.observers.set(context.resources, {
         session,
+        profileId: trustedContext.profileId,
+        chat: trustedContext.chatSource !== undefined,
         adapter,
         identity: trustedContext.toolIdentity,
         requestBody: context.requestBody,
@@ -3282,6 +3311,110 @@ function unansweredNoticeKey(params: {
   );
 }
 
+/** A ruling whose remedy continuation is due, and how much history followed it. */
+type RemedyContinuation = {
+  callId: string;
+  /** Results after the ruling in the request that carried it. */
+  laterResults: number;
+};
+
+/**
+ * Result counts after a ruling at which its continuation was delivered, as
+ * sorted, disjoint, non-adjacent `[first, last]` ranges. A request is only
+ * guided at a count below every guided one (or at a guided one), so replays
+ * of ever shorter histories form one range: the record stays small without
+ * dropping any guided history.
+ */
+type GuidedHistories = Array<[number, number]>;
+
+/**
+ * Records that the history `continuation` describes was told to apply the
+ * ruling's plan. Every guided history is kept, so a replay of any of them is
+ * guided again, and overlapping requests cannot drop each other's record.
+ */
+async function recordRemedyContinuation(params: {
+  session: OpenAppaSession;
+  continuation: RemedyContinuation;
+}): Promise<void> {
+  const key = remedyContinuationDeliveredKey({
+    session: params.session,
+    callId: params.continuation.callId,
+  });
+  const { laterResults } = params.continuation;
+  try {
+    await cacheManager.withLock(key, async (cache) => {
+      const guided = guidedHistories(await cache.get<unknown>(key));
+      if (isGuidedHistory(guided, laterResults)) return;
+      await cache.set(
+        key,
+        withGuidedHistory(guided, laterResults),
+        TimeInMs.Day,
+      );
+    });
+  } catch (err) {
+    // Without the record the next request is guided once more, as before.
+    logger.warn(
+      { err, sessionId: params.session.session_id },
+      "OpenAPPA could not record a delivered remedy continuation",
+    );
+  }
+}
+
+/** Reads a stored record; anything malformed counts as no record. */
+function guidedHistories(value: unknown): GuidedHistories {
+  if (!Array.isArray(value)) return [];
+  const ranges: GuidedHistories = [];
+  for (const range of value) {
+    if (
+      !Array.isArray(range) ||
+      range.length !== 2 ||
+      !Number.isInteger(range[0]) ||
+      !Number.isInteger(range[1]) ||
+      range[0] < 0 ||
+      range[1] < range[0]
+    )
+      return [];
+    ranges.push([range[0], range[1]]);
+  }
+  return ranges.reduce(withGuidedRange, []);
+}
+
+function isGuidedHistory(guided: GuidedHistories, count: number): boolean {
+  return guided.some(([first, last]) => first <= count && count <= last);
+}
+
+function withGuidedHistory(
+  guided: GuidedHistories,
+  count: number,
+): GuidedHistories {
+  return withGuidedRange(guided, [count, count]);
+}
+
+/** Inserts `range`, merging it with ranges it overlaps or touches. */
+function withGuidedRange(
+  guided: GuidedHistories,
+  range: [number, number],
+): GuidedHistories {
+  const merged: GuidedHistories = [];
+  for (const [first, last] of [...guided, range].sort((a, b) => a[0] - b[0])) {
+    const previous = merged.at(-1);
+    if (previous && first <= previous[1] + 1)
+      previous[1] = Math.max(previous[1], last);
+    else merged.push([first, last]);
+  }
+  return merged;
+}
+
+function remedyContinuationDeliveredKey(params: {
+  session: OpenAppaSession;
+  callId: string;
+}): AllowedCacheKey {
+  return sessionScopedCacheKey(
+    CacheKey.OpenAppaRemedyContinuationDelivered,
+    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
+  );
+}
+
 function notLoadedRulingKey(params: {
   session: OpenAppaSession;
   callId: string;
@@ -3438,6 +3571,7 @@ async function correlatedClaudeTeammateId(
 type RuntimeCall = {
   action: string;
   args: Record<string, unknown>;
+  gatewayId?: string;
   wrapper?: Record<string, unknown>;
   stringArgs?: boolean;
   spawn: boolean;
@@ -3500,6 +3634,10 @@ function signedCall(params: {
 
 async function resolveRuntimeCalls(params: {
   organizationId: string;
+  profileId: string;
+  callerId?: string;
+  chat?: boolean;
+  identity: AppaTrustedContext["toolIdentity"];
   calls: readonly ToolCall[];
   resolution: ToolNameResolution;
 }): Promise<Map<string, RuntimeCall>> {
@@ -3521,9 +3659,14 @@ async function resolveRuntimeCalls(params: {
     // run_tool refuses tool_args it cannot read, so that call never runs and
     // gets no proof.
     if (wrapper && !readRunToolArgs(wrapper.tool_args)) continue;
+    const gatewayId = params.identity.attestationOf(
+      call.name,
+      call.namespace,
+    )?.gatewayId;
     result.set(call.id, {
       action,
       args,
+      ...(gatewayId ? { gatewayId } : {}),
       spawn: false,
       ...(wrapper
         ? { wrapper, stringArgs: typeof wrapper.tool_args === "string" }
@@ -3538,6 +3681,9 @@ async function resolveRuntimeCalls(params: {
     )
   ) {
     const { organizationId } = params;
+    const actorUserId = params.callerId?.startsWith("user:")
+      ? params.callerId.slice("user:".length)
+      : undefined;
     const [runtimeTargets, spawnTargets] = await Promise.all([
       AgentModel.findRuntimeTargets(organizationId),
       AgentModel.findSpawnTargets(organizationId),
@@ -3557,13 +3703,37 @@ async function resolveRuntimeCalls(params: {
         (target) => `${AGENT_TOOL_PREFIX}${slugify(target.name)}`,
       ),
     ]);
+    const candidatePoolByCaller = new Map<string, Promise<boolean>>();
+    const hasCandidateSubagents = (callerAgentId: string): Promise<boolean> => {
+      let cached = candidatePoolByCaller.get(callerAgentId);
+      if (!cached) {
+        cached = callerHasCandidateRuntimeSubagents({
+          callerAgentId,
+          organizationId,
+          actorUserId,
+        });
+        candidatePoolByCaller.set(callerAgentId, cached);
+      }
+      return cached;
+    };
     for (const call of result.values()) {
-      call.spawn =
-        call.action === TOOL_START_AGENT_RUN_SHORT_NAME
-          ? typeof call.args.agent_id === "string" &&
-            (ids.has(call.args.agent_id) ||
-              runtimeNames.has(call.args.agent_id))
-          : names.has(call.action);
+      if (call.action === TOOL_START_AGENT_RUN_SHORT_NAME) {
+        const rawAgentId =
+          typeof call.args.agent_id === "string"
+            ? call.args.agent_id.trim()
+            : null;
+        if (rawAgentId && rawAgentId.length > 0) {
+          call.spawn = ids.has(rawAgentId) || runtimeNames.has(rawAgentId);
+        } else if (call.args.agent_id === undefined || rawAgentId === "") {
+          call.spawn = await hasCandidateSubagents(
+            call.gatewayId ?? params.profileId,
+          );
+        } else {
+          call.spawn = false;
+        }
+      } else {
+        call.spawn = names.has(call.action);
+      }
     }
   }
   return result;
@@ -4586,6 +4756,10 @@ async function signObservedRuntimeCalls(
   try {
     const runtimeCalls = await resolveRuntimeCalls({
       organizationId: observer.session.organization_id,
+      profileId: observer.profileId,
+      callerId: observer.session.caller_id,
+      chat: observer.chat,
+      identity: observer.identity,
       calls,
       resolution: toolNameResolution(observer),
     });
@@ -7121,18 +7295,25 @@ async function recordNativeHitlRulings(params: {
       }
       continue;
     }
-    const reading = parse(
-      {
-        content:
-          typeof answer.content === "string"
-            ? answer.content
-            : JSON.stringify(answer.content ?? null),
-        ...(typeof answer.isError === "boolean"
-          ? { isError: answer.isError }
-          : {}),
-      },
-      asked,
-    );
+    const answerResult = {
+      content:
+        typeof answer.content === "string"
+          ? answer.content
+          : JSON.stringify(answer.content ?? null),
+      ...(typeof answer.isError === "boolean"
+        ? { isError: answer.isError }
+        : {}),
+    };
+    const currentReading = parse(answerResult, asked);
+    // A question issued before the heading lost its brand can still be
+    // answered for HITL_QUESTION_TTL_MS after a deploy.
+    const reading =
+      currentReading === "unrecognized"
+        ? parse(answerResult, {
+            ...asked,
+            question: `[OpenAPPA] ${asked.question}`,
+          })
+        : currentReading;
     if (reading === "unrecognized") {
       // A client version may word its answer differently. Nothing is read
       // from it; a client with forms is asked again there. A known no-answer
@@ -7854,15 +8035,23 @@ async function reviewQuestionAskedBefore(params: {
   return false;
 }
 
+/**
+ * The ruling the next request must answer with a remedy call, if any: the
+ * latest blocked result with an offer, unless a control call or a user
+ * answer already followed it, or the model already went on after reading
+ * it. Without that last check a declined offer would be put to the model
+ * again on every later request of the turn.
+ */
 async function hasRemedyOfferResult(params: {
   binding: AppaPluginBinding;
+  session: OpenAppaSession;
   interactionType: string;
   results: LlmProxyToolResultsContext["toolResults"];
   toolResultUpdates: Awaited<
     ReturnType<typeof processProxyResults>
   >["toolResultUpdates"];
   verifiedNativeQuestionResults: ReadonlyMap<object, NativeQuestionClaim>;
-}): Promise<boolean> {
+}): Promise<RemedyContinuation | undefined> {
   // Restored notice IDs are client-carried structure, not proof of issuance.
   // The runtime must supply the ruling and this session must own its call.
   const session = params.binding.session;
@@ -7975,7 +8164,7 @@ async function hasRemedyOfferResult(params: {
     return [index];
   });
   const latestBlockedResult = blocked.at(-1) ?? -1;
-  if (latestBlockedResult < 0) return false;
+  if (latestBlockedResult < 0) return undefined;
 
   const control = params.binding.request.tools?.control;
   for (
@@ -7988,7 +8177,7 @@ async function hasRemedyOfferResult(params: {
       params.verifiedNativeQuestionResults.has(result) ||
       isUserQuestionResult({ binding: params.binding, answer: result })
     )
-      return false;
+      return undefined;
     if (!control) continue;
     if (
       isSpecialToolMember(
@@ -8002,10 +8191,42 @@ async function hasRemedyOfferResult(params: {
         "control",
       )
     ) {
-      return false;
+      return undefined;
     }
   }
-  return true;
+  const continuation = {
+    callId: withoutTrajectoryStamp(params.results[latestBlockedResult].id),
+    laterResults: params.results.length - 1 - latestBlockedResult,
+  };
+  const guided = guidedHistories(
+    await cacheManager.get<unknown>(
+      remedyContinuationDeliveredKey({
+        session: params.session,
+        callId: continuation.callId,
+      }),
+    ),
+  );
+  if (
+    guided.length > 0 &&
+    !isGuidedHistory(guided, continuation.laterResults) &&
+    continuation.laterResults > guided[0][0]
+  ) {
+    // The model read the guided ruling and went on with other calls: the
+    // plan it declined is not put to it again. A history that was guided
+    // before, or one shorter than any guided one, is guided (again), so a
+    // client retry gets the same request it sent. A new ruling arms the
+    // nudge again.
+    logger.debug(
+      {
+        sessionId: params.session.session_id,
+        toolCallId: continuation.callId,
+        laterResults: continuation.laterResults,
+      },
+      "OpenAPPA remedy continuation already answered; the model went on",
+    );
+    return undefined;
+  }
+  return continuation;
 }
 
 function reviewStatusInstruction(
@@ -8311,15 +8532,42 @@ function requestCarriesContract(params: {
   }
 }
 
+type NativeAppaGuidanceWire =
+  | "anthropic:messages"
+  | "openai:responses"
+  | "openai:chatCompletions"
+  | "chatCompletions:noDeveloper";
+
+/**
+ * Governed Chat Completions providers that reject `role: "developer"` and must
+ * receive OpenAPPA guidance in the leading `system` prompt or last `user` turn.
+ * All other governed interaction types fall back to `appaWireFamily`.
+ */
+const CHAT_COMPLETIONS_NO_DEVELOPER: ReadonlySet<SupportedProviderDiscriminator> =
+  new Set(["kimi-code:chatCompletions", "xai:chatCompletions"]);
+
+function nativeAppaGuidanceWire(
+  interactionType: string,
+): NativeAppaGuidanceWire | undefined {
+  if (
+    CHAT_COMPLETIONS_NO_DEVELOPER.has(
+      interactionType as SupportedProviderDiscriminator,
+    )
+  ) {
+    return "chatCompletions:noDeveloper";
+  }
+  return appaWireFamily(interactionType);
+}
+
 function requestCarriesInstruction(params: {
   request: unknown;
   interactionType: string;
   text: string;
 }): boolean {
   const { request, text } = params;
-  const interactionType = appaWireFamily(params.interactionType);
-  if (!isRecord(request)) return false;
-  if (interactionType === "openai:responses") {
+  const wire = nativeAppaGuidanceWire(params.interactionType);
+  if (!wire || !isRecord(request)) return false;
+  if (wire === "openai:responses") {
     return (
       Array.isArray(request.input) &&
       request.input.some(
@@ -8336,7 +8584,7 @@ function requestCarriesInstruction(params: {
       )
     );
   }
-  if (interactionType === "anthropic:messages") {
+  if (wire === "anthropic:messages") {
     if (Array.isArray(request.system)) {
       return request.system.some(
         (block) =>
@@ -8344,6 +8592,12 @@ function requestCarriesInstruction(params: {
       );
     }
     return typeof request.system === "string" && request.system.includes(text);
+  }
+  if (wire === "chatCompletions:noDeveloper") {
+    return (
+      Array.isArray(request.messages) &&
+      leadingSystemCarries(request.messages, text)
+    );
   }
   return false;
 }
@@ -8363,16 +8617,23 @@ function insertRequestGuidance(params: {
   onContinue?: "skip";
 }): void {
   const { request, guidance } = params;
-  const interactionType = appaWireFamily(params.interactionType);
+  const wire = nativeAppaGuidanceWire(params.interactionType);
+  if (!wire) return;
   if (
-    interactionType !== "openai:responses" ||
+    wire !== "openai:responses" ||
     !isRecord(request) ||
     !Array.isArray(request.input)
   ) {
     appendQuestionContinuation({ ...params, scope: "request" });
     return;
   }
-  if (requestCarriesInstruction({ request, interactionType, text: guidance })) {
+  if (
+    requestCarriesInstruction({
+      request,
+      interactionType: params.interactionType,
+      text: guidance,
+    })
+  ) {
     return;
   }
   const input = request.input;
@@ -8406,14 +8667,16 @@ function appendQuestionContinuation(params: {
   onContinue?: "skip" | "turn";
 }): void {
   const guidance = params.guidance ?? QUESTION_CONTINUATION_GUIDANCE;
-  const interactionType = appaWireFamily(params.interactionType);
-  if (!isRecord(params.request)) return;
+  const wire = nativeAppaGuidanceWire(params.interactionType);
+  if (!wire || !isRecord(params.request)) return;
   if (params.onContinue === "skip") return;
   if (params.onContinue === "turn") {
-    appendToLastUserTurn(params.request, guidance);
+    appendToLastUserTurn(params.request, guidance, {
+      plainText: wire === "chatCompletions:noDeveloper",
+    });
     return;
   }
-  if (interactionType === "openai:responses") {
+  if (wire === "openai:responses") {
     let input: unknown[];
     if (typeof params.request.input === "string") {
       input = [
@@ -8452,15 +8715,15 @@ function appendQuestionContinuation(params: {
     }
     return;
   }
-  if (interactionType === "openai:chatCompletions") {
+  if (wire === "openai:chatCompletions") {
     const messages = params.request.messages;
     if (!Array.isArray(messages)) return;
     if (
       messages.some(
-        (message) =>
-          isRecord(message) &&
-          message.role === "developer" &&
-          message.content === guidance,
+        (item) =>
+          isRecord(item) &&
+          item.role === "developer" &&
+          item.content === guidance,
       )
     ) {
       return;
@@ -8471,7 +8734,18 @@ function appendQuestionContinuation(params: {
     });
     return;
   }
-  if (interactionType === "anthropic:messages") {
+  if (wire === "chatCompletions:noDeveloper") {
+    // Kimi and xAI Chat Completions reject `developer`; fixed guidance merges
+    // into the leading `system` prompt and transient turn guidance trails in
+    // the user turn after the cached prefix.
+    if (params.scope === "request") {
+      mergeLeadingSystemMessage(params.request, guidance);
+      return;
+    }
+    appendToLastUserTurn(params.request, guidance, { plainText: true });
+    return;
+  }
+  if (wire === "anthropic:messages") {
     // Keep transient guidance after the cached prefix. Changing system would
     // invalidate all cached messages, including signed thinking blocks.
     if (params.scope !== "request") {
@@ -8496,18 +8770,28 @@ function appendQuestionContinuation(params: {
   }
 }
 
-/** Adds turn guidance without placing user text after native SDK control frames. */
+/** Adds turn guidance without placing user text before leading system prompts or after native SDK control frames. */
 function appendToLastUserTurn(
   request: Record<string, unknown>,
   text: string,
+  options?: { plainText?: boolean },
 ): void {
   const messages = request.messages;
   if (!Array.isArray(messages)) return;
+  let conversationStart = 0;
+  while (
+    conversationStart < messages.length &&
+    isRecord(messages[conversationStart]) &&
+    (messages[conversationStart].role === "system" ||
+      messages[conversationStart].role === "developer")
+  ) {
+    conversationStart++;
+  }
   let index = messages.length - 1;
   // Native SDKs can end a turn with system control messages. They must remain
   // last (or immediately before an assistant); they are not conversation turns.
   while (
-    index >= 0 &&
+    index >= conversationStart &&
     isRecord(messages[index]) &&
     messages[index].role === "system"
   )
@@ -8516,17 +8800,23 @@ function appendToLastUserTurn(
   if (!isRecord(last) || last.role !== "user") {
     messages.splice(index + 1, 0, {
       role: "user",
-      content: [{ type: "text", text }],
+      content: options?.plainText ? text : [{ type: "text", text }],
     });
     return;
   }
   if (last.content === text) return;
-  if (typeof last.content === "string")
+  if (typeof last.content === "string") {
+    if (options?.plainText) {
+      if (last.content.includes(text)) return;
+      last.content =
+        last.content.length > 0 ? `${last.content}\n\n${text}` : text;
+      return;
+    }
     last.content = [
       { type: "text", text: last.content },
       { type: "text", text },
     ];
-  else if (Array.isArray(last.content)) {
+  } else if (Array.isArray(last.content)) {
     if (
       !last.content.some(
         (block) =>
@@ -8534,7 +8824,9 @@ function appendToLastUserTurn(
       )
     )
       last.content.push({ type: "text", text });
-  } else last.content = [{ type: "text", text }];
+  } else {
+    last.content = options?.plainText ? text : [{ type: "text", text }];
+  }
 }
 
 /** Prevents Codex from converting a required HITL workflow step into prose. */
@@ -8698,4 +8990,24 @@ function restoreSoftBlockRequest(target: unknown, original: unknown): void {
     delete (target as Record<string, unknown>)[key];
   if (Array.isArray(target)) target.length = 0;
   Object.assign(target, original);
+}
+
+/**
+ * Agent Runtime's `archestra-grok-llm` strips Grok's `search_tool`/`use_tool`
+ * dispatchers and declares gateway tools directly, so deferred-MCP instructions
+ * do not apply.
+ */
+function grokUsesDirectGatewayTools(binding: AppaPluginBinding): boolean {
+  const hasDeferredDispatchers = ["search_tool", "use_tool"].every((name) =>
+    binding.request.declaredTools.some(
+      (tool) => tool.name === name && !tool.namespace,
+    ),
+  );
+  if (hasDeferredDispatchers) return false;
+  return (
+    binding.runtimeSessionId !== undefined ||
+    binding.request.declaredTools.some(
+      (tool) => !tool.namespace && tool.name.includes("__"),
+    )
+  );
 }

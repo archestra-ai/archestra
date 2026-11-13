@@ -276,6 +276,14 @@ export interface OfferReviewOutput {
    * values cannot.
    */
   arguments?: string
+  /**
+   * The review's coverage items as JSON text. Absent means unknown (a
+   * review stored before the runtime typed it, or one that joins several
+   * authorities), so show `text`; `[]` means the ruling accepts nothing else.
+   */
+  scope?: string
+  /** The ruling authority's own hint to the reviewer, when it declares one. */
+  hint?: string
 }
 
 /**

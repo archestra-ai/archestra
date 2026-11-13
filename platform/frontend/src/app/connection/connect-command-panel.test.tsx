@@ -3201,7 +3201,7 @@ describe("setup choices on the approval page", () => {
         screen.getByRole("option", { name: /Personal subscription/ }),
       ).toHaveTextContent("Your own GitHub Copilot sign-in");
       const plan = screen.getByRole("option", {
-        name: /Enterprise plan · acme/,
+        name: /GitHub Copilot acme/,
       });
       expect(plan).toHaveTextContent("Billed to acme on GitHub");
       await user.click(plan);
@@ -3214,11 +3214,81 @@ describe("setup choices on the approval page", () => {
           }),
         ),
       );
+      // The plan's name already says GitHub Copilot, so the summary is just it.
       expect(
-        screen.getByText("GitHub Copilot · Enterprise plan · acme"),
-      ).toBeInTheDocument();
+        screen.getByRole("switch", { name: "Model routing" }).parentElement,
+      ).toHaveTextContent(/^Model routingGitHub Copilot acme$/);
     } finally {
       finish();
+    }
+  });
+
+  it("offers each GitHub Copilot account only while its own plan is on", async () => {
+    const own = {
+      id: "copilot-own",
+      provider: "github-copilot",
+      name: "GitHub Copilot",
+      isPrimary: true,
+      isGithubAppKey: false,
+      githubOrganization: null,
+    };
+    const plan = {
+      id: "copilot-plan",
+      provider: "github-copilot",
+      name: "GitHub Copilot (acme)",
+      isPrimary: false,
+      isGithubAppKey: true,
+      githubOrganization: "acme",
+      githubOrganizationName: "Acme Inc",
+    };
+    const user = userEvent.setup();
+    for (const [turnedOff, bound, shown, hidden] of [
+      [
+        "enterprise",
+        undefined,
+        "GitHub Copilot · Personal subscription",
+        /Acme Inc/,
+      ],
+      [
+        "personal",
+        "copilot-plan",
+        "GitHub Copilot Acme Inc",
+        /Personal subscription/,
+      ],
+    ] as const) {
+      vi.mocked(useOrganization).mockReturnValue({
+        data: {
+          modelProviderOverrides: {
+            "github-copilot": { plans: { [turnedOff]: { hidden: true } } },
+          },
+        },
+      } as unknown as ReturnType<typeof useOrganization>);
+      availableKeysMock.mockReturnValue({ data: [own, plan] });
+      const { finish } = renderApproval({
+        client: findClient("copilot-cli"),
+        urlProvider: "github-copilot",
+      });
+      try {
+        await waitFor(() =>
+          expect(createSetupMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+              provider: "github-copilot",
+              providerApiKeyId: bound,
+            }),
+          ),
+        );
+        await user.click(screen.getByRole("button", { name: /Setup options/ }));
+        expect(screen.getByText(shown)).toBeInTheDocument();
+        expect(screen.queryByText(hidden)).toBeNull();
+        // The one account left is no choice.
+        expect(
+          screen.queryByRole("combobox", { name: "GitHub Copilot account" }),
+        ).toBeNull();
+      } finally {
+        finish();
+        cleanup();
+        createSetupMock.mockClear();
+      }
     }
   });
 
@@ -3250,13 +3320,117 @@ describe("setup choices on the approval page", () => {
         ),
       );
       await user.click(screen.getByRole("button", { name: /Setup options/ }));
-      expect(
-        screen.getByText("GitHub Copilot · Enterprise plan · acme"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("GitHub Copilot acme")).toBeInTheDocument();
       // One account is no choice.
       expect(
         screen.queryByRole("combobox", { name: "GitHub Copilot account" }),
       ).toBeNull();
+    } finally {
+      finish();
+    }
+  });
+
+  it("waits for the user to pick one of several organizations' plans before preparing a setup", async () => {
+    const plan = (organization: string, organizationName: string) => ({
+      id: `copilot-plan-${organization}`,
+      provider: "github-copilot",
+      name: `GitHub Copilot (${organization})`,
+      isPrimary: false,
+      isGithubAppKey: true,
+      githubOrganization: organization,
+      githubOrganizationName: organizationName,
+    });
+    availableKeysMock.mockReturnValue({
+      data: [plan("acme", "Acme"), plan("acme-labs", "Acme Labs")],
+    });
+    const user = userEvent.setup();
+    const { finish } = renderApproval({
+      client: findClient("copilot-cli"),
+      urlProvider: "github-copilot",
+    });
+    try {
+      // No plan is taken for the user: Setup options open as required.
+      expect(
+        await screen.findByRole("button", { name: /Setup options/ }),
+      ).toHaveTextContent("required");
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Choose the GitHub Copilot account this setup uses in Setup options. Each organization's plan is billed for its own requests.",
+      );
+      expect(
+        screen.getByRole("button", { name: /Approve connection/ }),
+      ).toBeDisabled();
+      expect(createSetupMock).not.toHaveBeenCalled();
+
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "GitHub Copilot account" }),
+        { key: "ArrowDown" },
+      );
+      await user.click(
+        screen.getByRole("option", { name: /GitHub Copilot Acme Labs/ }),
+      );
+
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            provider: "github-copilot",
+            providerApiKeyId: "copilot-plan-acme-labs",
+          }),
+        ),
+      );
+      expect(createSetupMock).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByRole("combobox", { name: "GitHub Copilot account" }),
+      ).toHaveTextContent("GitHub Copilot Acme Labs");
+      expect(screen.queryByRole("alert")).toBeNull();
+    } finally {
+      finish();
+    }
+  });
+
+  it("asks for a pick between organizations' plans when personal subscriptions are off, even with a sign-in", async () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          "github-copilot": { plans: { personal: { hidden: true } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+    const plan = (organization: string, organizationName: string) => ({
+      id: `copilot-plan-${organization}`,
+      provider: "github-copilot",
+      name: `GitHub Copilot (${organization})`,
+      isPrimary: false,
+      isGithubAppKey: true,
+      githubOrganization: organization,
+      githubOrganizationName: organizationName,
+    });
+    availableKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "copilot-own",
+          provider: "github-copilot",
+          name: "GitHub Copilot",
+          isPrimary: true,
+          isGithubAppKey: false,
+          githubOrganization: null,
+        },
+        plan("acme", "Acme"),
+        plan("acme-labs", "Acme Labs"),
+      ],
+    });
+    const { finish } = renderApproval({
+      client: findClient("copilot-cli"),
+      urlProvider: "github-copilot",
+    });
+    try {
+      // The sign-in's plan is off, so it is not bound in place of a pick.
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Choose the GitHub Copilot account this setup uses in Setup options.",
+      );
+      expect(
+        screen.getByRole("combobox", { name: "GitHub Copilot account" }),
+      ).toHaveTextContent("Choose an account");
+      expect(createSetupMock).not.toHaveBeenCalled();
     } finally {
       finish();
     }
@@ -3541,7 +3715,7 @@ describe("setup choices on the approval page", () => {
         { key: "ArrowDown" },
       );
       await user.click(
-        screen.getByRole("option", { name: /Enterprise plan · acme/ }),
+        screen.getByRole("option", { name: /GitHub Copilot acme/ }),
       );
       // The plan's own list, and the newest GPT line as its default.
       await waitFor(() =>
@@ -3554,7 +3728,7 @@ describe("setup choices on the approval page", () => {
       );
       expect(
         screen.getByText(/Saved as Copilot CLI's model by the setup script/),
-      ).toHaveTextContent("the models your Enterprise plan · acme serves.");
+      ).toHaveTextContent("the models your GitHub Copilot acme serves.");
       expect(screen.queryByPlaceholderText("Model id")).toBeNull();
     } finally {
       finish();

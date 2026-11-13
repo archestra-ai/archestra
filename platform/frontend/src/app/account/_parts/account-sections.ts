@@ -12,4 +12,6 @@ export const accountSections = [
   { label: "Credentials", href: "/account/credentials" },
   { label: "API Keys", href: "/account/api-keys" },
   { label: "Sessions", href: "/account/sessions" },
+  // One device per user, so the tab is singular.
+  { label: "Device", href: "/account/devices" },
 ];

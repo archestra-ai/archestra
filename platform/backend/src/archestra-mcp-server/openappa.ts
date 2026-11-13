@@ -38,7 +38,6 @@ import {
   parseCurrentTrajectory,
 } from "@/openappa/current-trajectory";
 import {
-  acceptedCoverage,
   type ClosedHitlReviewOutcome,
   clearHitlReview,
   closureFromReviewOutcome,
@@ -63,6 +62,7 @@ import {
   verifyPeerProof,
 } from "@/openappa/peer-claims";
 import {
+  acceptedScope,
   displayedReview,
   reviewedCallArguments,
   reviewedToolLabel,
@@ -170,6 +170,7 @@ import {
   structuredSuccessResult,
   successResult,
 } from "./helpers";
+import * as serverRules from "./openappa-server-rules";
 import { filterToolNamesByPermission } from "./rbac";
 import type { ArchestraContext } from "./types";
 
@@ -1367,6 +1368,8 @@ const registry = defineArchestraTools([
               const stagedReview = {
                 offerId: remedy.offer_id,
                 text: review.text,
+                scope: review.scope ?? null,
+                ...(review.hint ? { hint: review.hint } : {}),
                 ...(review.tool ? { tool: review.tool } : {}),
                 ...(review.arguments ? { arguments: review.arguments } : {}),
                 ...(toolDescription ? { toolDescription } : {}),
@@ -1410,7 +1413,7 @@ const registry = defineArchestraTools([
                 });
                 const shown = displayedReview(review);
                 const shownArguments = reviewedCallArguments(shown);
-                const accepted = acceptedCoverage(shown.text);
+                const accepted = acceptedScope(shown.scope);
                 const outcome = await context.elicitation.elicit({
                   toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
                   message: prepared?.question ?? shown.text,
@@ -1424,7 +1427,9 @@ const registry = defineArchestraTools([
                           : shown.arguments,
                       }
                     : {}),
-                  ...(accepted?.length ? { reviewedCoverage: accepted } : {}),
+                  ...(accepted
+                    ? { reviewedCoverage: accepted }
+                    : { reviewedText: shown.text }),
                 });
                 if (outcome.status === "answered") {
                   const parsed = parseHitlRuling(outcome.result);
@@ -1603,11 +1608,15 @@ const registry = defineArchestraTools([
   }),
 ] as const);
 
-export const toolEntries = registry.toolEntries;
-export const tools = registry.tools;
+// A server's own rules are OpenAPPA tools too, defined beside their service.
+export const toolEntries = {
+  ...registry.toolEntries,
+  ...serverRules.toolEntries,
+};
+export const tools = [...registry.tools, ...serverRules.tools];
 
 const OPENAPPA_TOOL_SHORT_NAMES: ReadonlySet<string | null | undefined> =
-  new Set(registry.toolShortNames);
+  new Set([...registry.toolShortNames, ...serverRules.toolShortNames]);
 
 export function isOpenappaTool(shortName: string | null | undefined): boolean {
   return OPENAPPA_TOOL_SHORT_NAMES.has(shortName);
@@ -2392,8 +2401,9 @@ function supersededReview(result: CallToolResult): CallToolResult {
 
 /**
  * The runtime's words for an offer that no longer stands. Contract: these are
- * OpenAPPA's display texts for `RemedyRefusal::UnknownOffer` and for a stale
- * offer's decline, as of the pinned revision 0d6c743c. Unlike a `Refuse`, which
+ * OpenAPPA's display texts for `RemedyRefusal::UnknownOffer`, for
+ * `RemedyRefusal::Superseded`, and for a stale offer's decline, as of the
+ * pinned revision 69404d2a. Unlike a `Refuse`, which
  * carries a typed class at this pin, a remedy outcome carries no class, so
  * these texts are matched; re-check them when the pin moves.
  */
@@ -2401,4 +2411,5 @@ const RETIRED_OFFER_TEXTS = [
   "this offer no longer stands; re-propose the call",
   "this offer no longer applies; re-propose the call",
   "no live offer with this id exists",
+  "changed after this offer was made, so the offer no longer applies",
 ];

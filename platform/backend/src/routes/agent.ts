@@ -1551,37 +1551,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      // Fetch agent first to determine its type, then enforce type-specific RBAC
-      const agent = await AgentModel.findById(id, user.id, true);
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Defense-in-depth: never allow cross-organization access, even for
-      // admins. AgentModel.findById is not org-scoped.
-      if (agent.organizationId !== organizationId) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      const checker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-
-      // Check read permission (return 404 to avoid leaking existence)
-      try {
-        checker.require(agent.agentType, { action: "read", scope: agent.id });
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Non-admin: enforce scope/team-based visibility like GetAgent does
-      if (!checker.isAdmin(agent.agentType)) {
-        const filteredAgent = await AgentModel.findById(id, user.id, false);
-        if (!filteredAgent) {
-          throw new ApiError(404, "Agent not found");
-        }
-      }
+      await requireAgentReadAccess({ id, user, organizationId });
 
       return reply.send(await agentToolExclusionsService.getExclusions(id));
     },
@@ -1603,38 +1573,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
-      // Fetch agent to determine its type for permission check
-      const agent = await AgentModel.findById(id, user.id, true);
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Defense-in-depth: never allow cross-organization access, even for
-      // admins. AgentModel.findById is not org-scoped.
-      if (agent.organizationId !== organizationId) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      const checker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-
-      // Editing exclusions requires the same permission as agent update
-      // (return 404 to avoid leaking existence)
-      try {
-        checker.require(agent.agentType, { action: "update", scope: agent.id });
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Requires an update grant on this agent, like UpdateAgent does
-      requireAgentModifyPermission({
-        agentId: agent.id,
-        action: "update",
-        checker,
-        agentType: agent.agentType,
-      });
+      await requireAgentUpdateAccess({ id, user, organizationId });
 
       return reply.send(
         await agentToolExclusionsService.replaceExclusions({
@@ -1661,37 +1600,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      // Fetch agent first to determine its type, then enforce type-specific RBAC
-      const agent = await AgentModel.findById(id, user.id, true);
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Defense-in-depth: never allow cross-organization access, even for
-      // admins. AgentModel.findById is not org-scoped.
-      if (agent.organizationId !== organizationId) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      const checker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-
-      // Check read permission (return 404 to avoid leaking existence)
-      try {
-        checker.require(agent.agentType, { action: "read", scope: agent.id });
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Non-admin: enforce scope/team-based visibility like GetAgent does
-      if (!checker.isAdmin(agent.agentType)) {
-        const filteredAgent = await AgentModel.findById(id, user.id, false);
-        if (!filteredAgent) {
-          throw new ApiError(404, "Agent not found");
-        }
-      }
+      await requireAgentReadAccess({ id, user, organizationId });
 
       return reply.send(await agentSubagentExclusionsService.getExclusions(id));
     },
@@ -1713,38 +1622,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
-      // Fetch agent to determine its type for permission check
-      const agent = await AgentModel.findById(id, user.id, true);
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Defense-in-depth: never allow cross-organization access, even for
-      // admins. AgentModel.findById is not org-scoped.
-      if (agent.organizationId !== organizationId) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      const checker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-
-      // Editing exclusions requires the same permission as agent update
-      // (return 404 to avoid leaking existence)
-      try {
-        checker.require(agent.agentType, { action: "update", scope: agent.id });
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Requires an update grant on this agent, like UpdateAgent does
-      requireAgentModifyPermission({
-        agentId: agent.id,
-        action: "update",
-        checker,
-        agentType: agent.agentType,
-      });
+      await requireAgentUpdateAccess({ id, user, organizationId });
 
       return reply.send(
         await agentSubagentExclusionsService.replaceExclusions({
@@ -3108,11 +2986,11 @@ async function requireAgentReadAccess(params: {
   id: string;
   user: { id: string };
   organizationId: string;
-}): Promise<Agent> {
+}) {
   const { id, user, organizationId } = params;
 
-  const agent = await AgentModel.findById(id, user.id, true);
-  // findById is not org-scoped, so check it here: an admin must not reach
+  const agent = await AgentModel.findByIdForAccess(id, user.id);
+  // The access lookup is not org-scoped, so check it here: an admin must not reach
   // across organizations either.
   if (!agent || agent.organizationId !== organizationId) {
     throw new ApiError(404, "Agent not found");
@@ -3130,8 +3008,13 @@ async function requireAgentReadAccess(params: {
   }
 
   if (!checker.isAdmin(agent.agentType)) {
-    const filteredAgent = await AgentModel.findById(id, user.id, false);
-    if (!filteredAgent) {
+    const hasAccess = await AgentTeamModel.userHasAgentAccess({
+      userId: user.id,
+      agentId: id,
+      isAgentAdmin: false,
+      agentAccessContext: agent,
+    });
+    if (!hasAccess) {
       throw new ApiError(404, "Agent not found");
     }
   }
@@ -3150,10 +3033,10 @@ async function requireAgentUpdateAccess(params: {
   id: string;
   user: { id: string };
   organizationId: string;
-}): Promise<Agent> {
+}) {
   const { id, user, organizationId } = params;
 
-  const agent = await AgentModel.findById(id, user.id, true);
+  const agent = await AgentModel.findByIdForAccess(id, user.id);
   if (!agent || agent.organizationId !== organizationId) {
     throw new ApiError(404, "Agent not found");
   }

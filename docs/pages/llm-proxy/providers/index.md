@@ -2,7 +2,7 @@
 title: Model Providers
 description: Connect provider API keys and personal subscriptions for Chat and the LLM Proxy
 order: 2
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,7 +30,7 @@ You can also set a key through an environment variable, `ARCHESTRA_CHAT_<PROVIDE
 
 <span id="turning-providers-off"></span>
 
-To hide a provider your company does not use, go to **Settings → LLM → Model providers** and switch **Available** off. It leaves every picker, and nobody can add a key for it. Its existing keys keep working. On the same page, you can give a provider a display name.
+To hide a provider your company does not use, go to **Settings → LLM → Model providers** and switch **Available** off. It leaves every picker, and nobody can add a key for it. Its existing keys keep working. On the same page, you can give a provider a display name. For GitHub Copilot, you can also turn off only [personal subscriptions or enterprise plans](/docs/llm-proxy/providers/github-copilot#offer-only-one-way-to-connect).
 
 <span id="personal-subscriptions"></span>
 

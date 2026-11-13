@@ -24,6 +24,84 @@ export function useAppaGithubSync() {
     refetchInterval: 10000,
   });
 }
+/** The GitHub App's permissions against what self-service needs, on demand. */
+export function useAppaGithubAppGrants(enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: [...appaGithubSyncQueryKey, "app-grants"],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getAppaGithubAppGrants();
+      throwOnApiError(error);
+      return data ?? null;
+    },
+  });
+}
+
+/**
+ * How the policy repository protects server rules files: the branch ruleset
+ * the administrator imports, as the server last read it. The server keeps a
+ * read for a minute, so polling more often only reads its cache; a change
+ * just made on GitHub is read with `useFreshAppaRepositoryProtection`.
+ */
+export function useAppaRepositoryProtection(enabled: boolean) {
+  const { data: canRead } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
+  return useQuery({
+    enabled: enabled && canRead === true,
+    queryKey: [...appaGithubSyncQueryKey, "protection"],
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getAppaRepositoryProtection();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    refetchInterval: 60_000,
+  });
+}
+
+/**
+ * Read the protection from GitHub now, for the check-again buttons: the
+ * administrator just imported or edited the ruleset. What comes back
+ * replaces the cached read, so the Git sync card follows at once.
+ */
+export function useFreshAppaRepositoryProtection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await archestraApiSdk.getAppaRepositoryProtection(
+        {
+          query: { fresh: "true" },
+        },
+      );
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData([...appaGithubSyncQueryKey, "protection"], data);
+    },
+  });
+}
+/**
+ * Whether this organization's MCP server editors change their servers' rules
+ * themselves, which shows the registry's Guardrails action. Anyone who may
+ * open the registry reads it.
+ */
+export function useAppaSelfService(enabled = true) {
+  const { data: canRead } = useHasPermissions({ mcpRegistry: ["read"] });
+  return useQuery({
+    enabled: enabled && canRead === true,
+    queryKey: appaSelfServiceQueryKey,
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getAppaSelfService();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? { enabled: false };
+    },
+    staleTime: 60_000,
+  });
+}
+export const appaSelfServiceQueryKey = ["openappa-github-sync", "self-service"];
+
 export function useConfigureAppaGithubSync() {
   const client = useQueryClient();
   return useMutation({
@@ -94,8 +172,25 @@ export function useUpdateAppaGithubSync() {
         archestraApiTypes.GetAppaGithubSyncResponses["200"]
       >(appaGithubSyncQueryKey)?.source?.setupPullRequestNumber,
     }),
-    onSettled: () => invalidatePolicyViews(client),
+    onSettled: () => {
+      invalidatePolicyViews(client);
+      client.invalidateQueries({ queryKey: appaSelfServiceQueryKey });
+    },
     onSuccess: (data, body, context) => {
+      if (body.action === "self_service") {
+        toast.success(
+          body.enabled
+            ? "MCP Guardrails Self-Service turned on."
+            : "MCP Guardrails Self-Service turned off. The branch ruleset was removed.",
+        );
+        return;
+      }
+      if (body.action === "include_servers") {
+        toast.success(
+          "Pull request opened. Merge it so the servers' files apply.",
+        );
+        return;
+      }
       if (body.action === "sync" && data?.source?.lastSyncError) return;
       // Still waiting on the setup PR: the dialog and panel already say so.
       if (body.action === "sync" && data?.source?.setupPullRequestNumber)

@@ -78,8 +78,6 @@ class OpenAppaGithubAppSetup {
       manifest: JSON.stringify(
         manifest({
           appName: await OrganizationModel.getAppName(),
-          // Off github.com there is no template; setup writes the workflow itself.
-          seedsWorkflow: api !== GITHUB_API_URL,
         }),
       ),
     };
@@ -555,7 +553,7 @@ type Installation = {
   repository_selection: "all" | "selected";
 };
 
-function manifest(params: { appName: string; seedsWorkflow: boolean }) {
+function manifest(params: { appName: string }) {
   const { appName } = params;
   const callbackUrl = `${config.frontendBaseUrl}/github/app-setup`;
   return {
@@ -567,18 +565,18 @@ function manifest(params: { appName: string; seedsWorkflow: boolean }) {
     redirect_url: callbackUrl,
     setup_url: callbackUrl,
     public: false,
-    // Contents and pull requests on the policy repository, and checks on its
-    // pull requests for self-service Guardrails, asked for up front so that
-    // turning self-service on later needs no change to the App. The branch
-    // ruleset that requires the check is the administrator's to import, so
-    // no Administration. Each job's token carries only its own part; it
-    // never creates repositories.
+    // Contents and pull requests on the policy repository, Checks for the
+    // policy check on each pull request, and Workflows for the validation
+    // workflow setup writes and keeps current. The branch ruleset that
+    // requires the check is the administrator's to import, so no
+    // Administration. Each job's token carries only its own part; it never
+    // creates repositories.
     default_permissions: {
       contents: "write",
       pull_requests: "write",
       checks: "write",
+      workflows: "write",
       metadata: "read",
-      ...(params.seedsWorkflow ? { workflows: "write" } : {}),
     },
     default_events: [],
     // No webhook: sync polls GitHub, and GitHub rejects hook URLs it cannot reach.

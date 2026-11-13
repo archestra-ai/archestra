@@ -910,7 +910,7 @@ test("repository errors disable inspection and replay without local fallback", a
   expect(inspections).toBe(0);
 });
 
-test("a pending setup pull request replaces the repository error with the merge request", async () => {
+test("a pending setup pull request replaces the repository error with the Finish setup notice", async () => {
   server.use(
     http.get(`${origin}/api/openappa/github-sync`, () =>
       HttpResponse.json({
@@ -920,6 +920,7 @@ test("a pending setup pull request replaces the repository error with the merge 
           repo: "example/policies",
           ref: "main",
           path: "appa.toml",
+          interval: "1h",
           lastSyncError: null,
           setupPullRequestNumber: 7,
         },
@@ -935,12 +936,8 @@ test("a pending setup pull request replaces the repository error with the merge 
     ),
   );
   showPage();
-  expect(
-    await screen.findByRole("link", { name: /Review and merge PR/ }),
-  ).toHaveAttribute(
-    "href",
-    "https://github.example.com/example/policies/pull/7",
-  );
+  expect(await screen.findByText("Finish the Git sync setup")).toBeVisible();
+  expect(screen.getByText("Merge PR #7.")).toBeVisible();
   expect(
     screen.queryByText("No accepted commit to read validations from"),
   ).not.toBeInTheDocument();

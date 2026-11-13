@@ -1,6 +1,12 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -47,6 +53,7 @@ const current = {
 };
 const declarations = {
   batteries: [],
+  repositoryFiles: [],
   unusedAliases: [],
   rootRevision: 1,
   lastError: null,
@@ -263,7 +270,7 @@ test("the Policy page selects an included battery source and searches its status
     screen.getByRole("combobox", { name: "Policy source file" }),
   );
   await userEvent.type(
-    await screen.findByPlaceholderText("Search included batteries"),
+    await screen.findByPlaceholderText("Search batteries and files"),
     "enforced",
   );
   expect(screen.getByRole("option", { name: /GitHubEnforced/ })).toBeVisible();
@@ -274,6 +281,73 @@ test("the Policy page selects an included battery source and searches its status
     screen.getByRole("option", { name: "Organization policy" }),
   );
   expect(mockRouterPush).toHaveBeenCalledWith("/openappa/policy");
+});
+
+test("the picker lists the repository's files the root folds in, and a file opens read-only with its edit link", async () => {
+  const entry = "mcp/payments_api.toml";
+  const text =
+    '[policy]\nversion = 2\n\n[[policy.tool]]\nname = "payments_api__refund_payment"\n';
+  server.use(
+    http.get(declarationsUrl, () =>
+      HttpResponse.json({
+        ...declarations,
+        managedInGithub: true,
+        repositoryFiles: [{ path: entry }, { path: "shared/rules.toml" }],
+      }),
+    ),
+    http.get(`${origin}/api/openappa/github-sync`, () =>
+      HttpResponse.json({
+        enabled: true,
+        hasPolicy: true,
+        githubWebUrl: "https://github.com",
+        provider: "github",
+        source: { repo: "example/policies", ref: "main", path: "appa.toml" },
+        selfService: { enabled: true, setting: true, directory: "mcp" },
+      }),
+    ),
+    http.get(`${origin}/api/openappa/battery-policy-source`, ({ request }) => {
+      expect(new URL(request.url).searchParams.get("entry")).toBe(entry);
+      return HttpResponse.json({
+        entry,
+        name: entry,
+        kind: "repository",
+        content: text,
+      });
+    }),
+  );
+  mount();
+  await userEvent.click(
+    await screen.findByRole("combobox", { name: "Policy source file" }),
+  );
+  expect(
+    await screen.findByRole("option", {
+      name: /mcp\/payments_api\.tomlMCP server rules/,
+    }),
+  ).toBeVisible();
+  expect(
+    screen.getByRole("option", { name: /shared\/rules\.tomlRepository file/ }),
+  ).toBeVisible();
+  await userEvent.click(
+    screen.getByRole("option", { name: /mcp\/payments_api\.toml/ }),
+  );
+  expect(mockRouterPush).toHaveBeenCalledWith(
+    "/openappa/policy?entry=mcp%2Fpayments_api.toml",
+  );
+  cleanup();
+
+  mount(entry);
+  expect(
+    await screen.findByRole("textbox", { name: "mcp/payments_api.toml TOML" }),
+  ).toHaveValue(text);
+  expect(
+    screen.getByText("Change this file in its connected repository."),
+  ).toBeVisible();
+  expect(
+    await screen.findByRole("link", { name: "Edit in repository" }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/edit/main/mcp/payments_api.toml",
+  );
 });
 
 test("battery source remains available when root policy and GitHub sync fail", async () => {

@@ -22,6 +22,7 @@ import {
   isServerRulesBranch,
   parsePolicyToml,
   repositoryIncludePaths,
+  requesterOf,
   SELF_SERVICE_INCLUDE_BRANCH,
   serverRulesBranch,
   serverRulesFolderOf,
@@ -1125,7 +1126,8 @@ async function rootAt(params: {
  * one of ours left from an earlier folder is closed first. A setup pull
  * request still waiting takes the include onto its own branch instead, so
  * one pull request brings both. Another caller opening it right now is
- * waited for, then found.
+ * waited for, up to half a minute, then found; past that, the request
+ * answers null and the pull request shows once that caller opens it.
  */
 export async function ensureSelfServiceInclude(params: Caller) {
   // A source just saved has no accepted commit yet: pull it now rather than
@@ -1137,7 +1139,7 @@ export async function ensureSelfServiceInclude(params: Caller) {
   const leased = await withOpenAppaLease({
     key: includeLeaseKey(params.organizationId),
     ttlMs: INCLUDE_LEASE_MS,
-    waitMs: INCLUDE_LEASE_MS,
+    waitMs: INCLUDE_WAIT_MS,
     work: () =>
       openSelfServiceInclude({
         organizationId: params.organizationId,
@@ -1164,6 +1166,8 @@ export async function proposeSelfServiceInclude(organizationId: string) {
 
 /** How long one caller may take to open the include before another may. */
 const INCLUDE_LEASE_MS = 2 * TimeInMs.Minute;
+/** How long a person's request waits for another caller opening it. */
+const INCLUDE_WAIT_MS = 30 * TimeInMs.Second;
 
 function includeLeaseKey(organizationId: string): AllowedCacheKey {
   return `${CacheKey.OpenAppaPolicyCheck}-include-lease-${organizationId}`;
@@ -1269,9 +1273,10 @@ const INCLUDE_TITLE = "Include each MCP server's Guardrails rules file";
  * Add the include to the setup pull request's branch when the policy it
  * seeds lacks it: the setup pull request then stands for the include until
  * it merges, as it does for a connect with self-service on. Its commit names
- * no requester, so the check still judges the pull request as setup's own.
- * Returns that pull request, or null when it carries the include already or
- * no longer waits.
+ * the requester the setup commit names, or none when that commit names none
+ * (one from an earlier version), so the check still reads one requester for
+ * the whole pull request. Returns that pull request, or null when it carries
+ * the include already or no longer waits.
  */
 async function includeInSetupPull(params: {
   source: NonNullable<
@@ -1311,10 +1316,11 @@ async function includeInSetupPull(params: {
       ? []
       : [{ path: readme, content: serverRulesReadme(folder, source.path) }]),
   ];
-  const parent = await github<{ tree?: { sha?: string } }>({
+  const parent = await github<{ tree?: { sha?: string }; message?: string }>({
     token,
     url: `${base}/git/commits/${setup.headSha}`,
   });
+  const requester = requesterOf(parent.message);
   const tree = await github<{ sha: string }>({
     token,
     url: `${base}/git/trees`,
@@ -1335,7 +1341,9 @@ async function includeInSetupPull(params: {
     method: "POST",
     // No author or committer: GitHub signs the commit for the App only then.
     body: {
-      message: INCLUDE_TITLE,
+      message: requester
+        ? withRequester(INCLUDE_TITLE, requester)
+        : INCLUDE_TITLE,
       tree: checkedSha(tree.sha),
       parents: [setup.headSha],
     },

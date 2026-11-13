@@ -2798,6 +2798,11 @@ async function serveAutoMergeRepository(params: {
   filesUpdate?: boolean;
   /** A setup pull request an earlier version opened, as pull request 7. */
   setupPull?: boolean;
+  /**
+   * A setup pull request this version opened, naming who connected, with
+   * the include added onto its branch, as pull request 7.
+   */
+  setupPullWithInclude?: boolean;
   /** The include pull request a sync opened, with no requester, as pull request 4. */
   includeFromSync?: boolean;
   /** Permissions the installation does not grant. */
@@ -2919,25 +2924,32 @@ async function serveAutoMergeRepository(params: {
       ],
     };
   }
-  if (params.setupPull) {
-    // Opened by an earlier version, before setup named who asked for it.
+  if (params.setupPull || params.setupPullWithInclude) {
     results[7] = "cd".repeat(20);
     repo.files[results[7]] = repo.files[FIRST] ?? {};
+    const appCommit = (sha: string, message: string) => ({
+      sha,
+      commit: { message, verification: { verified: true, reason: "valid" } },
+      author: bot,
+      committer: { login: "web-flow", type: "User" },
+    });
     pulls[7] = {
       ref: "archestra/openappa-setup-0a32964f-f7bb-4102-96d3-4caa3b0bf3d4",
       user: bot,
       files: ["appa.toml"],
-      commits: [
-        {
-          sha: results[7],
-          commit: {
-            message: "Seed current OpenAPPA policy",
-            verification: { verified: true, reason: "valid" },
-          },
-          author: bot,
-          committer: { login: "web-flow", type: "User" },
-        },
-      ],
+      commits: params.setupPullWithInclude
+        ? [
+            appCommit(
+              "ef".repeat(20),
+              `Seed current OpenAPPA policy\n\nRequested-by: ${params.requester}`,
+            ),
+            appCommit(
+              results[7],
+              `Include each MCP server's Guardrails rules file\n\nRequested-by: ${params.requester}`,
+            ),
+          ]
+        : // Opened by an earlier version, before setup named who asked for it.
+          [appCommit(results[7], "Seed current OpenAPPA policy")],
     };
   }
   if (params.another)
@@ -3916,6 +3928,30 @@ test("a setup pull request an earlier version opened, before setup named who ask
   ]);
 });
 
+test("a setup pull request that took the include onto its branch reads one requester: the check judges it as before", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, runs } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+    setupPullWithInclude: true,
+  });
+  await db
+    .update(schema.openappaGithubSyncTable)
+    .set({ setupPullRequestNumber: 7 })
+    .where(eq(schema.openappaGithubSyncTable.organizationId, org.id));
+  await checkDueAppaGithubSyncs();
+  expect(runs.filter((run) => run.head_sha === results[7])).toEqual([
+    expect.objectContaining({ conclusion: "success" }),
+  ]);
+});
+
 test("the include of the servers' folder a sync opened with no requester is judged on its policy, as setup's own pull request is", async ({
   makeOrganization,
   makeUser,
@@ -4505,8 +4541,12 @@ test("turning self-service on while the setup pull request waits puts the includ
       notes.push((await request.json()) as Record<string, unknown>);
       return HttpResponse.json({});
     }),
+    // The setup commit names who connected, as this version writes it.
     http.get(`${REPO}/git/commits/${SETUP_HEAD}`, () =>
-      HttpResponse.json({ tree: { sha: TREE } }),
+      HttpResponse.json({
+        tree: { sha: TREE },
+        message: `Seed current OpenAPPA policy\n\nRequested-by: ${admin.email}`,
+      }),
     ),
     http.post(`${REPO}/git/trees`, async ({ request }) => {
       trees.push((await request.json()) as (typeof trees)[number]);
@@ -4550,9 +4590,11 @@ test("turning self-service on while the setup pull request waits puts the includ
     "mcp/README.md",
   ]);
   expect(trees[0]?.tree[0]?.content).toContain('"mcp/*.toml"');
+  // It names the requester the setup commit names, so the check reads one
+  // requester for the whole pull request.
   expect(commits).toEqual([
     {
-      message: "Include each MCP server's Guardrails rules file",
+      message: `Include each MCP server's Guardrails rules file\n\nRequested-by: ${admin.email.toLowerCase()}`,
       tree: "4".repeat(40),
       parents: [SETUP_HEAD],
     },

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 
@@ -9,7 +10,9 @@ const LEASE_POLL_MS = 1000;
  * not open the same pull request at once. A lease ends when `work` settles,
  * or after `ttlMs` when its holder died. Another caller that finds it held
  * runs nothing: at once, or once `waitMs` has passed with the lease still
- * held. `ran: false` says so, apart from what `work` itself returned.
+ * held. `ran: false` says so, apart from what `work` itself returned. Each
+ * lease carries its holder's own token: a holder whose work outlived `ttlMs`
+ * ends only its own lease, never the one the next caller took over.
  */
 export async function withOpenAppaLease<T>(params: {
   key: AllowedCacheKey;
@@ -19,11 +22,12 @@ export async function withOpenAppaLease<T>(params: {
   work: () => Promise<T>;
 }): Promise<{ ran: true; value: T } | { ran: false }> {
   const { key } = params;
+  const holder = randomUUID();
   const deadline = Date.now() + (params.waitMs ?? 0);
   for (;;) {
     const claimed = await cacheManager.withLock(key, async (cache) => {
       if (await cache.get(key)) return false;
-      await cache.set(key, true, params.ttlMs);
+      await cache.set(key, holder, params.ttlMs);
       return true;
     });
     if (claimed) break;
@@ -34,7 +38,9 @@ export async function withOpenAppaLease<T>(params: {
     return { ran: true, value: await params.work() };
   } finally {
     await cacheManager
-      .withLock(key, (cache) => cache.delete(key))
+      .withLock(key, async (cache) => {
+        if ((await cache.get<string>(key)) === holder) await cache.delete(key);
+      })
       .catch((error) =>
         logger.warn(
           { key, error },

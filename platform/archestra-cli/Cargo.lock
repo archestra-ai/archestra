@@ -30,7 +30,7 @@ checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
 
 [[package]]
 name = "archestra_cli"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "aws-lc-rs",
  "axum",

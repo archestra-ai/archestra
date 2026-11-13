@@ -185,3 +185,54 @@ jobs:
           if result['test_exit'] != 0:
               raise SystemExit('Generated provider needs human semantic fixes; see repair PR and tests.log artifact.')
           PY
+
+  # Quiet unless the updater fails. A merge conflict, a codegen error and a
+  # repair PR whose provider tests fail each stall provider updates, so every
+  # failing run posts to the alerts channel until someone fixes the PR.
+  notify:
+    name: Report updater failures
+    needs: [prepare, publish]
+    if: >-
+      always() && github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main' &&
+      (needs.prepare.result == 'failure' || needs.publish.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      id-token: write # Workload Identity Federation to read the webhook from Secret Manager.
+    steps:
+      # The webhook lives in GCP Secret Manager. A dedicated service account
+      # reads only the alerting secrets, so no repository secret holds it.
+      - name: Authenticate to read the alerting webhook
+        uses: archestra-ai/.github/actions/google-auth@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
+        with:
+          service_account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Read the alerting webhook
+        id: alerting
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3.0.0
+        with:
+          secrets: |-
+            slack_webhook_url:friendly-path-465518-r6/ci-alerts-slack-webhook-url
+
+      - name: Post the failure to alerting
+        env:
+          SLACK_WEBHOOK_URL: ${{ steps.alerting.outputs.slack_webhook_url }}
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$SLACK_WEBHOOK_URL" ]]; then
+            echo "::warning::The alerting webhook secret is empty; skipping Slack notification."
+            exit 0
+          fi
+          pulls="https://github.com/archestra-ai/terraform-provider-archestra/pulls?q=is%3Apr+is%3Aopen+head%3Aautomation%2Fplatform-api"
+          if [[ "$PREPARE_RESULT" == "failure" ]]; then
+            detail="could not generate the provider update (merge conflict with provider main, or a codegen error)."
+          else
+            detail="proposed an update whose provider tests fail. Fix it on the <$pulls|repair pull request>."
+          fi
+          message=":rotating_light: Terraform provider update failed: the updater $detail <$RUN_URL|View workflow run>"
+          jq -n --arg text "$message" '{text: $text}' |
+            curl --fail-with-body -sS --max-time 15 -X POST -H 'Content-type: application/json' --data @- "$SLACK_WEBHOOK_URL"

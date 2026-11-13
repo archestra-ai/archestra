@@ -1408,8 +1408,10 @@ function checkedResultKey(
 /**
  * A setup pull request still open while a rule already requires the check:
  * nothing can be judged before the first commit is accepted, so the check is
- * posted as skipped on every open pull request, once each, and setup can
- * finish. Without such a rule nothing is posted.
+ * posted as skipped on that pull request alone, once, and setup can finish.
+ * Any other pull request waits, as it would without the import: the rule
+ * gates it until the first commit is accepted and the checks begin. Without
+ * such a rule nothing is posted.
  */
 async function postSetupPendingChecks(row: SyncRow) {
   if (!row.repo || !row.path || !row.githubAppConfigId) return;
@@ -1450,7 +1452,9 @@ async function postSetupPendingChecks(row: SyncRow) {
     title: "Git sync setup in progress",
     reason: `${archestraMcpBranding.appName} checks this repository's pull requests once its setup pull request has merged and the policy is pulled. A branch rule already requires this check${read.url ? ` (${read.url})` : ""}, so it is posted as skipped until then.`,
   };
-  for (const pull of pulls.slice(0, MAX_CHECKED_PULLS)) {
+  for (const pull of pulls.filter(
+    (candidate) => candidate.number === row.setupPullRequestNumber,
+  )) {
     const key = checkKey(
       "setup-posted",
       row.organizationId,
@@ -1578,6 +1582,8 @@ type CheckedPull = {
   head: string;
   /** The commit checked: GitHub's merge result when it has one, else the head. */
   result: string;
+  /** The host's number for it, where the host gives one. */
+  number?: number;
   post: (outcome: PullOutcome) => Promise<void>;
   /**
    * The files Git sync reads that the pull request changes, and, for one
@@ -1718,6 +1724,7 @@ async function githubPullRequests(
           postGithubCheck({ base, token, head, appId, outcome, checkName }),
         ...(number
           ? {
+              number,
               judge: () =>
                 judgeGithubPull({
                   source,

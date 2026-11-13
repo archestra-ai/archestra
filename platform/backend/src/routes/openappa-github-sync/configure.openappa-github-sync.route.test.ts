@@ -1870,6 +1870,12 @@ describe("APPA GitHub sync", () => {
                   head: { sha: SETUP_COMMIT },
                   merge_commit_sha: null,
                 },
+                // Someone else's pull request into the branch meanwhile.
+                {
+                  number: 9,
+                  head: { sha: "e".repeat(40) },
+                  merge_commit_sha: null,
+                },
               ],
         ),
       ),
@@ -1989,7 +1995,8 @@ describe("APPA GitHub sync", () => {
     expect(opened).toHaveLength(1);
     // No rule yet: the minute's round posts nothing on the setup pull
     // request. The ruleset imported meanwhile: the check it requires is
-    // posted as skipped, once, so the pull request can merge.
+    // posted as skipped, once, on the setup pull request alone, so it can
+    // merge; another pull request waits for the checks to begin.
     await checkDueAppaGithubSyncs();
     expect(runs).toEqual([]);
     rules = [

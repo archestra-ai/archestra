@@ -900,6 +900,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RestoreMcpServer]: {
     mcpServerInstallation: ["delete"],
   },
+  [RouteId.UpdateMcpServerDesktopArguments]: {
+    // The arguments belong to an installation the caller made, so the route
+    // is gated like installation (:create). The handler then admits only the
+    // owner of the installation: nobody sets what runs on another user's
+    // device.
+    mcpServerInstallation: ["create"],
+  },
   [RouteId.ReauthenticateMcpServer]: {
     // Re-authentication re-supplies credentials for a connection the caller can
     // already install, so it is gated like installation (:create), not :update.

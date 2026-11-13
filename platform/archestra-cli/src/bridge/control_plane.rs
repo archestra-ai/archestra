@@ -86,12 +86,26 @@ pub struct CatalogItem {
     /// How to start the MCP server. The variables are not replaced.
     #[serde(default)]
     pub command: Option<String>,
+    /// What the user of the device added in Archestra: they go after the
+    /// arguments of the command, each as one argument. An Archestra from
+    /// before the arguments sends no such key.
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub arguments: Vec<String>,
     /// The address of an HTTP MCP server on the device. An item has a
     /// command or a URL, not both.
     #[serde(default)]
     pub url: Option<String>,
     /// `false`: the user stopped the MCP server in Archestra.
     pub enabled: bool,
+}
+
+/// A `null` is the default value, as a key that is missing is.
+fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 /// The answer of `GET /v1/tunnels/{tunnel_id}`. `catalog_items` and
@@ -689,13 +703,16 @@ mod tests {
                     "id": "7c1e",
                     "name": "peekaboo",
                     "command": "/Users/$USER/bins/peekaboo mcp serve",
+                    "arguments": ["--root", "$HOME/My Models"],
                     "url": null,
                     "enabled": false,
                 },
+                // `null` is no arguments, as a missing key is.
                 {
                     "id": "91bd",
                     "name": "Notes",
                     "command": null,
+                    "arguments": null,
                     "url": "http://127.0.0.1:8080/mcp",
                     "enabled": true,
                 },
@@ -709,6 +726,7 @@ mod tests {
             id: id.to_owned(),
             name: name.to_owned(),
             command: None,
+            arguments: Vec::new(),
             url: None,
             enabled: true,
         };
@@ -717,6 +735,7 @@ mod tests {
             vec![
                 CatalogItem {
                     command: Some("/Users/$USER/bins/peekaboo mcp serve".to_owned()),
+                    arguments: vec!["--root".to_owned(), "$HOME/My Models".to_owned()],
                     enabled: false,
                     ..item("7c1e", "peekaboo")
                 },

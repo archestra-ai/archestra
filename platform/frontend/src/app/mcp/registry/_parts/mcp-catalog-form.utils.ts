@@ -6,6 +6,10 @@ import type {
   ImagePullSecretConfig,
 } from "@archestra/shared";
 import {
+  argumentsFromText,
+  argumentsToText,
+} from "@/components/container-deployment-fields.utils";
+import {
   desktopMcpTargetOf,
   desktopMcpTargetToApi,
 } from "@/lib/mcp/desktop-mcp";
@@ -123,12 +127,7 @@ export function transformFormToApiData(
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
     // Parse arguments string into array
-    const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
-          .split("\n")
-          .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
-      : [];
+    const argumentsArray = argumentsFromText(values.localConfig.arguments);
 
     data.localConfig = {
       command: values.localConfig.command || undefined,
@@ -474,7 +473,7 @@ export function transformCatalogItemToFormValues(
     | undefined;
   if (item.localConfig) {
     // Convert arguments array back to string
-    const argumentsString = item.localConfig.arguments?.join("\n") || "";
+    const argumentsString = argumentsToText(item.localConfig.arguments);
 
     const config = item.localConfig;
 

@@ -21,7 +21,7 @@ import {
 
 // Codex uses client_version to gate models that require a newer client.
 // An hourly workflow proposes updates from stable Codex CLI releases.
-const CODEX_MODELS_CLIENT_VERSION = "0.167.2";
+const CODEX_MODELS_CLIENT_VERSION = "0.168.0";
 
 const CodexModelsResponseSchema = z.object({
   models: z.array(

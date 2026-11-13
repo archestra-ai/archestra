@@ -1,5 +1,10 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -150,9 +155,25 @@ export function useCreateAppaGithubRepository() {
     onSettled: () => invalidatePolicyViews(client),
   });
 }
+/** Every Git sync action; a sync started anywhere shows on the card. */
+const updateAppaGithubSyncKey = [...appaGithubSyncQueryKey, "update"];
+
+/** Whether a sync runs now, wherever it was started: the card, a dialog. */
+export function useAppaGithubSyncing() {
+  return (
+    useIsMutating({
+      mutationKey: updateAppaGithubSyncKey,
+      predicate: (mutation) =>
+        (mutation.state.variables as { action?: string } | undefined)
+          ?.action === "sync",
+    }) > 0
+  );
+}
+
 export function useUpdateAppaGithubSync() {
   const client = useQueryClient();
   return useMutation({
+    mutationKey: updateAppaGithubSyncKey,
     mutationFn: async (
       body: archestraApiTypes.UpdateAppaGithubSyncData["body"],
     ) => {

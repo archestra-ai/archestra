@@ -4,6 +4,8 @@ import type { archestraApiTypes } from "@archestra/shared";
 import {
   ArrowLeft,
   Check,
+  CheckCircle2,
+  CircleDashed,
   Download,
   ExternalLink,
   LoaderCircle,
@@ -23,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useAppaGithubAppGrants,
+  useAppaRepositoryProtection,
   useFreshAppaRepositoryProtection,
   useUpdateAppaGithubSync,
 } from "@/lib/openappa-github-sync.query";
@@ -160,7 +163,7 @@ export function SelfServiceSetupDialog({
         }}
       />
       {step === "app" ? (
-        <AppStep
+        <GithubAppPermissionsStep
           grants={grants.data ?? null}
           loading={grants.isPending}
           error={grants.isError ? grants.error.message : undefined}
@@ -241,14 +244,32 @@ const PERMISSION_LABELS = {
   workflows: "Workflows",
 } as const;
 
-/** The App's permissions: what it has, and where to grant the rest. */
-function AppStep({
+/**
+ * The App's permissions: what it has, and where to grant the rest. Self-
+ * service asks for Administration and Checks; a caller can ask for others,
+ * such as Workflows for the validation workflow's updates.
+ */
+export function GithubAppPermissionsStep({
   grants,
   loading,
   error,
   checking,
   ready,
   onCheckAgain,
+  needed = NEEDED,
+  title = (app) => (
+    <>
+      Grant the <code>Checks</code> permission to the {app} App
+    </>
+  ),
+  hint = (
+    <>
+      Set it to <code>Read and write</code>: the App posts the check&apos;s
+      verdict on each pull request. Making the check required is a branch
+      ruleset you import yourself, so the App needs no Administration.
+    </>
+  ),
+  readyText = "every permission self-service needs",
 }: {
   grants: Grants | null;
   loading: boolean;
@@ -256,6 +277,11 @@ function AppStep({
   checking: boolean;
   ready: boolean;
   onCheckAgain: () => void;
+  needed?: readonly Grants["permissions"][number]["name"][];
+  title?: (app: string) => ReactNode;
+  hint?: ReactNode;
+  /** What the App has once every needed permission is granted. */
+  readyText?: string;
 }) {
   if (loading)
     return (
@@ -269,11 +295,11 @@ function AppStep({
       <InlineNotice variant="warning">
         <InlineNoticeText className="flex-1">
           {error ??
-            "Self-service needs a GitHub App: connect the policy repository through one first."}
+            "This needs a GitHub App: connect the policy repository through one first."}
         </InlineNoticeText>
       </InlineNotice>
     );
-  const missing = NEEDED.filter(
+  const missing = needed.filter(
     (name) =>
       grants.permissions.find((entry) => entry.name === name)?.granted !== true,
   );
@@ -282,19 +308,8 @@ function AppStep({
       <ol className="overflow-hidden rounded-lg border bg-card">
         <ManifestRow
           index={1}
-          title={
-            <>
-              Grant the <code>Checks</code> permission to the {grants.name} App
-            </>
-          }
-          hint={
-            <>
-              Set it to <code>Read and write</code>: the App posts the
-              check&apos;s verdict on each pull request. Making the check
-              required is a branch ruleset you import yourself, so the App needs
-              no Administration.
-            </>
-          }
+          title={title(grants.name)}
+          hint={hint}
           inlineAction
           waiting={false}
           error={error}
@@ -350,7 +365,7 @@ function AppStep({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
         {ready ? (
           <span>
-            The {grants.name} App has every permission self-service needs.
+            The {grants.name} App has {readyText}.
           </span>
         ) : (
           <span>
@@ -359,7 +374,8 @@ function AppStep({
               missing.map((name) => PERMISSION_LABELS[name]),
               " and ",
             )}
-            . Check again once it is accepted.
+            . Check again once {needed.length > 1 ? "they are" : "it is"}{" "}
+            accepted.
           </span>
         )}
         <Button
@@ -795,6 +811,89 @@ export function BranchRuleActions({
         </Button>
       </span>
     </span>
+  );
+}
+
+/**
+ * The branch ruleset that makes the policy check required, as a row of the
+ * Self-service step, so the step stays in view once it is done. With
+ * self-service saved on, GitHub's state now: in place with its link, or
+ * what to import or change. Otherwise, where the import comes.
+ */
+export function BranchRulesetRow({
+  saved,
+  after,
+}: {
+  /** Self-service is on for the saved source, so its rules can be read. */
+  saved: boolean;
+  /** What brings the last step, "save" or "connect". */
+  after: string;
+}) {
+  const protection = useAppaRepositoryProtection(saved);
+  const fresh = useFreshAppaRepositoryProtection();
+  const rules = saved ? protection.data?.branchRules : undefined;
+  const checkName = protection.data?.checkName ?? "policy";
+  const reading = saved && protection.isPending;
+  const active = rules?.state === "active";
+  return (
+    <div className="flex items-start gap-3">
+      <span
+        className="mt-0.5 flex size-4 shrink-0 items-center justify-center"
+        aria-hidden
+      >
+        {reading ? (
+          <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
+        ) : active ? (
+          <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+        ) : (
+          <CircleDashed className="size-4 text-muted-foreground" />
+        )}
+      </span>
+      <div className="min-w-0 space-y-1">
+        <p className="text-sm font-medium">Branch ruleset</p>
+        <div className="text-xs text-muted-foreground">
+          {!saved ? (
+            <span>
+              After you {after}, the last step offers the ruleset to import on
+              GitHub. It makes the check required, so a pull request merges only
+              once it passes.
+            </span>
+          ) : reading ? (
+            <span>Reading the branch rules…</span>
+          ) : !rules ? (
+            <span>
+              Could not read the branch rules. The last step checks them again
+              after you {after}.
+            </span>
+          ) : active ? (
+            <span>
+              The{" "}
+              {rules.url ? (
+                <a
+                  href={rules.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-foreground underline underline-offset-4"
+                >
+                  ruleset
+                </a>
+              ) : (
+                <span>ruleset</span>
+              )}{" "}
+              requires the {checkName} check, so a pull request merges only once
+              it passes.
+            </span>
+          ) : (
+            <BranchRuleActions
+              rules={rules}
+              checkName={checkName}
+              checking={fresh.isPending}
+              onCheckAgain={() => void fresh.mutateAsync().catch(() => null)}
+            />
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

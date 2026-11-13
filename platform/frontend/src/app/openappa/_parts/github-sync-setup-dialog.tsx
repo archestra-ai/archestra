@@ -95,7 +95,10 @@ import {
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
 import { onGithubAppSetup } from "./github-app-channel";
-import { SelfServiceOutcomeStep } from "./self-service-setup-dialog";
+import {
+  BranchRulesetRow,
+  SelfServiceOutcomeStep,
+} from "./self-service-setup-dialog";
 import { OpenAppaSetupPullRequestDialog } from "./setup-pull-request-dialog";
 
 /**
@@ -915,6 +918,14 @@ export function GithubSyncSetupDialog({
               </div>
             </div>
           ) : null}
+          {selfService && !gitlab ? (
+            // The ruleset the administrator imports: its state stays in view
+            // here once imported, beside the choices it goes with.
+            <BranchRulesetRow
+              saved={!!editing?.selfService}
+              after={editing ? "save" : "connect"}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -1070,17 +1081,16 @@ export function GithubSyncSetupDialog({
             {createdApp ? (
               <AppLogoTip settingsUrl={createdApp.settingsUrl} />
             ) : null}
-            {/* Checks is for the policy check self-service posts on pull
-                requests, asked for up front so turning self-service on later
-                changes nothing. Off github.com the App also writes the
-                validation workflow into the new repository. */}
+            {/* Checks posts the policy check on each pull request, asked for
+                up front so turning self-service on later changes nothing;
+                Workflows keeps the repository's validation workflow current. */}
             <AccessSummary
               intro="The App only needs the policy repository, nothing else in the organization:"
               permissions={[
                 "Contents",
                 "Pull requests",
                 "Checks",
-                ...(github?.dotCom ? [] : ["Workflows"]),
+                "Workflows",
               ].map((name) => ({ name, access: "Read & write" }))}
             />
           </div>

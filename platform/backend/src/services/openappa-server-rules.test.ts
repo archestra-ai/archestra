@@ -38,6 +38,7 @@ import {
   getServerRules,
   getServerRulesChangeStatus,
   previewServerRulesChange,
+  proposeSelfServiceInclude,
   proposeServerRulesChange,
   selfServiceIncludeState,
 } from "./openappa-server-rules";
@@ -2782,6 +2783,8 @@ async function serveAutoMergeRepository(params: {
   filesUpdate?: boolean;
   /** A setup pull request an earlier version opened, as pull request 7. */
   setupPull?: boolean;
+  /** The include pull request a sync opened, with no requester, as pull request 4. */
+  includeFromSync?: boolean;
   /** Permissions the installation does not grant. */
   refuse?: string[];
 }) {
@@ -2865,7 +2868,19 @@ async function serveAutoMergeRepository(params: {
       ref: "archestra/openappa-self-service",
       user: bot,
       files: ["appa.toml"],
-      commits: [signed(results[4] as string)],
+      commits: [
+        params.includeFromSync
+          ? {
+              sha: results[4],
+              commit: {
+                message: "Include each MCP server's Guardrails rules file",
+                verification: { verified: true, reason: "valid" },
+              },
+              author: bot,
+              committer: { login: "web-flow", type: "User" },
+            }
+          : signed(results[4] as string),
+      ],
     },
   };
   if (params.filesUpdate) {
@@ -3886,6 +3901,26 @@ test("a setup pull request an earlier version opened, before setup named who ask
   ]);
 });
 
+test("the include of the servers' folder a sync opened with no requester is judged on its policy, as setup's own pull request is", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, runs } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+    includeFromSync: true,
+  });
+  await checkDueAppaGithubSyncs();
+  expect(runs.filter((run) => run.head_sha === results[4])).toEqual([
+    expect.objectContaining({ conclusion: "success" }),
+  ]);
+});
+
 test("a grants read lets a refused round of checks go once the App holds what the check needs, while it still lacks Workflows", async ({
   makeOrganization,
   makeUser,
@@ -4237,6 +4272,298 @@ test("a policy in a folder of a repository that holds other work gets the same o
     expect.objectContaining({ head_sha: head, conclusion: "skipped" }),
     expect.objectContaining({ head_sha: head, conclusion: "success" }),
   ]);
+});
+
+test("a pull with self-service on and the policy file lacking the servers' folder proposes its include at once, by the App, naming no requester, and the next pull finds it waiting", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  await connectApp({ organizationId: org.id });
+  const INCLUDED = `include = ["mcp/*.toml"]\n${RULES}`;
+  const PULL_HEAD = "6".repeat(40);
+  serveRepository({
+    head: FIRST,
+    files: {
+      [FIRST]: { "appa.toml": RULES },
+      main: { "appa.toml": RULES },
+      [PULL_HEAD]: { "appa.toml": INCLUDED },
+    },
+  });
+  let openPulls: Array<{
+    number: number;
+    html_url: string;
+    head: { sha: string };
+  }> = [];
+  const trees: Array<{ tree: Array<{ path: string; content: string }> }> = [];
+  const commits: Array<{ message: string }> = [];
+  const pulls: Array<{ title: string; body: string; head: string }> = [];
+  server.use(
+    http.get(`${REPO}/rulesets`, () => HttpResponse.json([])),
+    http.get(`${REPO}/pulls`, ({ request }) =>
+      HttpResponse.json(
+        new URL(request.url).searchParams.get("head") ===
+          "example:archestra/openappa-self-service"
+          ? openPulls
+          : [],
+      ),
+    ),
+    http.get(`${REPO}/git/commits/${FIRST}`, () =>
+      HttpResponse.json({ tree: { sha: TREE } }),
+    ),
+    http.post(`${REPO}/git/trees`, async ({ request }) => {
+      trees.push((await request.json()) as (typeof trees)[number]);
+      return HttpResponse.json({ sha: "4".repeat(40) });
+    }),
+    http.post(`${REPO}/git/commits`, async ({ request }) => {
+      commits.push((await request.json()) as (typeof commits)[number]);
+      return HttpResponse.json({ sha: "5".repeat(40) });
+    }),
+    http.post(`${REPO}/git/refs`, () => HttpResponse.json({})),
+    http.delete(
+      `${REPO}/git/refs/heads/archestra/openappa-self-service`,
+      () => new HttpResponse(null, { status: 422 }),
+    ),
+    http.post(`${REPO}/pulls`, async ({ request }) => {
+      pulls.push((await request.json()) as (typeof pulls)[number]);
+      return HttpResponse.json({
+        number: 9,
+        html_url: "https://github.com/example/policies/pull/9",
+      });
+    }),
+  );
+
+  await syncAppaGithubPolicy(org.id);
+  expect(pulls).toEqual([
+    expect.objectContaining({
+      head: "archestra/openappa-self-service",
+      body: expect.stringContaining("MCP Guardrails Self-Service is on"),
+    }),
+  ]);
+  expect(trees[0]?.tree[0]?.content).toContain('"mcp/*.toml"');
+  // Nobody asked: the commit names no requester.
+  expect(commits[0]?.message).toBe(
+    "Include each MCP server's Guardrails rules file",
+  );
+
+  // The next pull finds it waiting: nothing more opens.
+  openPulls = [
+    {
+      number: 9,
+      html_url: "https://github.com/example/policies/pull/9",
+      head: { sha: PULL_HEAD },
+    },
+  ];
+  await syncAppaGithubPolicy(org.id);
+  expect(pulls).toHaveLength(1);
+  expect(await selfServiceIncludeState(org.id)).toEqual({
+    folder: "mcp",
+    state: "pull_open",
+    pull: { number: 9, url: "https://github.com/example/policies/pull/9" },
+  });
+});
+
+test("a pull and a person asking for the include at once open one pull request: whoever comes second finds it waiting", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ name: "Alex" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  await connectApp({ organizationId: org.id });
+  const PULL_HEAD = "6".repeat(40);
+  serveRepository({
+    head: FIRST,
+    files: {
+      [FIRST]: { "appa.toml": RULES },
+      main: { "appa.toml": RULES },
+      [PULL_HEAD]: { "appa.toml": `include = ["mcp/*.toml"]\n${RULES}` },
+    },
+  });
+  const openPulls: Array<{
+    number: number;
+    html_url: string;
+    head: { sha: string };
+  }> = [];
+  const pulls: unknown[] = [];
+  server.use(
+    http.get(`${REPO}/rulesets`, () => HttpResponse.json([])),
+    http.get(`${REPO}/pulls`, ({ request }) =>
+      HttpResponse.json(
+        new URL(request.url).searchParams.get("head") ===
+          "example:archestra/openappa-self-service"
+          ? openPulls
+          : [],
+      ),
+    ),
+    http.get(`${REPO}/git/commits/${FIRST}`, () =>
+      HttpResponse.json({ tree: { sha: TREE } }),
+    ),
+    http.post(`${REPO}/git/trees`, () =>
+      HttpResponse.json({ sha: "4".repeat(40) }),
+    ),
+    http.post(`${REPO}/git/commits`, () =>
+      HttpResponse.json({ sha: "5".repeat(40) }),
+    ),
+    http.post(`${REPO}/git/refs`, () => HttpResponse.json({})),
+    http.delete(
+      `${REPO}/git/refs/heads/archestra/openappa-self-service`,
+      () => new HttpResponse(null, { status: 422 }),
+    ),
+    http.post(`${REPO}/pulls`, async ({ request }) => {
+      pulls.push(await request.json());
+      openPulls.push({
+        number: 9,
+        html_url: "https://github.com/example/policies/pull/9",
+        head: { sha: PULL_HEAD },
+      });
+      return HttpResponse.json({
+        number: 9,
+        html_url: "https://github.com/example/policies/pull/9",
+      });
+    }),
+  );
+  // The source's first pull, with self-service off so it opens nothing.
+  await db
+    .update(schema.openappaGithubSyncTable)
+    .set({ selfService: false })
+    .where(eq(schema.openappaGithubSyncTable.organizationId, org.id));
+  await syncAppaGithubPolicy(org.id);
+  await db
+    .update(schema.openappaGithubSyncTable)
+    .set({ selfService: true })
+    .where(eq(schema.openappaGithubSyncTable.organizationId, org.id));
+
+  const [proposed, asked] = await Promise.all([
+    proposeSelfServiceInclude(org.id),
+    ensureSelfServiceInclude({ organizationId: org.id, userId: admin.id }),
+  ]);
+  expect(pulls).toHaveLength(1);
+  expect([proposed, asked].filter(Boolean)).toEqual([
+    { number: 9, url: "https://github.com/example/policies/pull/9" },
+  ]);
+});
+
+test("turning self-service on while the setup pull request waits puts the include on that pull request's branch, so one pull request brings both", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ name: "Alex" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  await connectApp({ organizationId: org.id, selfService: false });
+  const SETUP_HEAD = "8".repeat(40);
+  const files: Record<string, Record<string, string>> = {
+    [SETUP_HEAD]: { "appa.toml": RULES },
+  };
+  serveRepository({ head: FIRST, files });
+  // The connect proposed the current policy in a setup pull request that
+  // waits, without the include: self-service was off then.
+  await db
+    .update(schema.openappaGithubSyncTable)
+    .set({ setupPullRequestNumber: 3, sourceCommit: null })
+    .where(eq(schema.openappaGithubSyncTable.organizationId, org.id));
+  const trees: Array<{
+    base_tree: string;
+    tree: Array<{ path: string; content: string }>;
+  }> = [];
+  const commits: Array<{ message: string; parents: string[] }> = [];
+  const moves: Array<{ branch: string; body: Record<string, unknown> }> = [];
+  const notes: Array<Record<string, unknown>> = [];
+  const opened: unknown[] = [];
+  server.use(
+    http.get(`${REPO}/rulesets`, () => HttpResponse.json([])),
+    http.get(`${REPO}/pulls/3`, () =>
+      HttpResponse.json({
+        number: 3,
+        state: "open",
+        html_url: "https://github.com/example/policies/pull/3",
+        body: "This pull request puts your current OpenAPPA policy in place.",
+        head: { sha: SETUP_HEAD, ref: "archestra/openappa-setup-1234" },
+      }),
+    ),
+    http.patch(`${REPO}/pulls/3`, async ({ request }) => {
+      notes.push((await request.json()) as Record<string, unknown>);
+      return HttpResponse.json({});
+    }),
+    http.get(`${REPO}/git/commits/${SETUP_HEAD}`, () =>
+      HttpResponse.json({ tree: { sha: TREE } }),
+    ),
+    http.post(`${REPO}/git/trees`, async ({ request }) => {
+      trees.push((await request.json()) as (typeof trees)[number]);
+      return HttpResponse.json({ sha: "4".repeat(40) });
+    }),
+    http.post(`${REPO}/git/commits`, async ({ request }) => {
+      commits.push((await request.json()) as (typeof commits)[number]);
+      return HttpResponse.json({ sha: "5".repeat(40) });
+    }),
+    http.patch(
+      `${REPO}/git/refs/heads/archestra/:branch`,
+      async ({ params, request }) => {
+        moves.push({
+          branch: String(params.branch),
+          body: (await request.json()) as Record<string, unknown>,
+        });
+        return HttpResponse.json({});
+      },
+    ),
+    http.post(`${REPO}/pulls`, async ({ request }) => {
+      opened.push(await request.json());
+      return HttpResponse.json({ number: 9, html_url: "x" });
+    }),
+  );
+  await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service",
+    enabled: true,
+  });
+  expect(
+    await ensureSelfServiceInclude({
+      organizationId: org.id,
+      userId: admin.id,
+    }),
+  ).toEqual({ number: 3, url: "https://github.com/example/policies/pull/3" });
+  // One commit on the setup branch, from its head, adding the include and
+  // starting the folder; no second pull request.
+  expect(trees[0]?.base_tree).toBe(TREE);
+  expect(trees[0]?.tree.map((file) => file.path)).toEqual([
+    "appa.toml",
+    "mcp/README.md",
+  ]);
+  expect(trees[0]?.tree[0]?.content).toContain('"mcp/*.toml"');
+  expect(commits).toEqual([
+    {
+      message: "Include each MCP server's Guardrails rules file",
+      tree: "4".repeat(40),
+      parents: [SETUP_HEAD],
+    },
+  ]);
+  // A fast-forward, never forced over what someone pushed meanwhile.
+  expect(moves).toEqual([
+    { branch: "openappa-setup-1234", body: { sha: "5".repeat(40) } },
+  ]);
+  expect(notes[0]?.body).toEqual(
+    expect.stringContaining("It also adds `mcp/*.toml`"),
+  );
+  expect(opened).toEqual([]);
+  // The setup pull request now carries the include: it stands for it.
+  files[SETUP_HEAD] = { "appa.toml": `include = ["mcp/*.toml"]\n${RULES}` };
+  expect(await selfServiceIncludeState(org.id)).toEqual({
+    folder: "mcp",
+    state: "pull_open",
+    pull: { number: 3, url: "https://github.com/example/policies/pull/3" },
+  });
+  expect(
+    await ensureSelfServiceInclude({
+      organizationId: org.id,
+      userId: admin.id,
+    }),
+  ).toBeNull();
+  expect(commits).toHaveLength(1);
 });
 
 test("the self-service folder is chosen when turning on: the servers' files live there, one pull request in the administrator's name includes it, an include already in place or on its way needs none, a stale one is closed, and the folder cannot move while on", async ({

@@ -21,6 +21,7 @@ import {
 } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { makeSession, makeUserPermissions } from "@/mocks/data/auth";
+import { FinishSetupHost } from "./finish-setup-dialog";
 import { GithubManagedPolicyNotice } from "./github-managed-policy-notice";
 
 vi.mock("@/lib/clients/auth/auth-client");
@@ -121,6 +122,21 @@ test("a pending setup pull request shows the Finish setup notice, whose wizard l
         },
       }),
     ),
+    // The wizard's pull requests step syncs as it opens.
+    http.patch("http://localhost:9000/api/openappa/github-sync", () =>
+      HttpResponse.json({
+        enabled: true,
+        githubWebUrl: "https://github.example.com",
+        source: {
+          repo: "example/policies",
+          ref: "main",
+          path: "appa.toml",
+          interval: "1h",
+          setupPullRequestNumber: 7,
+          lastSyncError,
+        },
+      }),
+    ),
   );
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -128,6 +144,7 @@ test("a pending setup pull request shows the Finish setup notice, whose wizard l
   render(
     <QueryClientProvider client={client}>
       <GithubManagedPolicyNotice />
+      <FinishSetupHost />
     </QueryClientProvider>,
   );
   // The one Finish setup notice, as on the Git sync settings.

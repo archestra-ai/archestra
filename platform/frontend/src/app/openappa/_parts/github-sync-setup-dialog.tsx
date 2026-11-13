@@ -157,7 +157,8 @@ export function GithubSyncSetupDialog({
   const discard = useDiscardAppaGithubApp();
   const create = useCreateAppaGithubRepository();
   const configure = useConfigureAppaGithubSync();
-  const update = useUpdateAppaGithubSync();
+  // The wizard's own steps show what each sync brings: none toasts.
+  const update = useUpdateAppaGithubSync({ quiet: true });
   const syncing = useAppaGithubSyncing();
   const saving = configure.isPending || create.isPending;
   // Done syncs at once, so the card shows what the setup brought about.
@@ -165,6 +166,16 @@ export function GithubSyncSetupDialog({
     if (!syncing) update.mutate({ action: "sync" });
     onOpenChange(false);
   };
+  // Opened on a source that syncs: a pull now finds what is out of date and
+  // opens the pull requests it needs, so the Finish step lists them.
+  const connected = !!useAppaGithubSync().data?.source?.interval;
+  const openSynced = useRef(false);
+  const { mutate: syncNow } = update;
+  useEffect(() => {
+    if (!editing || !connected || openSynced.current) return;
+    openSynced.current = true;
+    if (!syncing) syncNow({ action: "sync" });
+  }, [editing, connected, syncing, syncNow]);
   /** Steps leave the Finish step's run behind: opened again, it only reads. */
   const goTo = (target: Step) => {
     if (target === "connect" || step === "connect") setOutcome(null);

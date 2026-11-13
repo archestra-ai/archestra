@@ -3,7 +3,7 @@ title: Git Sync
 description: Keep the Guardrails policy in a GitHub or GitLab repository and review every change there
 order: 2
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-11-13
+lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -17,7 +17,7 @@ With Git sync, every policy change goes through a pull request in your own GitHu
 
 When setup is done, the card on **Settings → Guardrails** shows **Connected**. While something still waits, such as a GitHub App permission or a pull request to merge, the card shows a **Finish setup** notice. The Guardrails pages show the same notice.
 
-**Finish setup** opens a wizard with one step for each item that waits. Like every Git sync wizard, it ends on the **Finish** step, which lists each part of the setup and what it still needs. While you edit Git sync, **Finish** opens from any step.
+**Finish setup** opens a wizard with one step for each item that waits. On its pull requests step, the wizard checks each pull request again when you return from GitHub. Once they all merge, the wizard goes to **Finish**. Like every Git sync wizard, it ends on the **Finish** step, which lists each part of the setup and what it still needs. While you edit Git sync, **Finish** opens from any step.
 
 ### GitHub
 
@@ -92,6 +92,8 @@ include = [
   "mcp/*.toml",
 ]
 ```
+
+Git sync proposes that include itself. When the policy file lacks it, the next sync opens a pull request that adds it. If the setup pull request has not merged yet, Git sync adds the include to that pull request instead. **Finish setup** lists the pull request with the others to merge.
 
 MCP servers whose tools carry the same tool prefix share one rules file, because rules match tools by name. To change a shared file, you need edit access to each of these servers that is shared with a team or the organization. Members' personal copies of these servers follow the same file. When only personal copies carry the prefix, a change needs edit access to each copy.
 

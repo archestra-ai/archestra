@@ -59,7 +59,11 @@ import {
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { appaGitHost } from "./appa-git-host";
-import { FinishSetupNotice, useFinishSetupPieces } from "./finish-setup-dialog";
+import {
+  FinishSetupHost,
+  FinishSetupNotice,
+  useFinishSetupPieces,
+} from "./finish-setup-dialog";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
 import { SelfServiceSetupDialog } from "./self-service-setup-dialog";
 
@@ -329,6 +333,8 @@ export function AppaGithubSyncPanel() {
           setDisconnecting(false);
         }}
       />
+      {/* The card stays when its notice goes, so the wizard lives here. */}
+      <FinishSetupHost />
     </>
   );
 }

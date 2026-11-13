@@ -2789,11 +2789,13 @@ test("the policy check asks for edit access to each shared server a rules file g
 async function serveAutoMergeRepository(params: {
   organizationId: string;
   requester: string;
+  /** A second self-served pull request whose check passes too. */
+  another?: boolean;
 }) {
   await connectApp({ organizationId: params.organizationId });
   const root = `include = ["mcp/*.toml"]\n${RULES}`;
   const results = Object.fromEntries(
-    [1, 2, 3, 4].map((number) => [number, String(number + 4).repeat(40)]),
+    [1, 2, 3, 4, 5].map((number) => [number, String(number + 4).repeat(40)]),
   ) as Record<number, string>;
   const repo = {
     head: FIRST,
@@ -2813,6 +2815,10 @@ async function serveAutoMergeRepository(params: {
         "mcp/payments_api.toml": INVOICES,
       },
       [results[4] as string]: { "appa.toml": root },
+      [results[5] as string]: {
+        "appa.toml": root,
+        "mcp/payments_api.toml": INVOICES,
+      },
     },
   };
   serveRepository(repo);
@@ -2864,12 +2870,24 @@ async function serveAutoMergeRepository(params: {
       files: ["appa.toml"],
       commits: [signed(results[4] as string)],
     },
+    ...(params.another
+      ? {
+          5: {
+            ref: "archestra/openappa-server-payments_api-5e6f7a8b",
+            user: bot,
+            files: ["mcp/payments_api.toml"],
+            commits: [signed(results[5] as string)],
+          },
+        }
+      : {}),
   };
   const runs: Array<{ head_sha: string; conclusion: string }> = [];
   const merges: Array<{ number: number; sha: string; merge_method: string }> =
     [];
   const deleted: string[] = [];
   const merge = { status: 200 };
+  /** What one pull request's merge answers, where it differs from the rest. */
+  const mergeStatuses: Record<number, number> = {};
   /** How each pull request answers when read on its own. */
   const pullStates: Record<number, { state: string; merged: boolean }> = {};
   /** Whether GitHub has a pull request's diff yet; it has unless told otherwise. */
@@ -2933,11 +2951,12 @@ async function serveAutoMergeRepository(params: {
         number: Number(params.number),
         ...((await request.json()) as { sha: string; merge_method: string }),
       });
-      return merge.status === 200
+      const status = mergeStatuses[Number(params.number)] ?? merge.status;
+      return status === 200
         ? HttpResponse.json({ merged: true, sha: "f".repeat(40) })
         : HttpResponse.json(
             { message: "Repository rule violations found" },
-            { status: merge.status },
+            { status },
           );
     }),
     http.delete(`${REPO}/git/refs/heads/archestra/:branch`, ({ params }) => {
@@ -2951,6 +2970,7 @@ async function serveAutoMergeRepository(params: {
     merges,
     deleted,
     merge,
+    mergeStatuses,
     repo,
     pullStates,
     filesReady,
@@ -3305,6 +3325,38 @@ test("a merge GitHub refuses because someone merged or closed the pull request m
     .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
   await checkDueAppaGithubSyncs();
   expect(await queuedSyncs()).toHaveLength(0);
+});
+
+test("a refusal later in the same pass does not drop the pull another merge still owes", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, merges, mergeStatuses } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+    another: true,
+  });
+  await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
+
+  // The first merges but its pull cannot be queued; the second is refused
+  // in the same pass. The owed pull is the repository's: the refusal leaves
+  // it, and the next minute's pass queues it.
+  mergeStatuses[5] = 405;
+  const enqueue = vi
+    .spyOn(OpenAppaGithubSyncModel, "enqueue")
+    .mockRejectedValueOnce(new Error("the database went away"));
+  await checkDueAppaGithubSyncs();
+  expect(merges.map((merged) => merged.number)).toEqual([1, 5]);
+  expect(merges[0]?.sha).toBe(results[1]);
+  expect(await queuedSyncs()).toHaveLength(0);
+  enqueue.mockRestore();
+  await checkDueAppaGithubSyncs();
+  expect(await queuedSyncs()).toHaveLength(1);
 });
 
 test("a pull request GitHub lists no files for yet is checked the next minute, not passed as changing nothing", async ({

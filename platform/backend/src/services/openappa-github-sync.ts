@@ -1543,17 +1543,6 @@ class AutoMerger {
     this.access ??= this.resolveAccess();
     const access = await this.access;
     if (!access) return;
-    // Set before the merge, cleared once its pull is queued: a process that
-    // stops in between leaves it for the next minute's pass to act on.
-    const resync = pendingResyncKey(organizationId, repo);
-    await cacheManager
-      .set(resync, true, CHECKED_TTL)
-      .catch((err) =>
-        logger.warn(
-          { organizationId, err },
-          "OpenAPPA could not note the pull that is to follow a merge",
-        ),
-      );
     const merged = await githubCall<{ merged?: boolean }>({
       token: access.token,
       url: `${access.base}/pulls/${pull.number}/merge`,
@@ -1566,6 +1555,7 @@ class AutoMerger {
         "OpenAPPA merged a self-served Guardrails rules pull request",
       );
       // A pull applies the merge now rather than at the next schedule.
+      await noteSyncOwed(organizationId, repo);
       await queueSyncAfterMerge(organizationId, repo);
       const deleted = await githubFetch({
         url: `${access.base}/git/refs/heads/${pull.ref}`,
@@ -1579,8 +1569,6 @@ class AutoMerger {
         );
       return;
     }
-    // Nothing merged: no pull is owed.
-    await cacheManager.delete(resync).catch(() => null);
     if ([403, 404, 405, 409, 422].includes(merged.status)) {
       // Merged or closed by someone since the listing: nothing to refuse.
       const gone = await this.settledMeanwhile(pull, access);
@@ -1650,6 +1638,7 @@ class AutoMerger {
         { organizationId, repo, number: pull.number },
         "A self-served Guardrails rules pull request was merged by someone else meanwhile",
       );
+      await noteSyncOwed(organizationId, repo);
       await queueSyncAfterMerge(organizationId, repo);
       return true;
     }
@@ -1762,6 +1751,23 @@ export async function heldMergeReason(source: {
 /** The key under which a merge still owes a pull of the synced branch. */
 function pendingResyncKey(organizationId: string, repo: string) {
   return checkKey("resync", organizationId, repo);
+}
+
+/**
+ * Note that a merge on the synced branch owes a pull, before the pull is
+ * queued: a process that stops in between leaves the note for the next
+ * minute's pass to act on. The note is the repository's, not one pull
+ * request's, so only a queued pull clears it; a refusal never does.
+ */
+async function noteSyncOwed(organizationId: string, repo: string) {
+  await cacheManager
+    .set(pendingResyncKey(organizationId, repo), true, CHECKED_TTL)
+    .catch((err) =>
+      logger.warn(
+        { organizationId, err },
+        "OpenAPPA could not note the pull that is to follow a merge",
+      ),
+    );
 }
 
 /**

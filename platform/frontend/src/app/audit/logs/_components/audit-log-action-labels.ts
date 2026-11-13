@@ -22,32 +22,26 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "hook.created": "Hook created",
   "hook.updated": "Hook updated",
   "hook.deleted": "Hook deleted",
-  "resourcePermissions.updated": "Permissions updated",
+  "resourcePermissions.updated": "Access updated",
   // Agent
   "agent.created": "Agent created",
   "agent.updated": "Agent updated",
   "agent.deleted": "Agent deleted",
-  "agent.bulk_updated": "Agents bulk updated",
   "agent.bulk_deleted": "Agents bulk deleted",
   "agent.restored": "Agent restored",
   "agent.purged": "Agent permanently deleted",
   "agent.imported": "Agent imported",
   // Agent run
   "agentRun.created": "Agent run started",
-  "agentRun.canceled": "Agent run canceled",
-  "agentRun.updated": "Agent run renamed",
+  "agentRun.canceled": "Agent run stopped",
+  "agentRun.updated": "Agent run updated",
   "agentRun.deleted": "Agent run deleted",
-  "agentRun.reviewDecided": "OpenAPPA review decided",
-  "agentRun.shared": "Agent run shared",
-  "agentRun.unshared": "Agent run unshared",
+  "agentRun.reviewDecided": "Agent run tool call reviewed",
   "browserStorageState.deleted": "Browser saved login removed",
   // Runtime credential
   "credential.created": "Credential created",
   "credential.updated": "Credential updated",
   "credential.deleted": "Credential deleted",
-  "runtimeCredential.created": "Runtime credential created",
-  "runtimeCredential.updated": "Runtime credential updated",
-  "runtimeCredential.deleted": "Runtime credential deleted",
   // Agent tool assignment
   "agentTool.created": "Agent tool added",
   "agentTool.updated": "Agent tool updated",
@@ -62,31 +56,29 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "app.created": "App created",
   "app.updated": "App updated",
   "app.deleted": "App deleted",
-  "app.bulk_updated": "Apps bulk updated",
   "app.bulk_deleted": "Apps bulk deleted",
-  // ChatOps binding
-  "chatOpsBinding.created": "ChatOps binding created",
-  "chatOpsBinding.updated": "ChatOps binding updated",
-  "chatOpsBinding.deleted": "ChatOps binding deleted",
-  "chatOpsBinding.refreshed": "ChatOps binding refreshed",
-  // ChatOps config
-  "chatOpsConfig.updated": "ChatOps config updated",
+  // Messaging channel binding
+  "chatOpsBinding.created": "Messaging channel binding created",
+  "chatOpsBinding.updated": "Messaging channel binding updated",
+  "chatOpsBinding.deleted": "Messaging channel binding deleted",
+  "chatOpsBinding.refreshed": "Messaging channel list refreshed",
+  // Messaging channel settings
+  "chatOpsConfig.updated": "Messaging channel settings updated",
   // Plugin
   "plugin.created": "Plugin created",
   "plugin.updated": "Plugin updated",
   "plugin.deleted": "Plugin deleted",
-  "plugin.syncTriggered": "Plugin sync check triggered",
+  "plugin.syncTriggered": "Plugin update check started",
   // Connector
-  "clientConnection.updated": "Client Connection Reviewed",
+  "clientConnection.updated": "Client connection request reviewed",
   "connectedClient.disconnected": "Connected client disconnected",
-  "connectionPromptSession.created": "Connection prompt session created",
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
   "connector.deleted": "Connector deleted",
   "connector.purged": "Connector permanently deleted",
   "connector.restored": "Connector restored",
-  "connector.permission_sync_triggered": "Connector permission sync triggered",
-  "connector.synced": "Connector synced",
+  "connector.permission_sync_triggered": "Connector permission sync started",
+  "connector.synced": "Connector sync started",
   // Default user limit
   "defaultUserLimit.created": "Default user limit created",
   "defaultUserLimit.updated": "Default user limit updated",
@@ -96,22 +88,16 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "environment.updated": "Environment updated",
   "environment.deleted": "Environment deleted",
   // GitHub App configuration
-  "githubAppConfig.created": "GitHub App configuration created",
-  "githubAppConfig.updated": "GitHub App configuration updated",
-  "githubAppConfig.deleted": "GitHub App configuration deleted",
-  "githubPat.created": "GitHub token saved",
-  "githubPat.updated": "GitHub token updated",
-  "githubPat.deleted": "GitHub token deleted",
   // Identity provider
   "identityProvider.created": "Identity provider created",
   "identityProvider.updated": "Identity provider updated",
   "identityProvider.deleted": "Identity provider deleted",
-  // Internal MCP catalog
-  "internalMcpCatalog.created": "Internal catalog created",
-  "internalMcpCatalog.updated": "Internal catalog updated",
-  "internalMcpCatalog.deleted": "Internal catalog deleted",
-  "internalMcpCatalog.restored": "Internal catalog restored",
-  "internalMcpCatalog.reinstalled": "Internal catalog reinstalled",
+  // MCP registry entry
+  "internalMcpCatalog.created": "MCP registry entry created",
+  "internalMcpCatalog.updated": "MCP registry entry updated",
+  "internalMcpCatalog.deleted": "MCP registry entry deleted",
+  "internalMcpCatalog.restored": "MCP registry entry restored",
+  "internalMcpCatalog.reinstalled": "MCP registry entry reinstalled",
   // Invitation
   "invitation.created": "Invitation sent",
   "invitation.deleted": "Invitation canceled",
@@ -133,7 +119,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "limit.updated": "Limit updated",
   "limit.reset": "Limit usage reset",
   "limit.deleted": "Limit deleted",
-  "limit.bulk_deleted": "Limits deleted",
+  "limit.bulk_deleted": "Limits bulk deleted",
   // LLM model
   "llmModel.updated": "LLM model updated",
   "llmModel.synced": "LLM model catalog synced",
@@ -143,53 +129,38 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "oauthClient.rotated": "OAuth client secret rotated",
   "oauthClient.bulk_deleted": "OAuth clients bulk deleted",
   // LLM OAuth client
-  "llmOauthClient.created": "LLM OAuth client created",
-  "llmOauthClient.updated": "LLM OAuth client updated",
-  "llmOauthClient.deleted": "LLM OAuth client deleted",
-  "llmOauthClient.rotated": "LLM OAuth client secret rotated",
-  "llmOauthClient.bulk_deleted": "LLM OAuth clients bulk deleted",
-  // LLM provider key
-  "llmProviderApiKey.created": "LLM provider key created",
-  "llmProviderApiKey.updated": "Updated provider credential",
-  "llmProviderApiKey.deleted": "LLM provider key deleted",
+  // Provider API key
+  "llmProviderApiKey.created": "Provider API key created",
+  "llmProviderApiKey.updated": "Provider API key updated",
+  "llmProviderApiKey.deleted": "Provider API key deleted",
   // LLM Proxy
   "llmProxy.updated": "LLM Proxy updated",
-  "llmProviderApiKey.bulk_deleted": "LLM provider keys deleted",
+  "llmProviderApiKey.bulk_deleted": "Provider API keys bulk deleted",
   // MCP OAuth client
-  "mcpOauthClient.created": "MCP OAuth client created",
-  "mcpOauthClient.updated": "MCP OAuth client updated",
-  "mcpOauthClient.deleted": "MCP OAuth client deleted",
-  "mcpOauthClient.rotated": "MCP OAuth client secret rotated",
   // MCP server
-  "mcpServer.created": "MCP server created",
+  "mcpServer.created": "MCP server installed",
   "mcpServer.updated": "MCP server updated",
-  "mcpServer.deleted": "MCP server deleted",
+  "mcpServer.deleted": "MCP server uninstalled",
   "mcpServer.restored": "MCP server restored",
   "mcpServer.reinstalled": "MCP server reinstalled",
   "mcpServer.hardReset": "MCP server hard reset",
   // MCP install request
   // Retired with the installation-request feature; retained so audit rows
   // written before its removal still render with a readable label.
-  "mcpServerInstallationRequest.created": "MCP install request created",
-  "mcpServerInstallationRequest.updated": "MCP install request updated",
-  // Member
-  "member.created": "Member added",
-  "member.role_updated": "Member role changed",
-  "member.deleted": "Member removed",
-  "member.bulk_deleted": "Members removed",
+  // User (organization member)
+  "member.created": "User added",
+  "member.role_updated": "User role changed",
+  "member.deleted": "User removed",
+  "member.bulk_deleted": "Users bulk removed",
   // Optimization rule
   // Retired with the LLM optimization rules feature; retained so audit rows
   // written before its removal still render with a readable label.
-  "optimizationRule.created": "Optimization rule created",
-  "optimizationRule.updated": "Optimization rule updated",
-  "optimizationRule.deleted": "Optimization rule deleted",
   // Organization
   "organization.updated": "Organization updated",
   // Project
   "project.created": "Project created",
   "project.updated": "Project updated",
   "project.deleted": "Project deleted",
-  "project.bulk_updated": "Projects bulk updated",
   "project.bulk_deleted": "Projects bulk deleted",
   "project.restored": "Project restored",
   "project.purged": "Project permanently deleted",
@@ -197,11 +168,11 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "role.created": "Role created",
   "role.updated": "Role updated",
   "role.deleted": "Role deleted",
-  // Schedule trigger
-  "scheduleTrigger.created": "Schedule trigger created",
-  "scheduleTrigger.updated": "Schedule trigger updated",
-  "scheduleTrigger.deleted": "Schedule trigger deleted",
-  "scheduleTrigger.triggered": "Schedule trigger run now",
+  // Schedule
+  "scheduleTrigger.created": "Schedule created",
+  "scheduleTrigger.updated": "Schedule updated",
+  "scheduleTrigger.deleted": "Schedule deleted",
+  "scheduleTrigger.triggered": "Schedule run manually",
   // Service account
   "serviceAccount.created": "Service account created",
   "serviceAccount.updated": "Service account updated",
@@ -209,46 +180,44 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   // Skill
   "skill.created": "Skill created",
   "skill.updated": "Skill updated",
-  "skill.bulk_updated": "Skills bulk updated",
   "skill.deleted": "Skill deleted",
   "skill.bulk_deleted": "Skills bulk deleted",
   "skill.restored": "Skill restored",
   "skill.purged": "Skill permanently deleted",
   "skill.imported": "Skill imported",
-  "skillShareLink.created": "Marketplace link created",
-  "skillShareLink.rotated": "Marketplace link rotated",
-  "skillShareLink.revoked": "Marketplace link revoked",
+  "skillShareLink.created": "Skill snapshot link created",
+  "skillShareLink.rotated": "Skill snapshot link refreshed",
+  "skillShareLink.revoked": "Skill snapshot link revoked",
   // Team
   "team.created": "Team created",
   "team.updated": "Team updated",
   "team.deleted": "Team deleted",
   // Team / org token
-  "teamToken.rotated": "Team token rotated",
-  // OpenAPPA
-  "openappaYell.updated": "Updated OpenAPPA yell status",
-  "guardrailsPolicy.updated": "Updated guardrails policy",
+  // Guardrails
+  "openappaYell.updated": "Guardrails yell status updated",
+  "guardrailsPolicy.updated": "Guardrails policy updated",
   // Guardrails batteries
-  "openappaBatteryInstall.created": "Guardrails battery installed",
-  "openappaBatteryInstall.updated": "Guardrails battery install updated",
-  "openappaBatteryInstall.deleted": "Guardrails battery uninstalled",
+  "openappaBatteryInstall.created": "Guardrails battery attached",
+  "openappaBatteryInstall.updated": "Guardrails battery updated",
+  "openappaBatteryInstall.deleted": "Guardrails battery detached",
   "openappaBatteryPackage.updated": "Guardrails battery package uploaded",
   "openappaBatteryPackage.deleted": "Guardrails battery package deleted",
-  "openappaCredentialBinding.updated": "Guardrails battery credential bound",
+  "openappaCredentialBinding.updated": "Guardrails battery credential set",
   // User
-  "user.password_reset": "Password reset",
+  "user.password_reset": "User password reset",
   // User token
   "userToken.rotated": "Personal token rotated",
-  // Virtual API key
-  "virtualApiKey.created": "Virtual API key created",
-  "virtualApiKey.deleted": "Virtual API key deleted",
-  "virtualApiKey.bulk_deleted": "Virtual API keys bulk deleted",
+  // Virtual key
+  "virtualApiKey.created": "Virtual key created",
+  "virtualApiKey.deleted": "Virtual key deleted",
+  "virtualApiKey.bulk_deleted": "Virtual keys bulk deleted",
   // Auth surface
   "auth.impersonation_started": "Impersonation started",
   "auth.impersonation_stopped": "Impersonation stopped",
-  "auth.signed_in": "Sign in",
-  "auth.signed_out": "Sign out",
-  "auth.signed_up": "Sign up",
-  "auth.sso_callback": "SSO callback",
+  "auth.signed_in": "Signed in",
+  "auth.signed_out": "Signed out",
+  "auth.signed_up": "Signed up",
+  "auth.sso_callback": "Signed in with SSO",
   "auth.sessions_revoked": "Sessions revoked",
   // Catch-all fallbacks
   "unknown.created": "Unknown create",
@@ -258,12 +227,10 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "connector.bulk_deleted": "Connectors bulk deleted",
   "environment.bulk_deleted": "Environments bulk deleted",
   "knowledgeBase.bulk_deleted": "Knowledge bases bulk deleted",
-  "knowledgeDirectory.bulk_updated": "Knowledge directories bulk updated",
   "knowledgeDirectory.bulk_deleted": "Knowledge directories bulk deleted",
-  "knowledgeFile.bulk_updated": "Knowledge documents bulk updated",
-  "knowledgeFile.bulk_deleted": "Knowledge documents bulk deleted",
+  "knowledgeFile.bulk_deleted": "Knowledge files bulk deleted",
   "llmModel.bulk_updated": "LLM models bulk updated",
-  "mcpServer.bulk_deleted": "MCP servers bulk deleted",
+  "mcpServer.bulk_deleted": "MCP servers bulk uninstalled",
   "role.bulk_deleted": "Roles bulk deleted",
   "serviceAccount.bulk_deleted": "Service accounts bulk deleted",
   "serviceAccount.bulk_updated": "Service accounts bulk updated",
@@ -311,8 +278,14 @@ export function formatAction(action: AuditEventName | string): string {
   return ACTION_LABEL[action as AuditEventName] ?? humanizeDottedName(action);
 }
 
+/** `optimizationRule.created` → "Optimization rule created". */
 function humanizeDottedName(name: string): string {
-  return name.replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const words = name
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[._]+/g, " ")
+    .trim()
+    .toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 // === Outcome labels and badge variants
@@ -349,91 +322,45 @@ export const ALL_ACTOR_TYPES: AuditActorType[] = [
   "system",
 ];
 
-// === Resource type helpers (unchanged)
-
-/**
- * Curated set of resource types surfaced in the audit log filter. Mirrors the
- * backend's auditable route registry; unrecognised resource types still appear
- * in rows but are not selectable from the filter dropdown.
- */
-export const KNOWN_RESOURCE_TYPES: readonly string[] = [
-  "agent",
-  "agentTool",
-  "apiKey",
-  "app",
-  "auth",
-  "chatOpsBinding",
-  "chatOpsConfig",
-  "clientConnection",
-  "connectedClient",
-  "connectionPromptSession",
-  "plugin",
-  "connector",
-  "defaultUserLimit",
-  "environment",
-  "credential",
-  "githubPat",
-  "identityProvider",
-  "internalMcpCatalog",
-  "invitation",
-  "knowledgeBase",
-  "knowledgeDirectory",
-  "knowledgeFile",
-  "limit",
-  "llmModel",
-  "oauthClient",
-  "llmOauthClient",
-  "llmProviderApiKey",
-  "llmProxy",
-  "mcpOauthClient",
-  "mcpServer",
-  "mcpServerInstallationRequest",
-  "member",
-  "optimizationRule",
-  "organization",
-  "role",
-  "scheduleTrigger",
-  "serviceAccount",
-  "skill",
-  "skillShareLink",
-  "team",
-  "teamToken",
-  "user",
-  "userToken",
-  "virtualApiKey",
-];
+// === Resource type helpers
 
 const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
-  agentTool: "Agent tool assignment",
+  agentTool: "Agent tool",
   apiKey: "API key",
-  auth: "Auth",
-  chatOpsBinding: "ChatOps channel binding",
-  chatOpsConfig: "ChatOps configuration",
-  plugin: "Plugin",
-  githubAppConfig: "GitHub App configuration",
-  githubPat: "GitHub PAT",
-  internalMcpCatalog: "Internal MCP catalog",
-  mcpOauthClient: "MCP OAuth client",
-  llmModel: "LLM model",
-  oauthClient: "OAuth client",
-  llmOauthClient: "LLM OAuth client",
-  llmProviderApiKey: "LLM provider key",
-  llmProxy: "LLM Proxy",
-  member: "Member",
-  mcpServer: "MCP server",
-  mcpServerInstallationRequest: "MCP install request",
+  auth: "Sign-in",
+  browserStorageState: "Browser saved login",
+  chatOpsBinding: "Messaging channel binding",
+  chatOpsConfig: "Messaging channel settings",
+  clientConnection: "Client connection request",
+  // The Grok CLI changing xAI's coding-data retention through the LLM Proxy.
+  clientPrivacy: "Grok data retention",
+  desktopDevice: "Device",
+  desktopDeviceSignIn: "Device sign-in",
+  guardrailsPolicy: "Guardrails policy",
   identityProvider: "Identity provider",
+  internalMcpCatalog: "MCP registry entry",
   knowledgeBase: "Knowledge base",
   knowledgeDirectory: "Knowledge directory",
   knowledgeFile: "Knowledge file",
-  optimizationRule: "Optimization rule",
-  organization: "Organization",
-  scheduleTrigger: "Scheduled task",
-  skill: "Agent skill",
-  skillShareLink: "Marketplace link",
-  teamToken: "Team / org token",
+  llmModel: "LLM model",
+  llmProviderApiKey: "Provider API key",
+  llmProxy: "LLM Proxy",
+  mcpServer: "MCP server",
+  member: "User",
+  oauthClient: "OAuth client",
+  // Who can use an object: the list Permissions button and the item's Access section.
+  resourcePermissions: "Access",
+  openappaBatteryInstall: "Guardrails battery",
+  openappaBatteryPackage: "Guardrails battery package",
+  openappaCredentialBinding: "Guardrails battery credential",
+  openappaYell: "Guardrails yell",
+  scheduleTrigger: "Schedule",
+  serviceAccountFederatedCredential: "Federated credential",
+  skill: "Skill",
+  skillShareLink: "Skill snapshot link",
+  userLimitUsage: "User spend",
   userToken: "Personal token",
-  virtualApiKey: "Virtual API key",
+  virtualApiKey: "Virtual key",
 };
 
 export function formatResourceType(resourceType: string): string {

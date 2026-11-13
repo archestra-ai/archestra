@@ -345,6 +345,27 @@ describe("GET /api/audit-logs", () => {
     expect(body.data.some((r: AuditLog) => r.id === agentRow.id)).toBe(true);
   });
 
+  test("resourceType filter accepts a comma-separated list", async () => {
+    const directoryRow = await seedRow(organizationId, {
+      resourceType: "knowledgeDirectory",
+    });
+    const fileRow = await seedRow(organizationId, {
+      resourceType: "knowledgeFile",
+    });
+    const agentRow = await seedRow(organizationId, { resourceType: "agent" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs?resourceType=knowledgeDirectory,knowledgeFile",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const ids = response.json().data.map((r: AuditLog) => r.id);
+    expect(ids).toContain(directoryRow.id);
+    expect(ids).toContain(fileRow.id);
+    expect(ids).not.toContain(agentRow.id);
+  });
+
   test("resourceId filter narrows results", async () => {
     const targeted = await seedRow(organizationId, {
       resourceType: "agent",

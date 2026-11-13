@@ -1,31 +1,6 @@
 "use client";
 
-import {
-  AppWindow,
-  Blocks,
-  Bot,
-  Building2,
-  CalendarClock,
-  Database,
-  FileText,
-  Fingerprint,
-  Gauge,
-  Globe,
-  KeyRound,
-  LogIn,
-  type LucideIcon,
-  MessageSquare,
-  Plug,
-  Server,
-  Shield,
-  ShieldBan,
-  Sparkles,
-  User,
-  UserCog,
-  Users,
-  Wrench,
-  X,
-} from "lucide-react";
+import { ShieldBan, X } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -35,6 +10,7 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import type { AuditLog } from "@/lib/audit-log/audit-log.query";
 import { formatCompactRelativeTime, formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
+import { auditResourceIcon } from "./audit-event-taxonomy";
 import {
   formatAction,
   formatResourceType,
@@ -216,7 +192,7 @@ function ResourceTile({
   type: string | null | undefined;
   failed: boolean;
 }) {
-  const Icon = (type && RESOURCE_ICONS[type]) || Blocks;
+  const Icon = auditResourceIcon(type);
   return (
     <span
       className={cn(
@@ -236,48 +212,3 @@ function Dot() {
     </span>
   );
 }
-
-const RESOURCE_ICONS: Record<string, LucideIcon> = {
-  agent: Bot,
-  agentRun: Bot,
-  agentTool: Wrench,
-  apiKey: KeyRound,
-  app: AppWindow,
-  auth: LogIn,
-  chatOpsBinding: MessageSquare,
-  chatOpsConfig: MessageSquare,
-  clientConnection: Plug,
-  connectedClient: Plug,
-  connector: Plug,
-  credential: KeyRound,
-  defaultUserLimit: Gauge,
-  environment: Globe,
-  githubPat: KeyRound,
-  identityProvider: Fingerprint,
-  internalMcpCatalog: Server,
-  invitation: Users,
-  knowledgeBase: Database,
-  knowledgeDirectory: Database,
-  knowledgeFile: FileText,
-  limit: Gauge,
-  llmModel: Sparkles,
-  llmOauthClient: KeyRound,
-  llmProviderApiKey: KeyRound,
-  llmProxy: Server,
-  mcpOauthClient: KeyRound,
-  mcpServer: Server,
-  member: UserCog,
-  oauthClient: KeyRound,
-  organization: Building2,
-  plugin: Blocks,
-  role: Shield,
-  runtimeCredential: KeyRound,
-  scheduleTrigger: CalendarClock,
-  serviceAccount: Bot,
-  skill: Sparkles,
-  team: Users,
-  teamToken: KeyRound,
-  user: User,
-  userToken: KeyRound,
-  virtualApiKey: KeyRound,
-};

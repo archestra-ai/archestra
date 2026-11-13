@@ -80,9 +80,6 @@ class OpenAppaGithubAppSetup {
           appName: await OrganizationModel.getAppName(),
           // Off github.com there is no template; setup writes the workflow itself.
           seedsWorkflow: api !== GITHUB_API_URL,
-          // The environment variable, while set, decides for every source.
-          // Release 1.4: the deployment's variable alone decides.
-          selfService: config.openappa.selfService === "enabled",
         }),
       ),
     };
@@ -558,12 +555,7 @@ type Installation = {
   repository_selection: "all" | "selected";
 };
 
-function manifest(params: {
-  appName: string;
-  seedsWorkflow: boolean;
-  /** Self-service Guardrails: checks on pull requests and the branch ruleset. */
-  selfService: boolean;
-}) {
+function manifest(params: { appName: string; seedsWorkflow: boolean }) {
   const { appName } = params;
   const callbackUrl = `${config.frontendBaseUrl}/github/app-setup`;
   return {
@@ -575,16 +567,16 @@ function manifest(params: {
     redirect_url: callbackUrl,
     setup_url: callbackUrl,
     public: false,
-    // Contents and pull requests on the policy repository; with self-service,
-    // checks on its pull requests and Administration for the branch ruleset
-    // Archestra keeps. Each job's token carries only its own part; it never
-    // creates repositories.
+    // Contents and pull requests on the policy repository, and checks on its
+    // pull requests for self-service Guardrails, asked for up front so that
+    // turning self-service on later needs no change to the App. The branch
+    // ruleset that requires the check is the administrator's to import, so
+    // no Administration. Each job's token carries only its own part; it
+    // never creates repositories.
     default_permissions: {
       contents: "write",
       pull_requests: "write",
-      ...(params.selfService
-        ? { checks: "write", administration: "write" }
-        : {}),
+      checks: "write",
       metadata: "read",
       ...(params.seedsWorkflow ? { workflows: "write" } : {}),
     },

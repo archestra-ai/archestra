@@ -117,6 +117,7 @@ export function RuntimeCredentialConnectionDialog({
         if (!open) onClose();
       }}
       size={definition.kind === "github_app" ? "medium" : "small"}
+      bodyClassName="space-y-4"
       title={
         <span className="flex items-center gap-2">
           <RuntimeCredentialIcon icon={definition.icon} />

@@ -2381,6 +2381,8 @@ async function serveAutoMergeRepository(params: {
   const merge = { status: 200 };
   /** How each pull request answers when read on its own. */
   const pullStates: Record<number, { state: string; merged: boolean }> = {};
+  /** Whether GitHub has a pull request's diff yet; it has unless told otherwise. */
+  const filesReady: Record<number, boolean> = {};
   server.use(
     http.get(`${REPO}/pulls/:number`, ({ params }) =>
       HttpResponse.json({
@@ -2390,6 +2392,7 @@ async function serveAutoMergeRepository(params: {
           sha: results[Number(params.number)],
           ref: pulls[Number(params.number)]?.ref,
         },
+        changed_files: pulls[Number(params.number)]?.files.length ?? 0,
         ...(pullStates[Number(params.number)] ?? {
           state: "open",
           merged: false,
@@ -2420,7 +2423,11 @@ async function serveAutoMergeRepository(params: {
     ),
     http.get(`${REPO}/pulls/:number/files`, ({ params }) =>
       HttpResponse.json(
-        pulls[Number(params.number)]?.files.map((filename) => ({ filename })),
+        filesReady[Number(params.number)] === false
+          ? []
+          : pulls[Number(params.number)]?.files.map((filename) => ({
+              filename,
+            })),
       ),
     ),
     http.get(`${REPO}/pulls/:number/commits`, ({ params }) =>
@@ -2447,7 +2454,16 @@ async function serveAutoMergeRepository(params: {
       return new HttpResponse(null, { status: 204 });
     }),
   );
-  return { results, runs, merges, deleted, merge, repo, pullStates };
+  return {
+    results,
+    runs,
+    merges,
+    deleted,
+    merge,
+    repo,
+    pullStates,
+    filesReady,
+  };
 }
 
 /** The queued pulls of the organization's Git sync. */
@@ -2705,6 +2721,39 @@ test("a merge GitHub refuses because someone merged or closed the pull request m
   repo.head = FIRST;
   await checkDueAppaGithubSyncs();
   expect(await queuedSyncs()).toHaveLength(0);
+});
+
+test("a pull request GitHub lists no files for yet is checked the next minute, not passed as changing nothing", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, runs, merges, filesReady } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+  });
+  await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
+
+  // The diff is not there yet: no check is posted on that head, and nothing
+  // merges; the other pull requests go on as usual.
+  filesReady[1] = false;
+  await checkDueAppaGithubSyncs();
+  expect(runs.map((run) => run.head_sha)).not.toContain(results[1]);
+  expect(merges).toEqual([]);
+
+  // The next minute sees the files: the check posts and the App merges.
+  filesReady[1] = true;
+  await checkDueAppaGithubSyncs();
+  expect(runs.find((run) => run.head_sha === results[1])?.conclusion).toBe(
+    "success",
+  );
+  expect(merges).toEqual([
+    { number: 1, sha: results[1], merge_method: "squash" },
+  ]);
 });
 
 test("a policy in a folder of a repository that holds other work gets the same one-rule ruleset, and a pull request that changes no policy file gets the check as skipped at once", async ({

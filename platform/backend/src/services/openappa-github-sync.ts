@@ -1518,19 +1518,27 @@ class AutoMerger {
     key: AllowedCacheKey;
   }) {
     const { pull, result } = params;
-    if (
-      !result.accepted ||
-      result.judged.governed.length === 0 ||
-      !result.judged.selfServed ||
-      !pull.number ||
-      !pull.ref ||
-      !isServerRulesBranch(pull.ref) ||
-      (result.mergeRefusedAt !== undefined &&
-        Date.now() - result.mergeRefusedAt <
-          ((result.mergeRefusals ?? 1) > 1 ? RETRY_REFUSED_MERGE : 0))
-    )
-      return;
     const { organizationId, repo } = this.source;
+    const skipped = !result.accepted
+      ? "its check did not pass"
+      : result.judged.governed.length === 0
+        ? "it changes no policy file"
+        : !result.judged.selfServed
+          ? "it is not self-served"
+          : !pull.number || !pull.ref || !isServerRulesBranch(pull.ref)
+            ? "it is not on a server rules branch"
+            : result.mergeRefusedAt !== undefined &&
+                Date.now() - result.mergeRefusedAt <
+                  ((result.mergeRefusals ?? 1) > 1 ? RETRY_REFUSED_MERGE : 0)
+              ? "GitHub refused it a moment ago"
+              : null;
+    if (skipped) {
+      logger.debug(
+        { organizationId, repo, number: pull.number, reason: skipped },
+        "OpenAPPA is not merging this pull request",
+      );
+      return;
+    }
     this.access ??= this.resolveAccess();
     const access = await this.access;
     if (!access) return;
@@ -1966,6 +1974,8 @@ async function githubPullRequests(
   const { token, api } = await resolveOpenAppaGithubAccess(source, {
     pull_requests: "read",
     checks: "write",
+    // The synced branch's head is read with the same token.
+    ...(options.branchHead ? { contents: "read" as const } : {}),
   });
   if (!token) return { pulls: [] };
   const base = `${api}/repos/${source.repo}`;
@@ -2101,6 +2111,23 @@ async function judgeGithubPull(params: {
     max: MAX_PULL_FILES,
   });
   if (changed === null) return null;
+  // A pull request just opened can list no files for a moment, before GitHub
+  // has its diff: one that says it changes files is checked next minute
+  // rather than passed as changing nothing.
+  if (changed.length === 0) {
+    const opened = await githubCall<{ changed_files?: number }>({
+      token,
+      url: `${base}/pulls/${number}`,
+    }).catch(() => null);
+    if (!opened?.ok) return null;
+    if ((opened.body.changed_files ?? 0) > 0) {
+      logger.debug(
+        { organizationId: source.organizationId, number },
+        "A pull request lists no files yet; its check waits for the next minute",
+      );
+      return null;
+    }
+  }
   if (changed === "over")
     return {
       governed: [],

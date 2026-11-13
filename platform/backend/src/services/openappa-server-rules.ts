@@ -295,7 +295,8 @@ export async function getServerRulesChangeStatus(
 ) {
   const source = await requireSource(params.organizationId);
   const server = await serverFor(params, serverRulesFolderOf(source));
-  const { token, api } = await githubWriter(source);
+  // The check posted on the head is read too, which takes Checks.
+  const { token, api } = await githubWriter(source, { checks: "read" });
   const base = `${api}/repos/${source.repo}`;
   const appId = await checkIntegrationId(source);
   const deadline = Date.now() + (params.wait ? STATUS_WAIT : 0);
@@ -1103,10 +1104,13 @@ async function githubWriter(
     Source,
     "organizationId" | "repo" | "githubPatId" | "githubAppConfigId"
   >,
+  /** What the job needs besides writing contents and pull requests. */
+  more: { checks?: "read" } = {},
 ) {
   const { token, api } = await resolveOpenAppaGithubAccess(source, {
     contents: "write",
     pull_requests: "write",
+    ...more,
   });
   if (!token)
     throw new ApiError(

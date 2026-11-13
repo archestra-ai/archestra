@@ -39,6 +39,7 @@ const desktopTunnelRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     `${DESKTOP_TUNNEL_PREFIX}/:tunnelId`,
     {
+      onRequest: authenticate,
       schema: {
         operationId: RouteId.GetDesktopTunnel,
         description:
@@ -80,7 +81,7 @@ const desktopTunnelRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const device = await authenticate(request);
+      const device = authenticatedDevice(request);
       const program = await servedProgramService.getServedProgram(
         readHeader(request, "x-tunnel-client-target"),
       );
@@ -111,6 +112,7 @@ const desktopTunnelRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     `${DESKTOP_TUNNEL_PREFIX}/:tunnelId/poll`,
     {
+      onRequest: authenticate,
       schema: {
         operationId: RouteId.PollDesktopTunnel,
         description:
@@ -141,7 +143,7 @@ const desktopTunnelRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const device = await authenticate(request);
+      const device = authenticatedDevice(request);
       desktopMcpInstallService.completeReadyChannels(
         device,
         readReadyChannels(request),
@@ -168,6 +170,7 @@ const desktopTunnelRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     `${DESKTOP_TUNNEL_PREFIX}/:tunnelId/response`,
     {
+      onRequest: authenticate,
       schema: {
         operationId: RouteId.RespondDesktopTunnel,
         description: "The tunnel client's answer for one polled MCP message.",
@@ -186,7 +189,7 @@ const desktopTunnelRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const device = await authenticate(request);
+      const device = authenticatedDevice(request);
       const { body } = request;
       if (body.resp_type === "jsonrpc_notify") {
         // The tunnel client reports its own state on the reserved channel.
@@ -226,6 +229,9 @@ const desktopTunnelRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.delete(
     `${DESKTOP_TUNNEL_PREFIX}/:tunnelId`,
     {
+      onRequest: authenticate,
+      // The tunnel client sends no body; nothing larger is read.
+      bodyLimit: DELETE_BODY_LIMIT,
       schema: {
         operationId: RouteId.DeleteDesktopTunnel,
         description:
@@ -236,7 +242,7 @@ const desktopTunnelRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const device = await authenticate(request);
+      const device = authenticatedDevice(request);
       await removeDesktopDeviceForTunnelClient({
         device,
         request: {
@@ -263,6 +269,9 @@ const DEFAULT_REQUESTED_POLL_WAIT_MS = 30_000;
 const MAX_REQUESTED_POLL_WAIT_MS = 600_000;
 const MAX_READY_CHANNELS = 64;
 const MAX_CHANNEL_NAME_LENGTH = 128;
+const DELETE_BODY_LIMIT = 1024;
+
+const authenticatedDevices = new WeakMap<FastifyRequest, DesktopDevice>();
 
 const TunnelParamsSchema = z.object({
   tunnelId: z.string().regex(/^tunnel_[a-z0-9]{32}$/),
@@ -291,15 +300,30 @@ const ServerInfoSchema = z.object({
     .max(MAX_READY_CHANNELS),
 });
 
-async function authenticate(
-  request: FastifyRequest<{ Params: { tunnelId: string } }>,
-): Promise<DesktopDevice> {
+/**
+ * Checks the device key in `onRequest`, before Fastify reads and parses the
+ * body, so a caller without a valid key cannot make the server parse a body
+ * of up to the API body limit. The handler takes the device with
+ * {@link authenticatedDevice}.
+ */
+async function authenticate(request: FastifyRequest): Promise<void> {
   const header = request.headers.authorization;
   const deviceKey = header?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null;
-  return desktopTunnelService.authenticate({
-    tunnelId: request.params.tunnelId,
+  // Not validated yet in `onRequest`; a malformed id matches no device.
+  const { tunnelId } = request.params as { tunnelId?: string };
+  const device = await desktopTunnelService.authenticate({
+    tunnelId: tunnelId ?? "",
     deviceKey,
   });
+  authenticatedDevices.set(request, device);
+}
+
+function authenticatedDevice(request: FastifyRequest): DesktopDevice {
+  const device = authenticatedDevices.get(request);
+  if (!device) {
+    throw new Error("The tunnel route has no authenticate hook.");
+  }
+  return device;
 }
 
 /** The one value of a header, or null when it is missing or sent twice. */

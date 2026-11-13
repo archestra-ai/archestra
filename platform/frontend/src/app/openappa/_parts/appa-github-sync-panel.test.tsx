@@ -138,6 +138,178 @@ test("syncs on demand and shows the server's failure while retaining the source"
   expect(toast.success).not.toHaveBeenCalled();
 });
 
+test("one Finish setup notice names what still waits, and its wizard takes the pieces at hand: the files update pull request, the App's permissions, the check", async () => {
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Guardrails Policy Admission",
+        include: { folder: "mcp", state: "included" },
+        branchRules: {
+          state: "active",
+          url: "https://github.com/example/policies/rules/5",
+        },
+      }),
+    ),
+  );
+  state = {
+    ...state,
+    templateFiles: {
+      templateCommit: "2302fc9b4a9921ea73910047fd1e98535c321112",
+      state: "pull_open",
+      paths: [".github/workflows/validate.yml", "README.md"],
+      withheld: [],
+      pull: { number: 4, url: "https://github.com/example/policies/pull/4" },
+      checkedAt: new Date(Date.now() - 10_000).toISOString(),
+    },
+  };
+  show();
+  expect(await screen.findByText("Finish the Git sync setup")).toBeVisible();
+  expect(screen.getByText("Merge PR #4.")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
+  let dialog = await screen.findByRole("dialog", {
+    name: "Merge the pull request",
+  });
+  expect(
+    within(dialog).getByRole("link", { name: "Repository files update #4" }),
+  ).toHaveAttribute("href", "https://github.com/example/policies/pull/4");
+  expect(within(dialog).getByText(/Waiting for merge/)).toBeVisible();
+  expect(
+    within(dialog).getByRole("link", { name: "Review and merge" }),
+  ).toHaveAttribute("href", "https://github.com/example/policies/pull/4");
+  // The pull request, then the Finish step, where Done syncs at once.
+  expect(within(dialog).queryByText("GitHub App")).toBeNull();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+  dialog = await screen.findByRole("dialog", { name: "Finish setup" });
+  expect(
+    await within(dialog).findByText(
+      /updates the files beside the policy: waiting for merge/,
+    ),
+  ).toBeVisible();
+  const actions: unknown[] = [];
+  server.use(
+    http.patch(url, async ({ request }) => {
+      actions.push(await request.json());
+      return HttpResponse.json(state);
+    }),
+  );
+  fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+  await waitFor(() => expect(actions).toEqual([{ action: "sync" }]));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  cleanup();
+
+  // The App may not write workflows: the pull request carries the rest, and
+  // the wizard starts with the grant, then the pull requests.
+  server.use(
+    http.get(`${url}/app-grants`, () =>
+      HttpResponse.json({
+        name: "Policy App",
+        url: "https://github.com/apps/policy-app",
+        settingsUrl: "https://github.com/settings/apps/policy-app/permissions",
+        installationUrl: "https://github.com/settings/installations/7",
+        permissions: [{ name: "workflows", granted: false }],
+      }),
+    ),
+  );
+  state = {
+    ...state,
+    source: state.source && { ...state.source, githubAppConfigId: "app-1" },
+    templateFiles: {
+      templateCommit: "2302fc9b4a9921ea73910047fd1e98535c321112",
+      state: "pull_open",
+      paths: [".github/workflows/validate.yml", "README.md"],
+      withheld: [".github/workflows/validate.yml"],
+      detail:
+        "The GitHub App cannot act on example/policies with Workflows (read and write).",
+      pull: { number: 4, url: "https://github.com/example/policies/pull/4" },
+      checkedAt: "2026-11-13T09:00:00Z",
+    },
+  };
+  show();
+  expect(
+    await screen.findByText(
+      "Grant the App's Workflows permission, merge PR #4.",
+    ),
+  ).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
+  dialog = await screen.findByRole("dialog", {
+    name: "Finish the GitHub App setup",
+  });
+  expect(
+    await within(dialog).findByRole("button", { name: "Update App" }),
+  ).toBeVisible();
+  expect(dialog).toHaveTextContent(
+    "Grant the Workflows permission to the Policy App App",
+  );
+  expect(within(dialog).getByText("Pull requests")).toBeVisible();
+  expect(
+    within(dialog).getByRole("button", { name: "Continue" }),
+  ).toBeDisabled();
+  cleanup();
+
+  // The last check failed while the pull request waits: still the one to
+  // merge, with the failure beside it.
+  state = {
+    ...state,
+    templateFiles: {
+      templateCommit: "2302fc9b4a9921ea73910047fd1e98535c321112",
+      state: "unavailable",
+      paths: [".github/workflows/validate.yml", "README.md"],
+      withheld: [],
+      pull: { number: 4, url: "https://github.com/example/policies/pull/4" },
+      detail: "GitHub returned HTTP 502 while proposing the repository files.",
+      checkedAt: "2026-11-13T09:00:00Z",
+    },
+  };
+  show();
+  expect(await screen.findByText("Merge PR #4.")).toBeVisible();
+  expect(
+    screen.getByText("Repository files could not be checked"),
+  ).toBeVisible();
+  cleanup();
+
+  // Only the workflow differs and the check is refused: both permissions,
+  // no pull request yet.
+  state = {
+    ...state,
+    templateFiles: {
+      templateCommit: "2302fc9b4a9921ea73910047fd1e98535c321112",
+      state: "needs_permission",
+      paths: [".github/workflows/validate.yml"],
+      withheld: [".github/workflows/validate.yml"],
+      detail:
+        "The GitHub App cannot act on example/policies with Workflows (read and write).",
+      checkedAt: "2026-11-13T09:00:00Z",
+    },
+    check: {
+      name: "Check OpenAPPA Guardrails",
+      state: "refused",
+      detail: "a GitHub App needs the Checks permission (read and write)",
+    },
+  };
+  show();
+  expect(
+    await screen.findByText(
+      "Grant the App's Workflows and Checks permissions.",
+    ),
+  ).toBeVisible();
+  cleanup();
+
+  // Current files and a posted check show nothing.
+  state = {
+    ...state,
+    templateFiles: {
+      templateCommit: "2302fc9b4a9921ea73910047fd1e98535c321112",
+      state: "current",
+      paths: [],
+      checkedAt: "2026-11-13T09:00:00Z",
+    },
+    check: { name: "Check OpenAPPA Guardrails", state: "posted" },
+  };
+  show();
+  expect(await screen.findByText("Connected")).toBeVisible();
+  expect(screen.queryByText(/Finish the Git sync setup/)).toBeNull();
+});
+
 test("shows a branch rule that needs a change, with the ruleset linked and the fix, and offers to finish the setup", async () => {
   server.use(
     http.get(`${url}/protection`, () =>
@@ -207,9 +379,14 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
         ),
     ),
   ).toBeVisible();
+  expect(
+    screen.getByText(
+      "Grant the App's Checks permission, finish the self-service protection.",
+    ),
+  ).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
   const dialog = await screen.findByRole("dialog", {
-    name: "MCP Guardrails Self-Service",
+    name: "Finish the GitHub App setup",
   });
   expect(
     await within(dialog).findByText(
@@ -234,9 +411,7 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
       within(dialog).getByRole("button", { name: "Continue" }),
     ).toBeEnabled(),
   );
-  expect(
-    within(dialog).getByText(/every permission self-service needs/),
-  ).toBeVisible();
+  expect(within(dialog).getByText(/has the Checks permission/)).toBeVisible();
 });
 
 test("Enable walks through the App's permission, the folder, the include pull request and the ruleset the administrator imports; the card then says what is in place", async () => {
@@ -318,6 +493,7 @@ test("Enable walks through the App's permission, the folder, the include pull re
         enabled?: boolean;
       };
       actions.push(body);
+      if (body.action === "sync") return HttpResponse.json(state);
       if (body.action === "include_servers") {
         include = {
           folder: "rules/servers",
@@ -443,7 +619,7 @@ test("Enable walks through the App's permission, the folder, the include pull re
   expect(link.closest("p")).toHaveTextContent(
     "Pull request #12 adds rules/servers/*.toml to appa.toml. Merge it and re-sync.",
   );
-  expect(screen.queryByRole("button", { name: "Finish setup" })).toBeNull();
+  expect(screen.getByText("Merge PR #12.")).toBeVisible();
   // Once on, the row offers no switch of its own: Edit changes or turns it off.
   expect(screen.queryByRole("button", { name: "Enable" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Disable" })).toBeNull();
@@ -499,7 +675,7 @@ test("locks self-service while the environment variable sets it, naming the vari
   expect(
     await screen.findByText(/No branch ruleset requires the/),
   ).toHaveTextContent(
-    "No branch ruleset requires the Guardrails Policy Admission check yet. Import it with Finish setup.",
+    "No branch ruleset requires the Guardrails Policy Admission check yet.",
   );
 });
 
@@ -740,9 +916,20 @@ test("links an existing repository whose policy lives elsewhere through Advanced
   expect(
     await screen.findByText(/Found policy\/appa.toml/, {}, { timeout: 3000 }),
   ).toBeVisible();
+  server.use(http.patch(url, () => HttpResponse.json(state)));
   fireEvent.click(screen.getByRole("button", { name: "Connect repository" }));
+  // The Finish step follows the connect, and Done closes it.
+  const checklist = await screen.findByRole("dialog", { name: "Finish setup" });
+  expect(
+    await within(checklist).findByText(
+      "Repository connected and the policy pulled",
+    ),
+  ).toBeVisible();
+  fireEvent.click(within(checklist).getByRole("button", { name: "Done" }));
   expect(await screen.findByText("Waiting for the first sync")).toBeVisible();
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
 });
 
 test("starts fresh from the template, connects it through a chosen App and finishes once the setup PR merges", async () => {
@@ -816,18 +1003,20 @@ test("starts fresh from the template, connects it through a chosen App and finis
     await screen.findByText("OpenAPPA template", {}, { timeout: 3000 }),
   ).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Connect repository" }));
-  // Repository rules require a pull request: the dialog waits on it.
-  expect(await screen.findByText("Finish Git sync")).toBeVisible();
-  expect(screen.getByText("Merge the setup PR")).toBeVisible();
+  // Repository rules require a pull request: the Finish step waits on it.
+  const checklist = await screen.findByRole("dialog", { name: "Finish setup" });
   expect(
-    within(screen.getByRole("dialog")).getByRole("link", {
-      name: "Review and merge",
-    }),
+    await within(checklist).findByText(
+      /carries the initial policy: waiting for merge/,
+    ),
+  ).toBeVisible();
+  expect(
+    within(checklist).getByRole("link", { name: "PR #7" }),
   ).toHaveAttribute(
     "href",
     "https://github.com/example/openappa-policy/pull/7",
   );
-  // Not merged yet: the check stays quiet, since the dialog already says so.
+  // Not merged yet: the check stays quiet, since the Finish step says so.
   let checks = 0;
   server.use(
     http.patch(url, () => {
@@ -841,7 +1030,11 @@ test("starts fresh from the template, connects it through a chosen App and finis
     expect(screen.queryByText("Checking…")).not.toBeInTheDocument(),
   );
   expect(toast.info).not.toHaveBeenCalled();
-  expect(screen.getByText("Finish Git sync")).toBeVisible();
+  expect(
+    within(checklist).getByText(
+      /carries the initial policy: waiting for merge/,
+    ),
+  ).toBeVisible();
   server.use(
     http.patch(url, async ({ request }) => {
       expect(await request.json()).toEqual({ action: "sync" });
@@ -860,14 +1053,15 @@ test("starts fresh from the template, connects it through a chosen App and finis
   );
   // Coming back from merging on GitHub checks at once.
   fireEvent.focus(window);
-  expect(await screen.findByText("Setup finished")).toBeVisible();
-  expect(screen.getByText("Merged")).toBeVisible();
+  expect(
+    await within(checklist).findByText(/^The policy syncs from/),
+  ).toBeVisible();
   expect(toast.success).toHaveBeenCalledWith(
     "Initial policy merged. Policy synced from GitHub.",
   );
-  fireEvent.click(screen.getByRole("button", { name: "Done" }));
+  fireEvent.click(within(checklist).getByRole("button", { name: "Done" }));
   await waitFor(() =>
-    expect(screen.queryByText("Setup finished")).not.toBeInTheDocument(),
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
 });
 
@@ -952,6 +1146,83 @@ test("editing an App-backed source keeps its repository and only warns about mis
     selfServiceDirectory: "mcp",
     selfServiceAutoMerge: false,
   });
+});
+
+test("the Self-service step leaves the branch ruleset to the Finish step, which shows it once App and repository are set: in place with its link, or what to import", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: appId },
+  };
+  serveApps([[appId, "Policy App"]]);
+  serveRepositories({ [appId]: ["example/policies"] });
+  let branchRules: Record<string, unknown> = {
+    state: "active",
+    url: "https://github.com/example/policies/rules/5",
+  };
+  server.use(
+    http.get(`${githubApp}/repository`, () =>
+      HttpResponse.json({ status: "policy", validations: true }),
+    ),
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Check OpenAPPA Guardrails",
+        include: { folder: "mcp", state: "included" },
+        branchRules,
+      }),
+    ),
+  );
+  const openStep = async (name: RegExp) => {
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(
+        within(dialog).getByRole("list", { name: "Setup progress" }),
+      ).getByRole("button", { name }),
+    );
+    return dialog;
+  };
+  show();
+  fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+  let dialog = await openStep(/Self-service/);
+  expect(
+    await within(dialog).findByText(
+      /The branch ruleset that makes the check required comes on the Finish step/,
+    ),
+  ).toBeVisible();
+  expect(within(dialog).queryByText(/Download ruleset/)).toBeNull();
+  // The Finish step opens from any step of an edit, and reads what is in place.
+  dialog = await openStep(/Finish/);
+  expect(
+    (
+      await within(dialog).findAllByText(
+        (_, element) =>
+          element?.tagName === "SPAN" &&
+          /^Ruleset requires the Check OpenAPPA Guardrails check on the branch/.test(
+            element.textContent ?? "",
+          ),
+      )
+    )[0],
+  ).toBeVisible();
+  expect(within(dialog).getByRole("link", { name: "Ruleset" })).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/rules/5",
+  );
+  cleanup();
+
+  // Not imported yet: what to import, with the file and the settings.
+  branchRules = {
+    state: "missing",
+    settingsUrl: "https://github.com/example/policies/settings/rules",
+    ruleset: { name: "Check OpenAPPA Guardrails" },
+  };
+  show();
+  fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+  dialog = await openStep(/Finish/);
+  expect(
+    await within(dialog).findByRole("button", { name: "Download ruleset" }),
+  ).toBeVisible();
+  expect(
+    within(dialog).getByRole("button", { name: "Open rulesets" }),
+  ).toBeVisible();
 });
 
 test("editing keeps the saved auto-merge choice; the Self-service step shows it under self-service and changes it", async () => {
@@ -1508,26 +1779,42 @@ test("leaves the validation folder and sync interval alone, and stays open on se
   await waitFor(() => expect(close).toHaveBeenCalledWith(false));
 });
 
-test("keeps the merge link after reload and removes it once initial sync completes", async () => {
+test("keeps the merge notice after reload, and Done in the wizard syncs at once so the notice goes once the merge is pulled", async () => {
   state = {
     ...state,
     source: { ...source, setupPullRequestNumber: 7, sourceCommit: null },
   };
+  show();
+  expect(await screen.findByText("Merge PR #7.")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
+  const pulls = await screen.findByRole("dialog", {
+    name: "Merge the pull request",
+  });
+  expect(
+    within(pulls).getByRole("link", { name: "Initial policy #7" }),
+  ).toHaveAttribute("href", "https://github.com/example/policies/pull/7");
+  fireEvent.click(within(pulls).getByRole("button", { name: "Continue" }));
+  const dialog = await screen.findByRole("dialog", { name: "Finish setup" });
+  // Merged on GitHub meanwhile: Done syncs at once, the card shows the sync
+  // running, and the notice goes once it lands.
+  let finish!: () => void;
+  const landed = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
   server.use(
-    http.patch(url, () => {
+    http.patch(url, async () => {
+      await landed;
       state = { ...state, source };
       return HttpResponse.json(state);
     }),
   );
-  show();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
   expect(
-    await screen.findByRole("link", { name: "Review and merge PR" }),
-  ).toHaveAttribute("href", "https://github.com/example/policies/pull/7");
-  fireEvent.click(screen.getByRole("button", { name: "Sync now" }));
+    await screen.findByRole("button", { name: "Syncing…" }),
+  ).toBeDisabled();
+  finish();
   await waitFor(() =>
-    expect(
-      screen.queryByRole("link", { name: "Review and merge PR" }),
-    ).not.toBeInTheDocument(),
+    expect(screen.queryByText("Merge PR #7.")).not.toBeInTheDocument(),
   );
   expect(screen.getByText("Connected")).toBeVisible();
 });
@@ -1576,21 +1863,34 @@ test("links the pull request that includes the servers' folder while it waits, a
   expect(link.closest("p")).toHaveTextContent(
     "Pull request #12 adds mcp/*.toml to appa.toml. Merge it and re-sync.",
   );
-  expect(screen.queryByRole("button", { name: "Finish setup" })).toBeNull();
+  expect(screen.getByText("Merge PR #12.")).toBeVisible();
 
   cleanup();
   include = { folder: "mcp", state: "missing" };
+  server.use(http.patch(url, () => HttpResponse.json(state)));
   show();
-  const finish = await screen.findByRole("button", { name: "Finish setup" });
-  expect(finish.closest("p")).toHaveTextContent(
-    "appa.toml does not include mcp/*.toml yet.",
-  );
-  // Already on: the setup starts at the App step, and the folder is fixed.
-  fireEvent.click(finish);
-  const dialog = await screen.findByRole("dialog", {
-    name: "MCP Guardrails Self-Service",
-  });
   expect(
-    await within(dialog).findByText(/every permission self-service needs/),
+    await screen.findByText(
+      (_, element) =>
+        element?.tagName === "P" &&
+        element.textContent === "appa.toml does not include mcp/*.toml yet.",
+    ),
+  ).toBeVisible();
+  expect(screen.getByText("Finish the self-service protection.")).toBeVisible();
+  // Already on: the wizard is the Finish step alone, and the missing include
+  // waits for its button.
+  fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
+  const dialog = await screen.findByRole("dialog", { name: "Finish setup" });
+  expect(
+    (
+      await within(dialog).findAllByText(
+        (_, element) =>
+          element?.tagName === "SPAN" &&
+          element.textContent === "appa.toml does not include mcp/*.toml yet.",
+      )
+    )[0],
+  ).toBeVisible();
+  expect(
+    within(dialog).getByRole("button", { name: "Open the pull request" }),
   ).toBeVisible();
 });

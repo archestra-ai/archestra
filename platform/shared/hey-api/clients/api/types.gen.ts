@@ -123389,6 +123389,9 @@ export type GetOpenappaPolicyDeclarationsResponses = {
             servers: Array<string>;
             line: number;
         }>;
+        repositoryFiles: Array<{
+            path: string;
+        }>;
         rootRevision: number;
         lastError: string | null;
         composition: {
@@ -123508,6 +123511,7 @@ export type GetOpenappaBatteryPolicySourceResponses = {
     200: {
         entry: string;
         name: string;
+        kind: 'battery' | 'repository';
         content: string;
     };
 };
@@ -124533,6 +124537,9 @@ export type SetOpenappaCredentialBindingResponses = {
             servers: Array<string>;
             line: number;
         }>;
+        repositoryFiles: Array<{
+            path: string;
+        }>;
         rootRevision: number;
         lastError: string | null;
         composition: {
@@ -125516,6 +125523,23 @@ export type GetAppaGithubSyncResponses = {
         validationDirectory: string;
         githubWebUrl: string;
         provider: 'github' | 'gitlab';
+        templateFiles?: {
+            templateCommit: string;
+            state: 'current' | 'pull_open' | 'needs_permission' | 'not_applicable' | 'unavailable';
+            paths: Array<string>;
+            withheld?: Array<string>;
+            pull?: {
+                number: number;
+                url: string;
+            };
+            detail?: string;
+            checkedAt: string;
+        };
+        check?: {
+            name: string;
+            state: 'posted' | 'refused' | 'none';
+            detail?: string;
+        };
     };
 };
 
@@ -125661,6 +125685,23 @@ export type UpdateAppaGithubSyncResponses = {
         validationDirectory: string;
         githubWebUrl: string;
         provider: 'github' | 'gitlab';
+        templateFiles?: {
+            templateCommit: string;
+            state: 'current' | 'pull_open' | 'needs_permission' | 'not_applicable' | 'unavailable';
+            paths: Array<string>;
+            withheld?: Array<string>;
+            pull?: {
+                number: number;
+                url: string;
+            };
+            detail?: string;
+            checkedAt: string;
+        };
+        check?: {
+            name: string;
+            state: 'posted' | 'refused' | 'none';
+            detail?: string;
+        };
     };
 };
 
@@ -125802,6 +125843,23 @@ export type ConfigureAppaGithubSyncResponses = {
         validationDirectory: string;
         githubWebUrl: string;
         provider: 'github' | 'gitlab';
+        templateFiles?: {
+            templateCommit: string;
+            state: 'current' | 'pull_open' | 'needs_permission' | 'not_applicable' | 'unavailable';
+            paths: Array<string>;
+            withheld?: Array<string>;
+            pull?: {
+                number: number;
+                url: string;
+            };
+            detail?: string;
+            checkedAt: string;
+        };
+        check?: {
+            name: string;
+            state: 'posted' | 'refused' | 'none';
+            detail?: string;
+        };
     };
 };
 
@@ -125896,7 +125954,7 @@ export type GetAppaRepositoryProtectionResponses = {
             settingsUrl: string;
             installationUrl: string | null;
             permissions: Array<{
-                name: 'contents' | 'pull_requests' | 'checks';
+                name: 'contents' | 'pull_requests' | 'checks' | 'workflows';
                 granted: boolean;
             }>;
         };
@@ -126025,7 +126083,7 @@ export type GetAppaGithubAppGrantsResponses = {
         settingsUrl: string;
         installationUrl: string | null;
         permissions: Array<{
-            name: 'contents' | 'pull_requests' | 'checks';
+            name: 'contents' | 'pull_requests' | 'checks' | 'workflows';
             granted: boolean;
         }>;
     } | null;
@@ -126257,6 +126315,23 @@ export type CreateAppaGithubRepositoryResponses = {
         validationDirectory: string;
         githubWebUrl: string;
         provider: 'github' | 'gitlab';
+        templateFiles?: {
+            templateCommit: string;
+            state: 'current' | 'pull_open' | 'needs_permission' | 'not_applicable' | 'unavailable';
+            paths: Array<string>;
+            withheld?: Array<string>;
+            pull?: {
+                number: number;
+                url: string;
+            };
+            detail?: string;
+            checkedAt: string;
+        };
+        check?: {
+            name: string;
+            state: 'posted' | 'refused' | 'none';
+            detail?: string;
+        };
     };
 };
 

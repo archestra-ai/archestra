@@ -479011,6 +479011,21 @@
                         "additionalProperties": false
                       }
                     },
+                    "repositoryFiles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "rootRevision": {
                       "type": "number"
                     },
@@ -479186,6 +479201,7 @@
                   "required": [
                     "batteries",
                     "unusedAliases",
+                    "repositoryFiles",
                     "rootRevision",
                     "lastError",
                     "composition",
@@ -479471,6 +479487,13 @@
                     "name": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "battery",
+                        "repository"
+                      ]
+                    },
                     "content": {
                       "type": "string"
                     }
@@ -479478,6 +479501,7 @@
                   "required": [
                     "entry",
                     "name",
+                    "kind",
                     "content"
                   ],
                   "additionalProperties": false
@@ -483190,6 +483214,21 @@
                         "additionalProperties": false
                       }
                     },
+                    "repositoryFiles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "rootRevision": {
                       "type": "number"
                     },
@@ -483365,6 +483404,7 @@
                   "required": [
                     "batteries",
                     "unusedAliases",
+                    "repositoryFiles",
                     "rootRevision",
                     "lastError",
                     "composition",
@@ -487090,6 +487130,91 @@
                         "github",
                         "gitlab"
                       ]
+                    },
+                    "templateFiles": {
+                      "type": "object",
+                      "properties": {
+                        "templateCommit": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "current",
+                            "pull_open",
+                            "needs_permission",
+                            "not_applicable",
+                            "unavailable"
+                          ]
+                        },
+                        "paths": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "withheld": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "pull": {
+                          "type": "object",
+                          "properties": {
+                            "number": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "number",
+                            "url"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "detail": {
+                          "type": "string"
+                        },
+                        "checkedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "templateCommit",
+                        "state",
+                        "paths",
+                        "checkedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "check": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "posted",
+                            "refused",
+                            "none"
+                          ]
+                        },
+                        "detail": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "state"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -487678,6 +487803,91 @@
                         "github",
                         "gitlab"
                       ]
+                    },
+                    "templateFiles": {
+                      "type": "object",
+                      "properties": {
+                        "templateCommit": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "current",
+                            "pull_open",
+                            "needs_permission",
+                            "not_applicable",
+                            "unavailable"
+                          ]
+                        },
+                        "paths": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "withheld": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "pull": {
+                          "type": "object",
+                          "properties": {
+                            "number": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "number",
+                            "url"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "detail": {
+                          "type": "string"
+                        },
+                        "checkedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "templateCommit",
+                        "state",
+                        "paths",
+                        "checkedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "check": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "posted",
+                            "refused",
+                            "none"
+                          ]
+                        },
+                        "detail": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "state"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -488294,6 +488504,91 @@
                         "github",
                         "gitlab"
                       ]
+                    },
+                    "templateFiles": {
+                      "type": "object",
+                      "properties": {
+                        "templateCommit": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "current",
+                            "pull_open",
+                            "needs_permission",
+                            "not_applicable",
+                            "unavailable"
+                          ]
+                        },
+                        "paths": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "withheld": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "pull": {
+                          "type": "object",
+                          "properties": {
+                            "number": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "number",
+                            "url"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "detail": {
+                          "type": "string"
+                        },
+                        "checkedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "templateCommit",
+                        "state",
+                        "paths",
+                        "checkedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "check": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "posted",
+                            "refused",
+                            "none"
+                          ]
+                        },
+                        "detail": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "state"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -488611,7 +488906,8 @@
                                 "enum": [
                                   "contents",
                                   "pull_requests",
-                                  "checks"
+                                  "checks",
+                                  "workflows"
                                 ]
                               },
                               "granted": {
@@ -489095,7 +489391,8 @@
                             "enum": [
                               "contents",
                               "pull_requests",
-                              "checks"
+                              "checks",
+                              "workflows"
                             ]
                           },
                           "granted": {
@@ -489950,6 +490247,91 @@
                         "github",
                         "gitlab"
                       ]
+                    },
+                    "templateFiles": {
+                      "type": "object",
+                      "properties": {
+                        "templateCommit": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "current",
+                            "pull_open",
+                            "needs_permission",
+                            "not_applicable",
+                            "unavailable"
+                          ]
+                        },
+                        "paths": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "withheld": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "pull": {
+                          "type": "object",
+                          "properties": {
+                            "number": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "number",
+                            "url"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "detail": {
+                          "type": "string"
+                        },
+                        "checkedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "templateCommit",
+                        "state",
+                        "paths",
+                        "checkedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "check": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "posted",
+                            "refused",
+                            "none"
+                          ]
+                        },
+                        "detail": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "state"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [

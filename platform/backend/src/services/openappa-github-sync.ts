@@ -49,6 +49,7 @@ import {
   isServerRulesFolder,
   repositoryIncludePaths,
   requesterOf,
+  SELF_SERVICE_INCLUDE_BRANCH,
   serverRulesFolderOf,
   serverRulesInclude,
   serverRulesPrefix,
@@ -933,6 +934,9 @@ export async function updateAppaGithubSync(params: {
       enabled: params.enabled === true,
       directory: params.directory,
     });
+    // The servers' files apply only under self-service: a pull now reads
+    // the repository the way the setting asks, not at the next check.
+    await OpenAppaGithubSyncModel.enqueue(params.organizationId);
     return getAppaGithubSync(params.organizationId);
   }
   if (params.action === "self_service_auto_merge") {
@@ -941,6 +945,7 @@ export async function updateAppaGithubSync(params: {
       row,
       enabled: params.enabled === true,
     });
+    await OpenAppaGithubSyncModel.enqueue(params.organizationId);
     return getAppaGithubSync(params.organizationId);
   }
   if (params.action === "sync")
@@ -954,6 +959,9 @@ export async function updateAppaGithubSync(params: {
       params.organizationId,
       params.action === "disconnect" ? null : (params.interval ?? row.interval),
     );
+    // A new schedule counts from a pull now.
+    if (params.action === "schedule")
+      await OpenAppaGithubSyncModel.enqueue(params.organizationId);
   }
   return getAppaGithubSync(params.organizationId);
 }
@@ -1157,6 +1165,11 @@ export async function syncAppaGithubPolicy(organizationId: string) {
               : null,
         },
       });
+      // Its policy applies only once it merges, but what self-service needs
+      // from that policy goes onto its branch now, so one pull request
+      // brings both.
+      if (read.pending === "open" && selfServiceActive(row))
+        await proposeIncludeAfterPull(organizationId);
       return;
     }
     const { content } = read;
@@ -1211,12 +1224,35 @@ export async function syncAppaGithubPolicy(organizationId: string) {
   // Every sync also reads the repository's protection for server rules
   // files: whether a branch rule requires the policy check. A failure there
   // shows in the protection status and never fails the pull.
+  let protection: RepositoryProtection | null = null;
   try {
-    await maintainRepositoryProtection(organizationId);
+    protection = await maintainRepositoryProtection(organizationId);
   } catch (error) {
     logger.warn(
       { organizationId, error },
       "OpenAPPA could not read the policy repository's protection",
+    );
+  }
+  if (protection) await proposeIncludeAfterPull(organizationId);
+}
+
+/**
+ * What self-service still needs from the policy file is proposed at once,
+ * as the template's files are: the include of the servers' folder waits in
+ * the Git sync setup as a pull request, never as a step that asks for one.
+ * A setup pull request still waiting takes it onto its own branch. An
+ * accepted policy that includes it costs no request to GitHub. Never fails
+ * the pull.
+ */
+async function proposeIncludeAfterPull(organizationId: string) {
+  try {
+    const include = await port("selfServiceInclude");
+    if (await include.proposeSelfServiceInclude(organizationId))
+      await maintainRepositoryProtection(organizationId);
+  } catch (error) {
+    logger.warn(
+      { organizationId, error },
+      "OpenAPPA could not propose the include of the self-service folder",
     );
   }
 }
@@ -2574,7 +2610,11 @@ async function judgeGithubPull(params: {
     ...params,
     own,
     governed,
-    setup: source.setupPullRequestNumber === number,
+    // The setup pull request, and the include a pull proposed for
+    // self-service: setup and the switch took the permission, not a person.
+    setup:
+      source.setupPullRequestNumber === number ||
+      params.ref === SELF_SERVICE_INCLUDE_BRANCH,
   });
   if (requester === null) return null;
   if ("refused" in requester)
@@ -2750,7 +2790,8 @@ async function archestraPullRequester(params: {
   );
   const [email] = [...emails];
   // A setup pull request opened before setup named who asked for it: setup
-  // itself took the permission to set the policy.
+  // itself took the permission to set the policy. So did turning
+  // self-service on, for the include a pull proposes with no requester.
   if (params.setup && emails.size === 1 && !email) return { setup: true };
   const member =
     emails.size === 1 && email

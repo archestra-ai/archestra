@@ -165,11 +165,10 @@ const LABELLED_ENTITY_PATHS = [
   "/api/knowledge-bases",
   "/api/knowledge-files",
   "/api/limits",
-  "/api/llm-oauth-clients",
   "/api/llm-provider-api-keys",
   "/api/llm-provider-models",
   "/api/llm-virtual-keys",
-  "/api/mcp-oauth-clients",
+  "/api/oauth-clients",
   "/api/plugins",
   "/api/service-accounts",
   "/api/skills",
@@ -745,21 +744,6 @@ export const handlers: HttpHandler[] = [
   ...patchJson("/api/llm-provider-api-keys/:id", makeLlmProviderApiKey()),
   ...deleteJson("/api/llm-provider-api-keys/:id"),
 
-  // MCP OAuth clients (bare array, unlike the LLM half's envelope) — the
-  // unified OAuth Clients page reads both.
-  ...getJson("/api/mcp-oauth-clients", []),
-  // LLM OAuth clients (paginated envelope) — used by the OAuth Clients page.
-  ...getJson("/api/llm-oauth-clients", {
-    data: [],
-    pagination: {
-      currentPage: 1,
-      limit: 20,
-      total: 0,
-      totalPages: 0,
-      hasNext: false,
-      hasPrev: false,
-    },
-  }),
   // Managed OAuth clients (paginated envelope) — the LLM keys delete dialog
   // lists the clients that map the key from here, because this list carries
   // the current-and-future-providers flag the dialog needs.

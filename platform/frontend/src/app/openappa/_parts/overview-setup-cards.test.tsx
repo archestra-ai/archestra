@@ -21,6 +21,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { appaGithubSyncQueryKey } from "@/lib/openappa-policy-views";
+import { FinishSetupHost } from "./finish-setup-dialog";
 import { OverviewSetupCards } from "./overview-setup-cards";
 
 vi.mock("@/lib/config/config.query");
@@ -136,6 +137,7 @@ function show() {
     ...render(
       <QueryClientProvider client={client}>
         <OverviewSetupCards />
+        <FinishSetupHost />
       </QueryClientProvider>,
     ),
   };
@@ -217,6 +219,12 @@ test("shows the Finish setup notice on Overview while sync waits for setup, with
     provider: "github",
     source: { ...source, setupPullRequestNumber: 7, sourceCommit: null },
   };
+  // The wizard's pull requests step syncs as it opens.
+  server.use(
+    http.patch("http://localhost:9000/api/openappa/github-sync", () =>
+      HttpResponse.json(sync),
+    ),
+  );
   show();
   // The one Finish setup notice, as on the Git sync settings.
   expect(await screen.findByText("Finish the Git sync setup")).toBeVisible();

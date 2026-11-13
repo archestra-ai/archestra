@@ -29,8 +29,8 @@ import agentToolRoutes from "@/routes/agent-tool";
 import chatRoutes from "@/routes/chat/routes";
 import internalMcpCatalogRoutes from "@/routes/internal-mcp-catalog";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
-import mcpOauthClientsRoutes from "@/routes/mcp-oauth-clients";
 import mcpServerRoutes from "@/routes/mcp-server";
+import oauthClientsRoutes from "@/routes/oauth-client/oauth-client.routes";
 import toolRoutes from "@/routes/tool";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { describe, expect, mustExist, test } from "@/test";
@@ -234,7 +234,7 @@ describe("the SRE agent and its tools follow object grants", () => {
       agentToolRoutes,
       mcpServerRoutes,
       toolRoutes,
-      mcpOauthClientsRoutes,
+      oauthClientsRoutes,
       agentRoutes,
     ]);
     const send = (method: "GET" | "POST", url: string, payload?: object) =>
@@ -312,8 +312,9 @@ describe("the SRE agent and its tools follow object grants", () => {
       ).toBe(canUse ? 200 : 404);
       expect(
         (
-          await send("POST", "/api/mcp-oauth-clients", {
+          await send("POST", "/api/oauth-clients", {
             name: "sre",
+            scopes: ["mcp"],
             grantType: "authorization_code",
             redirectUris: ["https://app.example.com/callback"],
             allowedGatewayIds: [SRE_AGENT_ID],

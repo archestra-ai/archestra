@@ -2444,11 +2444,21 @@ describe("APPA GitHub sync", () => {
       githubAppConfigId: githubApp.id,
       selfService: true,
     });
+    await db
+      .delete(schema.tasksTable)
+      .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
     const on = await action({
       action: "self_service_auto_merge",
       enabled: true,
     });
     expect(on.statusCode).toBe(200);
+    // A settings change queues a pull at once.
+    expect(
+      await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.taskType, "openappa_github_sync")),
+    ).toHaveLength(1);
     expect(on.json().selfService.autoMerge).toEqual({
       enabled: true,
       setting: true,
@@ -2503,12 +2513,23 @@ describe("APPA GitHub sync", () => {
     });
   });
 
-  test("schedule changes persist and successful recent syncs are not due", async () => {
+  test("schedule changes persist, queue a pull at once, and successful recent syncs are not due", async () => {
     await configure();
-    expect(
-      (await action({ action: "schedule", interval: "15m" })).json().source
-        .interval,
-    ).toBe("15m");
+    const pulls = () =>
+      db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
+    for (const interval of ["5m", "15m"] as const) {
+      // Saving the source queued one already: start from none.
+      await db
+        .delete(schema.tasksTable)
+        .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
+      expect(
+        (await action({ action: "schedule", interval })).json().source.interval,
+      ).toBe(interval);
+      expect(await pulls()).toHaveLength(1);
+    }
     await syncAppaGithubPolicy(organizationId);
     expect(await OpenAppaGithubSyncModel.findDue()).toEqual([]);
   });

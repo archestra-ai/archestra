@@ -126,7 +126,7 @@ export function useSaveRuntimeTemplateSettings() {
         client.invalidateQueries({ queryKey: catalogKey }),
         client.invalidateQueries({ queryKey: organizationKeys.details() }),
       ]);
-      toast.success("Agent Runtimes updated");
+      toast.success("Available runtimes updated");
     },
   });
 }

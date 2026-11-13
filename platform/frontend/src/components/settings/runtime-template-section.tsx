@@ -37,7 +37,7 @@ import {
   X,
 } from "lucide-react";
 import { useId, useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { AgentIcon } from "@/components/agent-icon";
 import {
   CatalogAgentIcon,
@@ -45,6 +45,7 @@ import {
   useAgentCatalogImages,
 } from "@/components/agent-pages/agent-catalog";
 import {
+  AGENT_RUNTIME_PROTOCOL_LABELS,
   type AgentRuntimeConfig,
   AgentRuntimeEnvironmentFields,
   AgentRuntimeImageFields,
@@ -53,9 +54,11 @@ import {
   AgentRuntimeSteeringField,
   defaultAgentRuntime,
 } from "@/components/agent-runtime-fields";
+import { ConfigurationRow } from "@/components/configuration-row";
 import { IdentityFields } from "@/components/identity-fields";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SettingsSaveBar } from "@/components/settings/settings-block";
+import { Accordion } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -103,8 +106,12 @@ import {
   useSaveRuntimeTemplateSettings,
 } from "@/lib/agent-runtime-templates.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useOrganization } from "@/lib/organization.query";
+import {
+  useAgentRuntimeTiers,
+  useOrganization,
+} from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 
 type SaveBody = archestraApiTypes.SaveRuntimeTemplateSettingsData["body"];
@@ -262,14 +269,11 @@ export function RuntimeTemplateSection({
     <section id="popular-agents" className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <h3 className="text-sm font-medium">Agent Runtimes</h3>
+          <h3 className="text-sm font-medium">Available runtimes</h3>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            These runtimes appear as configuration templates when creating an
-            agent. Drag to change their order, add custom runtimes, or remove
-            built-in and custom choices. Removed runtimes can be added back at
-            any time. A runtime’s settings only start new agents, unless you
-            lock them: a locked runtime’s settings apply to every agent that
-            uses it, and agent builders can’t change them.
+            The runtimes people can pick when creating an agent. A locked
+            runtime&apos;s settings apply to every agent that uses it, and agent
+            builders can&apos;t change them.
           </p>
         </div>
         <DropdownMenu>
@@ -332,7 +336,7 @@ export function RuntimeTemplateSection({
               items={visibleRows.map((row) => row.id)}
               strategy={verticalListSortingStrategy}
             >
-              <ul className="divide-y" aria-label="Agent Runtimes">
+              <ul className="divide-y" aria-label="Available runtimes">
                 {visibleRows.map((row, index) => (
                   <RuntimeTemplateRow
                     key={row.id}
@@ -551,6 +555,7 @@ function RuntimeTemplateDialog({
   onClose: () => void;
   onSave: (template: TemplateDraft) => void;
 }) {
+  const id = useId();
   const form = useForm<TemplateDraft>({
     defaultValues: template ?? {
       id: crypto.randomUUID(),
@@ -563,6 +568,17 @@ function RuntimeTemplateDialog({
       runtime: { ...defaultAgentRuntime(), privileged: false },
     },
   });
+  // A new runtime opens on its image, the one thing it can't do without; an
+  // existing one opens collapsed so its summaries read as an overview.
+  const [openRows, setOpenRows] = useState<string[]>(
+    template ? [] : ["container"],
+  );
+  const runtime = useWatch({ control: form.control, name: "runtime" });
+  const limits = useLimitsSummary(runtime);
+  const runtimeError = form.formState.errors.runtime?.message;
+  const imageAttention =
+    typeof runtimeError === "string" ? runtimeError : undefined;
+
   return (
     <Dialog
       open
@@ -572,137 +588,210 @@ function RuntimeTemplateDialog({
     >
       <DialogContent className="sm:max-w-2xl">
         <Form {...form}>
-          <form className="contents" onSubmit={form.handleSubmit(onSave)}>
+          <form
+            className="contents"
+            onSubmit={form.handleSubmit(onSave, (errors) => {
+              if (errors.runtime)
+                setOpenRows((rows) =>
+                  rows.includes("container") ? rows : [...rows, "container"],
+                );
+            })}
+          >
             <DialogHeader>
               <DialogTitle>
                 {template ? "Edit custom runtime" : "Add custom runtime"}
               </DialogTitle>
               <DialogDescription>
-                Defaults for new agents that use this runtime. Lock them to
-                apply them to every agent that uses it.
+                Defaults for new agents that use this runtime.
               </DialogDescription>
             </DialogHeader>
-            <DialogBody className="space-y-5">
-              <Controller
-                control={form.control}
-                name="icon"
-                render={({ field: iconField }) => (
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    rules={{
-                      required: "Enter a name",
-                      maxLength: {
-                        value: 100,
-                        message: "Use at most 100 characters",
-                      },
-                      validate: (value) =>
-                        !value.trim()
-                          ? "Enter a name"
-                          : names.some(
-                                (name) =>
-                                  name.toLocaleLowerCase() ===
-                                  value.trim().toLocaleLowerCase(),
-                              )
-                            ? "Choose a unique runtime name"
-                            : true,
-                    }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <IdentityFields
-                          icon={iconField.value}
-                          onIconChange={iconField.onChange}
-                          label={<FormLabel>Name</FormLabel>}
-                        >
-                          <FormControl>
-                            <Input
-                              {...field}
-                              maxLength={100}
-                              placeholder="Engineering workspace"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </IdentityFields>
-                      </FormItem>
-                    )}
-                  />
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        {...field}
-                        maxLength={1_000}
-                        placeholder="What should people use this runtime for?"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <DialogBody className="space-y-6">
+              <div className="space-y-4">
+                <Controller
+                  control={form.control}
+                  name="icon"
+                  render={({ field: iconField }) => (
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      rules={{
+                        required: "Enter a name",
+                        maxLength: {
+                          value: 100,
+                          message: "Use at most 100 characters",
+                        },
+                        validate: (value) =>
+                          !value.trim()
+                            ? "Enter a name"
+                            : names.some(
+                                  (name) =>
+                                    name.toLocaleLowerCase() ===
+                                    value.trim().toLocaleLowerCase(),
+                                )
+                              ? "Choose a unique runtime name"
+                              : true,
+                      }}
+                      render={({ field }) => (
+                        <FormItem>
+                          <IdentityFields
+                            icon={iconField.value}
+                            onIconChange={iconField.onChange}
+                            label={<FormLabel>Name</FormLabel>}
+                          >
+                            <FormControl>
+                              <Input
+                                {...field}
+                                maxLength={100}
+                                placeholder="Engineering workspace"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </IdentityFields>
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          value={field.value ?? ""}
+                          rows={2}
+                          maxLength={1_000}
+                          className="min-h-0 resize-none"
+                          placeholder="What should people use this runtime for?"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
               <FormField
                 control={form.control}
                 name="runtime"
                 rules={{
-                  validate: (runtime) =>
-                    !runtime.image.trim()
-                      ? "Enter a Docker image"
-                      : /\s/.test(runtime.image.trim())
-                        ? "Docker images cannot contain whitespace"
+                  validate: (value) =>
+                    !value.image.trim()
+                      ? "Enter a container image"
+                      : /\s/.test(value.image.trim())
+                        ? "Container images cannot contain whitespace"
                         : true,
                 }}
                 render={({ field }) => (
-                  <FormItem>
-                    <div className="space-y-5">
-                      <AgentRuntimeImageFields
-                        value={field.value}
-                        onChange={(value) =>
-                          field.onChange({ ...value, privileged: false })
+                  <FormItem className="gap-0">
+                    <Accordion
+                      type="multiple"
+                      value={openRows}
+                      onValueChange={setOpenRows}
+                      className="overflow-hidden rounded-md border"
+                    >
+                      <ConfigurationRow
+                        id={`${id}-container`}
+                        value="container"
+                        title="Container"
+                        description="The image each run starts from."
+                        summary={containerSummary(field.value)}
+                        attention={imageAttention}
+                      >
+                        <div className="space-y-2">
+                          <AgentRuntimeImageFields
+                            value={field.value}
+                            onChange={(value) =>
+                              field.onChange({ ...value, privileged: false })
+                            }
+                          />
+                          <FormMessage />
+                        </div>
+                      </ConfigurationRow>
+                      <ConfigurationRow
+                        id={`${id}-inference`}
+                        value="inference"
+                        title="Inference API"
+                        description="How the client calls models."
+                        summary={
+                          AGENT_RUNTIME_PROTOCOL_LABELS[
+                            field.value.inferenceProtocol
+                          ]
                         }
-                      />
-                      <FormMessage />
-                      <AgentRuntimeProtocolField
-                        value={field.value}
-                        onChange={field.onChange}
-                      />
-                      <AgentRuntimeSteeringField
-                        value={field.value}
-                        onChange={field.onChange}
-                      />
-                      <AgentRuntimeEnvironmentFields
-                        value={field.value}
-                        onChange={field.onChange}
-                      />
-                      <AgentRuntimeLimitFields
-                        value={field.value}
-                        onChange={field.onChange}
-                      />
-                    </div>
+                      >
+                        <AgentRuntimeProtocolField
+                          value={field.value}
+                          onChange={field.onChange}
+                          hideLabel
+                        />
+                      </ConfigurationRow>
+                      <ConfigurationRow
+                        id={`${id}-steering`}
+                        value="steering"
+                        title="Follow-up messages"
+                        description="Messages sent while it works."
+                        summary={
+                          field.value.steerMode === "tmux_keys"
+                            ? "Typed into its terminal"
+                            : "Delivered between turns"
+                        }
+                      >
+                        <AgentRuntimeSteeringField
+                          value={field.value}
+                          onChange={field.onChange}
+                          hideLabel
+                        />
+                      </ConfigurationRow>
+                      <ConfigurationRow
+                        id={`${id}-environment`}
+                        value="environment"
+                        title="Environment"
+                        description="Variables and credentials."
+                        summary={environmentSummary(field.value)}
+                      >
+                        <AgentRuntimeEnvironmentFields
+                          value={field.value}
+                          onChange={field.onChange}
+                          hideLabel
+                          hideDescription
+                        />
+                      </ConfigurationRow>
+                      <ConfigurationRow
+                        id={`${id}-limits`}
+                        value="limits"
+                        title="Limits"
+                        description="Run time, spend and tiers."
+                        summary={limits}
+                      >
+                        <AgentRuntimeLimitFields
+                          value={field.value}
+                          onChange={field.onChange}
+                        />
+                      </ConfigurationRow>
+                    </Accordion>
                   </FormItem>
                 )}
               />
+            </DialogBody>
+            <DialogFooter className="sm:items-center">
               <FormField
                 control={form.control}
                 name="locked"
                 render={({ field }) => (
-                  <LockSettingsField
+                  <FooterLock
                     checked={field.value ?? false}
                     onCheckedChange={field.onChange}
                   />
                 )}
               />
-            </DialogBody>
-            <DialogFooter>
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
               <Button type="submit">
-                {template ? "Update template" : "Add template"}
+                {template ? "Save runtime" : "Add runtime"}
               </Button>
             </DialogFooter>
           </form>
@@ -733,6 +822,8 @@ function BuiltInRuntimeDialog({
     }),
   );
   const [locked, setLocked] = useState(value?.locked ?? false);
+  const rowId = useId();
+  const limits = useLimitsSummary(runtime);
   return (
     <Dialog
       open
@@ -743,27 +834,59 @@ function BuiltInRuntimeDialog({
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Edit {name}</DialogTitle>
-          <DialogDescription>
-            Defaults for new {name} agents. Lock them to apply them to every{" "}
-            {name} agent.
-          </DialogDescription>
+          <DialogDescription>Defaults for new {name} agents.</DialogDescription>
         </DialogHeader>
-        <DialogBody className="space-y-5">
-          {runtime.claudeCode && (
-            <ClaudeAccountField
-              value={runtime.claudeCode.authentication}
-              onChange={(authentication) =>
-                setRuntime({
-                  ...runtime,
-                  claudeCode: { ...runtime.claudeCode, authentication },
-                })
-              }
-            />
-          )}
-          <AgentRuntimeLimitFields value={runtime} onChange={setRuntime} />
-          <LockSettingsField checked={locked} onCheckedChange={setLocked} />
+        <DialogBody>
+          <Accordion
+            type="multiple"
+            className="overflow-hidden rounded-md border"
+          >
+            <ConfigurationRow
+              id={`${rowId}-container`}
+              value="container"
+              title="Container"
+              description="The maintained image and client."
+              summary={containerSummary(runtime)}
+            >
+              <FieldDescription>
+                {name} runs the image {image}, kept up to date with each
+                release.
+              </FieldDescription>
+            </ConfigurationRow>
+            {runtime.claudeCode && (
+              <ConfigurationRow
+                id={`${rowId}-account`}
+                value="account"
+                title="Claude account"
+                description="Whose account runs the model."
+                summary={
+                  CLAUDE_ACCOUNT_LABELS[runtime.claudeCode.authentication]
+                }
+              >
+                <ClaudeAccountField
+                  value={runtime.claudeCode.authentication}
+                  onChange={(authentication) =>
+                    setRuntime({
+                      ...runtime,
+                      claudeCode: { ...runtime.claudeCode, authentication },
+                    })
+                  }
+                />
+              </ConfigurationRow>
+            )}
+            <ConfigurationRow
+              id={`${rowId}-limits`}
+              value="limits"
+              title="Limits"
+              description="Run time, spend and tiers."
+              summary={limits}
+            >
+              <AgentRuntimeLimitFields value={runtime} onChange={setRuntime} />
+            </ConfigurationRow>
+          </Accordion>
         </DialogBody>
-        <DialogFooter>
+        <DialogFooter className="sm:items-center">
+          <FooterLock checked={locked} onCheckedChange={setLocked} />
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -787,7 +910,7 @@ function BuiltInRuntimeDialog({
               })
             }
           >
-            Update runtime
+            Save runtime
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -805,7 +928,9 @@ function ClaudeAccountField({
   const id = useId();
   return (
     <div className="space-y-2">
-      <Label htmlFor={id}>Claude account</Label>
+      <Label htmlFor={id} className="sr-only">
+        Claude account
+      </Label>
       <Select
         value={value}
         onValueChange={(next) => onChange(next as "provider" | "subscription")}
@@ -815,43 +940,17 @@ function ClaudeAccountField({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="subscription">
-            Each person&apos;s Claude subscription
+            {CLAUDE_ACCOUNT_LABELS.subscription}
           </SelectItem>
-          <SelectItem value="provider">A company API key</SelectItem>
+          <SelectItem value="provider">
+            {CLAUDE_ACCOUNT_LABELS.provider}
+          </SelectItem>
         </SelectContent>
       </Select>
       <FieldDescription>
-        Whose account runs the model: each user signs in with their own Pro or
-        Max plan, or runs are billed to an LLM provider connection.
+        Each person signs in with their own Pro or Max plan, or runs are billed
+        to an LLM provider connection.
       </FieldDescription>
-    </div>
-  );
-}
-
-function LockSettingsField({
-  checked,
-  onCheckedChange,
-}: {
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-}) {
-  const id = useId();
-  return (
-    <div className="flex items-start gap-3 rounded-lg border p-3">
-      <Switch
-        id={id}
-        className="mt-0.5 shrink-0"
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-      />
-      <div className="min-w-0 space-y-1">
-        <Label htmlFor={id}>Lock settings</Label>
-        <FieldDescription>
-          Every agent that uses this runtime gets these settings, existing
-          agents included, and agent builders can&apos;t change them. Each agent
-          keeps its own environment, credentials and ports.
-        </FieldDescription>
-      </div>
     </div>
   );
 }
@@ -874,3 +973,77 @@ function withRuntimeOrder(state: SaveBody, ids: string[]): SaveBody {
     })),
   };
 }
+
+function FooterLock({
+  checked,
+  onCheckedChange,
+}: {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="flex min-w-0 items-start gap-3 py-1 sm:mr-auto">
+      <Switch
+        id={id}
+        className="mt-0.5"
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+      />
+      <div className="min-w-0 space-y-0.5">
+        <Label htmlFor={id} className="flex items-center gap-1.5">
+          <LockKeyhole
+            aria-hidden="true"
+            className={cn(
+              "size-3.5 transition-colors",
+              checked ? "text-foreground" : "text-muted-foreground",
+            )}
+          />
+          Lock settings
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          {checked
+            ? "Every agent uses these. Environment and ports stay per agent."
+            : "Agent builders can change these."}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function containerSummary(value: AgentRuntimeConfig): string {
+  const image = value.image.trim().split("/").slice(-2).join("/");
+  if (!image) return "No image set";
+  return value.command?.length ? `${image}, ${value.command[0]}` : image;
+}
+
+function environmentSummary(value: AgentRuntimeConfig): string {
+  const variables = value.environment?.length ?? 0;
+  const credentials = value.credentials?.length ?? 0;
+  const parts = [];
+  if (variables)
+    parts.push(`${variables} ${variables === 1 ? "variable" : "variables"}`);
+  if (credentials)
+    parts.push(
+      `${credentials} ${credentials === 1 ? "credential" : "credentials"}`,
+    );
+  return parts.length ? parts.join(", ") : "None";
+}
+
+function useLimitsSummary(value: AgentRuntimeConfig): string {
+  const defaults = useFeature("agentRuntimeBackend");
+  const { data: tiers } = useAgentRuntimeTiers();
+  const idle = value.idleTimeoutMinutes ?? defaults?.defaultIdleTimeoutMinutes;
+  const ttl = value.ttlHours ?? defaults?.defaultTtlHours;
+  const tier = value.tier ?? tiers?.defaultTier;
+  const parts = [];
+  if (idle != null) parts.push(`${idle} min idle`);
+  if (ttl != null) parts.push(`${ttl} h`);
+  if (tier) parts.push(`${tier} tier`);
+  return parts.length ? parts.join(" · ") : "Installation defaults";
+}
+
+const CLAUDE_ACCOUNT_LABELS = {
+  subscription: "Each person's Claude subscription",
+  provider: "A company API key",
+} as const;

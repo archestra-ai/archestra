@@ -11,6 +11,7 @@ import { SectionNav } from "@/components/section-nav";
 import { useDisableInvitations } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useSecretsType } from "@/lib/secrets.query";
+import { AgentsSubnav } from "./agents/_parts/agents-navigation";
 import { AppearanceSubnav } from "./appearance/_parts/appearance-navigation";
 import { MessagingProvidersSubnav } from "./messaging-channels/_parts/messaging-providers";
 import { resolveSettingsSection, useSettingsTabs } from "./settings-tabs";
@@ -29,7 +30,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   "/settings/agents": {
     title: "Agents",
     description:
-      "Defaults for agents and chats — default model, default agent, file uploads, and the channels agents can be reached through.",
+      "Defaults for agents and chats, the channels agents answer on, and the runtimes they run in.",
   },
   "/settings/messaging-channels": {
     title: "Messaging Channels",
@@ -269,7 +270,9 @@ export default function SettingsLayout({
                   ? { ...tab, subnav: <MessagingProvidersSubnav /> }
                   : tab.href === "/settings/appearance"
                     ? { ...tab, subnav: <AppearanceSubnav /> }
-                    : tab,
+                    : tab.href === "/settings/agents"
+                      ? { ...tab, subnav: <AgentsSubnav /> }
+                      : tab,
               )}
               activeHref={sectionHref}
             />

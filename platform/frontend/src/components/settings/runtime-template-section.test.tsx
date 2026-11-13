@@ -141,6 +141,10 @@ describe("RuntimeTemplateSection", () => {
     await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
     const dialog = screen.getByRole("dialog", { name: "Edit Claude Code" });
     await user.click(
+      within(dialog).getByRole("button", { name: /^Claude account/ }),
+    );
+    await user.click(within(dialog).getByRole("button", { name: /^Limits/ }));
+    await user.click(
       within(dialog).getByRole("combobox", { name: "Claude account" }),
     );
     await user.click(screen.getByRole("option", { name: "A company API key" }));
@@ -152,12 +156,12 @@ describe("RuntimeTemplateSection", () => {
       within(dialog).getByRole("switch", { name: "Lock settings" }),
     );
     await user.click(
-      within(dialog).getByRole("button", { name: "Update runtime" }),
+      within(dialog).getByRole("button", { name: "Save runtime" }),
     );
     expect(
-      within(screen.getByRole("list", { name: "Agent Runtimes" })).getByText(
-        "Locked",
-      ),
+      within(
+        screen.getByRole("list", { name: "Available runtimes" }),
+      ).getByText("Locked"),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
@@ -174,7 +178,9 @@ describe("RuntimeTemplateSection", () => {
   it("keeps sparse legacy saved positions ahead of unpositioned built-ins", async () => {
     settings.popularAgentOverrides = { codex: { position: 3 } };
     mount();
-    const list = await screen.findByRole("list", { name: "Agent Runtimes" });
+    const list = await screen.findByRole("list", {
+      name: "Available runtimes",
+    });
     await waitFor(() =>
       expect(within(list).getAllByRole("listitem")[0]).toHaveTextContent(
         "Codex",
@@ -233,8 +239,13 @@ describe("RuntimeTemplateSection", () => {
     await user.click(
       screen.getByRole("menuitem", { name: "Create custom runtime…" }),
     );
-    await user.click(screen.getByRole("button", { name: "Add template" }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Add runtime",
+      }),
+    );
     expect(await screen.findByText("Enter a name")).toBeInTheDocument();
+    expect(screen.getByText("Enter a container image")).toBeInTheDocument();
     await user.type(
       screen.getByRole("textbox", { name: "Name" }),
       "Canceled workspace",
@@ -261,7 +272,11 @@ describe("RuntimeTemplateSection", () => {
       screen.getByRole("textbox", { name: "Container image" }),
       "registry.example.com/engineering:v1",
     );
-    await user.click(screen.getByRole("button", { name: "Add template" }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Add runtime",
+      }),
+    );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(settings.templates).toHaveLength(1));
@@ -313,7 +328,7 @@ describe("RuntimeTemplateSection", () => {
     const name = screen.getByRole("textbox", { name: "Name" });
     await user.clear(name);
     await user.type(name, "Review workspace");
-    await user.click(screen.getByRole("button", { name: "Update template" }));
+    await user.click(screen.getByRole("button", { name: "Save runtime" }));
     await user.click(screen.getByRole("button", { name: "Actions for Codex" }));
     expect(
       screen.getByRole("menuitem", { name: "Edit runtime" }),
@@ -367,7 +382,7 @@ describe("RuntimeTemplateSection", () => {
       screen.getByRole("menuitem", { name: "Review workspace" }),
     );
     const rows = within(
-      screen.getByRole("list", { name: "Agent Runtimes" }),
+      screen.getByRole("list", { name: "Available runtimes" }),
     ).getAllByRole("listitem");
     expect(rows.at(-2)).toHaveTextContent("Codex");
     expect(rows.at(-1)).toHaveTextContent("Review workspace");
@@ -438,7 +453,11 @@ describe("RuntimeTemplateSection", () => {
       screen.getByRole("textbox", { name: "Container image" }),
       "registry.example.com/new:v1",
     );
-    await user.click(screen.getByRole("button", { name: "Add template" }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Add runtime",
+      }),
+    );
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(settings.templates).toHaveLength(3));
     const ordered = [...settings.templates].sort(

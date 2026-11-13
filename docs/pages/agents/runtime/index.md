@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-12
+lastUpdated: 2026-11-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -33,7 +33,7 @@ From a connected client, ask your agent to create one. [`create_agent`](/docs/re
 
 ### Choose and Order Agent Runtimes
 
-With [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), go to **Settings → Agents → Agent Runtimes** to choose the agents offered during creation.
+With [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), go to **Settings → Agents → Runtimes** to choose the agents offered during creation.
 
 1. Click **+** to add a choice, or remove one with its **Remove** button.
 2. Drag the agent chips into your preferred order. You can also focus an agent's reorder handle and use the arrow keys.
@@ -45,7 +45,7 @@ Removing a choice preserves existing agents and their runtime configuration.
 
 Decide once how every agent of a runtime runs, such as whether Claude Code bills each person's Claude subscription or a company API key, and stop agent builders from changing it. This also uses [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 
-1. Go to **Settings → Agents → Agent Runtimes**, open a runtime's **⋯** menu, and click **Edit runtime**.
+1. Go to **Settings → Agents → Runtimes**, open a runtime's **⋯** menu, and click **Edit runtime**.
 2. Set its defaults. A built-in runtime has **Claude account** (Claude Code only), run limits, and tiers. A custom runtime also has its image, protocol, and follow-up delivery.
 3. Turn on **Lock settings**, click **Update runtime**, then click **Save**.
 

@@ -176,6 +176,28 @@ describe("POST /v1/tunnels/:tunnelId/response", () => {
     expect(request?.status).toBe("dispatched");
   });
 
+  test("rejects a request without a valid device key before it reads the body", async () => {
+    const device = await connect();
+    const body = "{ this is not JSON";
+
+    const noKey = await ctx.app.inject({
+      method: "POST",
+      url: `/v1/tunnels/${device.tunnelId}/response`,
+      headers: { "content-type": "application/json" },
+      payload: body,
+    });
+    const otherTunnel = await ctx.app.inject({
+      method: "POST",
+      url: `/v1/tunnels/tunnel_${"0".repeat(32)}/response`,
+      headers: { ...device.headers, "content-type": "application/json" },
+      payload: body,
+    });
+
+    // A body that was read would fail as not JSON, with 400.
+    expect(noKey.statusCode).toBe(401);
+    expect(otherTunnel.statusCode).toBe(403);
+  });
+
   describe("state report of the tunnel client", () => {
     function report(device: TestDevice, params: object, channel?: string) {
       return respond(device, {

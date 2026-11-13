@@ -10,6 +10,7 @@ import {
 } from "@/services/agent-runtime/runtime-credentials";
 import { CredentialAccess } from "@/services/credential-access";
 import { CredentialResolutionBatch } from "@/services/credentials";
+import { StaleGitHubUserConnectionError } from "@/services/github-user-connection";
 import type {
   AgentRuntime,
   AgentRuntimeCredentialDeclaration,
@@ -416,16 +417,10 @@ async function resolvePersonalBatchCredential(params: {
       minimumValidityMs: params.minimumValidityMs,
     });
   } catch (error) {
-    // GitHub sign-in reports a revoked, expired, or reconfigured personal
-    // authorization (e.g. rotated GitHub App clientId) as a 400. Treat it as
-    // disconnected so optional declarations are omitted and required ones
-    // report `missing` with a reconnect link instead of crashing launch.
-    if (
-      params.batch.kind(params.credentialId) === "github_app_user" &&
-      error instanceof ApiError &&
-      error.statusCode === 400 &&
-      error.message !== "Credential ownership does not match this binding"
-    ) {
+    // A rotated GitHub App clientId or revoked/expired refresh grant invalidates
+    // only the caller's personal authorization. Leave admin misconfiguration and
+    // upstream GitHub failures to propagate.
+    if (error instanceof StaleGitHubUserConnectionError) {
       logger.info(
         {
           userId: params.userId,

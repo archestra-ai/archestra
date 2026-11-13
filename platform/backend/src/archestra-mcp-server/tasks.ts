@@ -942,6 +942,12 @@ async function launchDelegatedTask(params: {
           errorResult(error.message),
         );
       }
+      if (error instanceof ApiError) {
+        return failedLaunch(
+          error.statusCode >= 500 ? "failed" : "credentials_misconfigured",
+          errorResult(error.message),
+        );
+      }
       throw error;
     }
     if (preflight.missing.length > 0) {
@@ -1093,7 +1099,11 @@ async function launchDelegatedTask(params: {
     if (refused) return failedLaunch("refused", errorResult(refused));
     if (error instanceof ApiError) {
       return failedLaunch(
-        error.statusCode === 403 ? "not_allowed" : "invalid_request",
+        error.statusCode === 403
+          ? "not_allowed"
+          : error.statusCode >= 500
+            ? "failed"
+            : "invalid_request",
         errorResult(error.message),
       );
     }

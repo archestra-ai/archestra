@@ -11,6 +11,13 @@ import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-defini
 import VerificationModel from "@/models/verification";
 import { ApiError, GITHUB_COM_API_URL, GitHubUserIdSchema } from "@/types";
 
+export class StaleGitHubUserConnectionError extends ApiError {
+  constructor(message: string) {
+    super(400, message);
+    this.name = "StaleGitHubUserConnectionError";
+  }
+}
+
 class GitHubUserConnectionManager {
   async start(owner: Owner) {
     const app = await this.app(owner);
@@ -133,8 +140,7 @@ class GitHubUserConnectionManager {
       const token = StoredTokenSchema.parse(JSON.parse(raw));
       const app = await this.app(owner);
       if (token.clientId !== app.clientId)
-        throw new ApiError(
-          400,
+        throw new StaleGitHubUserConnectionError(
           "The GitHub App changed. Connect GitHub again.",
         );
       if (token.expiresAt - Date.now() > (owner.minimumValidityMs ?? 60_000))
@@ -226,14 +232,26 @@ class GitHubUserConnectionManager {
         redirect: "error",
       },
     );
-    const payload = response.ok
-      ? TokenResponseSchema.safeParse(await response.json())
-      : null;
-    if (!payload?.success)
+    if (!response.ok)
+      throw new ApiError(502, "Could not exchange GitHub authorization token");
+    const raw: unknown = await response.json().catch(() => null);
+    const payload = TokenResponseSchema.safeParse(raw);
+    if (!payload.success) {
+      const oauthError = OAuthErrorResponseSchema.safeParse(raw);
+      if (
+        body.grant_type === "refresh_token" &&
+        oauthError.success &&
+        STALE_REFRESH_OAUTH_ERRORS.has(oauthError.data.error)
+      ) {
+        throw new StaleGitHubUserConnectionError(
+          "GitHub authorization expired or was revoked. Connect GitHub again.",
+        );
+      }
       throw new ApiError(
         400,
         "GitHub authorization failed. Connect GitHub again and ensure expiring user tokens are enabled.",
       );
+    }
     return {
       accessToken: payload.data.access_token,
       refreshToken: payload.data.refresh_token,
@@ -282,6 +300,14 @@ const TokenResponseSchema = z.object({
   expires_in: z.number().positive(),
   refresh_token_expires_in: z.number().positive(),
 });
+const OAuthErrorResponseSchema = z.object({
+  error: z.string(),
+});
+const STALE_REFRESH_OAUTH_ERRORS = new Set([
+  "bad_refresh_token",
+  "invalid_grant",
+  "expired_token",
+]);
 const StoredTokenSchema = z.object({
   accessToken: z.string(),
   refreshToken: z.string(),

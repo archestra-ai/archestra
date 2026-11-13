@@ -405,6 +405,130 @@ test("treats a personal GitHub connection as disconnected when the backing GitHu
   });
 });
 
+test("treats a revoked refresh token as disconnected, while surfacing admin misconfiguration and GitHub outages", async ({
+  makeAgent,
+}) => {
+  expect((await complete(await start())).statusCode).toBe(200);
+  const owner = {
+    organizationId,
+    userId: user.id,
+    credentialId: "github-user",
+    scope: "personal" as const,
+  };
+  const stored = JSON.parse(
+    (await RuntimeCredentialConnectionModel.resolveValue(owner)) ?? "null",
+  );
+  await RuntimeCredentialConnectionModel.upsert({
+    ...owner,
+    value: JSON.stringify({ ...stored, expiresAt: Date.now() - 1 }),
+  });
+
+  const agent = await makeAgent({ organizationId });
+  const optionalRuntime = {
+    agentId: agent.id,
+    secretId: null,
+    credentials: [
+      {
+        key: "GITHUB_TOKEN",
+        label: "GitHub token",
+        scope: "per_user" as const,
+        credentialId: "github-user",
+        required: false,
+      },
+    ],
+  };
+  const requiredRuntime = {
+    ...optionalRuntime,
+    credentials: [{ ...optionalRuntime.credentials[0], required: true }],
+  };
+
+  // 1. Revoked/expired refresh grant -> disconnected (null / missing with reconnect).
+  server.use(
+    http.post("https://github.com/login/oauth/access_token", () =>
+      HttpResponse.json({
+        error: "bad_refresh_token",
+        error_description: "The refresh token passed is incorrect or expired.",
+      }),
+    ),
+  );
+  await expect(
+    preflightAgentRuntimeCredentials({
+      runtime: optionalRuntime,
+      organizationId,
+      userId: user.id,
+    }),
+  ).resolves.toEqual({ configured: [], missing: [], misconfigured: [] });
+  await expect(
+    preflightAgentRuntimeCredentials({
+      runtime: requiredRuntime,
+      organizationId,
+      userId: user.id,
+    }),
+  ).resolves.toMatchObject({
+    missing: [
+      {
+        key: "GITHUB_TOKEN",
+        credentialId: "github-user",
+        canConnect: true,
+      },
+    ],
+  });
+
+  // 2. Transient GitHub 502 on refresh -> propagates instead of silently dropping GITHUB_TOKEN.
+  server.use(
+    http.post("https://github.com/login/oauth/access_token", () =>
+      HttpResponse.json({ message: "Bad Gateway" }, { status: 502 }),
+    ),
+  );
+  await expect(
+    resolveAgentRuntimeCredentials({
+      runtime: optionalRuntime,
+      organizationId,
+      userId: user.id,
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 502,
+    message: "Could not exchange GitHub authorization token",
+  });
+
+  // 3. Admin misconfiguration (missing client secret / missing client ID) -> propagates 400.
+  await setRuntimeCredentialConnection({
+    organizationId,
+    userId: user.id,
+    credentialId: "repository-app",
+    scope: "organization",
+    value:
+      "-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----",
+  });
+  await expect(
+    preflightAgentRuntimeCredentials({
+      runtime: requiredRuntime,
+      organizationId,
+      userId: user.id,
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 400,
+    message: "An administrator must connect the GitHub App OAuth client secret",
+  });
+
+  await updateRuntimeCredentialDefinition({
+    organizationId,
+    key: "repository-app",
+    definition: { githubClientId: null },
+  });
+  await expect(
+    preflightAgentRuntimeCredentials({
+      runtime: optionalRuntime,
+      organizationId,
+      userId: user.id,
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 400,
+    message:
+      "Configure an organization GitHub.com App with an OAuth client ID first",
+  });
+});
+
 async function start() {
   const result = await app.inject({
     method: "POST",

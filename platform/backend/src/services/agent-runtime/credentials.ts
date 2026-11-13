@@ -162,7 +162,9 @@ export async function resolveAgentRuntimeCredentials(params: {
           })
         : null;
       if (credential === RECONNECT) {
-        missing.push({ ...toMissing(declaration), reconnect: true });
+        if (declaration.required) {
+          missing.push({ ...toMissing(declaration), reconnect: true });
+        }
         continue;
       }
       const value = declaration.credentialId
@@ -223,6 +225,12 @@ export async function preflightAgentRuntimeCredentials(params: {
    * refuses.
    */
   reportAdminOnlyCredentials?: boolean;
+  /**
+   * Report stale personal connections (`reconnect: true`) even when the
+   * declaration is optional, so read-only setup checks can offer to reconnect
+   * without blocking launch preflight.
+   */
+  reportOptionalReconnect?: boolean;
 }): Promise<{
   configured: string[];
   missing: MissingAgentRuntimeCredential[];
@@ -332,7 +340,9 @@ export async function preflightAgentRuntimeCredentials(params: {
             })
           : null;
       if (credential === RECONNECT) {
-        missing.push({ ...toMissing(declaration), reconnect: true });
+        if (declaration.required || params.reportOptionalReconnect) {
+          missing.push({ ...toMissing(declaration), reconnect: true });
+        }
         continue;
       }
       const connected =

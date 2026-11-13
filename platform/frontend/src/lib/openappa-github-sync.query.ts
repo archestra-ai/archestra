@@ -24,11 +24,6 @@ export function useAppaGithubSync() {
     refetchInterval: 10000,
   });
 }
-/**
- * How the policy repository protects server rules files: the branch ruleset
- * Archestra keeps. The server reads it at most once a
- * minute, so polling more often only reads its cache.
- */
 /** The GitHub App's permissions against what self-service needs, on demand. */
 export function useAppaGithubAppGrants(enabled: boolean) {
   return useQuery({
@@ -42,6 +37,12 @@ export function useAppaGithubAppGrants(enabled: boolean) {
   });
 }
 
+/**
+ * How the policy repository protects server rules files: the branch ruleset
+ * the administrator imports, as the server last read it. The server keeps a
+ * read for a minute, so polling more often only reads its cache; a change
+ * just made on GitHub is read with `useFreshAppaRepositoryProtection`.
+ */
 export function useAppaRepositoryProtection(enabled: boolean) {
   const { data: canRead } = useHasPermissions({
     organizationSettings: ["read"],
@@ -56,6 +57,29 @@ export function useAppaRepositoryProtection(enabled: boolean) {
       return data ?? null;
     },
     refetchInterval: 60_000,
+  });
+}
+
+/**
+ * Read the protection from GitHub now, for the check-again buttons: the
+ * administrator just imported or edited the ruleset. What comes back
+ * replaces the cached read, so the Git sync card follows at once.
+ */
+export function useFreshAppaRepositoryProtection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await archestraApiSdk.getAppaRepositoryProtection(
+        {
+          query: { fresh: "true" },
+        },
+      );
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData([...appaGithubSyncQueryKey, "protection"], data);
+    },
   });
 }
 /**

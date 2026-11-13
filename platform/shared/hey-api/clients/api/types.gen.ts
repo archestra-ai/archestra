@@ -125347,6 +125347,10 @@ export type GetAppaGithubSyncResponses = {
                 variable: string;
                 value: 'enabled' | 'disabled';
             };
+            leftoverRule?: {
+                checkName: string;
+                url: string | null;
+            };
             autoMerge: {
                 enabled: boolean;
                 setting: boolean;
@@ -125488,6 +125492,10 @@ export type UpdateAppaGithubSyncResponses = {
                 variable: string;
                 value: 'enabled' | 'disabled';
             };
+            leftoverRule?: {
+                checkName: string;
+                url: string | null;
+            };
             autoMerge: {
                 enabled: boolean;
                 setting: boolean;
@@ -125625,6 +125633,10 @@ export type ConfigureAppaGithubSyncResponses = {
                 variable: string;
                 value: 'enabled' | 'disabled';
             };
+            leftoverRule?: {
+                checkName: string;
+                url: string | null;
+            };
             autoMerge: {
                 enabled: boolean;
                 setting: boolean;
@@ -125646,7 +125658,9 @@ export type ConfigureAppaGithubSyncResponse = ConfigureAppaGithubSyncResponses[k
 export type GetAppaRepositoryProtectionData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        fresh?: 'true' | 'false';
+    };
     url: '/api/openappa/github-sync/protection';
 };
 
@@ -125730,7 +125744,7 @@ export type GetAppaRepositoryProtectionResponses = {
             settingsUrl: string;
             installationUrl: string | null;
             permissions: Array<{
-                name: 'contents' | 'pull_requests' | 'checks' | 'administration';
+                name: 'contents' | 'pull_requests' | 'checks';
                 granted: boolean;
             }>;
         };
@@ -125738,8 +125752,28 @@ export type GetAppaRepositoryProtectionResponses = {
             state: 'active' | 'incomplete' | 'missing' | 'needs_permission' | 'unavailable' | 'error';
             url?: string;
             detail?: string;
-            bypassActors?: number;
             checkRule?: 'unposted';
+            settingsUrl?: string;
+            ruleset?: {
+                name: string;
+                target: 'branch';
+                source_type?: 'Repository';
+                source?: string;
+                enforcement: 'active';
+                conditions: {
+                    ref_name: {
+                        include: Array<string>;
+                        exclude: Array<string>;
+                    };
+                };
+                bypass_actors: Array<unknown>;
+                rules: Array<{
+                    type: string;
+                    parameters?: {
+                        [key: string]: unknown;
+                    };
+                }>;
+            };
         };
         include: {
             folder: string;
@@ -125839,7 +125873,7 @@ export type GetAppaGithubAppGrantsResponses = {
         settingsUrl: string;
         installationUrl: string | null;
         permissions: Array<{
-            name: 'contents' | 'pull_requests' | 'checks' | 'administration';
+            name: 'contents' | 'pull_requests' | 'checks';
             granted: boolean;
         }>;
     } | null;
@@ -126054,6 +126088,10 @@ export type CreateAppaGithubRepositoryResponses = {
                 variable: string;
                 value: 'enabled' | 'disabled';
             };
+            leftoverRule?: {
+                checkName: string;
+                url: string | null;
+            };
             autoMerge: {
                 enabled: boolean;
                 setting: boolean;
@@ -126076,7 +126114,6 @@ export type StartAppaGithubAppData = {
     body: {
         githubUrl: string;
         owner: string;
-        selfService?: boolean;
     };
     path?: never;
     query?: never;

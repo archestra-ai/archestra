@@ -197,8 +197,10 @@ export function GithubSyncSetupDialog({
     account: string;
   } | null>(null);
   const [chosenRepo, setRepo] = useState(editing?.repo ?? "");
-  // Self-service for the servers' editors: the App then also gets Checks and
-  // Administration. The environment variable, while set, decides instead.
+  // Self-service for the servers' editors. Every App created here already
+  // has the Checks permission it posts the policy check with; an older one
+  // gets it through Finish setup on the Git sync card. The environment
+  // variable, while set, decides instead.
   const [chosenSelfService, setSelfService] = useState(
     editing?.selfService ?? false,
   );
@@ -233,7 +235,7 @@ export function GithubSyncSetupDialog({
     editing?.interval ?? DEFAULT_INTERVAL,
   );
   // With self-service on, the connect step stays open on what the save
-  // brought: the ruleset and the include pull request.
+  // brought: the include pull request, and the ruleset to import.
   const [outcome, setOutcome] = useState<(() => Promise<unknown>) | null>(null);
   const [pullRequest, setPullRequest] = useState<{
     repo: string;
@@ -241,7 +243,7 @@ export function GithubSyncSetupDialog({
   } | null>(null);
 
   const accounts = useAppaGithubAppAccounts(
-    (step === "app" || step === "repo") &&
+    (step === "app" || step === "selfService" || step === "repo") &&
       !gitlab &&
       !!canReadCredentials &&
       apps.length > 0,
@@ -344,7 +346,7 @@ export function GithubSyncSetupDialog({
     });
     setWaiting(null);
     setMode("create");
-    setStep("repo");
+    setStep("selfService");
   }, [step, installed, savedNewApp, newApp]);
 
   // Resume a setup whose App exists on an account.
@@ -384,7 +386,7 @@ export function GithubSyncSetupDialog({
     const tab = openGithubWindow("about:blank", GITHUB_WINDOW);
     setWaiting("create");
     start.mutate(
-      { githubUrl: github.web, owner, selfService },
+      { githubUrl: github.web, owner },
       {
         onSuccess: (manifest) => {
           if (manifest) postManifest(manifest, GITHUB_WINDOW);
@@ -414,9 +416,9 @@ export function GithubSyncSetupDialog({
         setInstalled(result);
         setWaiting(null);
         // The new App is now one of the saved ones; stay on it rather than
-        // falling back to the "which App" choice, and move on to the repository.
+        // falling back to the "which App" choice, and move on to self-service.
         setMode("create");
-        setStep("repo");
+        setStep("selfService");
       },
       onError: () => setWaiting(null),
     });
@@ -438,6 +440,24 @@ export function GithubSyncSetupDialog({
       : { githubAppConfigId: appId };
     setStep("connect");
     const withSelfService = !gitlab && selfService;
+    // With self-service on, a setup pull request that carries the current
+    // policy is one more row of the checklist, beside the ruleset to import.
+    const setupPullOf = (data: {
+      source?: {
+        repo?: string | null;
+        setupPullRequestNumber?: number | null;
+      } | null;
+    }) => {
+      const number = data.source?.setupPullRequestNumber;
+      return number && data.source?.repo && github
+        ? {
+            setupPull: {
+              number,
+              url: `${github.web}/${data.source.repo}/pull/${number}`,
+            },
+          }
+        : {};
+    };
     if (keepsSource) {
       const body = {
         repo,
@@ -453,7 +473,8 @@ export function GithubSyncSetupDialog({
         selfServiceDirectory: serversFolder || DEFAULT_SELF_SERVICE_FOLDER,
         selfServiceAutoMerge: withSelfService && chosenAutoMerge,
       };
-      if (withSelfService) setOutcome(() => () => configure.mutateAsync(body));
+      if (withSelfService)
+        setOutcome(() => () => configure.mutateAsync(body).then(setupPullOf));
       else
         configure.mutate(body, {
           onSuccess: () => onOpenChange(false),
@@ -490,7 +511,7 @@ export function GithubSyncSetupDialog({
       return false;
     };
     if (withSelfService)
-      setOutcome(() => () => create.mutateAsync(body).then(setupPull));
+      setOutcome(() => () => create.mutateAsync(body).then(setupPullOf));
     else
       create.mutate(body, {
         onSuccess: (data) => {
@@ -503,24 +524,22 @@ export function GithubSyncSetupDialog({
   function back() {
     if (gitlab) return setStep(step === "repo" ? "app" : "provider");
     if (step === "start") {
-      if (origin) return setOrigin(null);
+      // The template panel goes back to the choice; the choice, to the host.
+      if (origin === "fresh") return setOrigin(null);
       return setStep("provider");
     }
-    if (step === "repo") {
+    if (step === "repo") return setStep("selfService");
+    if (step === "selfService") {
       setStep("app");
       // A lone App was picked for the admin; go back to the choice, not a list of one.
       if (mode === "pick" && apps.length === 1) setMode("fork");
       return;
     }
-    if (step === "selfService") {
-      setStep("start");
-      // An existing repository has nothing to do on the first step: go back to the choice.
-      if (origin === "existing") setOrigin(null);
-      return;
-    }
     if (mode !== "fork" && apps.length > 0 && !createdApp)
       return setMode("fork");
-    setStep("selfService");
+    setStep("start");
+    // An existing repository has nothing to do on the first step: go back to the choice.
+    if (origin === "existing") setOrigin(null);
   }
 
   if (pullRequest)
@@ -548,7 +567,7 @@ export function GithubSyncSetupDialog({
   const loadingApps =
     credentials.isPending || (!!canCreateCredentials && pending.isPending);
 
-  // Self-service, on its own step before the GitHub App, with its folder.
+  // Self-service, on its own step after the GitHub App, with its folder.
   const selfServiceChoice = (
     <div className="flex items-start gap-3">
       <Checkbox
@@ -563,16 +582,9 @@ export function GithubSyncSetupDialog({
           MCP Guardrails Self-Service
         </Label>
         <FieldDescription>
-          MCP owners can manage MCP Guardrails.
-          {editing?.selfService ? (
-            <span> </span>
-          ) : (
-            <span>
-              {" "}
-              Additional GitHub App permissions are added to ensure the related
-              pull requests are checked.{" "}
-            </span>
-          )}
+          MCP owners can manage MCP Guardrails. {appName} checks their pull
+          requests through the GitHub App, and a branch ruleset you import makes
+          the check required.{" "}
           <a
             href={`${policyDocsUrl}#mcp-guardrails-self-service`}
             target="_blank"
@@ -589,6 +601,14 @@ export function GithubSyncSetupDialog({
               {selfServiceEnvironment.variable}={selfServiceEnvironment.value}
             </code>
             . Unset the environment variable to choose here.
+          </FieldDescription>
+        ) : null}
+        {selfService && mode === "pick" && !editing ? (
+          // An App from before self-service may lack the permission the
+          // check is posted with; the card's Finish setup asks for it.
+          <FieldDescription>
+            An App created before self-service may lack the Checks permission.
+            Finish setup on the Git sync card asks for it.
           </FieldDescription>
         ) : null}
       </div>
@@ -635,7 +655,7 @@ export function GithubSyncSetupDialog({
             </Button>
           )}
           {step === "start" && origin === "fresh" ? (
-            <Button type="button" onClick={() => setStep("selfService")}>
+            <Button type="button" onClick={() => setStep("app")}>
               <span>Continue</span>
             </Button>
           ) : null}
@@ -643,7 +663,7 @@ export function GithubSyncSetupDialog({
             <Button
               type="button"
               disabled={!serversFolderValid}
-              onClick={() => setStep("app")}
+              onClick={() => setStep("repo")}
             >
               <span>Continue</span>
             </Button>
@@ -652,7 +672,7 @@ export function GithubSyncSetupDialog({
             <Button
               type="button"
               disabled={!appId}
-              onClick={() => setStep("repo")}
+              onClick={() => setStep(gitlab ? "repo" : "selfService")}
             >
               <span>Continue</span>
             </Button>
@@ -734,7 +754,7 @@ export function GithubSyncSetupDialog({
         />
       ) : null}
 
-      {step === "start" && !origin ? (
+      {step === "start" && origin !== "fresh" ? (
         <GithubAccountFields
           idPrefix="github-sync"
           githubUrl={githubUrl}
@@ -747,7 +767,7 @@ export function GithubSyncSetupDialog({
         />
       ) : null}
 
-      {step === "start" && !origin ? (
+      {step === "start" && origin !== "fresh" ? (
         <ChoiceTiles>
           <ChoiceTile
             disabled={!ready}
@@ -768,7 +788,7 @@ export function GithubSyncSetupDialog({
             disabled={!ready}
             onClick={() => {
               setOrigin("existing");
-              setStep("selfService");
+              setStep("app");
             }}
             visual={
               <span className="flex size-9 items-center justify-center rounded-lg border bg-muted/40">
@@ -915,7 +935,7 @@ export function GithubSyncSetupDialog({
             // With one App there is nothing to choose: use it.
             if (apps.length === 1) {
               setPickedId(apps[0].id);
-              setStep("repo");
+              setStep("selfService");
             }
           }}
           onCreate={() => setMode("create")}
@@ -923,19 +943,34 @@ export function GithubSyncSetupDialog({
       ) : null}
 
       {step === "app" && !gitlab && !loadingApps && mode === "pick" ? (
-        <GithubAppPicker
-          idPrefix="github-sync-app"
-          value={pickedId}
-          onChange={setPickedId}
-          apps={apps.map((app) => ({
-            id: app.id,
-            name: app.name,
-            icon: app.icon,
-            account:
-              accounts.data?.find((entry) => entry.id === app.id)?.account ??
-              null,
-          }))}
-        />
+        <div className="space-y-3">
+          <GithubAppPicker
+            idPrefix="github-sync-app"
+            value={pickedId}
+            onChange={setPickedId}
+            apps={apps.map((app) => ({
+              id: app.id,
+              name: app.name,
+              icon: app.icon,
+              account:
+                accounts.data?.find((entry) => entry.id === app.id)?.account ??
+                null,
+            }))}
+          />
+          {canCreateCredentials ? (
+            // An edited source opens on its App; creating another is a
+            // step away, not a guess at Back.
+            <Button
+              type="button"
+              variant="link"
+              size="xs"
+              className="h-auto px-0 text-muted-foreground"
+              onClick={() => setMode("create")}
+            >
+              <span>Create a new GitHub App instead</span>
+            </Button>
+          ) : null}
+        </div>
       ) : null}
 
       {step === "app" && !gitlab && !loadingApps && mode === "create" ? (
@@ -1035,14 +1070,16 @@ export function GithubSyncSetupDialog({
             {createdApp ? (
               <AppLogoTip settingsUrl={createdApp.settingsUrl} />
             ) : null}
-            {/* Off github.com the App also writes the validation workflow
-                into the new repository. */}
+            {/* Checks is for the policy check self-service posts on pull
+                requests, asked for up front so turning self-service on later
+                changes nothing. Off github.com the App also writes the
+                validation workflow into the new repository. */}
             <AccessSummary
               intro="The App only needs the policy repository, nothing else in the organization:"
               permissions={[
                 "Contents",
                 "Pull requests",
-                ...(selfService ? ["Checks", "Administration"] : []),
+                "Checks",
                 ...(github?.dotCom ? [] : ["Workflows"]),
               ].map((name) => ({ name, access: "Read & write" }))}
             />
@@ -1456,6 +1493,7 @@ export function GithubSyncSetupDialog({
             done: editing
               ? "Git sync saved and the policy pulled"
               : "Repository connected and the policy pulled",
+            proposed: editing ? "Git sync saved" : "Repository connected",
             failed: editing
               ? "Could not save Git sync"
               : "Could not connect the repository",
@@ -1903,8 +1941,8 @@ function headerFor(params: {
 const GITHUB_STEPS: { id: Step; label: string }[] = [
   { id: "provider", label: "Host" },
   { id: "start", label: "Start" },
-  { id: "selfService", label: "Self-service" },
   { id: "app", label: "GitHub App" },
+  { id: "selfService", label: "Self-service" },
   { id: "repo", label: "Repository" },
 ];
 const GITLAB_STEPS: { id: Step; label: string }[] = [

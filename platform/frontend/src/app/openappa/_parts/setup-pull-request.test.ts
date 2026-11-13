@@ -17,6 +17,7 @@ const source = {
   lastSyncError: null,
   selfService: false,
   selfServiceDirectory: "mcp",
+  selfServiceAutoMerge: false,
 };
 
 describe("setupPullRequestOutcome", () => {

@@ -305,6 +305,7 @@ export function AppaGithubSyncPanel() {
               webUrl: githubWebUrl,
               selfService: source.selfService,
               selfServiceDirectory: source.selfServiceDirectory,
+              selfServiceAutoMerge: source.selfServiceAutoMerge,
             }}
           />
         ) : (
@@ -421,6 +422,12 @@ function SelfServiceRow({
             }
             onFinishSetup={canManage ? () => setSetup(true) : undefined}
           />
+        ) : null}
+        {selfService.enabled && selfService.autoMerge?.enabled ? (
+          // The setting lives in the wizard; the card says only what holds.
+          <p className="text-xs text-muted-foreground">
+            Admitted self-service pull requests merge automatically.
+          </p>
         ) : null}
       </div>
       {setup ? (

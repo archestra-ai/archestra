@@ -2244,6 +2244,107 @@ describe("APPA GitHub sync", () => {
     expect(tasks).toHaveLength(1);
   });
 
+  test("auto-merge takes self-service, is off by default, is saved by the action and audited, and the environment variable locks it", async () => {
+    const status = () =>
+      app.inject({ method: "GET", url: "/api/openappa/github-sync" });
+    // A source without self-service: auto-merge has nothing to merge, and a
+    // save that asks for it alone keeps it off.
+    expect(
+      (await configure({ ...source, selfServiceAutoMerge: true })).statusCode,
+    ).toBe(200);
+    expect((await status()).json().selfService).toMatchObject({
+      autoMerge: { enabled: false, setting: false },
+    });
+    const refused = await action({
+      action: "self_service_auto_merge",
+      enabled: true,
+    });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error.message).toMatch(
+      /needs MCP Guardrails Self-Service/,
+    );
+
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const secret = await secretManager().createSecret(
+      { apiToken: privateKey },
+      "test-auto-merge-app",
+    );
+    const githubApp = await GithubAppConfigModel.create({
+      organizationId,
+      name: "Policy App",
+      githubUrl: "https://api.github.com",
+      appId: "123",
+      installationId: randomUUID(),
+      secretId: secret.id,
+    });
+    await OpenAppaGithubSyncModel.save(organizationId, {
+      ...source,
+      githubAppConfigId: githubApp.id,
+      selfService: true,
+    });
+    const on = await action({
+      action: "self_service_auto_merge",
+      enabled: true,
+    });
+    expect(on.statusCode).toBe(200);
+    expect(on.json().selfService.autoMerge).toEqual({
+      enabled: true,
+      setting: true,
+    });
+    expect(on.json().source.selfServiceAutoMerge).toBe(true);
+    await vi.waitFor(async () => {
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, organizationId));
+      expect(
+        rows.some(
+          (row) =>
+            (row.before as { selfServiceAutoMerge?: boolean })
+              ?.selfServiceAutoMerge === false &&
+            (row.after as { selfServiceAutoMerge?: boolean })
+              ?.selfServiceAutoMerge === true,
+        ),
+      ).toBe(true);
+    });
+
+    // While the environment variable sets it, it decides, and the setting
+    // cannot be edited; unset, the saved setting applies again.
+    config.openappa.selfServiceAutoMerge = "disabled";
+    try {
+      const locked = await action({
+        action: "self_service_auto_merge",
+        enabled: false,
+      });
+      expect(locked.statusCode).toBe(400);
+      expect(locked.json().error.message).toBe(
+        "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE sets auto-merge for this deployment. Unset it to edit this setting.",
+      );
+      expect((await status()).json().selfService.autoMerge).toEqual({
+        enabled: false,
+        setting: true,
+        environment: {
+          variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE",
+          value: "disabled",
+        },
+      });
+    } finally {
+      delete config.openappa.selfServiceAutoMerge;
+    }
+    const off = await action({
+      action: "self_service_auto_merge",
+      enabled: false,
+    });
+    expect(off.json().selfService.autoMerge).toEqual({
+      enabled: false,
+      setting: false,
+    });
+  });
+
   test("schedule changes persist and successful recent syncs are not due", async () => {
     await configure();
     expect(

@@ -63,6 +63,7 @@ const source = {
   lastSyncError: null,
   selfService: true,
   selfServiceDirectory: "mcp",
+  selfServiceAutoMerge: false,
 };
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
@@ -83,7 +84,12 @@ beforeEach(() => {
     githubWebUrl: "https://github.com",
     provider: "github",
     source,
-    selfService: { enabled: true, setting: true, directory: "mcp" },
+    selfService: {
+      enabled: true,
+      setting: true,
+      directory: "mcp",
+      autoMerge: { enabled: false, setting: false },
+    },
   };
   server.use(http.get(url, () => HttpResponse.json(state)));
 });
@@ -237,7 +243,12 @@ test("Enable walks through the App's permission, the folder, the include pull re
   state = {
     ...state,
     source: { ...source, githubAppConfigId: "app-1", selfService: false },
-    selfService: { enabled: false, setting: false, directory: "mcp" },
+    selfService: {
+      enabled: false,
+      setting: false,
+      directory: "mcp",
+      autoMerge: { enabled: false, setting: false },
+    },
   };
   let include: Record<string, unknown> = { folder: "mcp", state: "missing" };
   const ruleset = {
@@ -326,11 +337,13 @@ test("Enable walks through the App's permission, the folder, the include pull re
           githubAppConfigId: "app-1",
           selfService: on,
           selfServiceDirectory: on ? "rules/servers" : "mcp",
+          selfServiceAutoMerge: false,
         },
         selfService: {
           enabled: on,
           setting: on,
           directory: on ? "rules/servers" : "mcp",
+          autoMerge: { enabled: false, setting: false },
         },
       };
       return HttpResponse.json(state);
@@ -445,6 +458,7 @@ test("locks self-service while the environment variable sets it, naming the vari
       enabled: true,
       setting: false,
       directory: "mcp",
+      autoMerge: { enabled: false, setting: false },
       environment: {
         variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE",
         value: "enabled",
@@ -489,11 +503,47 @@ test("locks self-service while the environment variable sets it, naming the vari
   );
 });
 
+test("while auto-merge is in force the card says admitted pull requests merge by themselves, and nothing otherwise", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: "app-1" },
+  };
+  show();
+  await screen.findByText("MCP Guardrails Self-Service");
+  expect(
+    screen.queryByText(
+      "Admitted self-service pull requests merge automatically.",
+    ),
+  ).toBeNull();
+  expect(screen.queryByRole("switch")).toBeNull();
+  cleanup();
+
+  state = {
+    ...state,
+    selfService: {
+      ...state.selfService,
+      autoMerge: { enabled: true, setting: true },
+    },
+  };
+  show();
+  expect(
+    await screen.findByText(
+      "Admitted self-service pull requests merge automatically.",
+    ),
+  ).toBeVisible();
+  expect(screen.queryByRole("switch")).toBeNull();
+});
+
 test("self-service needs a GitHub App: a source without one cannot enable it", async () => {
   state = {
     ...state,
     source: { ...source, selfService: false },
-    selfService: { enabled: false, setting: false, directory: "mcp" },
+    selfService: {
+      enabled: false,
+      setting: false,
+      directory: "mcp",
+      autoMerge: { enabled: false, setting: false },
+    },
   };
   show();
   expect(await screen.findByRole("button", { name: "Enable" })).toBeDisabled();
@@ -900,6 +950,76 @@ test("editing an App-backed source keeps its repository and only warns about mis
     githubAppConfigId: appId,
     selfService: true,
     selfServiceDirectory: "mcp",
+    selfServiceAutoMerge: false,
+  });
+});
+
+test("editing keeps the saved auto-merge choice; the Self-service step shows it under self-service and changes it", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: appId, selfServiceAutoMerge: true },
+    selfService: {
+      ...state.selfService,
+      autoMerge: { enabled: true, setting: true },
+    },
+  };
+  serveApps([[appId, "Policy App"]]);
+  serveRepositories({ [appId]: ["example/policies"] });
+  let saved: Record<string, unknown> | undefined;
+  server.use(
+    http.get(`${githubApp}/repository`, () =>
+      HttpResponse.json({ status: "policy", validations: true }),
+    ),
+    http.put(url, async ({ request }) => {
+      saved = (await request.json()) as Record<string, unknown>;
+      return HttpResponse.json(state);
+    }),
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Check OpenAPPA Guardrails",
+        include: { folder: "mcp", state: "included" },
+        branchRules: { state: "active" },
+      }),
+    ),
+  );
+  show();
+  fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+  const dialog = await screen.findByRole("dialog");
+  // Back to the Self-service step, which follows the App.
+  const stepper = within(dialog).getByRole("list", { name: "Setup progress" });
+  fireEvent.click(
+    within(stepper).getByRole("button", { name: /Self-service/ }),
+  );
+  const autoMerge = await within(dialog).findByRole("checkbox", {
+    name: "Auto-merge pull requests",
+  });
+  expect(autoMerge).toBeChecked();
+  // Only while self-service is ticked.
+  fireEvent.click(
+    within(dialog).getByRole("checkbox", {
+      name: "MCP Guardrails Self-Service",
+    }),
+  );
+  expect(
+    within(dialog).queryByRole("checkbox", {
+      name: "Auto-merge pull requests",
+    }),
+  ).toBeNull();
+  fireEvent.click(
+    within(dialog).getByRole("checkbox", {
+      name: "MCP Guardrails Self-Service",
+    }),
+  );
+  fireEvent.click(
+    within(dialog).getByRole("checkbox", { name: "Auto-merge pull requests" }),
+  );
+  // On to the repository step, and the save.
+  fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+  fireEvent.click(await within(dialog).findByRole("button", { name: "Save" }));
+  await waitFor(() => expect(saved).toBeDefined());
+  expect(saved).toMatchObject({
+    selfService: true,
+    selfServiceAutoMerge: false,
   });
 });
 
@@ -919,6 +1039,7 @@ test("connecting an existing repository with self-service keeps the checklist op
         githubAppConfigId: appId,
         interval: "1h",
         selfService: true,
+        selfServiceAutoMerge: false,
         existing: true,
         replace: false,
       });

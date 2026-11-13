@@ -1572,6 +1572,10 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Default: unset.
   - Values: `enabled`, `disabled`.
 
+- **`ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE`** - Sets [Auto-merge](/docs/agents/guardrails/git-sync#auto-merge) for MCP Guardrails Self-Service: the GitHub App merges each MCP server's rules pull request once its policy check passes. While it is set, it overrides the setting saved in Git sync setup, which cannot be edited there.
+  - Default: unset (the saved setting applies, off unless changed).
+  - Values: `enabled`, `disabled`. Other values stop startup.
+
 - **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Sets **Human approval** under [Break the glass](/docs/agents/guardrails/policies#yells) for the whole deployment. While it is set, it overrides the value saved in **Settings → Guardrails**, and the setting cannot be edited there. Unset it to edit the setting again.
   - Default: unset (the saved setting applies, `block` unless changed)
   - Values: `block`, `unattended`, `everywhere`. Other values stop startup.

@@ -96,6 +96,42 @@ describe("locked Agent Runtime settings", () => {
     expect(read.json()).toEqual([{ id: "codex", ...builtIns.codex }]);
   });
 
+  test("changing a locked custom runtime's image moves its agents to the new image", async ({
+    makeAgent,
+  }) => {
+    const template = makeTemplate({ locked: true });
+    const agent = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      runtime: template.runtime,
+    });
+    expect(
+      (await save({ revision: 0, templates: [template] })).statusCode,
+    ).toBe(200);
+    const moved = {
+      ...template,
+      runtime: { ...template.runtime, image: "registry.example.com/agent:v2" },
+    };
+    expect((await save({ revision: 1, templates: [moved] })).statusCode).toBe(
+      200,
+    );
+    expect((await AgentModel.findById(agent.id))?.runtime?.image).toBe(
+      "registry.example.com/agent:v2",
+    );
+  });
+
+  test("a custom runtime with a maintained image can't be locked", async () => {
+    const template = makeTemplate({
+      locked: true,
+      runtime: buildCustomAgentRuntime({
+        image: config.agentRuntime.catalogImages.codex,
+      }),
+    });
+    const refused = await save({ revision: 0, templates: [template] });
+    expect(refused.statusCode).toBe(400);
+    expect(refused.body).toContain("Lock the built-in runtime instead");
+  });
+
   test("a locked runtime's image can't be shared with another custom runtime", async () => {
     const template = makeTemplate({ locked: true });
     const twin = makeTemplate({ name: "Same image" });

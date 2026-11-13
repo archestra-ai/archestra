@@ -1028,6 +1028,8 @@ async function resolveRuntimeAndModelForWrite(params: {
 
   const runtime = await applyAgentRuntimeLock({
     organizationId: context.organizationId,
+    userId: context.userId,
+    previous: existing?.runtime,
     runtime:
       runtimeInput == null
         ? runtimeInput

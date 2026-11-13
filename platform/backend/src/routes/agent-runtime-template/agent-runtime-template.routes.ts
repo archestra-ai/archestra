@@ -1,7 +1,12 @@
-import { PopularAgentIdSchema, RouteId } from "@archestra/shared";
+import {
+  agentCatalogIdForImage,
+  PopularAgentIdSchema,
+  RouteId,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth/utils";
+import config from "@/config";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import { assertAgentRuntimeTiersExist } from "@/services/agent-runtime/agent-config-validation";
 import {
@@ -99,18 +104,39 @@ const agentRuntimeTemplateRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ]) {
         await assertAgentRuntimeTiersExist({ runtime, organizationId });
       }
+      const previous =
+        await AgentRuntimeTemplateModel.getSettings(organizationId);
+      for (const template of body.templates) {
+        if (
+          template.locked &&
+          agentCatalogIdForImage({
+            image: template.runtime.image,
+            catalogImages: config.agentRuntime.catalogImages,
+          })
+        )
+          throw new ApiError(
+            400,
+            `${template.name} uses a maintained image, so it runs as that built-in runtime. Lock the built-in runtime instead.`,
+          );
+      }
       await assertLockedRuntimesFitAgents({
         organizationId,
         userId: user.id,
         settings: body,
+        previous,
       });
       return reply.send(
         await AgentRuntimeTemplateModel.saveSettings({
           organizationId,
           settings: body,
           popularAgentOverrides: body.popularAgentOverrides,
-          afterWrite: ({ tx, settings }) =>
-            applyLockedRuntimesToAgents({ organizationId, settings, tx }),
+          afterWrite: ({ tx, settings, previous }) =>
+            applyLockedRuntimesToAgents({
+              organizationId,
+              settings,
+              previous,
+              tx,
+            }),
         }),
       );
     },

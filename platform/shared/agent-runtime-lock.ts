@@ -66,36 +66,27 @@ export type AgentRuntimeTemplateRef =
 
 /**
  * The Agent Runtime a saved runtime is an Agent of. A runtime stores no
- * template id: a maintained template is recognised by its wrapper command or
- * its catalog image, and a custom runtime by its image.
+ * template id, so it is recognised by its image, then by its wrapper command:
+ * a maintained catalog image, then a custom runtime's image, then a
+ * maintained wrapper. That order keeps a locked runtime's image locked
+ * whatever command an agent sets.
  */
 export function resolveAgentRuntimeTemplate(params: {
   runtime: Pick<LockableAgentRuntime, "image" | "command">;
   catalogImages: Record<AgentCatalogId, string>;
   customTemplates: readonly { id: string; image: string }[];
 }): AgentRuntimeTemplateRef | null {
-  const builtIn =
-    resolveAgentCatalogId(params.runtime) ??
-    agentCatalogIdForImage({
-      image: params.runtime.image,
-      catalogImages: params.catalogImages,
-    });
-  if (builtIn) return { kind: "built-in", id: builtIn };
+  const catalogImage = agentCatalogIdForImage({
+    image: params.runtime.image,
+    catalogImages: params.catalogImages,
+  });
+  if (catalogImage) return { kind: "built-in", id: catalogImage };
   const custom = params.customTemplates.find(
     (template) => template.image.trim() === params.runtime.image.trim(),
   );
-  return custom ? { kind: "custom", id: custom.id } : null;
-}
-
-/** Whether a runtime already carries every setting its locked template sets. */
-export function hasLockedAgentRuntimeSettings(params: {
-  runtime: LockableAgentRuntime;
-  template: LockableAgentRuntime;
-}): boolean {
-  return (
-    JSON.stringify(lockedSettings(params.runtime)) ===
-    JSON.stringify(lockedSettings(params.template))
-  );
+  if (custom) return { kind: "custom", id: custom.id };
+  const wrapper = resolveAgentCatalogId(params.runtime);
+  return wrapper ? { kind: "built-in", id: wrapper } : null;
 }
 
 /** The runtime with its locked template's settings applied. */
@@ -103,9 +94,8 @@ export function withLockedAgentRuntimeSettings<
   Runtime extends LockableAgentRuntime,
 >(params: { runtime: Runtime; template: LockableAgentRuntime }): Runtime {
   const { runtime, template } = params;
-  const { claudeCode: _claudeCode, ...rest } = runtime;
   return {
-    ...rest,
+    ...runtime,
     command: template.command,
     inferenceProtocol: template.inferenceProtocol,
     steerMode: template.steerMode,
@@ -114,29 +104,12 @@ export function withLockedAgentRuntimeSettings<
     ttlHours: template.ttlHours,
     maxCostUsd: template.maxCostUsd ?? null,
     idleTimeoutMinutes: template.idleTimeoutMinutes,
+    // A runtime that sets no Claude account leaves the agent's own.
     ...(template.claudeCode && {
       claudeCode: {
         ...runtime.claudeCode,
         authentication: template.claudeCode.authentication,
       },
     }),
-  } as Runtime;
-}
-
-// ===================================================================
-// Internal
-// ===================================================================
-
-function lockedSettings(runtime: LockableAgentRuntime) {
-  return [
-    runtime.command ?? null,
-    runtime.inferenceProtocol,
-    runtime.steerMode,
-    runtime.tier ?? null,
-    runtime.maxTier ?? null,
-    runtime.ttlHours ?? null,
-    runtime.maxCostUsd ?? null,
-    runtime.idleTimeoutMinutes ?? null,
-    runtime.claudeCode?.authentication ?? null,
-  ];
+  };
 }

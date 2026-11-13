@@ -1586,6 +1586,46 @@ describe("agent runtime and model tools", () => {
     ).toMatchObject({ ttlHours: 6, idleTimeoutMinutes: 30 });
   });
 
+  test("only an administrator can move an agent off a locked runtime", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    await AgentRuntimeTemplateModel.saveSettings({
+      organizationId,
+      settings: {
+        revision: 0,
+        templates: [],
+        builtIns: { "claude-code": { locked: true, settings: {} } },
+      },
+      popularAgentOverrides: null,
+    });
+    const runtime = buildAgentCatalogRuntime({
+      id: "claude-code",
+      image: config.agentRuntime.catalogImages["claude-code"],
+    });
+    const builder = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: { agent: ["read", "create", "update", "configure-runtime"] },
+    });
+    await makeMember(builder.id, organizationId, { role: role.role });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: builder.id,
+      agentType: "agent",
+      runtime,
+    });
+    mockContext.userId = builder.id;
+    const refused = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      runtime: { image: "example.test/own:v1" },
+    });
+    expect(refused.isError).toBe(true);
+    expect(JSON.stringify(refused)).toContain("locked Claude Code runtime");
+    expect((await AgentModel.findById(agent.id))?.runtime).toEqual(runtime);
+  });
+
   test("create_agent applies runtime overrides on top of a template", async ({
     makeLlmProviderApiKey,
   }) => {

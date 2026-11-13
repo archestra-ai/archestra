@@ -1527,7 +1527,11 @@ export function AgentForm({
   const isClaudeCodeRuntime = isClaudeCodeRuntimeConfig(runtime);
   const agentCatalogImages = useAgentCatalogImages();
   // Its Agent Runtime's settings, when locked, are this agent's: read-only.
-  const lockedRuntimeName = useLockedRuntimeName(runtime, agentCatalogImages);
+  // An existing agent's runtime is the saved one, never the unsaved draft.
+  const lockedRuntimeName = useLockedRuntimeName(
+    agent ? agent.runtime : runtime,
+    agentCatalogImages,
+  );
   const agentRuntimeEnabled = useFeature("agentRuntime") === true;
   // A runtime saved before the deployment turned Agent Runtime off stays
   // editable, so it can be switched off.
@@ -3308,10 +3312,9 @@ export function AgentForm({
               </p>
             ))}
           {isClaudeCodeRuntime ? (
-            <fieldset
-              disabled={canConfigureRuntime !== true || !!lockedRuntimeName}
-            >
+            <fieldset disabled={canConfigureRuntime !== true}>
               <ClaudeCodeInferenceSettings
+                authenticationLocked={!!lockedRuntimeName}
                 agentId={agent?.id ?? ""}
                 authentication={
                   usesClaudeSubscription ? "subscription" : "provider"

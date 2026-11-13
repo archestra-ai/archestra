@@ -797,6 +797,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       body.runtime = await applyAgentRuntimeLock({
         organizationId,
+        userId: user.id,
         runtime: body.runtime,
       });
       await requireAgentRuntimePermission({
@@ -2106,7 +2107,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       body.runtime = await applyAgentRuntimeLock({
         organizationId,
+        userId: user.id,
         runtime: body.runtime,
+        previous: existingAgent.runtime,
       });
       await requireAgentRuntimePermission({
         agentType: existingAgent.agentType,

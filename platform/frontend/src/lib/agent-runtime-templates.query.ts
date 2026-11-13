@@ -16,8 +16,6 @@ export type RuntimeTemplate =
   archestraApiTypes.GetAgentRuntimeTemplateResponses["200"];
 export type RuntimeTemplateSummary =
   archestraApiTypes.ListAgentRuntimeTemplatesResponses["200"][number];
-export type BuiltInRuntimeSettings =
-  archestraApiTypes.ListBuiltInAgentRuntimeSettingsResponses["200"][number];
 const catalogKey = ["agent-runtime-templates"] as const;
 const builtInsKey = ["agent-runtime-templates", "built-ins"] as const;
 const settingsKey = ["agent-runtime-template-settings"] as const;

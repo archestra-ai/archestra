@@ -94,23 +94,25 @@ beforeEach(() => {
 
 describe("AgentRuntimePicker", () => {
   it("starts a maintained runtime from the administrator's settings", async () => {
+    let served = false;
     server.use(
       http.get(
         "http://localhost:9000/api/agent-runtime-templates/built-ins",
-        () =>
-          HttpResponse.json([
+        () => {
+          served = true;
+          return HttpResponse.json([
             { id: "codex", locked: false, settings: { ttlHours: 6 } },
-          ]),
+          ]);
+        },
       ),
     );
     const user = userEvent.setup();
     await renderPicker("claude-code");
-    await waitFor(async () => {
-      await user.click(screen.getByRole("radio", { name: "Codex" }));
-      expect(savedRuntime()).toMatchObject({
-        command: ["archestra-codex"],
-        ttlHours: 6,
-      });
+    await waitFor(() => expect(served).toBe(true));
+    await user.click(screen.getByRole("radio", { name: "Codex" }));
+    expect(savedRuntime()).toMatchObject({
+      command: ["archestra-codex"],
+      ttlHours: 6,
     });
   });
 

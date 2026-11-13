@@ -1,12 +1,13 @@
 import { isDeepStrictEqual } from "node:util";
 import {
+  AGENT_CATALOG_NAMES,
   buildAgentCatalogRuntime,
-  hasLockedAgentRuntimeSettings,
   type LockableAgentRuntime,
   resolveAgentRuntimeTemplate,
   withAgentRuntimeDefaults,
   withLockedAgentRuntimeSettings,
 } from "@archestra/shared";
+import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import type { Transaction } from "@/database";
 import { AgentModel } from "@/models";
@@ -22,36 +23,64 @@ import { assertAgentRuntimeModelCompatibility } from "./agent-config-validation"
 
 /**
  * A runtime with its Agent Runtime's locked settings applied. Every Agent of a
- * locked runtime's type runs with that runtime's settings, whoever saves it,
- * so the agent forms show them read-only and the agent tools take them as given.
+ * locked runtime runs with that runtime's settings, whoever saves it, so the
+ * agent forms show them read-only and the agent tools take them as given.
+ * Moving an Agent off a locked runtime changes those settings too, so it needs
+ * the permission that edits them.
  */
 export async function applyAgentRuntimeLock<
   Runtime extends AgentRuntime | null | undefined,
->(params: { organizationId: string; runtime: Runtime }): Promise<Runtime> {
+>(params: {
+  organizationId: string;
+  userId: string;
+  runtime: Runtime;
+  /** The Agent's saved runtime, when it has one. */
+  previous?: AgentRuntime | null;
+}): Promise<Runtime> {
   if (!params.runtime) return params.runtime;
-  const template = lockedTemplateFor({
-    runtime: params.runtime,
-    settings: await AgentRuntimeTemplateModel.getSettings(
+  const settings = await AgentRuntimeTemplateModel.getSettings(
+    params.organizationId,
+  );
+  const lock = lockedRuntimeFor({ runtime: params.runtime, settings });
+  const left = params.previous
+    ? lockedRuntimeFor({ runtime: params.previous, settings })
+    : null;
+  if (
+    left &&
+    left.id !== lock?.id &&
+    !(await userHasPermission(
+      params.userId,
       params.organizationId,
-    ),
-  });
-  return template
-    ? withLockedAgentRuntimeSettings({ runtime: params.runtime, template })
+      "organizationSettings",
+      "update",
+    ))
+  ) {
+    throw new ApiError(
+      403,
+      `This agent uses the locked ${left.name} runtime, so only an administrator can move it to another runtime.`,
+    );
+  }
+  return lock
+    ? (applyLock({ runtime: params.runtime, lock }) as Runtime)
     : params.runtime;
 }
 
 /**
  * Refuse runtime settings that, once locked, would stop an existing Agent of
- * their type working with its model, naming those Agents.
+ * their runtime working with its model, naming those Agents.
  */
 export async function assertLockedRuntimesFitAgents(params: {
   organizationId: string;
   userId: string;
   settings: RuntimeTemplateSettings;
+  previous: RuntimeTemplateSettings;
 }): Promise<void> {
   const changes = lockedRuntimeChanges({
-    agents: await AgentModel.findWithRuntime(params),
+    agents: await AgentModel.findWithRuntime({
+      organizationId: params.organizationId,
+    }),
     settings: params.settings,
+    previous: params.previous,
   });
   const incompatible: string[] = [];
   for (const { agent, runtime } of changes) {
@@ -80,17 +109,24 @@ export async function assertLockedRuntimesFitAgents(params: {
 }
 
 /**
- * Give every existing Agent of a locked runtime's type that runtime's
- * settings, in the transaction that saves them.
+ * Give every existing Agent of a locked runtime that runtime's settings, in
+ * the transaction that saves them. An Agent of a custom runtime is found by
+ * the image the runtime had before this save too, so changing a locked
+ * runtime's image moves its Agents to the new one.
  */
 export async function applyLockedRuntimesToAgents(params: {
   organizationId: string;
   settings: RuntimeTemplateSettings;
+  previous: RuntimeTemplateSettings;
   tx: Transaction;
 }): Promise<void> {
   const changes = lockedRuntimeChanges({
-    agents: await AgentModel.findWithRuntime(params),
+    agents: await AgentModel.findWithRuntime({
+      organizationId: params.organizationId,
+      tx: params.tx,
+    }),
     settings: params.settings,
+    previous: params.previous,
   });
   for (const { agent, runtime } of changes) {
     await AgentModel.setRuntime({ id: agent.id, runtime, tx: params.tx });
@@ -100,6 +136,27 @@ export async function applyLockedRuntimesToAgents(params: {
 // ===================================================================
 // Internal
 // ===================================================================
+
+type LockedRuntime = {
+  id: string;
+  name: string;
+  runtime: LockableAgentRuntime;
+  /** A custom runtime's image is its own; a maintained one follows the catalog. */
+  setsImage: boolean;
+};
+
+function applyLock(params: {
+  runtime: AgentRuntime;
+  lock: LockedRuntime;
+}): AgentRuntime {
+  const locked = withLockedAgentRuntimeSettings({
+    runtime: params.runtime,
+    template: params.lock.runtime,
+  });
+  return params.lock.setsImage
+    ? { ...locked, image: params.lock.runtime.image }
+    : locked;
+}
 
 function modelSettings(runtime: AgentRuntime) {
   return [
@@ -113,53 +170,62 @@ function modelSettings(runtime: AgentRuntime) {
 function lockedRuntimeChanges<Agent extends { runtime: AgentRuntime }>(params: {
   agents: Agent[];
   settings: RuntimeTemplateSettings;
+  previous: RuntimeTemplateSettings;
 }) {
   return params.agents.flatMap((agent) => {
-    const template = lockedTemplateFor({
+    const lock = lockedRuntimeFor({
       runtime: agent.runtime,
       settings: params.settings,
+      previous: params.previous,
     });
-    return template &&
-      !hasLockedAgentRuntimeSettings({ runtime: agent.runtime, template })
-      ? [
-          {
-            agent,
-            runtime: withLockedAgentRuntimeSettings({
-              runtime: agent.runtime,
-              template,
-            }),
-          },
-        ]
-      : [];
+    if (!lock) return [];
+    const runtime = applyLock({ runtime: agent.runtime, lock });
+    return isDeepStrictEqual(runtime, agent.runtime)
+      ? []
+      : [{ agent, runtime }];
   });
 }
 
-/** The settings of the locked Agent Runtime a runtime is an Agent of, if any. */
-function lockedTemplateFor(params: {
+/** The locked Agent Runtime a runtime belongs to, if any. */
+function lockedRuntimeFor(params: {
   runtime: LockableAgentRuntime;
   settings: RuntimeTemplateSettings;
-}): LockableAgentRuntime | null {
+  /** Settings being replaced: their custom images still name their runtime. */
+  previous?: RuntimeTemplateSettings;
+}): LockedRuntime | null {
   const ref = resolveAgentRuntimeTemplate({
     runtime: params.runtime,
     catalogImages: config.agentRuntime.catalogImages,
-    customTemplates: params.settings.templates.map(({ id, runtime }) => ({
-      id,
-      image: runtime.image,
-    })),
+    customTemplates: [
+      ...params.settings.templates,
+      ...(params.previous?.templates ?? []),
+    ].map(({ id, runtime }) => ({ id, image: runtime.image })),
   });
   if (!ref) return null;
   if (ref.kind === "custom") {
     const template = params.settings.templates.find(({ id }) => id === ref.id);
-    return template?.locked ? template.runtime : null;
+    return template?.locked
+      ? {
+          id: template.id,
+          name: template.name,
+          runtime: template.runtime,
+          setsImage: true,
+        }
+      : null;
   }
   const builtIn = params.settings.builtIns[ref.id];
   if (!builtIn?.locked) return null;
-  return withAgentRuntimeDefaults({
-    runtime: buildAgentCatalogRuntime({
-      id: ref.id,
-      image: config.agentRuntime.catalogImages[ref.id],
+  return {
+    id: ref.id,
+    name: AGENT_CATALOG_NAMES[ref.id],
+    runtime: withAgentRuntimeDefaults({
+      runtime: buildAgentCatalogRuntime({
+        id: ref.id,
+        image: config.agentRuntime.catalogImages[ref.id],
+      }),
+      defaults: builtIn.settings,
     }),
-    defaults: builtIn.settings,
-  });
+    setsImage: false,
+  };
 }
 // SPDX-SnippetEnd

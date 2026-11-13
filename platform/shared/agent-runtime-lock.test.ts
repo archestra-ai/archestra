@@ -5,7 +5,6 @@ import {
   getAgentCatalogImages,
 } from "./agent-catalog-images";
 import {
-  hasLockedAgentRuntimeSettings,
   resolveAgentRuntimeTemplate,
   withLockedAgentRuntimeSettings,
 } from "./agent-runtime-lock";
@@ -40,6 +39,19 @@ describe("resolveAgentRuntimeTemplate", () => {
     }
   });
 
+  it("keeps a custom runtime's image its own whatever wrapper an agent sets", () => {
+    expect(
+      resolveAgentRuntimeTemplate({
+        runtime: {
+          ...buildCustomAgentRuntime({ image: "example.com/own:v1" }),
+          command: ["archestra-codex"],
+        },
+        catalogImages,
+        customTemplates,
+      }),
+    ).toEqual({ kind: "custom", id: customTemplates[0].id });
+  });
+
   it("finds a custom runtime by its image, and nothing for an unknown image", () => {
     expect(
       resolveAgentRuntimeTemplate({
@@ -59,6 +71,13 @@ describe("resolveAgentRuntimeTemplate", () => {
 });
 
 describe("withLockedAgentRuntimeSettings", () => {
+  it("keeps the agent's own Claude account when the runtime sets none", () => {
+    const agent = buildAgentCatalogRuntime({ id: "claude-code", image: "a:0" });
+    const template = buildCustomAgentRuntime({ image: "a:0" });
+    const locked = withLockedAgentRuntimeSettings({ runtime: agent, template });
+    expect(locked.claudeCode).toEqual(agent.claudeCode);
+  });
+
   it("takes the locked settings and keeps the agent's own image, values and model", () => {
     const template = {
       ...buildAgentCatalogRuntime({ id: "claude-code", image: "a:1" }),
@@ -84,11 +103,5 @@ describe("withLockedAgentRuntimeSettings", () => {
         model: agent.claudeCode?.model,
       },
     });
-    expect(hasLockedAgentRuntimeSettings({ runtime: agent, template })).toBe(
-      false,
-    );
-    expect(hasLockedAgentRuntimeSettings({ runtime: locked, template })).toBe(
-      true,
-    );
   });
 });

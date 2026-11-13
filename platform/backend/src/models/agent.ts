@@ -4300,12 +4300,15 @@ class AgentModel {
     return updated.length > 0;
   }
 
-  /** The organization's agents that have a runtime, with the model their runs use. */
+  /**
+   * The organization's agents that have a runtime, with the model their runs
+   * use. Inside a transaction the rows stay locked until it ends.
+   */
   static async findWithRuntime(params: {
     organizationId: string;
     tx?: Transaction;
   }) {
-    const rows = await (params.tx ?? db)
+    const query = (params.tx ?? db)
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
@@ -4320,7 +4323,11 @@ class AgentModel {
           isNotNull(schema.agentsTable.runtime),
           notDeleted(schema.agentsTable),
         ),
-      );
+      )
+      .$dynamic();
+    // In a transaction that rewrites them, hold the rows until it commits so
+    // a concurrent agent edit is not overwritten by this read.
+    const rows = await (params.tx ? query.for("update") : query);
     return rows.flatMap(({ runtime, ...row }) =>
       runtime ? [{ ...row, runtime }] : [],
     );

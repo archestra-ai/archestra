@@ -44,6 +44,7 @@ class AgentRuntimeTemplateModel {
     afterWrite?: (params: {
       tx: Transaction;
       settings: RuntimeTemplateSettings;
+      previous: RuntimeTemplateSettings;
     }) => Promise<void>;
   }): Promise<RuntimeTemplateEditorSettings> {
     const input = RuntimeTemplateSettingsSchema.parse(params.settings);
@@ -69,7 +70,7 @@ class AgentRuntimeTemplateModel {
         settings,
         tx,
       );
-      await params.afterWrite?.({ tx, settings });
+      await params.afterWrite?.({ tx, settings, previous: current });
       await tx
         .update(schema.organizationsTable)
         .set({

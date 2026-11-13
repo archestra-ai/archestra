@@ -49,10 +49,10 @@ Decide once how every agent of a runtime runs, such as whether Claude Code bills
 2. Set its defaults. A built-in runtime has **Claude account** (Claude Code only), run limits, and tiers. A custom runtime also has its image, protocol, and follow-up delivery.
 3. Turn on **Lock settings**, click **Update runtime**, then click **Save**.
 
-The runtime shows **Locked**. Agents of that runtime, existing ones included, take its settings, and their **Agent Runtime** tab shows them read-only.
+The runtime shows **Locked**. Every agent of that runtime, existing ones included, gets its launch command, protocol, follow-up delivery, limits, tiers, and Claude account, plus a custom runtime's image. The agent's **Agent Runtime** tab shows them read-only.
 
 - An unlocked runtime's settings only set where new agents start.
-- Each agent keeps its own environment, credentials, and ports.
+- Each agent keeps its own environment, credentials, ports, and model. Moving an agent off a locked runtime also needs `organizationSettings:update`.
 - Saving is refused, naming the agents, when the new settings would no longer work with an agent's model. Change that agent's model first.
 
 ### Update the Image

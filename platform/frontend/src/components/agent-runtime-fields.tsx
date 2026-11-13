@@ -144,7 +144,7 @@ export function AgentRuntimeFields({
               aria-label="Dedicated Agent runtime"
               className="mt-0.5 shrink-0"
               checked={value !== null}
-              disabled={locked || (runtimeEnabled !== true && value === null)}
+              disabled={runtimeEnabled !== true && value === null}
               onCheckedChange={(checked) =>
                 onChange(checked ? defaultAgentRuntime() : null)
               }
@@ -238,9 +238,10 @@ export function LockedRuntimeNotice({ name }: { name: string }) {
       <InlineNoticeBody>
         <span className="font-medium">Set by the {name} runtime</span>
         <InlineNoticeText>
-          Its container, Claude account and limits apply to every agent that
-          uses it. Administrators change them in Settings, under Agents.
-          Environment, credentials and ports stay this agent's own.
+          Its launch command, protocol, follow-up delivery, limits, tiers and
+          Claude account apply to every agent that uses it. Administrators
+          change them in Settings, under Agents. Environment, credentials and
+          ports stay this agent's own.
         </InlineNoticeText>
       </InlineNoticeBody>
     </InlineNotice>

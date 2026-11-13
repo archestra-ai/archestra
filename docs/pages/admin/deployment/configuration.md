@@ -1572,7 +1572,7 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Default: unset.
   - Values: `enabled`, `disabled`.
 
-- **`ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE`** - Sets [Auto-merge](/docs/agents/guardrails/git-sync#auto-merge) for MCP Guardrails Self-Service: the GitHub App merges each MCP server's rules pull request once its policy check passes. While it is set, it overrides the setting in the Git sync card, which cannot be edited there.
+- **`ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE`** - Sets [Auto-merge](/docs/agents/guardrails/git-sync#auto-merge) for MCP Guardrails Self-Service: the GitHub App merges each MCP server's rules pull request once its policy check passes. While it is set, it overrides the setting saved in Git sync setup, which cannot be edited there.
   - Default: unset (the saved setting applies, off unless changed).
   - Values: `enabled`, `disabled`. Other values stop startup.
 

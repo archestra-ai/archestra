@@ -86,7 +86,7 @@ Enable it in the Guardrails setting when setting up git sync or afterwards. Can 
 
 ### Auto-merge
 
-MCP owners need no access to the policy repository: the GitHub App merges their pull requests itself. Turn on **Auto-merge pull requests** under **MCP Guardrails Self-Service** in the Git sync card, or in the Self-service step of Git sync setup.
+MCP owners need no access to the policy repository: the GitHub App merges their pull requests itself. Turn on **Auto-merge pull requests** in the Self-service step of Git sync setup, or by editing the source later. The Git sync card then says that admitted self-service pull requests merge automatically.
 
 - The policy check is the only gate. A pull request merges within about a minute of its check passing, and Git sync then applies it. The APPA Keeper follows the pull request in the chat and reports when it is applied, or why it did not merge.
 - Only rules pull requests opened from Archestra for an MCP server merge this way. Pull requests people open on GitHub keep the repository's own review.

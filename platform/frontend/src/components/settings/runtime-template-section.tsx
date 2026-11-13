@@ -578,8 +578,8 @@ function RuntimeTemplateDialog({
                 {template ? "Edit custom runtime" : "Add custom runtime"}
               </DialogTitle>
               <DialogDescription>
-                A reusable starting configuration for new agents. Unless you
-                lock its settings, each agent can still adjust them.
+                Defaults for new agents that use this runtime. Lock them to
+                apply them to every agent that uses it.
               </DialogDescription>
             </DialogHeader>
             <DialogBody className="space-y-5">
@@ -744,8 +744,8 @@ function BuiltInRuntimeDialog({
         <DialogHeader>
           <DialogTitle>Edit {name}</DialogTitle>
           <DialogDescription>
-            Where new {name} agents start. Its image and client stay the
-            maintained ones.
+            Defaults for new {name} agents. Lock them to apply them to every{" "}
+            {name} agent.
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-5">

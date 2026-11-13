@@ -1862,6 +1862,7 @@ describe("release image digests", () => {
       "mcp-server-base": digest("a"),
       "p4-shim": digest("b"),
       "agent-codex": digest("c"),
+      "dagger-engine": digest("d"),
     },
   });
 
@@ -1891,6 +1892,10 @@ describe("release image digests", () => {
     expect(cfg.agentRuntime.catalogImages.codex).toBe(
       `ghcr.io/archestra-ai/agent-codex:1.6.0@${digest("c")}`,
     );
+    // The patched Dagger engine replaces upstream's once a release ships it.
+    expect(cfg.daggerRuntime.engine.image).toBe(
+      `ghcr.io/archestra-ai/dagger-engine:1.6.0@${digest("d")}`,
+    );
     // No digest shipped for this image: it keeps its version tag.
     expect(cfg.agentRuntime.catalogImages.hermes).toBe(
       "ghcr.io/archestra-ai/agent-hermes:1.6.0",
@@ -1905,7 +1910,15 @@ describe("release image digests", () => {
       "mirror.example/mcp-server-base:1.6.0",
     );
     vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY", "mirror.example");
+    vi.stubEnv(
+      "ARCHESTRA_DAGGER_RUNTIME_ENGINE_IMAGE",
+      "mirror.example/dagger-engine:1.6.0",
+    );
     const { default: cfg } = await import("./config");
+
+    expect(cfg.daggerRuntime.engine.image).toBe(
+      "mirror.example/dagger-engine:1.6.0",
+    );
 
     expect(cfg.orchestrator.mcpServerBaseImage).toBe(
       "mirror.example/mcp-server-base:1.6.0",
@@ -1921,6 +1934,11 @@ describe("release image digests", () => {
     const { default: cfg } = await import("./config");
     expect(cfg.orchestrator.mcpServerBaseImage).toBe(
       "ghcr.io/archestra-ai/mcp-server-base:1.6.1",
+    );
+    // A patched engine is only used once a release publishes it, so builds
+    // without its digest keep the upstream engine they can always pull.
+    expect(cfg.daggerRuntime.engine.image).toMatch(
+      /^registry\.dagger\.io\/engine:v\d+\.\d+\.\d+$/,
     );
 
     vi.resetModules();

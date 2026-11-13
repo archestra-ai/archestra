@@ -4,9 +4,9 @@ set -eu
 root_dir="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 dockerfile="$root_dir/Dockerfile"
 cargo_toml="$root_dir/archestra-rs/sandbox-core/Cargo.toml"
-# The engine image the backend provisions. The Helm chart no longer deploys an
-# engine, so this constant is the only thing pinning the engine version.
-manager_ts="$root_dir/backend/src/k8s/dagger-environment-runtime/manager.ts"
+# The upstream engine the backend falls back to when no release digest pins
+# Archestra's patched build (dev, CI e2e, the quickstart).
+config_ts="$root_dir/backend/src/config.ts"
 # The quickstart image ships a rendered engine manifest rather than a chart, so
 # its image tag has to be checked here or it silently drifts.
 quickstart_manifest="$root_dir/docker/dagger-engine.quickstart.yaml"
@@ -29,7 +29,11 @@ docker_version="$(sed -n 's/^ARG DAGGER_VERSION=v\{0,1\}\([0-9][^[:space:]]*\)$/
 cargo_version="$(sed -n 's/^dagger-sdk = "=\([0-9][^"]*\)"$/\1/p' "$cargo_toml")"
 # tolerate reformatting around the constant (indentation, spacing, a trailing
 # comment); only the image tag itself is pinned.
-engine_image_version="$(sed -n 's#^[[:space:]]*const[[:space:]][[:space:]]*ENGINE_IMAGE[[:space:]]*=[[:space:]]*"registry.dagger.io/engine:v\([0-9][^"]*\)".*#\1#p' "$manager_ts")"
+engine_image_version="$(sed -n 's#^[[:space:]]*: "registry.dagger.io/engine:v\([0-9][^"@]*\)");$#\1#p' "$config_ts")"
+# The upstream image the patched dagger-engine target of the Dockerfile starts
+# from: same version, pinned to the same digest as the benchmark Job.
+engine_base_version="$(sed -n 's#^ARG DAGGER_ENGINE_BASE_IMAGE=registry.dagger.io/engine:v\([0-9][^@]*\)@sha256:[0-9a-f]\{64\}$#\1#p' "$dockerfile")"
+engine_base_digest="$(sed -n 's#^ARG DAGGER_ENGINE_BASE_IMAGE=[^@]*@\(sha256:[0-9a-f]\{64\}\)$#\1#p' "$dockerfile")"
 quickstart_version="$(engine_image_tag "$quickstart_manifest")"
 bench_dagger_version="$(engine_image_tag "$bench_dagger_compose")"
 bench_dagger_job_version="$(engine_image_tag "$bench_dagger_job")"
@@ -40,16 +44,21 @@ if [ -z "$bench_dagger_job_digest" ]; then
   exit 1
 fi
 
-case "$docker_version:$cargo_version:$engine_image_version:$quickstart_version:$bench_dagger_version:$bench_dagger_job_version" in
+if [ "$engine_base_digest" != "$bench_dagger_job_digest" ]; then
+  echo "the Dockerfile's DAGGER_ENGINE_BASE_IMAGE digest ($engine_base_digest) differs from the benchmark Job's ($bench_dagger_job_digest)" >&2
+  exit 1
+fi
+
+case "$docker_version:$cargo_version:$engine_image_version:$engine_base_version:$quickstart_version:$bench_dagger_version:$bench_dagger_job_version" in
   *::* | :* | *:)
     echo "failed to read one or more pinned Dagger versions" >&2
     exit 1
     ;;
-  "$cargo_version:$cargo_version:$cargo_version:$cargo_version:$cargo_version:$cargo_version")
+  "$cargo_version:$cargo_version:$cargo_version:$cargo_version:$cargo_version:$cargo_version:$cargo_version")
     exit 0
     ;;
   *)
-    echo "Dagger version mismatch: Dockerfile has $docker_version, dagger-sdk has $cargo_version, manager.ts ENGINE_IMAGE has $engine_image_version, quickstart manifest has $quickstart_version, bench-dagger compose has $bench_dagger_version, benchmark Job has $bench_dagger_job_version" >&2
+    echo "Dagger version mismatch: Dockerfile has $docker_version, dagger-sdk has $cargo_version, config.ts upstream engine has $engine_image_version, Dockerfile DAGGER_ENGINE_BASE_IMAGE has $engine_base_version, quickstart manifest has $quickstart_version, bench-dagger compose has $bench_dagger_version, benchmark Job has $bench_dagger_job_version" >&2
     exit 1
     ;;
 esac

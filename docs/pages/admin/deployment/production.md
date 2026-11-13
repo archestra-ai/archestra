@@ -47,7 +47,7 @@ Make your cluster refuse any Archestra image that Archestra's release workflow d
 
 A verifier checks three things:
 
-- **Images:** `docker.io/archestra/platform`, and `ghcr.io/archestra-ai/` `mcp-server-base`, `p4-shim`, `sandbox-base`, and `agent-*`.
+- **Images:** `docker.io/archestra/platform`, and `ghcr.io/archestra-ai/` `mcp-server-base`, `p4-shim`, `sandbox-base`, `dagger-engine`, and `agent-*`.
 - **Issuer:** `https://token.actions.githubusercontent.com`.
 - **Identity:** `https://github.com/archestra-ai/archestra/.github/workflows/release-please.yml@refs/heads/release/<major>.<minor>` for stable releases, `@refs/heads/main` for release candidates.
 
@@ -89,6 +89,7 @@ Both commands exit non-zero for an image Archestra did not release. To enforce i
               - "ghcr.io/archestra-ai/mcp-server-base*"
               - "ghcr.io/archestra-ai/p4-shim*"
               - "ghcr.io/archestra-ai/sandbox-base*"
+              - "ghcr.io/archestra-ai/dagger-engine*"
               - "ghcr.io/archestra-ai/agent-*"
             attestations:
               - type: https://slsa.dev/provenance/v1

@@ -106,7 +106,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
   - Also turns on [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) when it is left blank. Set to `false`, it stays off.
 
-- **`ARCHESTRA_RELEASE_IMAGE_DIGESTS`** - Digests of the images released with this version: the MCP server base, the p4 shim, and the maintained agent images. The Helm chart of every release sets it, so those images run exactly as released, pinned by digest instead of a tag that could move. To check their signatures, or admit only those images, see [Verify Archestra Images](/docs/admin/deployment/production#verify-archestra-images).
+- **`ARCHESTRA_RELEASE_IMAGE_DIGESTS`** - Digests of the images released with this version: the MCP server base, the p4 shim, the Dagger engine, and the maintained agent images. The Helm chart of every release sets it, so those images run exactly as released, pinned by digest instead of a tag that could move. To check their signatures, or admit only those images, see [Verify Archestra Images](/docs/admin/deployment/production#verify-archestra-images).
   - Default: unset (the Docker quickstart and charts built outside a release use the version tags)
   - Leave it to the chart. A mirror set with [`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY), or an image set with [`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE) or [`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE), runs exactly as you set it. To pin a mirrored image, set its digest in that value: `registry.example.com/mcp-server-base:1.6.0@sha256:…`.
 
@@ -980,6 +980,10 @@ Archestra creates one Dagger engine per organization and per environment. Each e
   - Default: `false`
   - Values: `true`, `false`
   - With `true`, engines with restricted egress need to reach only the base image's registry, not `ghcr.io`, Debian mirrors, or PyPI. Sandboxes fail if the image is not the pre-built base.
+
+- **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_IMAGE`** - Image of the Dagger engine Archestra runs for each organization. Set it to run the engine from your own registry mirror.
+  - Default: `ghcr.io/archestra-ai/dagger-engine:<platform version>`, pinned by digest on a released chart (see [`ARCHESTRA_RELEASE_IMAGE_DIGESTS`](/docs/admin/deployment/configuration#ARCHESTRA_RELEASE_IMAGE_DIGESTS)). That build is Dagger's engine with its binaries rebuilt against dependencies that fix known CVEs. Without a release digest, such as in the Docker quickstart, the default is the matching upstream `registry.dagger.io/engine` image.
+  - An existing engine keeps its image. Delete its StatefulSet to move it to a new one.
 
 - **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST`** - CPU request for each engine Archestra creates.
   - Default: `2`

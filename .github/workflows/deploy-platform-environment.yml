@@ -99,6 +99,7 @@ jobs:
             --install --namespace "$namespace"
             --set "archestra.image=${CI_IMAGE_REGISTRY}/platform:${PLATFORM_IMAGE_TAG}"
             --set "archestra.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE=${CI_IMAGE_REGISTRY}/p4-shim:${PLATFORM_IMAGE_TAG}"
+            --set "archestra.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_IMAGE=${CI_IMAGE_REGISTRY}/dagger-engine:${PLATFORM_IMAGE_TAG}"
             --set "archestra.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY=${CI_IMAGE_REGISTRY}"
             --set "archestra.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${CI_IMAGE_REGISTRY}/mcp-server-base:${PLATFORM_IMAGE_TAG}"
             --values .github/values-staging-demo-shared.yaml

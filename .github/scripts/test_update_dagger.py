@@ -27,6 +27,8 @@ NEXT = f"{MAJOR}.{MINOR}.{PATCH + 2}"
 NOW = dt.datetime(2030, 1, 31, tzinfo=dt.timezone.utc)
 NEW_COMMIT = "1" * 40
 NEW_CLI = "2" * 64
+NEW_RUNC = "v9.9.9"
+NEW_RUNC_COMMIT = "4" * 40
 MANIFEST = '[package]\nname = "dagger-sdk"\nversion = "{version}"\n\n[dependencies.reqwest]\nversion = "0.11.0"\n'
 
 
@@ -105,6 +107,9 @@ class UpdateDaggerTests(unittest.TestCase):
             f"/repos/dagger/dagger/git/ref/tags/v{NEXT}": {"object": {"type": "tag", "sha": "9" * 40}},
             f"/repos/dagger/dagger/git/tags/{'9' * 40}": {"object": {"type": "commit", "sha": NEW_COMMIT}},
             f"/dagger/dagger/{NEW_COMMIT}/go.mod": b"module github.com/dagger/dagger\n\ngo 1.26.1\n",
+            f"/dagger/dagger/{NEW_COMMIT}/toolchains/engine-dev/consts/consts.go":
+                f'package consts\n\nconst (\n\tRuncVersion  = "{NEW_RUNC}"\n)\n'.encode(),
+            f"/repos/opencontainers/runc/git/ref/tags/{NEW_RUNC}": {"object": {"type": "commit", "sha": NEW_RUNC_COMMIT}},
             f"/dagger/dagger/releases/download/v{NEXT}/checksums.txt":
                 f"{'3' * 64}  dagger_v{NEXT}_darwin_arm64.tar.gz\n{NEW_CLI}  dagger_v{NEXT}_linux_amd64.tar.gz\n".encode(),
             f"/v2/engine/manifests/v{NEXT}": (index, {"Docker-Content-Digest": self.new_digest}),
@@ -135,7 +140,11 @@ class UpdateDaggerTests(unittest.TestCase):
         self.assertIn(f"Updated Dagger {CURRENT} -> {NEXT}", result.stdout)
         self.assertEqual(UPDATER.current_version(self.root), NEXT)
         pins = UPDATER.Pins.read(self.root, NEXT)
-        self.assertEqual((pins.commit, pins.engine_digest, pins.cli_checksum), (NEW_COMMIT, self.new_digest, NEW_CLI))
+        self.assertEqual((pins.commit, pins.engine_digest, pins.cli_checksum, pins.runc_version, pins.runc_commit),
+                         (NEW_COMMIT, self.new_digest, NEW_CLI, NEW_RUNC, NEW_RUNC_COMMIT))
+        # The patched engine starts from the new upstream engine, by digest.
+        self.assertIn(f"ARG DAGGER_ENGINE_BASE_IMAGE=registry.dagger.io/engine:v{NEXT}@{self.new_digest}\n",
+                      (self.root / UPDATER.DOCKERFILE).read_text())
         for name in UPDATER.VERSION_FILES:
             text = (self.root / name).read_text()
             self.assertNotIn(f"{CURRENT}", text.replace(f"{NEXT}", ""), name)

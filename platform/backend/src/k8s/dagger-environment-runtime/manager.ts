@@ -85,7 +85,6 @@ interface EngineScheduling {
   tolerations: k8s.V1Toleration[] | null;
 }
 
-const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.11";
 const ENGINE_CONTAINER = "dagger-engine";
 const OWNER_LABEL = "archestra.io/dagger-runtime-owner";
 const ORGANIZATION_LABEL = "archestra.io/dagger-organization";
@@ -832,7 +831,7 @@ class DaggerEnvironmentRuntimeManager {
       if (!isConflict(error)) throw error;
       // Engine already exists — left as-is. Image/resource changes do NOT roll
       // out on reconcile (a deliberate limitation: the engine is long-lived and
-      // rarely changes; bumping ENGINE_IMAGE needs a manual StatefulSet delete).
+      // rarely changes; a new engine image needs a manual StatefulSet delete).
       // The per-reconcile mutation a target actually drives — its egress policy
       // — is applied below via the NetworkPolicy, not the engine spec.
       await this.warnIfEngineOutdated(appsApi, engineId, namespace, scheduling);
@@ -860,6 +859,19 @@ class DaggerEnvironmentRuntimeManager {
         namespace,
       });
       const podSpec = existing.spec?.template.spec;
+      const image = podSpec?.containers[0]?.image;
+      if (image !== config.daggerRuntime.engine.image) {
+        logger.warn(
+          {
+            engineId,
+            namespace,
+            statefulSet: name,
+            image,
+            desiredImage: config.daggerRuntime.engine.image,
+          },
+          "[DaggerEnvRuntime] engine runs a different image than this release provisions (it may lack security fixes); delete the StatefulSet to recreate it",
+        );
+      }
       const command = podSpec?.containers[0]?.command?.join("\n") ?? "";
       if (!command.includes(sandboxCgroupName(engineId))) {
         logger.warn(
@@ -942,7 +954,7 @@ class DaggerEnvironmentRuntimeManager {
             containers: [
               {
                 name: ENGINE_CONTAINER,
-                image: ENGINE_IMAGE,
+                image: engine.image,
                 command: [
                   "/bin/sh",
                   "-c",

@@ -125726,6 +125726,8 @@ export type GetAppaRepositoryProtectionResponses = {
             ruleset?: {
                 name: string;
                 target: 'branch';
+                source_type?: 'Repository';
+                source?: string;
                 enforcement: 'active';
                 conditions: {
                     ref_name: {

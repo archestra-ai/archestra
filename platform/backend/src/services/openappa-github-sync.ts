@@ -863,7 +863,9 @@ async function setSelfService(params: {
   if (params.enabled && params.row.repo)
     await forgetRefusedChecks(params.organizationId, params.row.repo);
   try {
-    await maintainRepositoryProtection(params.organizationId);
+    await maintainRepositoryProtection(params.organizationId, {
+      turnedOff: !params.enabled,
+    });
   } catch (error) {
     logger.warn(
       { organizationId: params.organizationId, error },
@@ -1379,7 +1381,13 @@ async function forgetRefusedChecks(organizationId: string, repo: string) {
 
 /** A shared cache key for the policy check, from its parts. */
 function checkKey(
-  kind: "checked" | "refused" | "leftover" | "leftover-posted",
+  kind:
+    | "checked"
+    | "refused"
+    | "leftover"
+    | "leftover-posted"
+    | "leftover-read"
+    | "self-service-seen",
   ...parts: string[]
 ) {
   return `${CacheKey.OpenAppaPolicyCheck}-${kind}-${createHash("sha256")
@@ -3162,17 +3170,35 @@ export async function getRepositoryProtection(
  */
 async function maintainRepositoryProtection(
   organizationId: string,
+  options: {
+    /** Self-service was just turned off: read the rules whatever was seen. */
+    turnedOff?: boolean;
+  } = {},
 ): Promise<RepositoryProtection | null> {
   const row = await OpenAppaGithubSyncModel.find(organizationId);
   if (selfServiceActive(row)) {
     const read = await repositoryProtection(organizationId);
     protectionStatus.set(organizationId, read);
     await forgetLeftoverRule(organizationId, row.repo);
+    await cacheManager
+      .set(selfServiceSeenKey(organizationId, row.repo), true, LEFTOVER_TTL)
+      .catch(() => undefined);
     return read;
   }
   protectionStatus.set(organizationId, null);
-  if (row?.interval && row.repo && row.path && row.githubAppConfigId)
-    await recordLeftoverRule({ ...row, repo: row.repo });
+  if (row?.interval && row.repo && row.path && row.githubAppConfigId) {
+    // Only a repository self-service was on for lately can have a rule left
+    // behind; the rest is not read for one.
+    const source = { ...row, repo: row.repo };
+    if (
+      options.turnedOff ||
+      (await recordedLeftoverRule(source)) ||
+      (await cacheManager
+        .get(selfServiceSeenKey(organizationId, row.repo))
+        .catch(() => undefined))
+    )
+      await recordLeftoverRule(source);
+  }
   return null;
 }
 
@@ -3185,18 +3211,35 @@ async function maintainRepositoryProtection(
  */
 async function beforeSourceChange(
   organizationId: string,
-  next: { repo: string; ref?: string | null } | null,
+  next: {
+    repo: string;
+    ref?: string | null;
+    githubAppConfigId?: string | null;
+  } | null,
 ) {
   const current = await OpenAppaGithubSyncModel.find(organizationId);
-  if (!selfServiceActive(current)) return;
+  if (
+    !current?.interval ||
+    !current.repo ||
+    !current.path ||
+    !current.githubAppConfigId
+  )
+    return;
+  const source = { ...current, repo: current.repo };
+  // Off, only a rule recorded as left behind can hold the change; it is
+  // read again below, so one removed on GitHub meanwhile holds nothing.
+  if (!selfServiceActive(current) && !(await recordedLeftoverRule(source)))
+    return;
   const leaves =
     !next ||
     current.repo !== next.repo ||
-    (current.ref ?? null) !== (next.ref ?? null);
+    (current.ref ?? null) !== (next.ref ?? null) ||
+    // A token or a GitLab project in the App's place posts no check either.
+    !next.githubAppConfigId;
   if (!leaves) return;
   let read: Awaited<ReturnType<typeof readPolicyCheckRule>>;
   try {
-    read = await readPolicyCheckRule(current, POLICY_CHECK_NAME);
+    read = await readPolicyCheckRule(source, POLICY_CHECK_NAME);
   } catch {
     return;
   }
@@ -3415,11 +3458,10 @@ async function githubBranchRules(
       };
     return { state: "missing", settingsUrl, ruleset };
   }
+  // With the App's own id unknown, the rule offered takes the check from
+  // any source, and one that does is what was asked for.
   const from = found.entry.integration_id;
-  if (
-    from === undefined ||
-    (integrationId !== undefined && from !== integrationId)
-  )
+  if (integrationId !== undefined && from !== integrationId)
     return {
       state: "incomplete",
       ...(url ? { url } : {}),
@@ -3524,6 +3566,19 @@ function leftoverRuleKey(organizationId: string, repo: string) {
   return checkKey("leftover", organizationId, repo);
 }
 
+/** Self-service was on for the repository lately: a rule may be left behind. */
+function selfServiceSeenKey(organizationId: string, repo: string) {
+  return checkKey("self-service-seen", organizationId, repo);
+}
+
+async function recordedLeftoverRule(
+  source: Pick<RuledSource, "organizationId" | "repo">,
+): Promise<LeftoverRule | undefined> {
+  return cacheManager
+    .get<LeftoverRule>(leftoverRuleKey(source.organizationId, source.repo))
+    .catch(() => undefined);
+}
+
 /**
  * Self-service off: whether a branch rule still requires the check. Archestra
  * cannot take the rule off (that takes Administration, which it never
@@ -3548,7 +3603,22 @@ async function recordLeftoverRule(source: RuledSource) {
   if (read.found) {
     const leftover: LeftoverRule = { checkName, url: read.url ?? null };
     await cacheManager.set(key, leftover, LEFTOVER_TTL);
-  } else await cacheManager.delete(key);
+    // Just read: the settings need no second look for a minute.
+    await cacheManager
+      .set(
+        checkKey("leftover-read", source.organizationId, source.repo),
+        true,
+        TimeInMs.Minute,
+      )
+      .catch(() => undefined);
+  } else {
+    // Nothing left behind: the repository needs no read until self-service
+    // is on again.
+    await cacheManager.delete(key);
+    await cacheManager.delete(
+      selfServiceSeenKey(source.organizationId, source.repo),
+    );
+  }
 }
 
 async function forgetLeftoverRule(organizationId: string, repo: string) {
@@ -3567,10 +3637,18 @@ async function leftoverRule(
   row: SyncRow,
 ): Promise<{ leftoverRule?: LeftoverRule }> {
   if (selfServiceActive(row) || !row.repo || !row.githubAppConfigId) return {};
-  const found = await cacheManager
-    .get<LeftoverRule>(leftoverRuleKey(row.organizationId, row.repo))
-    .catch(() => undefined);
-  return found ? { leftoverRule: found } : {};
+  const source = { ...row, repo: row.repo };
+  const found = await recordedLeftoverRule(source);
+  if (!found) return {};
+  // Read again, at most once a minute: a rule removed on GitHub leaves the
+  // settings without waiting for the next sync.
+  const read = checkKey("leftover-read", row.organizationId, row.repo);
+  if (await cacheManager.get(read).catch(() => true))
+    return { leftoverRule: found };
+  await cacheManager.set(read, true, TimeInMs.Minute).catch(() => undefined);
+  await recordLeftoverRule(source);
+  const again = await recordedLeftoverRule(source);
+  return again ? { leftoverRule: again } : {};
 }
 
 /**

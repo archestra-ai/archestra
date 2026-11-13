@@ -1008,6 +1008,46 @@ test("connecting an existing repository with self-service keeps the checklist op
   // Nothing else opened: the pull request on its way is the include.
   expect(actions).toEqual([]);
   expect(screen.queryByText("Finish Git sync")).not.toBeInTheDocument();
+  // Without the Checks permission the import waits: a rule requiring a
+  // check nobody posts would hold every pull request, so no file to import.
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Check OpenAPPA Guardrails",
+        include: {
+          folder: "mcp",
+          state: "pull_open",
+          pull: {
+            number: 8,
+            url: "https://github.com/example/policies/pull/8",
+          },
+        },
+        branchRules: {
+          state: "needs_permission",
+          detail:
+            "The GitHub App needs the Checks permission (read and write).",
+          settingsUrl: "https://github.com/example/policies/settings/rules",
+          ruleset: { name: "Check OpenAPPA Guardrails" },
+        },
+      }),
+    ),
+  );
+  fireEvent.click(
+    within(dialog).getByRole("button", {
+      name: "Check the branch rules again",
+    }),
+  );
+  expect(
+    await within(dialog).findByText(/Grant it with Finish setup/),
+  ).toHaveTextContent(
+    "The GitHub App needs the Checks permission (read and write). Grant it with Finish setup on the Git sync card, then import the ruleset.",
+  );
+  expect(
+    within(dialog).queryByRole("button", { name: "Download ruleset" }),
+  ).toBeNull();
+  expect(
+    within(dialog).queryByRole("button", { name: "Open rulesets" }),
+  ).toBeNull();
   fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),

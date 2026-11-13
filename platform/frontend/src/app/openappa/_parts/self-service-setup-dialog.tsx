@@ -450,32 +450,6 @@ export function SelfServiceOutcomeStep({
       const outcome = await first();
       setSetupPull(setupPullOf(outcome));
       setSwitched("done");
-      setRules({ state: "running" });
-      setInclude({ state: "running" });
-      const read = await refetch();
-      setRules(rulesStateOf(read));
-      if (
-        read?.include.state === "included" ||
-        read?.include.state === "pull_open"
-      ) {
-        setInclude({ state: "done", detail: read.include });
-        return;
-      }
-      try {
-        await mutate({ action: "include_servers" });
-        const again = await refetch();
-        setInclude(
-          again?.include.state === "included" ||
-            again?.include.state === "pull_open"
-            ? { state: "done", detail: again.include }
-            : { state: "failed", detail: again?.include },
-        );
-      } catch (error) {
-        setInclude({
-          state: "failed",
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
     } catch (error) {
       setSwitched("failed");
       setRules({ state: "waiting" });
@@ -483,12 +457,65 @@ export function SelfServiceOutcomeStep({
         state: "waiting",
         error: error instanceof Error ? error.message : String(error),
       });
+      return;
+    }
+    // The switch is done whatever the reads after it bring: a read that
+    // fails shows on its own row, with a check-again.
+    setRules({ state: "running" });
+    setInclude({ state: "running" });
+    const read = await readProtection();
+    if (read === undefined) return setInclude({ state: "waiting" });
+    setRules(rulesStateOf(read));
+    await settleInclude(read);
+  }
+  /** The protection from GitHub, or undefined once a failed read is shown. */
+  async function readProtection(): Promise<Protection | null | undefined> {
+    try {
+      return await refetch();
+    } catch (error) {
+      setRules({
+        state: "action",
+        detail: {
+          state: "error",
+          detail: error instanceof Error ? error.message : String(error),
+        },
+      });
+      return undefined;
+    }
+  }
+  /** The include row from a read: in place, on its way, or opened now. */
+  async function settleInclude(read: Protection | null) {
+    if (
+      read?.include.state === "included" ||
+      read?.include.state === "pull_open"
+    ) {
+      setInclude({ state: "done", detail: read.include });
+      return;
+    }
+    try {
+      await mutate({ action: "include_servers" });
+      const again = await refetch();
+      setInclude(
+        again?.include.state === "included" ||
+          again?.include.state === "pull_open"
+          ? { state: "done", detail: again.include }
+          : { state: "failed", detail: again?.include },
+      );
+    } catch (error) {
+      setInclude({
+        state: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
   // The administrator imported or edited the ruleset: read the branch again.
   async function checkRules() {
     setRules((current) => ({ ...current, state: "running" }));
-    setRules(rulesStateOf(await refetch()));
+    const read = await readProtection();
+    if (read === undefined) return;
+    setRules(rulesStateOf(read));
+    // An include left waiting by a failed read settles with this one.
+    if (include.state === "waiting") await settleInclude(read);
   }
   // Runs once, when the step is shown.
   // biome-ignore lint/correctness/useExhaustiveDependencies: one run per showing
@@ -703,8 +730,17 @@ export function BranchRuleActions({
           </>
         );
       case "incomplete":
-      case "needs_permission":
         return <>{rules.detail ?? "The branch ruleset needs a change."}</>;
+      case "needs_permission":
+        // A rule that requires a check nobody can post would hold every
+        // pull request: the import waits for the permission.
+        return (
+          <>
+            {rules.detail ?? "The GitHub App needs the Checks permission."}{" "}
+            Grant it with Finish setup on the Git sync card, then import the
+            ruleset.
+          </>
+        );
       default:
         return (
           <>
@@ -714,7 +750,9 @@ export function BranchRuleActions({
         );
     }
   })();
-  const { ruleset, settingsUrl } = rules;
+  const { settingsUrl } = rules;
+  const ruleset =
+    rules.state === "needs_permission" ? undefined : rules.ruleset;
   return (
     <span className="block space-y-2">
       <span className="block">{sentence}</span>
@@ -730,7 +768,7 @@ export function BranchRuleActions({
             <span>Download ruleset</span>
           </Button>
         ) : null}
-        {settingsUrl ? (
+        {settingsUrl && ruleset ? (
           <Button
             type="button"
             variant="outline"

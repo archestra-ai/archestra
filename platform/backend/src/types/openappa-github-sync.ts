@@ -164,6 +164,9 @@ export const AppaGithubAppGrantsSchema = z.object({
 export const AppaBranchRulesetSchema = z.object({
   name: z.string(),
   target: z.literal("branch"),
+  /** As GitHub's export writes them, so the import takes the file as is. */
+  source_type: z.literal("Repository").optional(),
+  source: z.string().optional(),
   enforcement: z.literal("active"),
   conditions: z.object({
     ref_name: z.object({

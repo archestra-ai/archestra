@@ -487833,6 +487833,15 @@
                                 "branch"
                               ]
                             },
+                            "source_type": {
+                              "type": "string",
+                              "enum": [
+                                "Repository"
+                              ]
+                            },
+                            "source": {
+                              "type": "string"
+                            },
                             "enforcement": {
                               "type": "string",
                               "enum": [

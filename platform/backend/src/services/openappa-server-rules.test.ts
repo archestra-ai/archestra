@@ -1836,14 +1836,15 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
     }),
   );
 
-  // Off: the sync reads the branch's rules and finds none to worry about,
-  // the minute's check reads no pull request, the registry shows no action,
-  // and the Keeper's tools refuse.
+  // Off from the start: the sync reads no branch rules, since a rule left
+  // behind takes self-service having been on; the minute's check reads no
+  // pull request, the registry shows no action, and the Keeper's tools
+  // refuse.
   await syncAppaGithubPolicy(org.id);
   expect(await getRepositoryProtection(org.id)).toBeNull();
-  expect(calls).toEqual(["GET rules main"]);
+  expect(calls).toEqual([]);
   await checkDueAppaGithubSyncs();
-  expect(calls).toEqual(["GET rules main"]);
+  expect(calls).toEqual([]);
   expect(await getAppaSelfService(org.id)).toEqual({ enabled: false });
   expect((await getAppaGithubSync(org.id)).selfService).toEqual({
     enabled: false,
@@ -1981,6 +1982,12 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
   });
   expect(calls).toEqual(["GET rules main"]);
   expect(await getRepositoryProtection(org.id)).toBeNull();
+  // Off, the recorded rule holds a stop the same way: nothing would post
+  // the check it requires once the sync is gone.
+  await expect(
+    updateAppaGithubSync({ organizationId: org.id, action: "disconnect" }),
+  ).rejects.toMatchObject({ statusCode: 409 });
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.interval).toBe("1h");
   await updateAppaGithubSync({
     organizationId: org.id,
     action: "self_service",

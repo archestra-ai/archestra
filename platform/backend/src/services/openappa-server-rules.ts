@@ -304,7 +304,8 @@ export async function getServerRulesChangeStatus(
     number: number;
     wait?: boolean;
     since?: ChangePhase;
-    /** How often to look while waiting; tests shorten it. */
+    /** How long to wait and how often to look; tests shorten them. */
+    waitMs?: number;
     pollMs?: number;
   },
 ) {
@@ -315,8 +316,10 @@ export async function getServerRulesChangeStatus(
   const base = `${api}/repos/${source.repo}`;
   const appId = await checkIntegrationId(source);
   const poll = params.pollMs ?? STATUS_POLL;
-  const deadline = Date.now() + (params.wait ? STATUS_WAIT : 0);
+  const deadline =
+    Date.now() + (params.wait ? (params.waitMs ?? STATUS_WAIT) : 0);
   let baseline = params.since ?? null;
+  let last: Awaited<ReturnType<typeof readChangeStatus>> | undefined;
   for (let read = 0; ; read += 1) {
     // Git sync may have applied the merge since the last look.
     if (read > 0) source = await requireSource(params.organizationId);
@@ -329,16 +332,26 @@ export async function getServerRulesChangeStatus(
         token,
         base,
         appId,
+        // A later look is bounded by the wait: the first has GitHub's time.
+        ...(read > 0 ? { deadline } : {}),
       });
     } catch (error) {
       // A host that fails for now is asked again while the wait lasts; a
-      // refusal of the request itself (no such pull request) is not.
-      const transient = error instanceof ApiError && error.statusCode >= 500;
-      if (!params.wait || !transient || Date.now() + poll >= deadline)
+      // refusal of the request itself (no such pull request) is not. Past
+      // the wait, what the last look found is the answer.
+      const transient =
+        (error instanceof ApiError && error.statusCode >= 500) ||
+        (error instanceof Error &&
+          ["TimeoutError", "AbortError"].includes(error.name));
+      if (!transient) throw error;
+      if (!params.wait || Date.now() + poll >= deadline) {
+        if (last) return last;
         throw error;
+      }
       await pause(poll, deadline);
       continue;
     }
+    last = status;
     baseline ??= status.phase;
     // No look is started that the wait has no room for.
     if (
@@ -366,8 +379,15 @@ async function readChangeStatus(params: {
   token: string;
   base: string;
   appId: number | undefined;
+  /** When the caller's wait ends: no request outlives it by more than a second. */
+  deadline?: number;
 }) {
   const { source, token, base } = params;
+  const signal = params.deadline
+    ? AbortSignal.timeout(
+        Math.min(15_000, Math.max(1_000, params.deadline - Date.now())),
+      )
+    : undefined;
   const pull = await github<{
     number: number;
     html_url: string;
@@ -376,7 +396,7 @@ async function readChangeStatus(params: {
     merged_at?: string | null;
     merge_commit_sha?: string | null;
     head?: { ref?: string; sha?: string };
-  }>({ token, url: `${base}/pulls/${params.number}` });
+  }>({ token, url: `${base}/pulls/${params.number}`, signal });
   if (!isServerRulesBranch(pull.head?.ref ?? "", params.prefix))
     throw new ApiError(404, "No rules change for this server has that number");
   const merged = pull.merged === true && !!pull.merge_commit_sha;
@@ -401,6 +421,7 @@ async function readChangeStatus(params: {
           await github<{ status?: string }>({
             token,
             url: `${base}/compare/${pull.merge_commit_sha}...${source.sourceCommit}`,
+            signal,
           })
         ).status ?? "",
       );
@@ -432,6 +453,7 @@ async function readChangeStatus(params: {
       }>({
         token,
         url: `${base}/commits/${head}/check-runs?check_name=${encodeURIComponent(POLICY_CHECK_NAME)}${params.appId ? `&app_id=${params.appId}` : ""}&per_page=10`,
+        signal,
       }).then((listed) => listed.check_runs ?? [])
     : [];
   const run = runs.find((entry) => entry.status === "completed");
@@ -1241,6 +1263,7 @@ async function github<T = unknown>(params: {
   url: string;
   method?: "GET" | "POST" | "PATCH";
   body?: object;
+  signal?: AbortSignal;
 }): Promise<T> {
   return githubJson<T>({ ...params, errors: githubPolicyChangeErrors });
 }

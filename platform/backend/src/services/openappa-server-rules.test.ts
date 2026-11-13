@@ -1379,6 +1379,8 @@ test("a server's editors propose its rules as a pull request; readers and outsid
   const head8 = "a".repeat(40);
   const runs: Array<Record<string, unknown>> = [];
   let flaky = 0;
+  let slowAfterFirst = false;
+  let reads = 0;
   server.use(
     http.get(`${REPO}/pulls/8`, () =>
       HttpResponse.json({
@@ -1390,10 +1392,13 @@ test("a server's editors propose its rules as a pull request; readers and outsid
         head: { ref: refs[2]?.ref.replace("refs/heads/", ""), sha: head8 },
       }),
     ),
-    http.get(`${REPO}/commits/${head8}/check-runs`, ({ request }) => {
+    http.get(`${REPO}/commits/${head8}/check-runs`, async ({ request }) => {
       expect(new URL(request.url).searchParams.get("check_name")).toBe(
         config.openappa.policyCheckName,
       );
+      reads += 1;
+      if (slowAfterFirst && reads > 1)
+        await new Promise((resolve) => setTimeout(resolve, 3_000));
       if (flaky > 0) {
         flaky -= 1;
         return HttpResponse.json({ message: "down" }, { status: 502 });
@@ -1452,6 +1457,16 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     done: false,
     check: { state: "passed" },
   });
+  // A look GitHub is slow to answer ends with the wait: what the last look
+  // found is the answer, well inside the minute a client gives the call.
+  reads = 0;
+  slowAfterFirst = true;
+  const started = Date.now();
+  expect(
+    await follow({ wait: true, since: "merge_pending", waitMs: 300 }),
+  ).toMatchObject({ phase: "merge_pending", done: false });
+  expect(Date.now() - started).toBeLessThan(2_500);
+  slowAfterFirst = false;
   // A merge that has not come in fifteen minutes is not waited on for ever.
   runs[0] = {
     ...runs[0],
@@ -3246,12 +3261,40 @@ test("a self-served pull request GitHub refuses to merge is logged and left for 
     enabled: true,
   });
   await checkDueAppaGithubSyncs();
-  later.mockRestore();
   expect(
     warn.mock.calls.filter(([, message]) =>
       String(message).includes("allows no merge method"),
     ),
   ).toHaveLength(2);
+  // Saving the source with auto-merge on, as the setup wizard does, lifts
+  // the hold as well.
+  const row = await OpenAppaGithubSyncModel.find(org.id);
+  await configureAppaGithubSync({
+    organizationId: org.id,
+    userId: admin.id,
+    source: {
+      repo: "example/policies",
+      ref: "main",
+      path: "appa.toml",
+      interval: "1h",
+      validationDirectory: "",
+      githubPatId: null,
+      githubAppConfigId: row?.githubAppConfigId ?? null,
+      gitlabTokenId: null,
+      selfService: true,
+      selfServiceDirectory: "mcp",
+      selfServiceAutoMerge: true,
+    },
+  });
+  // The save queues a pull, which the minute's checks wait on.
+  await syncAppaGithubPolicy(org.id);
+  await checkDueAppaGithubSyncs();
+  later.mockRestore();
+  expect(
+    warn.mock.calls.filter(([, message]) =>
+      String(message).includes("allows no merge method"),
+    ),
+  ).toHaveLength(3);
 });
 
 test("a merge GitHub refuses because someone merged or closed the pull request meanwhile completes gracefully, and a merge whose pull could not be queued is followed up the next minute", async ({
@@ -3357,6 +3400,52 @@ test("a refusal later in the same pass does not drop the pull another merge stil
   enqueue.mockRestore();
   await checkDueAppaGithubSyncs();
   expect(await queuedSyncs()).toHaveLength(1);
+});
+
+test("a merge while a pull is already running keeps the pull it owes until one that sees the merge is queued", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { merges, mergeStatuses, pullStates } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+  });
+  await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
+  // A pull is running, and may have read the branch before the merge.
+  const [running] = await db
+    .insert(schema.tasksTable)
+    .values({
+      taskType: "openappa_github_sync",
+      payload: { organizationId: org.id },
+      maxAttempts: 1,
+      status: "processing",
+    })
+    .returning({ id: schema.tasksTable.id });
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(1);
+  expect(await queuedSyncs()).toHaveLength(1);
+  // Nothing else merges from here; the owed pull waits for the running one.
+  mergeStatuses[1] = 405;
+  pullStates[1] = { state: "closed", merged: false };
+  await checkDueAppaGithubSyncs();
+  expect(await queuedSyncs()).toHaveLength(1);
+  await db
+    .update(schema.tasksTable)
+    .set({ status: "completed" })
+    .where(eq(schema.tasksTable.id, running?.id ?? ""));
+  await checkDueAppaGithubSyncs();
+  expect((await queuedSyncs()).map((task) => task.status).sort()).toEqual([
+    "completed",
+    "pending",
+  ]);
+  // Queued once: the note is cleared.
+  await checkDueAppaGithubSyncs();
+  expect(await queuedSyncs()).toHaveLength(2);
 });
 
 test("a pull request GitHub lists no files for yet is checked the next minute, not passed as changing nothing", async ({

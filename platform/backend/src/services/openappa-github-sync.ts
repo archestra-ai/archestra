@@ -1308,9 +1308,10 @@ type CheckedResult = {
    * deployment's App for a member who may change them.
    */
   judged: Verdict & { governed: string[]; selfServed: boolean };
-  /** When GitHub last refused to merge it at this head, under auto-merge, and how often. */
+  /** When GitHub last refused to merge it at this head, under auto-merge, how often, and why. */
   mergeRefusedAt?: number;
   mergeRefusals?: number;
+  mergeRefusedReason?: string;
 };
 
 /** One check's outcome as stored. */
@@ -1344,10 +1345,20 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   const source = { ...row, repo: row.repo, path: row.path };
   const refused = refusedChecksKey(organizationId, source.repo);
   if (await cacheManager.get(refused)) return;
-  const checkName = POLICY_CHECK_NAME;
+  const autoMerge = selfServiceAutoMergeActive(row);
   let pulls: CheckedPull[];
   try {
-    pulls = await githubPullRequests(source);
+    const listed = await githubPullRequests(source, { branchHead: autoMerge });
+    pulls = listed.pulls;
+    // Every merge on the synced branch is followed by a pull: the one the
+    // App queues right after merging, or this one when that was lost.
+    if (listed.branchHead && listed.branchHead !== row.sourceCommit)
+      await OpenAppaGithubSyncModel.enqueue(organizationId).catch((err) =>
+        logger.warn(
+          { organizationId, err },
+          "OpenAPPA could not queue the pull that follows a merge on the synced branch; the next minute queues it again",
+        ),
+      );
   } catch (error) {
     // A credential the host refuses is not asked again every minute.
     if (
@@ -1360,27 +1371,11 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   }
   const deployment = await deploymentState(organizationId, row.sourceCommit);
   const checking = pulls.slice(0, MAX_CHECKED_PULLS);
-  const merger = selfServiceAutoMergeActive(row)
-    ? new AutoMerger(source)
-    : null;
+  const merger = autoMerge ? new AutoMerger(source) : null;
   // What the source reads decides which files a pull request governs, so a
   // policy file or servers' folder moved makes every stored result stale,
   // the unrelated ones included.
-  const keys = checking.map((pull) =>
-    checkKey(
-      "checked",
-      "v4",
-      organizationId,
-      source.repo,
-      source.ref ?? "",
-      source.path,
-      serverRulesFolderOf(source),
-      String(source.githubAppConfigId ?? ""),
-      checkName,
-      pull.head,
-      pull.result,
-    ),
-  );
+  const keys = checking.map((pull) => pullCheckKey(source, pull));
   const checked = await cacheManager.getMany<CheckedResult>(keys);
   for (const [index, pull] of checking.entries()) {
     const key = keys[index] as AllowedCacheKey;
@@ -1457,6 +1452,9 @@ async function checkAppaGithubPullRequests(organizationId: string) {
         ? {
             mergeRefusedAt: previous.mergeRefusedAt,
             mergeRefusals: previous.mergeRefusals ?? 1,
+            ...(previous.mergeRefusedReason
+              ? { mergeRefusedReason: previous.mergeRefusedReason }
+              : {}),
           }
         : {}),
     };
@@ -1568,6 +1566,9 @@ class AutoMerger {
       return;
     }
     if ([403, 404, 405, 409, 422].includes(merged.status)) {
+      // Merged or closed by someone since the listing: nothing to refuse.
+      const gone = await this.settledMeanwhile(pull, access);
+      if (gone) return;
       // Another rule blocks it, its head moved, it cannot merge cleanly, or
       // the App may not merge here: people take it from here, and the App
       // tries again in a while.
@@ -1588,6 +1589,7 @@ class AutoMerger {
             ...result,
             mergeRefusedAt: Date.now(),
             mergeRefusals: (result.mergeRefusals ?? 0) + 1,
+            mergeRefusedReason: refusalReason(merged),
           },
           CHECKED_TTL,
         )
@@ -1609,6 +1611,45 @@ class AutoMerger {
       },
       "OpenAPPA could not merge a self-served Guardrails rules pull request; it tries again next minute",
     );
+  }
+
+  /**
+   * Whether the pull request was merged or closed between the listing and
+   * the merge: a merge by someone else is followed by a pull like the App's
+   * own; a closed one is left alone. False while it is still open, or when
+   * GitHub cannot say for now (the refusal is then recorded as such).
+   */
+  private async settledMeanwhile(
+    pull: CheckedPull,
+    access: { token: string; base: string },
+  ): Promise<boolean> {
+    const { organizationId, repo } = this.source;
+    const read = await githubCall<{ state?: string; merged?: boolean }>({
+      token: access.token,
+      url: `${access.base}/pulls/${pull.number}`,
+    }).catch(() => null);
+    if (!read?.ok) return false;
+    if (read.body.merged === true) {
+      logger.info(
+        { organizationId, repo, number: pull.number },
+        "A self-served Guardrails rules pull request was merged by someone else meanwhile",
+      );
+      await OpenAppaGithubSyncModel.enqueue(organizationId).catch((err) =>
+        logger.warn(
+          { organizationId, err },
+          "OpenAPPA could not queue the pull that applies a merged rules pull request",
+        ),
+      );
+      return true;
+    }
+    if (read.body.state && read.body.state !== "open") {
+      logger.info(
+        { organizationId, repo, number: pull.number },
+        "A self-served Guardrails rules pull request was closed meanwhile",
+      );
+      return true;
+    }
+    return false;
   }
 
   private async resolveAccess() {
@@ -1670,6 +1711,70 @@ class AutoMerger {
 /** The key under which a repository the App cannot merge in waits fifteen minutes. */
 function heldMergesKey(organizationId: string, repo: string) {
   return checkKey("merge", organizationId, repo);
+}
+
+/**
+ * The key one pull request result's checks are stored under. What the source
+ * reads is part of it, so a policy file or servers' folder moved makes every
+ * stored result stale, the unrelated ones included.
+ */
+function pullCheckKey(
+  source: PolicySource,
+  pull: { head: string; result: string },
+) {
+  return checkKey(
+    "checked",
+    "v4",
+    source.organizationId,
+    source.repo,
+    source.ref ?? "",
+    source.path,
+    serverRulesFolderOf(source),
+    String(source.githubAppConfigId ?? ""),
+    POLICY_CHECK_NAME,
+    pull.head,
+    pull.result,
+  );
+}
+
+/**
+ * What the minute's checks stored for one pull request result: the posted
+ * outcome, and under auto-merge the last refused merge. Undefined before the
+ * first check, or once the stored shape has moved on.
+ */
+export async function storedPullCheck(
+  source: PolicySource,
+  pull: { head: string; result: string },
+): Promise<
+  | {
+      accepted: boolean;
+      reason: string | null;
+      mergeRefusedAt?: number;
+      mergeRefusedReason?: string;
+    }
+  | undefined
+> {
+  const stored = await cacheManager
+    .get<CheckedResult>(pullCheckKey(source, pull))
+    .catch(() => undefined);
+  if (!stored?.judged) return undefined;
+  return {
+    accepted: stored.accepted,
+    reason: stored.reason,
+    ...(stored.mergeRefusedAt !== undefined
+      ? { mergeRefusedAt: stored.mergeRefusedAt }
+      : {}),
+    ...(stored.mergeRefusedReason
+      ? { mergeRefusedReason: stored.mergeRefusedReason }
+      : {}),
+  };
+}
+
+/** Why GitHub refused a merge, in its words where it gave any. */
+function refusalReason(refused: { status: number; message?: string }): string {
+  return refused.message
+    ? `GitHub answered ${refused.status}: ${refused.message}`
+    : `GitHub answered ${refused.status}`;
 }
 
 /** The key under which a refused round of checks waits ten minutes. */
@@ -1777,7 +1882,7 @@ type CheckedPull = {
  */
 type Judged = { governed: string[]; outcome: PullOutcome; selfServed: boolean };
 
-type PolicySource = RepositorySource & {
+export type PolicySource = RepositorySource & {
   path: string;
   ref: string | null;
   validationDirectory?: string | null;
@@ -1856,12 +1961,13 @@ function checkSummary(outcome: PullOutcome) {
 
 async function githubPullRequests(
   source: PolicySource,
-): Promise<CheckedPull[]> {
+  options: { branchHead?: boolean } = {},
+): Promise<{ pulls: CheckedPull[]; branchHead?: string }> {
   const { token, api } = await resolveOpenAppaGithubAccess(source, {
     pull_requests: "read",
     checks: "write",
   });
-  if (!token) return [];
+  if (!token) return { pulls: [] };
   const base = `${api}/repos/${source.repo}`;
   const checkName = POLICY_CHECK_NAME;
   const appId = await checkIntegrationId(source);
@@ -1889,7 +1995,7 @@ async function githubPullRequests(
         ? new CheckRefused(status)
         : new ApiError(502, `GitHub returned HTTP ${status}`),
   });
-  return pulls.flatMap((pull) => {
+  const checked = pulls.flatMap((pull) => {
     const head = pull.head?.sha;
     if (!head || !/^[a-f0-9]{40}$/.test(head)) return [];
     const merged = pull.merge_commit_sha;
@@ -1920,6 +2026,28 @@ async function githubPullRequests(
       },
     ];
   });
+  // Under auto-merge the synced branch is read too: a merge, the App's or
+  // anyone's, that the queue did not pick up is pulled within a minute.
+  const branchHead = options.branchHead
+    ? await githubJson<{ sha?: string }>({
+        url: `${base}/commits/${encodeURIComponent(branch)}`,
+        token,
+        errors: githubSyncErrors,
+      })
+        .then((commit) =>
+          typeof commit.sha === "string" && /^[a-f0-9]{40}$/.test(commit.sha)
+            ? commit.sha
+            : undefined,
+        )
+        .catch((error: unknown) => {
+          logger.warn(
+            { organizationId: source.organizationId, error },
+            "OpenAPPA could not read the synced branch's head; the next minute reads it again",
+          );
+          return undefined;
+        })
+    : undefined;
+  return { pulls: checked, ...(branchHead ? { branchHead } : {}) };
 }
 
 // --- Authorship: who asked for a pull request, and whether they may ---
@@ -3932,7 +4060,7 @@ function refPatternMatches(
 }
 
 /** The App whose check the ruleset requires, or none for a token. */
-async function checkIntegrationId(source: {
+export async function checkIntegrationId(source: {
   organizationId: string;
   githubAppConfigId: string | null;
 }): Promise<number | undefined> {

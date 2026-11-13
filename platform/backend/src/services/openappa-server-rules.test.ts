@@ -1369,6 +1369,99 @@ test("a server's editors propose its rules as a pull request; readers and outsid
   expect(queued.map((task) => task.payload)).toContainEqual({
     organizationId: org.id,
   });
+
+  // The pull request opened under auto-merge is followed phase by phase:
+  // the check pending, failed, or passed and waiting for the App's merge,
+  // then merged and applied. `wait` returns once the phase moves on, and
+  // rides out a host that fails for now.
+  const head8 = "a".repeat(40);
+  const runs: Array<Record<string, unknown>> = [];
+  let flaky = 0;
+  server.use(
+    http.get(`${REPO}/pulls/8`, () =>
+      HttpResponse.json({
+        number: 8,
+        html_url: "https://github.com/example/policies/pull/8",
+        state: "open",
+        merged: false,
+        merge_commit_sha: null,
+        head: { ref: refs[2]?.ref.replace("refs/heads/", ""), sha: head8 },
+      }),
+    ),
+    http.get(`${REPO}/commits/${head8}/check-runs`, ({ request }) => {
+      expect(new URL(request.url).searchParams.get("check_name")).toBe(
+        config.openappa.policyCheckName,
+      );
+      if (flaky > 0) {
+        flaky -= 1;
+        return HttpResponse.json({ message: "down" }, { status: 502 });
+      }
+      return HttpResponse.json({ check_runs: runs });
+    }),
+  );
+  const follow = (extra: object = {}) =>
+    getServerRulesChangeStatus({
+      organizationId: org.id,
+      userId: pat.id,
+      catalogId: catalog.id,
+      number: 8,
+      pollMs: 10,
+      ...extra,
+    });
+  expect(await follow()).toMatchObject({
+    phase: "check_pending",
+    done: false,
+    autoMerge: true,
+    check: { state: "pending" },
+    instruction: expect.stringContaining('since="check_pending"'),
+  });
+  runs.push({
+    status: "completed",
+    conclusion: "failure",
+    output: { title: "Git sync would refuse this policy", summary: "bad" },
+  });
+  expect(await follow()).toMatchObject({
+    phase: "check_failed",
+    done: true,
+    check: { state: "failed", title: "Git sync would refuse this policy" },
+    instruction: expect.stringContaining("cannot merge"),
+  });
+  // Waiting past "check_pending": the first read fails for now, the next
+  // sees the check passed and the App's merge due.
+  runs.splice(0, runs.length, {
+    status: "completed",
+    conclusion: "success",
+    output: { title: "Git sync would accept this policy", summary: "ok" },
+  });
+  flaky = 1;
+  expect(await follow({ wait: true, since: "check_pending" })).toMatchObject({
+    phase: "merge_pending",
+    done: false,
+    check: { state: "passed" },
+  });
+  // Merged and applied: the accepted commit contains the merge.
+  server.use(
+    http.get(`${REPO}/pulls/8`, () =>
+      HttpResponse.json({
+        number: 8,
+        html_url: "https://github.com/example/policies/pull/8",
+        state: "closed",
+        merged: true,
+        merge_commit_sha: "b".repeat(40),
+        head: { ref: refs[2]?.ref.replace("refs/heads/", ""), sha: head8 },
+      }),
+    ),
+    http.get(`${REPO}/compare/${"b".repeat(40)}...${FIRST}`, () =>
+      HttpResponse.json({ status: "identical" }),
+    ),
+  );
+  expect(await follow({ wait: true, since: "merge_pending" })).toMatchObject({
+    phase: "applied",
+    done: true,
+    state: "merged",
+    applied: true,
+    instruction: expect.stringContaining("rules are active"),
+  });
 });
 
 test("each job's GitHub App token covers the policy repository and its own permissions only, and a permission the App lacks is reported", async ({
@@ -2211,7 +2304,7 @@ async function serveAutoMergeRepository(params: {
   const results = Object.fromEntries(
     [1, 2, 3, 4].map((number) => [number, String(number + 4).repeat(40)]),
   ) as Record<number, string>;
-  serveRepository({
+  const repo = {
     head: FIRST,
     files: {
       [FIRST]: { "appa.toml": root, "mcp/payments_api.toml": REFUNDS },
@@ -2230,7 +2323,8 @@ async function serveAutoMergeRepository(params: {
       },
       [results[4] as string]: { "appa.toml": root },
     },
-  });
+  };
+  serveRepository(repo);
   await syncAppaGithubPolicy(params.organizationId);
   const bot = { id: 900, login: "acme-guardrails[bot]", type: "Bot" };
   const signed = (sha: string) => ({
@@ -2285,7 +2379,23 @@ async function serveAutoMergeRepository(params: {
     [];
   const deleted: string[] = [];
   const merge = { status: 200 };
+  /** How each pull request answers when read on its own. */
+  const pullStates: Record<number, { state: string; merged: boolean }> = {};
   server.use(
+    http.get(`${REPO}/pulls/:number`, ({ params }) =>
+      HttpResponse.json({
+        number: Number(params.number),
+        html_url: `https://github.com/example/policies/pull/${params.number}`,
+        head: {
+          sha: results[Number(params.number)],
+          ref: pulls[Number(params.number)]?.ref,
+        },
+        ...(pullStates[Number(params.number)] ?? {
+          state: "open",
+          merged: false,
+        }),
+      }),
+    ),
     http.get("https://api.github.com/app", () =>
       HttpResponse.json({ slug: "acme-guardrails", name: "Policy App" }),
     ),
@@ -2337,7 +2447,7 @@ async function serveAutoMergeRepository(params: {
       return new HttpResponse(null, { status: 204 });
     }),
   );
-  return { results, runs, merges, deleted, merge };
+  return { results, runs, merges, deleted, merge, repo, pullStates };
 }
 
 /** The queued pulls of the organization's Git sync. */
@@ -2532,6 +2642,69 @@ test("a self-served pull request GitHub refuses to merge is logged and left for 
       String(message).includes("allows no merge method"),
     ),
   ).toHaveLength(2);
+});
+
+test("a merge GitHub refuses because someone merged or closed the pull request meanwhile completes gracefully, and every merge on the synced branch is followed by a pull within a minute", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, merges, merge, repo, pullStates } =
+    await serveAutoMergeRepository({
+      organizationId: org.id,
+      requester: admin.email,
+    });
+  await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
+  const warn = vi.spyOn(logger, "warn");
+  const info = vi.spyOn(logger, "info");
+
+  // Merged by a person between the listing and the App's merge: no refusal
+  // is recorded, and the merge is followed by a pull like the App's own.
+  merge.status = 405;
+  pullStates[1] = { state: "closed", merged: true };
+  await checkDueAppaGithubSyncs();
+  expect(merges).toEqual([
+    { number: 1, sha: results[1], merge_method: "squash" },
+  ]);
+  expect(
+    warn.mock.calls.filter(([, message]) =>
+      String(message).includes("GitHub refused to merge"),
+    ),
+  ).toHaveLength(0);
+  expect(info).toHaveBeenCalledWith(
+    expect.objectContaining({ number: 1 }),
+    expect.stringContaining("merged by someone else"),
+  );
+  expect(await queuedSyncs()).toHaveLength(1);
+  await db
+    .delete(schema.tasksTable)
+    .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
+
+  // Closed meanwhile: left alone, nothing queued, no refusal held, so the
+  // next minute (it is listed as open again here) tries once more.
+  pullStates[1] = { state: "closed", merged: false };
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(2);
+  expect(await queuedSyncs()).toHaveLength(0);
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(3);
+
+  // The synced branch moved on without the queue hearing of it: the next
+  // minute's pass queues the pull; a branch at the accepted commit does not.
+  pullStates[1] = { state: "open", merged: false };
+  repo.head = "c".repeat(40);
+  await checkDueAppaGithubSyncs();
+  expect(await queuedSyncs()).toHaveLength(1);
+  await db
+    .delete(schema.tasksTable)
+    .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
+  repo.head = FIRST;
+  await checkDueAppaGithubSyncs();
+  expect(await queuedSyncs()).toHaveLength(0);
 });
 
 test("a policy in a folder of a repository that holds other work gets the same one-rule ruleset, and a pull request that changes no policy file gets the check as skipped at once", async ({

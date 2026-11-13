@@ -3,7 +3,7 @@ title: Git Sync
 description: Keep the Guardrails policy in a GitHub or GitLab repository and review every change there
 order: 2
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-11-12
+lastUpdated: 2026-11-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -82,3 +82,11 @@ Turn it on for the deployment with [`ARCHESTRA_OPENAPPA_SELF_SERVICE=enabled`](/
 
 - **The check**, `Check OpenAPPA Guardrails` pull request check. It fails when the policy update author lacks required permissions or if the update would make the effective policy invalid. [`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME) env var allows to set custom name for this check.
 - **The ruleset**, the branch ruleset to keep the check required in order to merge a pull request introducing policy updates.
+
+### Auto-merge
+
+MCP owners need no access to the policy repository: the GitHub App merges their pull requests itself. Turn it on for the deployment with [`ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE=enabled`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE). The Git sync card then says that admitted self-service pull requests merge automatically.
+
+- The policy check is the only gate. A pull request merges within about a minute of its check passing, and Git sync then applies it. The APPA Keeper follows the pull request in the chat and reports when it is applied, or why it did not merge.
+- Only rules pull requests opened from Archestra for an MCP server merge this way. Pull requests people open on GitHub keep the repository's own review.
+- If another branch rule blocks the merge, the pull request stays open for people to merge. The App tries again a minute later, then every 15 minutes.

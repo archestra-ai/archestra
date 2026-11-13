@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 1
-lastUpdated: 2026-11-12
+lastUpdated: 2026-11-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1509,6 +1509,11 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 - **`ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY`** - The folder beside the policy file that holds one rules file per MCP server, which the policy includes as `<folder>/*.toml`. Shown read-only under **Git sync** in **Settings → Guardrails**.
   - Default: `mcp`
   - Values: a folder path such as `mcp` or `rules/servers`: no `..`, no `*`, not under `batteries/`. Other values stop startup.
+
+- **`ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE`** - Whether the GitHub App merges each MCP server's rules pull request once its policy check passes, so MCP owners need no access to the policy repository. See [Auto-merge](/docs/agents/guardrails/git-sync#auto-merge). Shown read-only under **Git sync** in **Settings → Guardrails**.
+  - Default: `disabled`
+  - Values: `disabled`, `enabled`. Other values stop startup.
+  - Later releases make this an editable setting with the same default. While this variable is set they use it instead and lock the setting, so keep it set when you upgrade to keep the same behaviour.
 
 - **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Whether a call or remedy plan waiting for human approval runs anyway, with a yell. Shown read-only under [Break the glass](/docs/agents/guardrails/policies#yells) in **Settings → Guardrails**.
   - Default: `block`

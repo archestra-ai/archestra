@@ -100445,6 +100445,13 @@ export type GetAppaGithubSyncResponses = {
                 variable: string;
                 value: string;
             };
+            autoMerge: {
+                enabled: boolean;
+                environment: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
+            };
         };
         hasPolicy: boolean;
         validationDirectory: string;
@@ -100573,6 +100580,13 @@ export type UpdateAppaGithubSyncResponses = {
                 variable: string;
                 value: string;
             };
+            autoMerge: {
+                enabled: boolean;
+                environment: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
+            };
         };
         hasPolicy: boolean;
         validationDirectory: string;
@@ -100698,6 +100712,13 @@ export type ConfigureAppaGithubSyncResponses = {
             directoryEnvironment: {
                 variable: string;
                 value: string;
+            };
+            autoMerge: {
+                enabled: boolean;
+                environment: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
             };
         };
         hasPolicy: boolean;
@@ -101116,6 +101137,13 @@ export type CreateAppaGithubRepositoryResponses = {
             directoryEnvironment: {
                 variable: string;
                 value: string;
+            };
+            autoMerge: {
+                enabled: boolean;
+                environment: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
             };
         };
         hasPolicy: boolean;

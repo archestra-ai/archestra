@@ -171,6 +171,7 @@ describe("OpenAPPA tool execution", () => {
         policyCheckName: "Guardrails Policy Admission",
         selfService: "disabled" as const,
         selfServiceDirectory: "mcp",
+        selfServiceAutoMerge: "disabled",
         yellEnabled: false,
         yellForwardingEnabled: false,
         offerSigningSecret: TEST_SIGNING_SECRET,

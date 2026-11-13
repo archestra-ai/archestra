@@ -390335,13 +390335,47 @@
                             "value"
                           ],
                           "additionalProperties": false
+                        },
+                        "autoMerge": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "environment": {
+                              "type": "object",
+                              "properties": {
+                                "variable": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string",
+                                  "enum": [
+                                    "enabled",
+                                    "disabled"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "variable",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "environment"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
                         "directory",
                         "environment",
-                        "directoryEnvironment"
+                        "directoryEnvironment",
+                        "autoMerge"
                       ],
                       "additionalProperties": false
                     },
@@ -390856,13 +390890,47 @@
                             "value"
                           ],
                           "additionalProperties": false
+                        },
+                        "autoMerge": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "environment": {
+                              "type": "object",
+                              "properties": {
+                                "variable": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string",
+                                  "enum": [
+                                    "enabled",
+                                    "disabled"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "variable",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "environment"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
                         "directory",
                         "environment",
-                        "directoryEnvironment"
+                        "directoryEnvironment",
+                        "autoMerge"
                       ],
                       "additionalProperties": false
                     },
@@ -391391,13 +391459,47 @@
                             "value"
                           ],
                           "additionalProperties": false
+                        },
+                        "autoMerge": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "environment": {
+                              "type": "object",
+                              "properties": {
+                                "variable": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string",
+                                  "enum": [
+                                    "enabled",
+                                    "disabled"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "variable",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "environment"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
                         "directory",
                         "environment",
-                        "directoryEnvironment"
+                        "directoryEnvironment",
+                        "autoMerge"
                       ],
                       "additionalProperties": false
                     },
@@ -392882,13 +392984,47 @@
                             "value"
                           ],
                           "additionalProperties": false
+                        },
+                        "autoMerge": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "environment": {
+                              "type": "object",
+                              "properties": {
+                                "variable": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string",
+                                  "enum": [
+                                    "enabled",
+                                    "disabled"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "variable",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "environment"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
                         "directory",
                         "environment",
-                        "directoryEnvironment"
+                        "directoryEnvironment",
+                        "autoMerge"
                       ],
                       "additionalProperties": false
                     },

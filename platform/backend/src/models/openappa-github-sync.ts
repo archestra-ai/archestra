@@ -171,16 +171,22 @@ class OpenAppaGithubSyncModel {
         ),
       );
   }
-  static async enqueue(organizationId: string) {
-    // The partial unique index also deduplicates simultaneous requests on different replicas.
-    await db
+  /**
+   * Queue a pull. One pending or processing already is left alone (the
+   * partial unique index deduplicates simultaneous requests on different
+   * replicas too): true when this call queued one, false when it coalesced.
+   */
+  static async enqueue(organizationId: string): Promise<boolean> {
+    const queued = await db
       .insert(schema.tasksTable)
       .values({
         taskType: "openappa_github_sync",
         payload: { organizationId },
         maxAttempts: 1,
       })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ id: schema.tasksTable.id });
+    return queued.length > 0;
   }
   static async findByIdForAudit(id: string, organizationId: string) {
     if (id !== organizationId) return null;

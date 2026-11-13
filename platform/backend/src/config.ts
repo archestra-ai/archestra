@@ -2098,12 +2098,14 @@ export function parseOpenAppaConfig({
   policyCheckName,
   selfService,
   selfServiceDirectory,
+  selfServiceAutoMerge,
 }: {
   humanApprovalMode?: string;
   softBlockMode?: string;
   policyCheckName?: string;
   selfService?: string;
   selfServiceDirectory?: string;
+  selfServiceAutoMerge?: string;
   yellEnabled?: string;
   yellForwardingEnabled?: string;
   offerSigningSecret?: string;
@@ -2167,6 +2169,15 @@ export function parseOpenAppaConfig({
     ),
     selfServiceDirectory:
       parseOpenAppaSelfServiceDirectory(selfServiceDirectory),
+    // Whether the GitHub App merges each self-served rules pull request once
+    // its policy check passes. Release 1.4 sets it here only, off by default;
+    // later releases save it with the Git sync source and, while this
+    // variable is set, use it instead.
+    selfServiceAutoMerge: parseOpenAppaChoice(
+      OPENAPPA_SELF_SERVICE_AUTO_MERGE_VARIABLE,
+      selfServiceAutoMerge,
+      ["disabled", "enabled"] as const,
+    ),
     yellEnabled: (yellEnabled ?? "true") === "true",
     // External diagnostic delivery requires its own opt-in in every environment.
     yellForwardingEnabled: forwarding === "true",
@@ -2185,6 +2196,9 @@ export const OPENAPPA_SELF_SERVICE_VARIABLE = "ARCHESTRA_OPENAPPA_SELF_SERVICE";
 /** The variable that names the folder each MCP server's rules file lives in. */
 export const OPENAPPA_SELF_SERVICE_DIRECTORY_VARIABLE =
   "ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY";
+/** The variable that turns auto-merge of self-served pull requests on or off. */
+export const OPENAPPA_SELF_SERVICE_AUTO_MERGE_VARIABLE =
+  "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE";
 
 /** The first choice is the default; any other value stops startup. */
 function parseOpenAppaChoice<const T extends readonly [string, ...string[]]>(
@@ -2356,6 +2370,7 @@ const openappa = parseOpenAppaConfig({
   policyCheckName: process.env.ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME,
   selfService: process.env.ARCHESTRA_OPENAPPA_SELF_SERVICE,
   selfServiceDirectory: process.env.ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY,
+  selfServiceAutoMerge: process.env.ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE,
   yellForwardingEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED,
   offerSigningSecret: process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   postgresMaxConnections:

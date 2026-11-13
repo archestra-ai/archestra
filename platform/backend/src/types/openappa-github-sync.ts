@@ -182,6 +182,17 @@ export const AppaSelfServiceSchema = z.object({
   }),
   /** The environment variable that names the folder, with its value. */
   directoryEnvironment: z.object({ variable: z.string(), value: z.string() }),
+  /**
+   * Whether the GitHub App merges each self-served rules pull request once
+   * its policy check passes, and the environment variable that sets it.
+   */
+  autoMerge: z.object({
+    enabled: z.boolean(),
+    environment: z.object({
+      variable: z.string(),
+      value: SelfServiceChoiceSchema,
+    }),
+  }),
 });
 export const AppaGithubSyncStatusSchema = z.object({
   enabled: z.boolean(),

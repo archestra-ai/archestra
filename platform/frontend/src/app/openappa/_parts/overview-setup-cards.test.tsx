@@ -88,6 +88,13 @@ beforeEach(() => {
         variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY",
         value: "mcp",
       },
+      autoMerge: {
+        enabled: false,
+        environment: {
+          variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE",
+          value: "disabled",
+        },
+      },
     },
   };
   server.use(

@@ -10,15 +10,21 @@ const DEFAULT_DSN = "https://public@errors.example.com/1";
 
 describe("isAnalyticsEnabled", () => {
   test.each([
-    [undefined, "production", true],
-    ["", "production", true],
-    [undefined, "development", false],
-    [undefined, "test", false],
-    ["disabled", "production", false],
-    [" disabled ", "production", false],
-    ["enabled", "development", true],
-  ])("ARCHESTRA_ANALYTICS=%s with NODE_ENV=%s is %s", (analytics, nodeEnv, expected) => {
-    expect(isAnalyticsEnabled({ analytics, nodeEnv })).toBe(expected);
+    [undefined, "production", false, true],
+    ["", "production", false, true],
+    [undefined, "development", false, false],
+    [undefined, "test", false, false],
+    ["disabled", "production", false, false],
+    [" disabled ", "production", false, false],
+    ["enabled", "development", false, true],
+    [undefined, "production", true, false],
+    ["", "production", true, false],
+    ["enabled", "production", true, true],
+    ["disabled", "production", true, false],
+  ])("ARCHESTRA_ANALYTICS=%s with NODE_ENV=%s and enterprise license %s is %s", (analytics, nodeEnv, enterpriseLicenseActivated, expected) => {
+    expect(
+      isAnalyticsEnabled({ analytics, nodeEnv, enterpriseLicenseActivated }),
+    ).toBe(expected);
   });
 });
 

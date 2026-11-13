@@ -227,7 +227,7 @@ impl ControlPlaneConfig {
             path: path.to_owned(),
             field,
         };
-        if !is_http_url(&self.base_url) {
+        if !is_secure_base_url(&self.base_url) {
             return Err(invalid("base_url"));
         }
         if !is_valid_tunnel_id(&self.tunnel_id) {
@@ -330,6 +330,30 @@ pub fn normalize_base_url(base_url: &str) -> String {
 pub fn is_http_url(url: &str) -> bool {
     reqwest::Url::parse(url)
         .is_ok_and(|url| matches!(url.scheme(), "http" | "https") && url.has_host())
+}
+
+/// `true` for an address of Archestra that the MCP bridge may use: an
+/// `https://` URL, or an `http://` URL on this computer (`localhost`,
+/// `127.0.0.0/8`, `::1`). Over `http://` to another computer, anyone on the
+/// network could read the device key and change the commands and updates that
+/// Archestra sends.
+pub fn is_secure_base_url(url: &str) -> bool {
+    let Ok(url) = reqwest::Url::parse(url) else {
+        return false;
+    };
+    match url.scheme() {
+        "https" => url.has_host(),
+        // The parser writes the host in lower case and an IPv6 host in `[]`.
+        "http" => url.host_str().is_some_and(|host| {
+            host == "localhost"
+                || host
+                    .trim_start_matches('[')
+                    .trim_end_matches(']')
+                    .parse::<std::net::IpAddr>()
+                    .is_ok_and(|ip| ip.is_loopback())
+        }),
+        _ => false,
+    }
 }
 
 /// The id goes into a URL path. The form is `tunnel_` + letters and digits.
@@ -619,12 +643,16 @@ mcp:
                 "control_plane:\n  base_url: archestra\n  tunnel_id: tunnel_ab\n  api_key: k\n",
             ),
             (
+                "base_url",
+                "control_plane:\n  base_url: http://a.example\n  tunnel_id: tunnel_ab\n  api_key: k\n",
+            ),
+            (
                 "tunnel_id",
-                "control_plane:\n  base_url: http://a.example\n  tunnel_id: ../x\n  api_key: k\n",
+                "control_plane:\n  base_url: https://a.example\n  tunnel_id: ../x\n  api_key: k\n",
             ),
             (
                 "api_key",
-                "control_plane:\n  base_url: http://a.example\n  tunnel_id: tunnel_ab\n  api_key: \"a b\"\n",
+                "control_plane:\n  base_url: https://a.example\n  tunnel_id: tunnel_ab\n  api_key: \"a b\"\n",
             ),
         ] {
             fs::write(&path, text).expect("write");
@@ -799,6 +827,33 @@ mcp:
         assert!(!is_valid_tunnel_id("6b1f0c2e4d5a4f7e8a9b0c1d2e3f4a5b"));
         assert!(!is_valid_tunnel_id("tunnel_a/b"));
         assert!(!is_valid_tunnel_id("tunnel_a?b"));
+    }
+
+    #[test]
+    fn base_url_needs_https_unless_it_is_on_this_computer() {
+        for url in [
+            "https://archestra.example.com",
+            "https://192.168.1.50:9000",
+            "http://localhost:9000",
+            "http://LOCALHOST:9000",
+            "http://127.0.0.1:9000",
+            "http://127.1.2.3",
+            "http://[::1]:9000",
+        ] {
+            assert!(is_secure_base_url(url), "{url}");
+        }
+        for url in [
+            "http://archestra.example.com",
+            "http://192.168.1.50:9000",
+            "http://[fe80::1]:9000",
+            "http://localhost.example.com",
+            "http://0.0.0.0:9000",
+            "ftp://localhost",
+            "localhost:9000",
+            "archestra",
+        ] {
+            assert!(!is_secure_base_url(url), "{url}");
+        }
     }
 
     #[test]

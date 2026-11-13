@@ -46,7 +46,6 @@ import config from "@/config";
 import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
-  ModelPoolModel,
   VirtualApiKeyModel,
 } from "@/models";
 import {
@@ -86,8 +85,8 @@ describe("systemKeyManager", () => {
 
   /**
    * One deployment with Vertex AI enabled creates the Gemini system key, and
-   * an admin maps a virtual key to it and puts it in a model pool. Returns
-   * readers for everything that hangs off the key.
+   * an admin maps a virtual key to it. Returns readers for the mapping and the
+   * model links that hang off the key.
    */
   async function setUpVertexKeyInUse(
     organizationId: string,
@@ -111,31 +110,12 @@ describe("systemKeyManager", () => {
     const virtualKey = await makeVirtualApiKey(organizationId, {
       providerApiKeys: [{ provider: "gemini", providerApiKeyId: geminiKey.id }],
     });
-    const pool = await ModelPoolModel.create({
-      organizationId,
-      input: {
-        name: "vertex-pool",
-        members: [
-          {
-            providerApiKeyId: geminiKey.id,
-            modelId: "gemini-2.5-flash",
-            priority: 1,
-            weight: 1,
-            enabled: true,
-          },
-        ],
-      },
-    });
     return {
       geminiKey,
       mappedKeyIds: async () =>
         (await VirtualApiKeyModel.getProviderApiKeys(virtualKey.id)).map(
           (mapping) => mapping.providerApiKeyId,
         ),
-      poolMemberKeyIds: async () =>
-        (
-          await ModelPoolModel.findById({ organizationId, id: pool.id })
-        )?.members.map((member) => member.providerApiKeyId),
       linkedModelIds: async () =>
         (
           await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
@@ -151,7 +131,7 @@ describe("systemKeyManager", () => {
   }) => {
     const organization = await makeOrganization();
     config.llmSystemKeys.autoDeleteEnabled = false;
-    const { geminiKey, mappedKeyIds, poolMemberKeyIds, linkedModelIds } =
+    const { geminiKey, mappedKeyIds, linkedModelIds } =
       await setUpVertexKeyInUse(organization.id, makeVirtualApiKey);
 
     // A second deployment on the same database, with no Vertex AI settings.
@@ -162,7 +142,6 @@ describe("systemKeyManager", () => {
       LlmProviderApiKeyModel.findSystemKey("gemini"),
     ).resolves.toMatchObject({ id: geminiKey.id });
     expect(await mappedKeyIds()).toEqual([geminiKey.id]);
-    expect(await poolMemberKeyIds()).toEqual([geminiKey.id]);
     expect(await linkedModelIds()).toEqual(["gemini-2.5-flash"]);
 
     // The first deployment syncs again and finds its key as it left it.

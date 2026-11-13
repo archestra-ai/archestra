@@ -11,7 +11,11 @@ import { blobProviderLogoSrc } from "@/components/blob-provider-logo";
 import { FormDialog } from "@/components/form-dialog";
 import { LlmProviderOptionLabel } from "@/components/llm-provider-select-items";
 import { Button } from "@/components/ui/button";
-import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import {
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
 import {
   InlineNotice,
   InlineNoticeBody,
@@ -109,10 +113,9 @@ export function BlobProviderDialog({
       description="A small test object is written and deleted before saving."
       size="medium"
     >
-      <form
+      <DialogForm
         noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
+        onSubmit={() => {
           void submit();
         }}
       >
@@ -423,7 +426,7 @@ export function BlobProviderDialog({
                 : "Test and add"}
           </Button>
         </DialogStickyFooter>
-      </form>
+      </DialogForm>
     </FormDialog>
   );
 }

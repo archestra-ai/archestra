@@ -12,7 +12,11 @@ import {
 } from "@/components/blob-provider-logo";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import {
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
 import {
   InlineNotice,
   InlineNoticeBody,
@@ -78,10 +82,9 @@ export function CostExportDialog({
       description={`Writes ${COST_EXPORT_FORMAT_LABELS.focus_csv} files of LLM cost and usage to a blob provider.`}
       size="small"
     >
-      <form
+      <DialogForm
         noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
+        onSubmit={() => {
           void form.submit();
         }}
       >
@@ -255,7 +258,7 @@ export function CostExportDialog({
             {saving ? "Saving…" : isEdit ? "Save changes" : "Schedule"}
           </Button>
         </DialogStickyFooter>
-      </form>
+      </DialogForm>
     </FormDialog>
   );
 }

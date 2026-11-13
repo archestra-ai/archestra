@@ -165,24 +165,6 @@ export const {
 });
 
 export const {
-  useLabelKeys: useLlmOauthClientLabelKeys,
-  useLabelValues: useLlmOauthClientLabelValues,
-} = createEntityLabelQueries({
-  queryKey: "llm-oauth-clients",
-  keysFn: archestraApiSdk.llmOauthClientLabelKeys,
-  valuesFn: archestraApiSdk.llmOauthClientLabelValues,
-});
-
-export const {
-  useLabelKeys: useMcpOauthClientLabelKeys,
-  useLabelValues: useMcpOauthClientLabelValues,
-} = createEntityLabelQueries({
-  queryKey: "mcp-oauth-clients",
-  keysFn: archestraApiSdk.mcpOauthClientLabelKeys,
-  valuesFn: archestraApiSdk.mcpOauthClientLabelValues,
-});
-
-export const {
   useLabelKeys: useEnvironmentLabelKeys,
   useLabelValues: useEnvironmentLabelValues,
 } = createEntityLabelQueries({

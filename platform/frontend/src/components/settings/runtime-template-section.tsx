@@ -486,9 +486,11 @@ function RuntimeTemplateRow({
           )}
         </div>
         <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-          <span className="max-w-full truncate" title={row.description}>
-            {row.description}
-          </span>
+          {row.description && (
+            <span className="max-w-full truncate" title={row.description}>
+              {row.description}
+            </span>
+          )}
           <span
             className="max-w-full truncate font-mono text-[11px] opacity-70"
             title={row.image}

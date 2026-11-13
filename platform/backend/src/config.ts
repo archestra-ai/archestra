@@ -1568,13 +1568,18 @@ export const getAnalyticsConfig = () => {
   const isProductionEnv = ["production", "prod"].includes(
     process.env.NODE_ENV?.toLowerCase() ?? "",
   );
+  const isEnterpriseLicenseActivated =
+    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true";
   return {
     // Analytics (PostHog product analytics, instance heartbeats, and backend
-    // error tracking) defaults to on only in production builds. Local dev and
-    // test runs (bare `pnpm dev`, vitest — where NODE_ENV isn't "production")
+    // error tracking) defaults to on only in production builds without an
+    // activated enterprise license. Local dev and test runs (bare `pnpm dev`,
+    // vitest — where NODE_ENV isn't "production") and enterprise deployments
     // stay silent unless ARCHESTRA_ANALYTICS is explicitly set, which always
     // wins in both directions ("disabled" → off, any other value → on).
-    enabled: analyticsEnv ? analyticsEnv !== "disabled" : isProductionEnv,
+    enabled: analyticsEnv
+      ? analyticsEnv !== "disabled"
+      : isProductionEnv && !isEnterpriseLicenseActivated,
     posthog: {
       key:
         process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY?.trim() ||

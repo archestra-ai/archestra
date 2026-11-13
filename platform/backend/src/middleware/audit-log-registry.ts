@@ -475,6 +475,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "mcpServer.hardReset",
     fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
   },
+  // The arguments a user adds to the command of their own desktop MCP
+  // server. The snapshot holds how many there are and their hash, not the
+  // arguments. A request with the stored arguments updates nothing.
+  "/api/mcp_server/:id/desktop-arguments": {
+    resourceType: "mcpServer",
+    action: "mcpServer.updated",
+    fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
+    onlyWhenChanged: true,
+  },
   // Restore is a POST carrying :id — register directly so the POST walk-up
   // isn't dropped (which would mis-log it as unknown.created). findByIdForAudit
   // does NOT filter soft-deleted rows, so `before` captures the deleted install

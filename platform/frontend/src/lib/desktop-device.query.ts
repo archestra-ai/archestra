@@ -6,6 +6,11 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import {
+  type DesktopArgumentsProgramNotice,
+  desktopArgumentsSaveIsFollowed,
+} from "@/lib/mcp/desktop-mcp";
+import { mcpRegistryQueryKey } from "@/lib/mcp/mcp-registry.query";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 import websocketService from "@/lib/websocket/websocket";
 
@@ -98,6 +103,61 @@ export function useDesktopMcpInstallationStatus(serverId: string | null) {
   }, [serverId, queryClient]);
 
   return query;
+}
+
+/**
+ * Stores the arguments the signed-in user adds to the command of a desktop
+ * MCP server, for their own installation. The MCP bridge on their device
+ * then starts the server again with them, and the installation waits until
+ * its tools are read again. The Connect dialog then follows the
+ * installation and says how it went, so there is no success toast. A device
+ * whose program is from before the arguments starts nothing again (`notice`
+ * is what the dialog said of it): there is nothing to follow, and a toast
+ * says that the arguments are saved. See `desktopArgumentsSaveIsFollowed`.
+ */
+export function useUpdateDesktopMcpArguments() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      id: string;
+      desktopArguments: string[];
+      notice: DesktopArgumentsProgramNotice | null;
+    }) => {
+      const { data, error } =
+        await archestraApiSdk.updateMcpServerDesktopArguments({
+          path: { id: params.id },
+          body: { desktopArguments: params.desktopArguments },
+        });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: async (server, params) => {
+      const installStatus = server?.localInstallationStatus ?? null;
+      if (
+        !desktopArgumentsSaveIsFollowed({
+          notice: params.notice,
+          installStatus,
+        })
+      ) {
+        toast.success("Arguments saved");
+      }
+      // What the dialog that follows the installation reads first: without
+      // these it would show the status and the state of the MCP server from
+      // before the change, and its steps would go back.
+      queryClient.setQueryData(
+        desktopMcpInstallationStatusKey(params.id),
+        installStatus,
+      );
+      void queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: desktopDevicesQueryKey }),
+        queryClient.refetchQueries({ queryKey: ["mcp-servers"] }),
+      ]);
+    },
+  });
 }
 
 export function useDeleteDesktopDevice() {

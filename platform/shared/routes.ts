@@ -206,6 +206,7 @@ export const RouteId = {
   DeleteMcpServer: "deleteMcpServer",
   BulkDeleteMcpServers: "bulkDeleteMcpServers",
   RestoreMcpServer: "restoreMcpServer",
+  UpdateMcpServerDesktopArguments: "updateMcpServerDesktopArguments",
   ReauthenticateMcpServer: "reauthenticateMcpServer",
   ReinstallMcpServer: "reinstallMcpServer",
   HardResetMcpServer: "hardResetMcpServer",

@@ -11,8 +11,8 @@ use axum::http::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    Bridge, HttpFixture, TestDir, command_entry, kill, server_pid, timings, tool_text, tools_call,
-    url_entry, wait_until_gone,
+    Bridge, HttpFixture, TestDir, command_entry, kill, pid_in, server_pid, timings, tool_text,
+    tools_call, url_entry, wait_until_gone,
 };
 use crate::mock_control_plane::{BRIDGE_CHANNEL, MockControlPlane, server_of};
 
@@ -205,6 +205,84 @@ async fn a_sync_request_replaces_the_entries_and_the_servers_follow() {
         .wait_for_state("no servers", |state| state.servers.is_empty())
         .await;
     assert_eq!(load(&dir).mcp, McpConfig::default());
+}
+
+#[tokio::test]
+async fn the_arguments_of_the_user_reach_the_server_and_a_change_starts_it_again() {
+    let mock = MockControlPlane::start().await;
+    let dir = TestDir::new();
+    let mut bridge = Bridge::start(&mock, &dir, no_servers());
+    bridge.wait_for_status(BridgeStatus::Connected).await;
+
+    // The command of the admin has no options. The user adds the pid file:
+    // its path has a space and stays one argument.
+    let pid_file = dir.root().join("the server.pid");
+    let pid_path = pid_file.display().to_string();
+    let items = |arguments: Value| {
+        let mut item = command_item(FILES, &dir.stdio_command_with_no_options());
+        item["arguments"] = arguments;
+        json!([item])
+    };
+    mock.set_catalog_items(items(json!(["--pid-file", pid_path])));
+    let response = mock.control("bridge/sync", Value::Null).await;
+    assert_eq!(response["result"], json!({}), "{response}");
+    mock.wait_for_ready_channels(&[FILES]).await;
+    let first_pid = pid_in(&pid_file, None).await;
+    assert_eq!(
+        load(&dir).mcp.commands[0].arguments,
+        ["--pid-file".to_owned(), pid_path.clone()]
+    );
+    assert_eq!(
+        load(&dir).mcp.commands[0].command,
+        dir.stdio_command_with_no_options()
+    );
+
+    // A sync with the same arguments does not write the file, and the MCP
+    // server runs on.
+    let written = |dir: &TestDir| {
+        std::fs::metadata(dir.config_path())
+            .and_then(|metadata| metadata.modified())
+            .expect("the config file")
+    };
+    let written_at = written(&dir);
+    mock.control("bridge/sync", Value::Null).await;
+    tokio::time::sleep(timings().config_check_interval * 4).await;
+    assert_eq!(written(&dir), written_at);
+    assert_eq!(pid_in(&pid_file, None).await, first_pid);
+
+    // One more argument: the MCP server starts again with all of them.
+    mock.set_catalog_items(items(json!(["--pid-file", pid_path, "--log-to-stderr"])));
+    mock.control("bridge/sync", Value::Null).await;
+    let second_pid = pid_in(&pid_file, Some(first_pid)).await;
+    wait_until_gone(first_pid).await;
+    mock.wait_for_ready_channels(&[FILES]).await;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        let response = mock
+            .control("bridge/server/log", json!({"channel": FILES}))
+            .await;
+        let lines = response["result"]["lines"].as_array().cloned();
+        if lines.is_some_and(|lines| lines.contains(&json!("files server started"))) {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the log did not come: {response}"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    // The user removes the arguments: Archestra sends an empty list, the
+    // file has no `arguments` key, and the MCP server starts again.
+    mock.set_catalog_items(items(json!([])));
+    mock.control("bridge/sync", Value::Null).await;
+    wait_until_gone(second_pid).await;
+    mock.wait_for_ready_channels(&[FILES]).await;
+    assert!(load(&dir).mcp.commands[0].arguments.is_empty());
+    let text = std::fs::read_to_string(dir.config_path()).expect("the config file");
+    assert!(!text.contains("arguments:"), "{text}");
+    let list = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"});
+    assert_eq!(mock.call(FILES, list).await["resp_code"], json!(200));
 }
 
 #[tokio::test]

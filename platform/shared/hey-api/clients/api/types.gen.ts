@@ -58058,6 +58058,7 @@ export type GetDesktopTunnelResponses = {
             id: string;
             name: string;
             command: string | null;
+            arguments: Array<string>;
             url: string | null;
             enabled: boolean;
         }>;
@@ -91503,6 +91504,7 @@ export type SearchMcpRegistryResponses = {
             environmentValues: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown>;
+            desktopArguments: Array<string> | null;
             createdByServiceAccountId: string | null;
             ownerId: string | null;
             teamId: string | null;
@@ -110618,6 +110620,7 @@ export type GetMcpServersResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        desktopArguments: Array<string> | null;
         createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
@@ -110685,6 +110688,7 @@ export type InstallMcpServerData = {
         environmentValues?: {
             [key: string]: string;
         };
+        desktopArguments?: Array<string> | null;
         createdByServiceAccountId?: string | null;
         ownerId?: string | null;
         teamId?: string | null;
@@ -110786,6 +110790,7 @@ export type InstallMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        desktopArguments: Array<string> | null;
         createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
@@ -111012,6 +111017,7 @@ export type GetMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        desktopArguments: Array<string> | null;
         createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
@@ -111159,6 +111165,7 @@ export type ReauthenticateMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        desktopArguments: Array<string> | null;
         createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
@@ -111397,6 +111404,7 @@ export type RestoreMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        desktopArguments: Array<string> | null;
         createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
@@ -111443,6 +111451,147 @@ export type RestoreMcpServerResponses = {
 };
 
 export type RestoreMcpServerResponse = RestoreMcpServerResponses[keyof RestoreMcpServerResponses];
+
+export type UpdateMcpServerDesktopArgumentsData = {
+    body: {
+        desktopArguments: Array<string> | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/desktop-arguments';
+};
+
+export type UpdateMcpServerDesktopArgumentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateMcpServerDesktopArgumentsError = UpdateMcpServerDesktopArgumentsErrors[keyof UpdateMcpServerDesktopArgumentsErrors];
+
+export type UpdateMcpServerDesktopArgumentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        deploymentName: string | null;
+        catalogId: string;
+        serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
+        secretId: string | null;
+        environmentValues: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
+        desktopArguments: Array<string> | null;
+        createdByServiceAccountId: string | null;
+        ownerId: string | null;
+        teamId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        reinstallRequired: boolean;
+        reinstallReason: 'new-input' | 'restart';
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
+        localInstallationError: string | null;
+        oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
+        oauthRefreshErrorMessage: string | null;
+        oauthRefreshErrorDescription: string | null;
+        oauthRefreshFailedAt: string | null;
+        lastUsedAt: string | null;
+        hibernationMode: 'inherit' | 'enabled' | 'disabled';
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        ownerEmail?: string | null;
+        catalogName?: string | null;
+        users?: Array<string>;
+        userDetails?: Array<{
+            userId: string;
+            email: string;
+            createdAt: string;
+        }>;
+        teamDetails?: {
+            teamId: string;
+            name: string;
+            createdAt: string;
+        } | null;
+        assignedAgents?: Array<{
+            id: string;
+            name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerId: string | null;
+            ownerEmail: string | null;
+            pinned: boolean;
+            accessAllTools?: boolean;
+            organizationId?: string;
+        }>;
+        secretStorageType?: 'vault' | 'database' | 'none';
+    };
+};
+
+export type UpdateMcpServerDesktopArgumentsResponse = UpdateMcpServerDesktopArgumentsResponses[keyof UpdateMcpServerDesktopArgumentsResponses];
 
 export type UnmuteMcpServerAlertData = {
     body?: never;
@@ -112014,6 +112163,7 @@ export type ReinstallMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        desktopArguments: Array<string> | null;
         createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;

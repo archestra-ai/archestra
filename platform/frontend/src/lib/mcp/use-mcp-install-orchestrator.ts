@@ -407,8 +407,15 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
    * installation the Add dialog then follows, or null when it was refused
    * (a toast says why) and the dialog stays for another try.
    */
-  const handleDesktopAdd = (catalogItem: CatalogItem) =>
-    addDesktopMcpServer({ install: installMutation.mutateAsync, catalogItem });
+  const handleDesktopAdd = (
+    catalogItem: CatalogItem,
+    desktopArguments: string[] | undefined,
+  ) =>
+    addDesktopMcpServer({
+      install: installMutation.mutateAsync,
+      catalogItem,
+      desktopArguments,
+    });
 
   const handleOAuthConfirm = async (result: OAuthInstallResult) => {
     if (!selectedCatalogItem) return;

@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   addDesktopMcpServer,
+  desktopArgumentsProgramNotice,
+  desktopArgumentsSaveIsFollowed,
   desktopHostingOffered,
+  desktopMcpArgumentsError,
+  desktopMcpCommandOf,
   desktopMcpTargetError,
   desktopMcpTargetOf,
   desktopMcpTargetToApi,
@@ -41,6 +45,246 @@ describe("addDesktopMcpServer", () => {
     await expect(
       addDesktopMcpServer({ install, catalogItem }),
     ).resolves.toBeNull();
+  });
+
+  it("sends the arguments the user added, also when there are none", async () => {
+    const install = vi.fn(async () => ({
+      installedServer: { id: "server-1" },
+      errorMessage: null,
+    }));
+
+    await addDesktopMcpServer({
+      install,
+      catalogItem,
+      desktopArguments: ["--root", "$HOME/My Models"],
+    });
+    await addDesktopMcpServer({ install, catalogItem, desktopArguments: [] });
+
+    expect(install).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        desktopArguments: ["--root", "$HOME/My Models"],
+      }),
+    );
+    expect(install).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ desktopArguments: [] }),
+    );
+  });
+
+  it("sends no arguments key for an item that takes none", async () => {
+    const install = vi.fn(async () => ({
+      installedServer: { id: "server-1" },
+      errorMessage: null,
+    }));
+
+    await addDesktopMcpServer({ install, catalogItem });
+
+    expect(install.mock.calls[0]).toEqual([
+      expect.not.objectContaining({ desktopArguments: expect.anything() }),
+    ]);
+  });
+});
+
+describe("desktopArgumentsProgramNotice", () => {
+  const appName = "Acme";
+  const device = {
+    name: "MBP-0142",
+    platform: "macos" as const,
+    lastPolledAt: "2026-11-12T12:00:00.000Z",
+    programVersion: "0.1.0",
+    programUpdate: null,
+    programAutoUpdate: true,
+  };
+
+  it("says nothing to a viewer with no device", () => {
+    expect(desktopArgumentsProgramNotice({ device: null, appName })).toBeNull();
+    expect(
+      desktopArgumentsProgramNotice({ device: undefined, appName }),
+    ).toBeNull();
+  });
+
+  it("says nothing when the program of the device applies arguments", () => {
+    for (const programVersion of ["0.1.2", "0.1.10", "0.2.0", "0.1.2-dev"]) {
+      expect(
+        desktopArgumentsProgramNotice({
+          device: { ...device, programVersion },
+          appName,
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it("says nothing of a device that was linked a moment ago and has not reported yet", () => {
+    expect(
+      desktopArgumentsProgramNotice({
+        device: { ...device, lastPolledAt: null, programVersion: null },
+        appName,
+      }),
+    ).toBeNull();
+  });
+
+  it("names the update command when the deployment serves a program that applies arguments", () => {
+    expect(
+      desktopArgumentsProgramNotice({
+        device: { ...device, programUpdate: { version: "0.1.2" } },
+        appName,
+      }),
+    ).toEqual({
+      title: "Arguments need a newer version of the MCP bridge",
+      text: {
+        before:
+          "The MCP bridge on MBP-0142 is version 0.1.0. Arguments need version 0.1.2 or newer. Run ",
+        command: "archestra update",
+        after:
+          " in a terminal on that device. Arguments are saved and apply after the update.",
+      },
+    });
+  });
+
+  it("says that a Windows device updates by itself where the deployment lets it", () => {
+    const notice = desktopArgumentsProgramNotice({
+      device: {
+        ...device,
+        platform: "windows",
+        programUpdate: { version: "0.2.0" },
+      },
+      appName,
+    });
+    expect(notice?.text.before).toBe(
+      "The MCP bridge on MBP-0142 is version 0.1.0. Arguments need version 0.1.2 or newer. The device updates by itself when no tool call is running. To update now, run ",
+    );
+    expect(notice?.text.command).toBe("archestra update");
+  });
+
+  it("names no command while the deployment serves no program that applies arguments: an update would get the same one", () => {
+    for (const programUpdate of [
+      null,
+      { version: "0.1.1" },
+      // A build put there by hand: its version is not known.
+      { version: null },
+    ]) {
+      expect(
+        desktopArgumentsProgramNotice({
+          device: { ...device, programUpdate },
+          appName,
+        }),
+      ).toEqual({
+        title: "Arguments need a newer version of the MCP bridge",
+        text: {
+          before:
+            "The MCP bridge on MBP-0142 is version 0.1.0. Arguments need version 0.1.2 or newer. Acme does not offer that version yet. Arguments are saved and apply once the device has it.",
+          command: null,
+          after: "",
+        },
+      });
+    }
+  });
+
+  it("counts a device that reported no version as too old", () => {
+    expect(
+      desktopArgumentsProgramNotice({
+        device: { ...device, programVersion: null },
+        appName,
+      })?.text.before,
+    ).toBe(
+      "The MCP bridge on MBP-0142 did not report its version. Arguments need version 0.1.2 or newer. Acme does not offer that version yet. Arguments are saved and apply once the device has it.",
+    );
+  });
+});
+
+describe("desktopArgumentsSaveIsFollowed", () => {
+  const notice = {
+    title: "Arguments need a newer version of the MCP bridge",
+    text: { before: "", command: null, after: "" },
+  };
+
+  it("follows an installation that waits again: the MCP server starts again on the device", () => {
+    expect(
+      desktopArgumentsSaveIsFollowed({
+        notice: null,
+        installStatus: "pending",
+      }),
+    ).toBe(true);
+    expect(
+      desktopArgumentsSaveIsFollowed({
+        notice: null,
+        installStatus: "discovering-tools",
+      }),
+    ).toBe(true);
+  });
+
+  it("follows nothing on a device that does not apply arguments, whatever the installation says", () => {
+    expect(
+      desktopArgumentsSaveIsFollowed({ notice, installStatus: "success" }),
+    ).toBe(false);
+    expect(
+      desktopArgumentsSaveIsFollowed({ notice, installStatus: "pending" }),
+    ).toBe(false);
+  });
+
+  it("follows nothing when the saved installation is complete: the dialog would say connected at once", () => {
+    expect(
+      desktopArgumentsSaveIsFollowed({
+        notice: null,
+        installStatus: "success",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("desktopMcpCommandOf", () => {
+  it("gives the command exactly as stored", () => {
+    expect(
+      desktopMcpCommandOf({
+        command: "/Users/$USER/bins/mcp  serve --flag 'two words'",
+      }),
+    ).toBe("/Users/$USER/bins/mcp  serve --flag 'two words'");
+  });
+
+  it("gives none for an item with a URL, and for one that is not set up", () => {
+    expect(desktopMcpCommandOf({ command: null })).toBeNull();
+    expect(desktopMcpCommandOf({ command: "   " })).toBeNull();
+    expect(desktopMcpCommandOf({})).toBeNull();
+    expect(desktopMcpCommandOf(null)).toBeNull();
+    expect(desktopMcpCommandOf(undefined)).toBeNull();
+  });
+});
+
+describe("desktopMcpArgumentsError", () => {
+  it("accepts no arguments and ordinary ones", () => {
+    expect(desktopMcpArgumentsError([])).toBeNull();
+    expect(
+      desktopMcpArgumentsError(["--root", "$HOME/My Models", "--verbose"]),
+    ).toBeNull();
+    expect(
+      desktopMcpArgumentsError(
+        Array.from({ length: 64 }, (_, index) => `--flag-${index}`),
+      ),
+    ).toBeNull();
+    expect(desktopMcpArgumentsError(["a".repeat(4096)])).toBeNull();
+  });
+
+  it("refuses more arguments than the backend stores", () => {
+    expect(
+      desktopMcpArgumentsError(
+        Array.from({ length: 65 }, (_, index) => `--flag-${index}`),
+      ),
+    ).toBe("Use at most 64 arguments.");
+  });
+
+  it("refuses an argument that is too long", () => {
+    expect(desktopMcpArgumentsError(["--ok", "a".repeat(4097)])).toBe(
+      "Use at most 4096 characters in one argument.",
+    );
+  });
+
+  it("refuses arguments that are too long together", () => {
+    expect(
+      desktopMcpArgumentsError(
+        Array.from({ length: 5 }, () => "a".repeat(4000)),
+      ),
+    ).toBe("Use at most 16384 characters in all arguments together.");
   });
 });
 

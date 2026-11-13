@@ -64,12 +64,14 @@ async fn the_first_run_signs_in_and_syncs_the_config_file() {
                 channel: "7c1e".to_owned(),
                 name: "peekaboo".to_owned(),
                 command: "/Users/$USER/bins/peekaboo mcp serve".to_owned(),
+                arguments: Vec::new(),
                 enabled: true,
             },
             CommandEntry {
                 channel: "3f02".to_owned(),
                 name: "eda-agent".to_owned(),
                 command: String::new(),
+                arguments: Vec::new(),
                 enabled: true,
             },
         ]
@@ -181,12 +183,14 @@ async fn a_later_run_replaces_the_entries_of_the_config_file() {
                 channel: "7c1e".to_owned(),
                 name: "MATLAB R2026".to_owned(),
                 command: "/opt/matlab/mcp".to_owned(),
+                arguments: Vec::new(),
                 enabled: true,
             },
             CommandEntry {
                 channel: "aa11".to_owned(),
                 name: "New server".to_owned(),
                 command: String::new(),
+                arguments: Vec::new(),
                 enabled: true,
             },
         ]

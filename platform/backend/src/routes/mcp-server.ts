@@ -82,6 +82,7 @@ import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  DesktopMcpArgumentsSchema,
   type EnterpriseManagedCredentialConfig,
   generateErrorResponseSchema,
   InsertMcpServerSchema,
@@ -408,6 +409,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         userConfigValues,
         environmentValues,
+        desktopArguments,
         ...restDataFromRequestBody
       } = body;
       const serverData: typeof restDataFromRequestBody & {
@@ -647,6 +649,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertInstallAllowedOrBlock({ catalogItem, organizationId });
       }
 
+      // Arguments go after the command a device runs; no other server type
+      // has one.
+      if (
+        desktopArguments?.length &&
+        catalogItem?.serverType !== "desktop_mcp"
+      ) {
+        throw new ApiError(
+          400,
+          "Only a desktop MCP server takes arguments from its user.",
+        );
+      }
+
       if (
         secretId &&
         (!catalogItem?.oauthConfig ||
@@ -667,6 +681,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const mcpServer = await desktopMcpInstallService.install({
           catalogItem,
           userId: targetUserId,
+          desktopArguments,
         });
         broadcastMcpServersChanged({
           organizationId,
@@ -1919,6 +1934,44 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       await syncDeviceAfterDesktopInstallChange(restored);
       return reply.send(restored);
+    },
+  );
+
+  fastify.put(
+    "/api/mcp_server/:id/desktop-arguments",
+    {
+      schema: {
+        operationId: RouteId.UpdateMcpServerDesktopArguments,
+        description:
+          "Set the arguments the signed-in user adds to the command of a desktop MCP server, for their own installation. The MCP bridge on their device starts the MCP server again with them.",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: z.object({
+          // Null or an empty list: no arguments.
+          desktopArguments: DesktopMcpArgumentsSchema.nullable(),
+        }),
+        response: constructResponseSchema(SelectMcpServerSchema),
+      },
+    },
+    async (request, reply) => {
+      const { mcpServer, changed } =
+        await desktopMcpInstallService.updateArguments({
+          mcpServerId: request.params.id,
+          userId: request.user.id,
+          desktopArguments: request.body.desktopArguments,
+        });
+      if (changed) {
+        broadcastMcpServersChanged({
+          organizationId: request.organizationId,
+          serverIds: [mcpServer.id],
+        });
+      } else {
+        // The stored arguments: nothing was updated.
+        request.auditSkip = true;
+      }
+      return reply.send(mcpServer);
     },
   );
 

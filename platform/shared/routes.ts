@@ -690,25 +690,6 @@ export const RouteId = {
   DeleteOauthClient: "deleteOauthClient",
   BulkDeleteOauthClients: "bulkDeleteOauthClients",
 
-  // LLM OAuth Client Routes
-  GetLlmOauthClients: "getLlmOauthClients",
-  GetLlmOauthClientLabelValues: "llmOauthClientLabelValues",
-  GetLlmOauthClientLabelKeys: "llmOauthClientLabelKeys",
-  CreateLlmOauthClient: "createLlmOauthClient",
-  UpdateLlmOauthClient: "updateLlmOauthClient",
-  RotateLlmOauthClientSecret: "rotateLlmOauthClientSecret",
-  DeleteLlmOauthClient: "deleteLlmOauthClient",
-  BulkDeleteLlmOauthClients: "bulkDeleteLlmOauthClients",
-
-  // MCP OAuth Client Routes
-  GetMcpOauthClients: "getMcpOauthClients",
-  GetMcpOauthClientLabelValues: "mcpOauthClientLabelValues",
-  GetMcpOauthClientLabelKeys: "mcpOauthClientLabelKeys",
-  CreateMcpOauthClient: "createMcpOauthClient",
-  UpdateMcpOauthClient: "updateMcpOauthClient",
-  RotateMcpOauthClientSecret: "rotateMcpOauthClientSecret",
-  DeleteMcpOauthClient: "deleteMcpOauthClient",
-
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
   GetLlmModelIdsByKey: "getLlmModelIdsByKey",

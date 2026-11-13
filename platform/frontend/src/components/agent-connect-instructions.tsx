@@ -40,8 +40,10 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import config from "@/lib/config/config";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { useMcpOauthClients } from "@/lib/mcp-oauth-clients.query";
-import { useCreateOauthClient } from "@/lib/oauth-clients.query";
+import {
+  useCreateOauthClient,
+  useOauthClientsForResource,
+} from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 
 /**
@@ -298,7 +300,12 @@ function useOauthClientStep(
   const { data: canCreate } = useHasPermissions({
     oauthClient: ["create"],
   });
-  const { data: clients = [] } = useMcpOauthClients({ enabled });
+  // The server returns every client that can reach the gateway, including
+  // authorization-code clients; the step offers the ones that list it.
+  const { data: clients = [] } = useOauthClientsForResource({
+    resourceId: gateway.id,
+    enabled,
+  });
   const create = useCreateOauthClient();
   const [createOpen, setCreateOpen] = useState(false);
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys({

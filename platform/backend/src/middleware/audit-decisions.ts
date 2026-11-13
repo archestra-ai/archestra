@@ -190,9 +190,9 @@ export const AUDIT_DECISIONS = {
   modelsTable: { audited: true, model: ModelModel },
   modelPoolsTable: { audited: true, model: ModelPoolModel },
   autoRoutersTable: { audited: true, model: AutoRouterModel },
-  // oauthClientsTable stores LLM OAuth clients (/api/llm-oauth-clients) and MCP
-  // OAuth clients (/api/mcp-oauth-clients). Admin CRUD for both is audited at the
-  // route level via AUDITABLE_ROUTES; this table-level model is the LLM snapshot.
+  // oauthClientsTable stores every managed OAuth client (/api/oauth-clients).
+  // Admin CRUD is audited at the route level via AUDITABLE_ROUTES; this
+  // table-level model is the LLM snapshot.
   oauthClientsTable: { audited: true, model: LlmOauthClientModel },
   organizationsTable: { audited: true, model: OrganizationModel },
   organizationRolesTable: { audited: true, model: OrganizationRoleModel },

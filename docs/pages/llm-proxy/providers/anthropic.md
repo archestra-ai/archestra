@@ -2,7 +2,7 @@
 title: Anthropic
 description: Connect Claude with an Anthropic API key, Microsoft Foundry, Vertex AI, or workload identity federation.
 order: 3
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -33,7 +33,7 @@ Use the Claude deployments in your Microsoft Foundry resource, billed through Az
 4. Click **Test & Create**. The key's models are your Claude deployments, listed by deployment name.
 
 - Requests name the deployment, not the Claude model ID. On the [Unified Model API](/docs/llm-proxy/unified-model), call `anthropic:<deployment-name>`, and map this key on your [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys).
-- Do not add Claude under the [Azure AI Foundry](/docs/llm-proxy/providers/azure) provider. That provider uses the OpenAI API, and Foundry answers Claude requests there with `404 Requested API is currently not supported`.
+- Add Claude here, not under the [Azure AI Foundry](/docs/llm-proxy/providers/azure) provider. Foundry serves Claude there only over the Responses API, so Chat Completions requests for it fail.
 - For keyless Microsoft Entra ID authentication, set [`ARCHESTRA_ANTHROPIC_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_ANTHROPIC_BASE_URL) to the `/anthropic` URL and [`ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED). Keyless works with this server-wide URL only, not with a key's **Base URL**.
 
 ### Anthropic on Vertex AI

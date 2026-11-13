@@ -1,3 +1,4 @@
+import type { AzureModelEvidence } from "@archestra/shared/azure-models";
 import { type ModelMessage, stepCountIs, streamText, tool } from "ai";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -24,13 +25,12 @@ afterEach(async () => {
 
 // Foundry rejects Claude on Chat Completions; a Claude deployment's alias is
 // free-form, so only its synced backing model can select Responses.
-const claudeEvidence = {
+const claudeEvidence: AzureModelEvidence = {
   kind: "text",
   underlyingModelName: "claude-haiku-5-5",
   operations: ["responses"],
   source: "deployment",
-  status: "known",
-} as const;
+};
 
 describe.each(
   [

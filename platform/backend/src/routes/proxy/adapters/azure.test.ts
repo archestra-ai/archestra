@@ -172,22 +172,6 @@ describe("azureAdapterFactory", () => {
       );
     });
 
-    test("explains api_not_supported, Foundry's answer for Claude on Chat Completions", () => {
-      const foundryError = {
-        status: 404,
-        error: {
-          code: "api_not_supported",
-          message: "Requested API is currently not supported",
-        },
-      };
-      const message = azureAdapterFactory.extractErrorMessage(foundryError);
-      expect(message).toContain("Chat Completions");
-      expect(message).toContain("Responses API");
-      expect(message).toContain(
-        "https://<resource>.services.ai.azure.com/anthropic",
-      );
-    });
-
     test("falls back to Error.message for generic errors", () => {
       const err = new Error("Network timeout");
       expect(azureAdapterFactory.extractErrorMessage(err)).toBe(

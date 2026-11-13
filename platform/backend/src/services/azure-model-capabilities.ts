@@ -119,24 +119,6 @@ export async function validateAzureModelOperation(params: {
   return evidence;
 }
 
-/**
- * Guidance for a Claude deployment called over Chat Completions, which
- * Microsoft Foundry answers with `404 api_not_supported`.
- */
-export function azureClaudeChatCompletionsUnsupportedMessage(params: {
-  deployment: string;
-  underlyingModelName: string | null;
-}): string {
-  const backing = params.underlyingModelName
-    ? ` is backed by ${params.underlyingModelName}, which`
-    : "";
-  return (
-    `Azure deployment "${params.deployment}"${backing} is a Claude model that Microsoft Foundry does not serve over the OpenAI Chat Completions API. ` +
-    `Send the request to the Responses API instead, or configure the Foundry resource under the Anthropic provider with base URL ` +
-    `https://<resource>.services.ai.azure.com/anthropic and call "anthropic:${params.deployment}" with a key mapped to that credential.`
-  );
-}
-
 function validateImageParameters(params: {
   name: string;
   parameters: Record<string, unknown>;
@@ -222,4 +204,22 @@ function validateImageParameters(params: {
         );
     }
   }
+}
+
+/**
+ * Guidance for a Claude deployment called over Chat Completions, which
+ * Microsoft Foundry answers with `404 api_not_supported`.
+ */
+function azureClaudeChatCompletionsUnsupportedMessage(params: {
+  deployment: string;
+  underlyingModelName: string | null;
+}): string {
+  const backing = params.underlyingModelName
+    ? ` is backed by ${params.underlyingModelName}, which`
+    : "";
+  return (
+    `Azure deployment "${params.deployment}"${backing} is a Claude model that Microsoft Foundry does not serve over the OpenAI Chat Completions API. ` +
+    `Send the request to the Responses API instead, or configure the Foundry resource under the Anthropic provider with base URL ` +
+    `https://<resource>.services.ai.azure.com/anthropic and call "anthropic:${params.deployment}" with a key mapped to that credential.`
+  );
 }

@@ -407,9 +407,13 @@ export const azureAdapterFactory: LLMProvider<
       stream: false,
     } as unknown as ChatCompletionCreateParamsNonStreaming;
 
-    return (await azureClient.chat.completions.create(
-      azureRequest,
-    )) as unknown as AzureResponse;
+    try {
+      return (await azureClient.chat.completions.create(
+        azureRequest,
+      )) as unknown as AzureResponse;
+    } catch (error) {
+      throw explainUnsupportedChatCompletions(error);
+    }
   },
 
   async executeStream(
@@ -424,9 +428,13 @@ export const azureAdapterFactory: LLMProvider<
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
 
-    return streamChatCompletionChunks<AzureStreamChunk>(
-      azureClient.chat.completions.create(azureRequest),
-    );
+    try {
+      return await streamChatCompletionChunks<AzureStreamChunk>(
+        azureClient.chat.completions.create(azureRequest),
+      );
+    } catch (error) {
+      throw explainUnsupportedChatCompletions(error);
+    }
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
@@ -437,11 +445,6 @@ export const azureAdapterFactory: LLMProvider<
   },
 
   extractErrorMessage(error: unknown): string {
-    // Without synced deployment metadata the request reaches Foundry, whose
-    // answer for a Claude deployment says nothing about the endpoint.
-    if (get(error, "error.code") === "api_not_supported") {
-      return AZURE_CHAT_COMPLETIONS_NOT_SUPPORTED_MESSAGE;
-    }
     const azureMessage = get(error, "error.message");
     if (typeof azureMessage === "string") {
       return azureMessage;
@@ -520,6 +523,18 @@ function defaultAzureReasoningEffort(request: AzureRequest): {
 }
 
 const DEFAULT_AZURE_REASONING_EFFORT: ReasoningEffort = "medium";
+
+/**
+ * Without synced deployment metadata a Claude deployment reaches Foundry's
+ * Chat Completions endpoint, whose `404 api_not_supported` says nothing about
+ * the endpoint being the problem. Replace it with what to do instead.
+ */
+function explainUnsupportedChatCompletions(error: unknown): unknown {
+  if (get(error, "error.code") !== "api_not_supported") {
+    return error;
+  }
+  return new ApiError(400, AZURE_CHAT_COMPLETIONS_NOT_SUPPORTED_MESSAGE);
+}
 
 const AZURE_CHAT_COMPLETIONS_NOT_SUPPORTED_MESSAGE =
   "This Azure deployment does not serve the OpenAI Chat Completions API (api_not_supported). " +

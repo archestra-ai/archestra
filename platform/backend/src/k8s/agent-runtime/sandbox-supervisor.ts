@@ -36,12 +36,16 @@ tmux set-option -t agent status-left '#{?#{==:#{@archestra_attention},1},#[fg=ye
 tmux set-hook -g client-detached 'if-shell -F "#{m:/dev/*,#{hook_client}}" "run-shell \"date +%s > /var/run/archestra/development-activity\""'
 
 fail_recording() {
+  # A failure the agent already reported says why the turn ended; a recording
+  # that stopped afterwards must not replace it.
+  if [ ! -s "$turn.failure" ]; then
   ${buildRuntimeFailureEnvelopeScript({
     prefixVariable: "turn",
     code: "runtime.recording_failed",
     message:
       "The terminal recording stopped unexpectedly. The turn was stopped to avoid losing further output. Review the retained output and saved work before retrying.",
   })}
+  fi
   tmux set-option -t agent @archestra_retained_task "" 2>/dev/null || true
   tmux respawn-pane -k -t agent 'while :; do sleep 1; done' 2>/dev/null || true
   printf '75\n' > "$turn.result.tmp"
@@ -149,6 +153,14 @@ while :; do
       fi
       sleep 1
     done
+    # A full-screen client stopped after a failure never turns off the focus
+    # reporting it enabled. tmux 3.3a crashes its server when any client
+    # detaches while a dead pane still has that mode, ending this workspace's
+    # tmux and every later turn. Reset the dead pane's terminal modes first;
+    # the pane stays dead, and the recording already holds its last screen.
+    if [ "$(tmux display-message -p -t agent '#{pane_dead}' 2>/dev/null || echo 0)" = 1 ]; then
+      tmux send-keys -R -t agent 2>/dev/null || true
+    fi
     # tmux orders command responses after pending output. Detaching only this
     # control client drains the recording before readers observe completion.
     # A client can disappear between the liveness check and this write. Keep

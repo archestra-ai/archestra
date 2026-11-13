@@ -57,6 +57,29 @@ export function buildAzureFoundryDeploymentsUrl(
   }
 }
 
+/**
+ * The Anthropic Messages base URL of the Foundry resource behind an Azure base
+ * URL, which is where Claude deployments are served. Null when the URL names
+ * no Azure AI resource.
+ */
+export function buildAzureFoundryAnthropicBaseUrl(
+  baseUrl: string | null | undefined,
+): string | null {
+  if (!baseUrl) return null;
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase();
+    const suffix = AZURE_AI_RESOURCE_HOST_SUFFIXES.find((candidate) =>
+      host.endsWith(candidate),
+    );
+    const resource = suffix ? host.slice(0, -suffix.length) : "";
+    return resource && !resource.includes(".")
+      ? `https://${resource}.services.ai.azure.com/anthropic`
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function buildAzureOpenAiV1ModelsUrl(baseUrl: string): string | null {
   try {
     const url = new URL(baseUrl);
@@ -322,3 +345,9 @@ function getAzureOpenAiPathname(url: URL): string | null {
 
   return null;
 }
+
+const AZURE_AI_RESOURCE_HOST_SUFFIXES = [
+  ".services.ai.azure.com",
+  ".openai.azure.com",
+  ".cognitiveservices.azure.com",
+];

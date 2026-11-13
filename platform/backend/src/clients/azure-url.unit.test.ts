@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildAzureDeploymentBaseUrl,
   buildAzureDeploymentsUrl,
+  buildAzureFoundryAnthropicBaseUrl,
   buildAzureModelsUrl,
   buildAzureOpenAiV1ModelsUrl,
   buildAzureResponsesBaseUrl,
@@ -80,6 +81,28 @@ describe("buildAzureDeploymentsUrl", () => {
     ).toBe(
       "https://my-resource.openai.azure.com/openai/deployments?api-version=2023-03-15-preview",
     );
+  });
+});
+
+describe("buildAzureFoundryAnthropicBaseUrl", () => {
+  it.each([
+    [
+      "https://contoso.services.ai.azure.com/openai/v1",
+      "https://contoso.services.ai.azure.com/anthropic",
+    ],
+    [
+      "https://contoso.openai.azure.com/openai/deployments/gpt-4o",
+      "https://contoso.services.ai.azure.com/anthropic",
+    ],
+    [
+      "https://contoso.cognitiveservices.azure.com/",
+      "https://contoso.services.ai.azure.com/anthropic",
+    ],
+    ["https://proxy.example.com/openai/v1", null],
+    ["not a url", null],
+    [null, null],
+  ])("maps %s to its resource's Anthropic URL", (baseUrl, expected) => {
+    expect(buildAzureFoundryAnthropicBaseUrl(baseUrl)).toBe(expected);
   });
 });
 

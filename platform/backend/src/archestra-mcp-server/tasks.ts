@@ -40,7 +40,11 @@ import {
   prepareAgentRuntimeBackendDriver,
   resolveAgentRuntimeBackendDriver,
 } from "@/services/agent-runtime/backends";
-import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
+import {
+  preflightAgentRuntimeCredentials,
+  SharedCredentialAccessDeniedError,
+} from "@/services/agent-runtime/credentials";
+import { preflightAgentRuntimeModelCompatibility } from "@/services/agent-runtime/model-compatibility";
 import {
   pendingExports,
   pendingFileNotice,
@@ -132,7 +136,11 @@ function evaluateCallerSubagentPolicy(
   targetAgent: Pick<Agent, "id" | "name" | "environmentId">,
 ):
   | { allowed: true }
-  | { allowed: false; reason: "agent_not_found" | "refused"; message: string } {
+  | {
+      allowed: false;
+      reason: "agent_not_found" | "not_allowed";
+      message: string;
+    } {
   if (!callerPolicy) {
     return {
       allowed: false,
@@ -153,7 +161,7 @@ function evaluateCallerSubagentPolicy(
   if (callerPolicy.excludedSubagentIds.has(targetAgent.id)) {
     return {
       allowed: false,
-      reason: "refused",
+      reason: "not_allowed",
       message: `Agent "${targetAgent.name}" is not an allowed subagent of "${callerPolicy.name}".`,
     };
   }
@@ -163,7 +171,7 @@ function evaluateCallerSubagentPolicy(
   ) {
     return {
       allowed: false,
-      reason: "refused",
+      reason: "not_allowed",
       message: `Agent "${targetAgent.name}" is not an allowed subagent of "${callerPolicy.name}".`,
     };
   }
@@ -182,7 +190,11 @@ export async function checkCallerSubagentAccess(
   targetAgent: Pick<Agent, "id" | "name" | "environmentId">,
 ): Promise<
   | { allowed: true }
-  | { allowed: false; reason: "agent_not_found" | "refused"; message: string }
+  | {
+      allowed: false;
+      reason: "agent_not_found" | "not_allowed";
+      message: string;
+    }
 > {
   if (callerAgentId === targetAgent.id) {
     return { allowed: true };
@@ -215,7 +227,17 @@ async function launchDelegatedTask(params: {
 }): Promise<{ result: CallToolResult; outcome?: RuntimeLaunchOutcome }> {
   const { agentId, message, context } = params;
   try {
-    const actor = requireActor(context);
+    let actor: A2AActor;
+    try {
+      actor = requireActor(context);
+    } catch (error) {
+      return failedLaunch(
+        "not_allowed",
+        error instanceof Error
+          ? errorResult(error.message)
+          : catchError(error, "starting the run"),
+      );
+    }
     const agent = await AgentModel.findById(agentId);
     if (!agent || agent.organizationId !== actor.organizationId) {
       return failedLaunch("agent_not_found", errorResult("Agent not found"));
@@ -250,7 +272,19 @@ async function launchDelegatedTask(params: {
     }
 
     const runtime = resolveAgentRuntime(agent);
-    if (runtime) await prepareAgentRuntimeBackendDriver(runtime.backend);
+    if (runtime) {
+      try {
+        await prepareAgentRuntimeBackendDriver(runtime.backend);
+      } catch (error) {
+        if (error instanceof ApiError) {
+          return failedLaunch(
+            "backend_unavailable",
+            errorResult(error.message),
+          );
+        }
+        throw error;
+      }
+    }
     const crossing = await runtimeCrossingForStart(context, Boolean(runtime));
     if (typeof crossing === "string") {
       return failedLaunch("refused", errorResult(crossing));
@@ -260,11 +294,34 @@ async function launchDelegatedTask(params: {
     // missing credential. Otherwise the detached task fails after its handle
     // has been returned and the user only discovers the problem by polling.
     if (runtime) {
-      const preflight = await preflightAgentRuntimeCredentials({
-        runtime,
-        organizationId: actor.organizationId,
-        userId: actor.id,
-      });
+      let preflight: Awaited<
+        ReturnType<typeof preflightAgentRuntimeCredentials>
+      >;
+      try {
+        preflight = await preflightAgentRuntimeCredentials({
+          runtime,
+          organizationId: actor.organizationId,
+          userId: actor.id,
+        });
+      } catch (error) {
+        if (error instanceof SharedCredentialAccessDeniedError) {
+          return failedLaunch(
+            "credentials_admin_only",
+            errorResult(error.message),
+          );
+        }
+        if (error instanceof ApiError) {
+          return failedLaunch(
+            error.statusCode === 403
+              ? "not_allowed"
+              : error.statusCode === 400
+                ? "credentials_misconfigured"
+                : "failed",
+            errorResult(error.message),
+          );
+        }
+        throw error;
+      }
       if (preflight.missing.length > 0) {
         return credentialsNeededLaunch(agent.id, preflight.missing);
       }
@@ -277,6 +334,22 @@ async function launchDelegatedTask(params: {
               .join(", ")}`,
           ),
         );
+      }
+      try {
+        await preflightAgentRuntimeModelCompatibility({
+          runtime,
+          agent,
+          organizationId: actor.organizationId,
+          userId: actor.id,
+        });
+      } catch (error) {
+        if (error instanceof ApiError) {
+          return failedLaunch(
+            error.statusCode >= 500 ? "failed" : "model_unready",
+            errorResult(error.message),
+          );
+        }
+        throw error;
       }
     }
 
@@ -350,8 +423,21 @@ async function launchDelegatedTask(params: {
     if (needed) {
       return credentialsNeededLaunch(needed.agentId, needed.missing);
     }
+    if (error instanceof SharedCredentialAccessDeniedError) {
+      return failedLaunch("credentials_admin_only", errorResult(error.message));
+    }
     const refused = crossingRefusal(error);
     if (refused) return failedLaunch("refused", errorResult(refused));
+    if (error instanceof ApiError) {
+      return failedLaunch(
+        error.statusCode === 403
+          ? "not_allowed"
+          : error.statusCode >= 500
+            ? "failed"
+            : "invalid_request",
+        errorResult(error.message),
+      );
+    }
     return failedLaunch("failed", catchError(error, "starting the run"));
   }
 }

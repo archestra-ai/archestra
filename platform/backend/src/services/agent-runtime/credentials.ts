@@ -10,6 +10,7 @@ import {
 } from "@/services/agent-runtime/runtime-credentials";
 import { CredentialAccess } from "@/services/credential-access";
 import { CredentialResolutionBatch } from "@/services/credentials";
+import { GitHubReconnectRequiredError } from "@/services/github-user-connection";
 import type {
   AgentRuntime,
   AgentRuntimeCredentialDeclaration,
@@ -117,9 +118,8 @@ export async function resolveAgentRuntimeCredentials(params: {
     Object.assign(env, resolved.values);
     for (const declaration of perUser) {
       const credential = declaration.credentialId
-        ? await batch.resolve({
+        ? await resolvePersonalCredential(batch, {
             organizationId: params.organizationId,
-            scope: "personal",
             userId: params.userId,
             credentialId: declaration.credentialId,
             minimumValidityMs: 50 * 60_000,
@@ -252,9 +252,8 @@ export async function preflightAgentRuntimeCredentials(params: {
       const connected = declaration.credentialId
         ? Boolean(
             (
-              await batch.resolve({
+              await resolvePersonalCredential(batch, {
                 organizationId: params.organizationId,
-                scope: "personal",
                 userId: params.userId,
                 credentialId: declaration.credentialId,
               })
@@ -320,7 +319,7 @@ async function requireSharedCredentialAccess(params: {
 }
 
 /** A person without organization settings access tried to run with an organization credential. */
-class SharedCredentialAccessDeniedError extends ApiError {
+export class SharedCredentialAccessDeniedError extends ApiError {
   constructor() {
     super(
       403,
@@ -535,6 +534,23 @@ export async function deleteAgentRuntimeCredential(params: {
 }
 
 // ===================== internals =====================
+
+async function resolvePersonalCredential(
+  batch: CredentialResolutionBatch,
+  params: {
+    organizationId: string;
+    userId: string;
+    credentialId: string;
+    minimumValidityMs?: number;
+  },
+) {
+  try {
+    return await batch.resolve({ ...params, scope: "personal" });
+  } catch (error) {
+    if (error instanceof GitHubReconnectRequiredError) return null;
+    throw error;
+  }
+}
 
 function splitDeclarations(
   declarations: AgentRuntimeCredentialDeclaration[] | null | undefined,

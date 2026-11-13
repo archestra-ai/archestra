@@ -1,5 +1,7 @@
 import {
+  ADMIN_ROLE_NAME,
   BUILT_IN_AGENT_IDS,
+  buildCustomAgentRuntime,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
@@ -14,7 +16,8 @@ import {
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
-import { AgentModel, AgentToolModel, ToolModel } from "@/models";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
+import { AgentModel, AgentToolModel, MemberModel, ToolModel } from "@/models";
 import AgentExcludedSubagentModel from "@/models/agent-excluded-subagent";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -1004,5 +1007,52 @@ describe("clone agent route", () => {
     expect(
       await agentKnowledgeSourceExclusionsService.getExclusions(cloned.id),
     ).toEqual({ excludedConnectorIds: [connector.id] });
+  });
+
+  test("keeps the source's runtime but not its stored credential values", async ({
+    makeInternalAgent,
+    makeSecret,
+  }) => {
+    vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
+    // Cloning a runtime needs the caller's configure-runtime permission.
+    await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
+    const runtime = {
+      ...buildCustomAgentRuntime({ image: "example.test/worker:v1" }),
+      environment: [{ key: "LOG_LEVEL", value: "debug" }],
+      credentials: [
+        {
+          key: "SERVICE_TOKEN",
+          scope: "shared" as const,
+          label: "Service token",
+          required: true,
+        },
+      ],
+      ttlHours: 4,
+      idleTimeoutMinutes: 30,
+    };
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Runtime Agent",
+      runtime,
+    });
+    const secret = await makeSecret();
+    await AgentModel.setAgentRuntimeSecretId({
+      id: sourceAgent.id,
+      secretId: secret.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const cloned = response.json() as Agent;
+    expect(cloned.runtime).toEqual(runtime);
+    const [clonedRow] = await db
+      .select({ runtimeSecretId: schema.agentsTable.runtimeSecretId })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, cloned.id));
+    expect(clonedRow.runtimeSecretId).toBeNull();
   });
 });

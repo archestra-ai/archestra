@@ -1,5 +1,8 @@
 import { A2AManager } from "@/agents/a2a/a2a-manager";
-import { watchTaskCompletion } from "@/agents/task-completion-watcher";
+import {
+  notifyRunCredentialReconnect,
+  watchTaskCompletion,
+} from "@/agents/task-completion-watcher";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -8,7 +11,6 @@ import {
   AgentRunModel,
   AgentWorkspaceModel,
 } from "@/models";
-import { notifyRunCredentialReconnect } from "@/services/agent-runtime/credential-reconnect-notice";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
 import type { AgentWorkspace } from "@/types/agent-workspace";
 import {

@@ -11,7 +11,7 @@
  * and only overrides provider-specific configuration.
  */
 
-import { ArchestraInternalErrorCode } from "@archestra/shared";
+import { ArchestraInternalErrorCode, getDocsUrl } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
@@ -24,6 +24,7 @@ import {
 } from "@/clients/azure-openai-credentials";
 import {
   buildAzureDeploymentBaseUrl,
+  buildAzureFoundryAnthropicBaseUrl,
   isAzureOpenAiFirstPartyModelName,
   isAzureThinkingModelName,
   normalizeAzureApiKey,
@@ -316,9 +317,17 @@ export const azureAdapterFactory: LLMProvider<
       stream: false,
     } as unknown as ChatCompletionCreateParamsNonStreaming;
 
-    return (await azureClient.chat.completions.create(
-      azureRequest,
-    )) as unknown as AzureResponse;
+    try {
+      return (await azureClient.chat.completions.create(
+        azureRequest,
+      )) as unknown as AzureResponse;
+    } catch (error) {
+      throw explainUnsupportedChatCompletions({
+        error,
+        deployment: request.model,
+        baseUrl: (client as AzureClient).baseUrl,
+      });
+    }
   },
 
   async executeStream(
@@ -333,7 +342,16 @@ export const azureAdapterFactory: LLMProvider<
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
 
-    const stream = await azureClient.chat.completions.create(azureRequest);
+    let stream: Awaited<ReturnType<typeof azureClient.chat.completions.create>>;
+    try {
+      stream = await azureClient.chat.completions.create(azureRequest);
+    } catch (error) {
+      throw explainUnsupportedChatCompletions({
+        error,
+        deployment: request.model,
+        baseUrl: (client as AzureClient).baseUrl,
+      });
+    }
 
     return {
       [Symbol.asyncIterator]: async function* () {
@@ -426,6 +444,33 @@ function azureAcceptsMaxCompletionTokens(baseUrl: string | undefined): boolean {
 }
 
 const MAX_COMPLETION_TOKENS_API_VERSION = "2024-09-01";
+
+/**
+ * Microsoft Foundry answers Chat Completions for a Claude deployment with
+ * `404 api_not_supported`, which says nothing about the endpoint being the
+ * problem. Replace it with what to do instead: Claude on Foundry is served
+ * through the Anthropic provider.
+ */
+function explainUnsupportedChatCompletions(params: {
+  error: unknown;
+  deployment: string;
+  baseUrl: string | undefined;
+}): unknown {
+  if (get(params.error, "error.code") !== "api_not_supported") {
+    return params.error;
+  }
+  const anthropicBaseUrl =
+    buildAzureFoundryAnthropicBaseUrl(params.baseUrl) ??
+    "https://<resource>.services.ai.azure.com/anthropic";
+  return new ApiError(
+    400,
+    `Azure deployment "${params.deployment}" does not serve the OpenAI Chat Completions API (Microsoft Foundry answered api_not_supported), which is how Foundry answers for Claude deployments. ` +
+      `To use a Claude deployment, add this Foundry resource as an Anthropic provider key with base URL ${anthropicBaseUrl}, map that key on your virtual key, and call "anthropic:${params.deployment}". ` +
+      `Setup guide: ${getDocsUrl(ANTHROPIC_FOUNDRY_DOCS_PAGE, "anthropic-on-microsoft-foundry")}`,
+  );
+}
+
+const ANTHROPIC_FOUNDRY_DOCS_PAGE = "llm-proxy/providers/anthropic";
 
 function getAzureDefaultQuery(
   baseUrl: string | undefined,

@@ -13,10 +13,24 @@ import {
 describe("getAgentSetupSteps", () => {
   it("walks an agent through configuration, tools, messaging and advanced — connecting is the detail page's section, not a step", () => {
     expect(
-      getAgentSetupSteps({ agentType: "agent", builtIn: false }).map(
-        (s) => s.id,
-      ),
+      getAgentSetupSteps({
+        agentType: "agent",
+        builtIn: false,
+        canReadTriggers: true,
+      }).map((s) => s.id),
     ).toEqual(["configuration", "tools", "messaging", "advanced"]);
+  });
+
+  // The channel editor reads the organization's channel bindings, so a role
+  // without that read used to land on a blank "Triggers & Channels" step.
+  it("leaves the messaging step out for a role that cannot read triggers", () => {
+    expect(
+      getAgentSetupSteps({
+        agentType: "agent",
+        builtIn: false,
+        canReadTriggers: false,
+      }).map((s) => s.id),
+    ).toEqual(["configuration", "tools", "advanced"]);
   });
 
   // A gateway or a proxy is not something a person messages, so it gets no
@@ -24,16 +38,22 @@ describe("getAgentSetupSteps", () => {
   it("gives an MCP gateway (and a legacy profile) the same three steps", () => {
     for (const agentType of ["mcp_gateway", "profile"] as const) {
       expect(
-        getAgentSetupSteps({ agentType, builtIn: false }).map((s) => s.id),
+        getAgentSetupSteps({
+          agentType,
+          builtIn: false,
+          canReadTriggers: true,
+        }).map((s) => s.id),
       ).toEqual(["configuration", "tools", "advanced"]);
     }
   });
 
   it("leaves a built-in agent with configuration and tools — it has no advanced step", () => {
     expect(
-      getAgentSetupSteps({ agentType: "agent", builtIn: true }).map(
-        (s) => s.id,
-      ),
+      getAgentSetupSteps({
+        agentType: "agent",
+        builtIn: true,
+        canReadTriggers: true,
+      }).map((s) => s.id),
     ).toEqual(["configuration", "tools"]);
   });
 });

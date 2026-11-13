@@ -2664,6 +2664,12 @@ function governedFiles(
   );
   const within = (path: string, parent: string) =>
     parent === "" || path === parent || path.startsWith(`${parent}/`);
+  // Sync reads the `.appa` files directly in the validations folder and
+  // nothing else there: a README beside them is not the policy's.
+  const validation = (path: string) =>
+    path.startsWith(`${validations}/`) &&
+    path.endsWith(".appa") &&
+    !path.slice(validations.length + 1).includes("/");
   const servers = serverRulesFolderOf(source);
   const seen = new Set<string>();
   return paths.flatMap((path) => {
@@ -2675,7 +2681,7 @@ function governedFiles(
     if (
       path === source.path ||
       (within(path, folder) && path.endsWith(".toml")) ||
-      within(path, validations)
+      validation(path)
     )
       return [{ path, prefix: null }];
     return [];

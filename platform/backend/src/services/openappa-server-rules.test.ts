@@ -2777,6 +2777,8 @@ async function serveAutoMergeRepository(params: {
    * refused merge. The new commit holds the pull request's files.
    */
   testMerges?: boolean;
+  /** The repository files update Archestra's sync opens, as pull request 6. */
+  filesUpdate?: boolean;
 }) {
   await connectApp({ organizationId: params.organizationId });
   const root = `include = ["mcp/*.toml"]\n${RULES}`;
@@ -2858,6 +2860,27 @@ async function serveAutoMergeRepository(params: {
       commits: [signed(results[4] as string)],
     },
   };
+  if (params.filesUpdate) {
+    // No requester: sync opens it on its own, with the template's files.
+    results[6] = "ab".repeat(20);
+    repo.files[results[6]] = repo.files[FIRST] ?? {};
+    pulls[6] = {
+      ref: "archestra/openappa-template",
+      user: bot,
+      files: ["README.md", "traces/README.md"],
+      commits: [
+        {
+          sha: results[6],
+          commit: {
+            message: "Update the OpenAPPA policy repository files",
+            verification: { verified: true, reason: "valid" },
+          },
+          author: bot,
+          committer: { login: "web-flow", type: "User" },
+        },
+      ],
+    };
+  }
   if (params.another)
     pulls[5] = {
       ref: "archestra/openappa-server-payments_api-5e6f7a8b",
@@ -3719,6 +3742,95 @@ test("under auto-merge a self-served pull request that conflicts, is a draft, or
   // Nothing holds it any more: merged.
   await checkDueAppaGithubSyncs();
   expect(merges).toEqual([{ number: 1, sha: head, merge_method: "squash" }]);
+});
+
+test("the repository files update sync opens changes no file Git sync reads, a README in the validations folder included, so its check is skipped rather than failed for want of a requester", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, runs } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+    filesUpdate: true,
+  });
+  await checkDueAppaGithubSyncs();
+  expect(runs.filter((run) => run.head_sha === results[6])).toEqual([
+    expect.objectContaining({ conclusion: "skipped" }),
+  ]);
+});
+
+test("a first refused merge is pending only for the retry the next minute brings: past it, a check that failed meanwhile is what the Keeper hears", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, merges, merge, otherChecks } =
+    await serveAutoMergeRepository({
+      organizationId: org.id,
+      requester: admin.email,
+    });
+  await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
+  const catalog = await InternalMcpCatalogModel.create(
+    {
+      name: "payments_api",
+      serverType: "remote",
+      serverUrl: "https://payments.example.com/mcp",
+      scope: "org",
+    },
+    { organizationId: org.id },
+  );
+  await ToolModel.createToolIfNotExists({
+    name: "payments_api__refund_payment",
+    description: "refund",
+    parameters: {},
+    catalogId: catalog.id,
+  });
+  const status = () =>
+    getServerRulesChangeStatus({
+      organizationId: org.id,
+      userId: admin.id,
+      catalogId: catalog.id,
+      number: 1,
+    });
+  const head = results[1] as string;
+  merge.status = 405;
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(1);
+  expect(await status()).toMatchObject({
+    phase: "merge_pending",
+    mergeRefused: {
+      reason: expect.stringContaining("Repository rule violations found"),
+    },
+  });
+  // Another check fails before the retry: the App does not try again.
+  otherChecks[head] = [
+    { name: "Validate policy", status: "completed", conclusion: "failure" },
+  ];
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(1);
+  // Past the retry's minute, the Keeper hears which check holds the merge.
+  const later = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 3 * 60_000);
+  try {
+    expect(await status()).toMatchObject({
+      phase: "merge_refused",
+      done: true,
+      mergeRefused: {
+        checks: true,
+        reason: expect.stringContaining("Validate policy failed"),
+      },
+    });
+  } finally {
+    later.mockRestore();
+  }
 });
 
 test("a merge GitHub refuses because someone merged or closed the pull request meanwhile completes gracefully, and a merge whose pull could not be queued is followed up the next minute", async ({

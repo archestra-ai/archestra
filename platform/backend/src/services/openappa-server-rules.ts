@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { isBuiltInCatalogId, slugifyMcpServerName } from "@archestra/shared";
+import {
+  isBuiltInCatalogId,
+  slugifyMcpServerName,
+  TimeInMs,
+} from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -512,10 +516,12 @@ async function readChangeStatus(params: {
     // A check just posted can take GitHub a moment to count: the first
     // refusal is tried again next minute, and only a second one stands. A
     // ruleset that takes the check from another App stands at once.
-    return answer(
-      refusal.ruleset || refusal.count > 1 ? "merge_refused" : "merge_pending",
-      { check, mergeRefused },
-    );
+    if (refusal.ruleset || refusal.count > 1)
+      return answer("merge_refused", { check, mergeRefused });
+    // The App tries again only once the pull request is ready; past the
+    // retry's minute, its own state says what holds the merge.
+    if (Date.now() - refusal.at < FIRST_REFUSAL_GRACE)
+      return answer("merge_pending", { check, mergeRefused });
   }
   // Every check on the pull request, not only this one: the App merges once
   // they all pass, and not while any failed.
@@ -586,6 +592,9 @@ async function readChangeStatus(params: {
     });
   return answer("merge_pending", { check });
 }
+
+/** How long a first refused merge stands for the retry the next minute brings. */
+const FIRST_REFUSAL_GRACE = 2 * TimeInMs.Minute;
 
 type StatusExtra = {
   check?: { state: string; title?: string; summary?: string };

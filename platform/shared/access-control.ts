@@ -402,7 +402,7 @@ export const permissionDescriptions: Record<string, string> = {
     "Edit project descriptions, instructions, sharing, and schedules",
   "project:delete": "Delete projects and schedules",
   "log:read":
-    "View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells",
+    "View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells",
 
   // Administration
   "member:read": "View organization members and their roles",
@@ -432,7 +432,7 @@ export const permissionDescriptions: Record<string, string> = {
   "auditLog:admin":
     "View every audit event in your organization (also requires Read)",
   "log:admin":
-    "View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)",
+    "View every LLM, MCP, and Guardrails consult log and yell in your organization (also requires Read)",
   "accessPolicies:read": "View access policies for all resource types",
   "accessPolicies:update":
     "Edit access policies and grant access across all resource types",
@@ -1752,8 +1752,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // Loopback-only `builtin = "archestra"` annotator; authenticated by the same
   // per-process bridge bearer inside the route.
   [RouteId.AnnotateOpenappaToolWithArchestra]: {},
-  // Log readers see and resolve all yells and read their own consults;
-  // log:admin widens consult visibility to the whole organization.
+  // Log readers see and resolve their own yells and read their own consults;
+  // log:admin widens both to the whole organization.
   [RouteId.GetOpenAppaYells]: { log: ["read"] },
   [RouteId.GetOpenAppaYellsSummary]: { log: ["read"] },
   [RouteId.DownloadOpenAppaYell]: { log: ["read"] },

@@ -52,7 +52,6 @@ Starts the MCP bridge. It connects MCP servers on this device to Archestra.
 Options:
   --url <url>       The address of Archestra. Necessary for the first run only.
   --config <path>   The config file. Default: ~/.archestra/mcp-bridge/config.yaml
-  --no-tray         Do not show the tray icon.
   --foreground      Run in this terminal, not in the background.
   --no-open         Print the approval URL; do not open the browser.
   --setup-code <code>
@@ -63,10 +62,10 @@ Options:
 
 The program signs in, copies itself to ~/.archestra/bin/, and continues in
 the background; the command in the terminal ends.
-  macOS     launchd runs it; an icon in the menu bar.
-  Windows   a process of its own; an icon in the notification area.
+  macOS     launchd runs it.
+  Windows   a process of its own.
   Linux     a systemd user unit, or a process of its own with no systemd
-            user session; no tray icon.
+            user session.
 
 The first start on a device also puts the `archestra` command on your PATH
 (for each new terminal) and turns auto-start on: the MCP bridge then starts
@@ -97,6 +96,7 @@ Shows what the MCP bridge on this device does now. It changes nothing.
 - If auto-start is on.
 - Which Archestra this device is linked to.
 - The version of this program, and where its log file is.
+- While it runs: if an update of the program waits.
 
 Options:
   -h, --help        Show this text.";
@@ -302,7 +302,6 @@ fn parse_bridge_start(mut arguments: impl Iterator<Item = String>) -> Result<Inv
                 let path = arguments.next().ok_or(CliError::MissingValue("--config"))?;
                 args.config = Some(PathBuf::from(path));
             }
-            "--no-tray" => args.no_tray = true,
             "--foreground" => args.foreground = true,
             "--no-open" => args.no_open = true,
             "--setup-code" => {
@@ -362,7 +361,6 @@ mod tests {
                 "https://archestra.example.com",
                 "--config",
                 "/tmp/c.yaml",
-                "--no-tray",
                 "--foreground",
                 "--no-open",
                 "--background",
@@ -372,7 +370,6 @@ mod tests {
             Ok(Invocation::Run(Command::BridgeStart(StartArgs {
                 url: Some("https://archestra.example.com".to_owned()),
                 config: Some(PathBuf::from("/tmp/c.yaml")),
-                no_tray: true,
                 foreground: true,
                 no_open: true,
                 background: true,

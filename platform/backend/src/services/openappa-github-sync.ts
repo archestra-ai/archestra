@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   getGithubWebOrigin,
   gitHostFromUrl,
+  isBuiltInCatalogId,
+  parseFullToolName,
   slugifyMcpServerName,
   TimeInMs,
 } from "@archestra/shared";
@@ -2170,32 +2172,39 @@ async function judgeGithubPull(params: {
     : null;
   let needsPolicyPermission = false;
   for (const file of governed) {
-    const catalogIds = file.prefix ? prefixes?.byPrefix.get(file.prefix) : null;
-    if (!catalogIds || catalogIds.size !== 1) {
-      // No server of that name, or more than one: the policy's own matter.
+    if (
+      !file.prefix ||
+      !prefixes?.byPrefix.get(file.prefix)?.size ||
+      governsBuiltInTools(file.prefix, prefixes)
+    ) {
+      // No server carries that prefix, or the built-in tools do: the policy's
+      // own matter.
       needsPolicyPermission = true;
       continue;
     }
-    const [catalogId] = [...catalogIds] as [string];
-    const allowed = await (await port("scopedPermissions")).allows({
+    // The file governs every server whose tools carry its prefix, so the
+    // requester needs edit access to each one that owns it.
+    const refused = await ownersNotEditable({
       organizationId: source.organizationId,
       userId,
-      resource: "mcpRegistry",
-      scope: catalogId,
-      action: "update",
+      servers: await rulesFileServers(file.prefix, prefixes),
     });
-    if (!allowed) {
-      const catalog = await InternalMcpCatalogModel.findById(catalogId);
+    if (refused.length > 0)
       return {
         governed: paths,
         selfServed: false,
         outcome: {
           accepted: false,
           title: "The requester may not change these rules",
-          reason: `${email} may not change ${file.path}: that takes edit access to the MCP server ${catalog?.name ?? file.prefix} in the MCP registry.`,
+          reason: `${email} may not change ${file.path}: that takes edit access to ${await ownersAsNamedFor(
+            {
+              organizationId: source.organizationId,
+              userId,
+              servers: refused,
+            },
+          )} in the MCP registry.`,
         },
       };
-    }
   }
   if (needsPolicyPermission) {
     const permissions = await RoleCompositionModel.getUserPermissions({
@@ -2206,7 +2215,8 @@ async function judgeGithubPull(params: {
       const first = governed.find(
         (file) =>
           !file.prefix ||
-          (prefixes?.byPrefix.get(file.prefix)?.size ?? 0) !== 1,
+          !prefixes?.byPrefix.get(file.prefix)?.size ||
+          governsBuiltInTools(file.prefix, prefixes),
       );
       return {
         governed: paths,
@@ -3338,24 +3348,159 @@ const SAFE_PREFIX = /^[A-Za-z0-9_-][A-Za-z0-9_.-]*$/;
 type ToolPrefixes = Awaited<ReturnType<typeof catalogToolPrefixes>>;
 
 /**
- * Whether a server has a rules file of its own: named by its own slug, and
- * only when every one of its tools carries that prefix and no other server's
- * tool does, so no server reaches another's file through its name.
+ * Why a server has no rules file, or `null` when it has one. The file is
+ * named by the server's own slug, which must be a safe file name, and every
+ * one of its tools carries that prefix, so no server reaches another's file,
+ * or the built-in tools, through its name. Other servers whose tools carry
+ * the same prefix share the file.
  */
-export function hasOwnFile(
-  catalog: { id: string; name: string },
-  prefixes: ToolPrefixes,
-): boolean {
+export function rulesFileRefusal(params: {
+  catalog: { id: string; name: string };
+  /** The server's own tool names. */
+  tools: readonly string[];
+  prefixes: ToolPrefixes;
+}): string | null {
+  const { catalog, tools, prefixes } = params;
   const prefix = slugifyMcpServerName(catalog.name);
-  const carried = prefixes.byCatalog.get(catalog.id);
+  if (!SAFE_PREFIX.test(prefix) || prefix.includes("__"))
+    return `${catalog.name} has no rules file: its tool prefix, ${prefix}, is not a safe file name or holds "__".`;
+  const stray = [
+    ...new Set(
+      tools.flatMap((tool) => {
+        const { serverName } = parseFullToolName(tool);
+        if (serverName === prefix) return [];
+        return [
+          serverName === null ? `${tool} (no prefix)` : `${serverName}__`,
+        ];
+      }),
+    ),
+  ].sort();
+  if (stray.length > 0)
+    return `${catalog.name} has no rules file: some of its tools carry other prefixes than ${prefix}__ (${stray.join(", ")}).`;
+  if (governsBuiltInTools(prefix, prefixes))
+    return `${catalog.name} has no rules file: its tools carry the prefix ${prefix}__ of the built-in ${archestraMcpBranding.catalogName} tools, which only the organization's own policy governs.`;
+  if (
+    [...(prefixes.byPrefix.get(prefix) ?? [])].some(
+      (id) => id !== catalog.id && prefixes.conflicting.has(id),
+    )
+  )
+    return `${catalog.name} has no rules file: another MCP server's tools put "__" inside its tool prefix, ${prefix}__.`;
+  return null;
+}
+
+/**
+ * Whether a prefix is the built-in tools' own: their catalog carries it, or it
+ * is one of their names (a white-labeled deployment's, and the default name
+ * they still answer to). A catalog that predates the name check can still
+ * carry it, and a rules file for it would govern the built-in tools too.
+ */
+function governsBuiltInTools(prefix: string, prefixes: ToolPrefixes): boolean {
   return (
-    SAFE_PREFIX.test(prefix) &&
-    !prefix.includes("__") &&
-    !prefixes.conflicting.has(catalog.id) &&
-    carried?.size === 1 &&
-    carried.has(prefix) &&
-    ![...(prefixes.byPrefix.get(prefix) ?? [])].some((id) => id !== catalog.id)
+    archestraMcpBranding.allowedServerNames.includes(prefix) ||
+    [...(prefixes.byPrefix.get(prefix) ?? [])].some(isBuiltInCatalogId)
   );
+}
+
+/** A server a rules file governs, and whether its editors gate the file. */
+type RulesFileServer = {
+  id: string;
+  name: string;
+  scope: "personal" | "team" | "org";
+  owner: boolean;
+};
+
+/**
+ * Every server a rules file governs: each catalog whose tools carry its
+ * prefix, since rules are keyed by tool name. The shared entries (scope
+ * `org` or `team`) own the file; members' personal copies follow it and
+ * gate nothing, unless no shared entry carries the prefix.
+ */
+export async function rulesFileServers(
+  prefix: string,
+  prefixes: ToolPrefixes,
+): Promise<RulesFileServer[]> {
+  const catalogs = await InternalMcpCatalogModel.getByIds([
+    ...(prefixes.byPrefix.get(prefix) ?? []),
+  ]);
+  const shared = [...catalogs.values()].some(
+    (catalog) => catalog.scope !== "personal",
+  );
+  return [...catalogs.values()]
+    .map((catalog) => ({
+      id: catalog.id,
+      name: catalog.name,
+      scope: catalog.scope,
+      owner: !shared || catalog.scope !== "personal",
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+}
+
+/** Names as a sentence lists them: "a", "a and b", "a, b and c". */
+export function listedNames(names: readonly string[]): string {
+  return names.length <= 1
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
+
+/**
+ * Owners as a check summary or pull request body names them: by name when
+ * the member may open them in the MCP registry, counted otherwise, since
+ * everyone who reads the repository reads both.
+ */
+export async function ownersAsNamedFor(params: {
+  organizationId: string;
+  userId: string;
+  servers: readonly RulesFileServer[];
+}): Promise<string> {
+  const permissions = await port("scopedPermissions");
+  const readable = await Promise.all(
+    params.servers.map((server) =>
+      permissions.allows({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        resource: "mcpRegistry",
+        scope: server.id,
+        action: "read",
+      }),
+    ),
+  );
+  const named = params.servers
+    .filter((_, index) => readable[index])
+    .map((server) => server.name);
+  const unseen = params.servers.length - named.length;
+  const hidden =
+    unseen === 0
+      ? []
+      : [
+          unseen === 1
+            ? "an MCP server they cannot see"
+            : `${unseen} MCP servers they cannot see`,
+        ];
+  if (named.length === 0) return listedNames(hidden);
+  const items = [...named, ...hidden];
+  return `the MCP server${items.length > 1 ? "s" : ""} ${listedNames(items)}`;
+}
+
+/** The owners of a rules file a member may not edit in the MCP registry. */
+export async function ownersNotEditable(params: {
+  organizationId: string;
+  userId: string;
+  servers: readonly RulesFileServer[];
+}): Promise<RulesFileServer[]> {
+  const permissions = await port("scopedPermissions");
+  const owners = params.servers.filter((server) => server.owner);
+  const allowed = await Promise.all(
+    owners.map((server) =>
+      permissions.allows({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        resource: "mcpRegistry",
+        scope: server.id,
+        action: "update",
+      }),
+    ),
+  );
+  return owners.filter((_, index) => !allowed[index]);
 }
 
 // =============================================================================

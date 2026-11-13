@@ -24,7 +24,7 @@ The commands of a component are `archestra <component> <action>`. `update` and `
 | --- | --- | --- |
 | `bridge start` | Starts the MCP bridge in the background. | Auto-start, except at the first start. |
 | `bridge stop` | Stops the MCP bridge that runs in the background. | Auto-start, the config file and the device key. |
-| `bridge status` | Shows if the MCP bridge runs, if auto-start is on, which Archestra the device is linked to, the version, the log file and, while it runs, the state of each MCP server. | Everything: it only reads. |
+| `bridge status` | Shows if the MCP bridge runs, if auto-start is on, which Archestra the device is linked to, the version, the log file and, while it runs, the update that waits and the state of each MCP server. | Everything: it only reads. |
 | `bridge enable-auto-start` | Turns auto-start on: the MCP bridge starts at each login. | What runs now. |
 | `bridge disable-auto-start` | Turns auto-start off. | What runs now. |
 | `update` | Gets the program that Archestra serves now, and starts the MCP bridge again with it. | Auto-start, the config file and the device key. |
@@ -36,7 +36,7 @@ The commands of a component are `archestra <component> <action>`. `update` and `
 - `bridge enable-auto-start` needs a computer that is signed in, and uses the default config file.
 - An MCP bridge started with `--foreground` runs in the terminal; stop it there with Ctrl-C.
 
-Options of `bridge start`: `--url <url>`, `--config <path>`, `--no-tray`, `--foreground` (stay in the terminal), `--no-open`, `--background` (the OS sets it). The other commands have no options.
+Options of `bridge start`: `--url <url>`, `--config <path>`, `--foreground` (stay in the terminal), `--no-open`, `--background` (the OS sets it). The other commands have no options.
 
 ### The `archestra` command on the PATH
 
@@ -66,8 +66,8 @@ The program follows the Archestra that it is connected to. The checksum decides,
 | System | Who updates |
 | --- | --- |
 | Windows | The MCP bridge that the OS runs, by itself, when Archestra allows it (`auto_update`) and no command is in work. `archestra update` does it at once. |
-| macOS | The user, with `archestra update`. The program is not signed: each build is a new application to the privacy settings of macOS, so an update takes away the permissions that the MCP servers got. A silent update would do that with no warning. The tray menu and the Device tab show that an update waits. |
-| Linux | The user, with `archestra update`. The downloaded program would start inside the systemd unit of the MCP bridge, and systemd would end it together with the MCP bridge that it stops. The Device tab shows that an update waits. |
+| macOS | The user, with `archestra update`. The program is not signed: each build is a new application to the privacy settings of macOS, so an update takes away the permissions that the MCP servers got. A silent update would do that with no warning. The Device tab and `archestra bridge status` show that an update waits. |
+| Linux | The user, with `archestra update`. The downloaded program would start inside the systemd unit of the MCP bridge, and systemd would end it together with the MCP bridge that it stops. The Device tab and `archestra bridge status` show that an update waits. |
 
 - An MCP bridge that runs in a terminal (`--foreground`) never updates itself.
 - The MCP bridge tries one program one time. The SHA-256 of the last try is in `~/.archestra/mcp-bridge/update-tried`; a program that could not install itself is not tried again at each sync. A download that failed or had another SHA-256 is not a try.
@@ -106,7 +106,7 @@ Archestra has the config of the device: for each desktop MCP server that the use
 
 - A sync gets this config and writes it to the config file. The file is a copy: the user does not edit it, and a sync replaces its MCP entries.
 - A sync writes the file only when Archestra has other MCP entries than the file. So `synced_at` in the file is the time of the last sync that changed the MCP entries (or of the first sync), not of the last sync.
-- The client syncs when it starts, when Archestra says that the config changed, when the user picks "Sync config from Archestra" in the tray menu, and every 5 minutes.
+- The client syncs when it starts, when Archestra says that the config changed, and every 5 minutes.
 - If a sync fails, the file and the MCP servers stay as they are. If the client starts and cannot reach Archestra, it runs the MCP servers of the file.
 - An item with a command is a stdio MCP server that the client starts. An item with a URL is an HTTP MCP server on this computer that the client connects to. An item with none of them, or one that is off, is not started.
 - One command serves every system. A program on `PATH` (`matlab-mcp-server`) or a package runner (`npx -y some-mcp-server`, `uvx some-mcp-server`) works on macOS, Windows and Linux. On Windows a name with no extension is looked up with `PATHEXT`, so `npx` is `npx.cmd`.
@@ -117,6 +117,7 @@ Archestra has the config of the device: for each desktop MCP server that the use
 ## State, restart and log
 
 - Each MCP server has a state: `no_command`, `starting`, `running`, `failed` (with the error) or `stopped`. The client reports the states to Archestra at the start, after each sync that changed the config file, and at each change.
+- The Device tab of Personal Settings in Archestra and `archestra bridge status` show the state of each MCP server.
 - Archestra can ask the client to sync, to start one MCP server again, and to give the last 200 stderr lines of a stdio MCP server. These requests come through the poll on the reserved channel `archestra-bridge`.
 - Each stderr line of a stdio MCP server also goes to the log of the client, with the name of the MCP server in front.
 - A log file over 5 MB is put aside as `mcp-bridge.log.1` (in place of the one before it), and a new log file starts. Windows and Linux: each time the MCP bridge starts in the background. macOS: each time `bridge start` hands over to launchd; launchd opens the log file itself, so a start at login does not put it aside.
@@ -130,7 +131,6 @@ Archestra has the config of the device: for each desktop MCP server that the use
 | In the start at login when | the LaunchAgent is in `~/Library/LaunchAgents` | the `Run` key has the value `Archestra MCP bridge` | the unit is enabled (`systemctl --user enable`); with no systemd user session, the XDG autostart entry is there |
 | `bridge stop` | `launchctl bootout` | the stop request (below) | `systemctl --user stop`; the stop request for a process of its own |
 | `uninstall` | `launchctl bootout`, removes both LaunchAgent files | the stop request, deletes the `Run` value | `systemctl --user disable --now`, removes the unit and the XDG autostart entry; the stop request for a process of its own |
-| Tray | menu bar | notification area (`Shell_NotifyIconW`, stock icons) | none: the Device tab shows the state |
 | Log file | launchd writes it | the program writes it | the program writes it |
 
 ### macOS
@@ -140,39 +140,23 @@ launchd runs the MCP bridge also when it is not in the start at login, so the ba
 ### Windows
 
 - `bridge start` stops the MCP bridge that runs first: Windows cannot replace a running `.exe`. It then starts the copy with no console (`DETACHED_PROCESS`).
-- The MCP bridge in the background holds `mcp-bridge.lock`. `bridge stop` sets the named event `Local\ArchestraMcpBridgeStop`, which the MCP bridge waits for; it stops its MCP servers, removes its icon and ends. One that does not end in 10 seconds is terminated.
+- The MCP bridge in the background holds `mcp-bridge.lock`. `bridge stop` sets the named event `Local\ArchestraMcpBridgeStop`, which the MCP bridge waits for; it stops its MCP servers and ends. One that does not end in 10 seconds is terminated.
 - Each stdio MCP server starts with no console window (`CREATE_NO_WINDOW`) and in a job object that ends all its processes when the MCP server stops, is restarted, or the MCP bridge ends in any way. `npx` starts `cmd.exe`, which starts `node`: the job ends all three.
 - At login the `Run` value starts a console program: Windows shows a console window for a moment, until the program closes it.
 - The config file gets no mode: the profile folder is readable only by the user and the administrators.
 
 ### Linux
 
-- No tray icon and no GUI library. `xdg-open` opens the approval page.
+- `xdg-open` opens the approval page.
 - The systemd unit has the `PATH` of the shell that ran `bridge start`, as the LaunchAgent has, so `npx` from a version manager is found. It has no `Restart=`: a signed-out MCP bridge ends and waits for the user, as on macOS.
 - With the XDG autostart, the MCP bridge in the background holds `mcp-bridge.lock`; `bridge stop` sends it SIGTERM.
-
-## Tray menu
-
-```
-Archestra MCP bridge: connected
-Config: synced 2 minutes ago
----------------------------------
-peekaboo: running
-MATLAB: starting
----------------------------------
-Sync config from Archestra
-Open Device tab
-Quit
-```
-
-The second line has the time of the last good sync of this run. It is `Config: sync failed. Last sync 2 minutes ago` after a sync that failed. When the MCP bridge starts and cannot reach Archestra, the time is `synced_at` of the config file. Quit ends the program; the start at login stays.
 
 ## Layout
 
 - `src/main.rs` and `src/cli.rs`: the command line, `archestra <command> <component> [options]`. A new component is one more `Command` variant and a module in the library.
 - `src/layout.rs`: the files in the home folder.
 - `src/bridge/`: the MCP bridge. `start.rs` and `stop.rs` are its two commands.
-- The OS-specific code: `src/bridge/autostart/` (`mod.rs` has the two commands and what the systems share, then one file per OS), `src/bridge/tray/` (macOS, Windows), `src/bridge/instance.rs` (the lock and the stop request, Windows and Linux), `src/bridge/process_tree.rs` (Windows job objects), `src/bridge/command_line.rs` (the split and the `PATHEXT` lookup), `src/bridge/open_url.rs`.
+- The OS-specific code: `src/bridge/autostart/` (`mod.rs` has the two commands and what the systems share, then one file per OS), `src/bridge/instance.rs` (the lock and the stop request, Windows and Linux), `src/bridge/process_tree.rs` (Windows job objects), `src/bridge/command_line.rs` (the split and the `PATHEXT` lookup), `src/bridge/open_url.rs`.
 
 ## Release
 

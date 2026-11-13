@@ -37,7 +37,7 @@ export type OAuthScope = (typeof OAUTH_SCOPES)[number];
  * Used by the consent page to explain what each scope grants.
  */
 export const OAUTH_SCOPE_DESCRIPTIONS: Record<OAuthScope, string> = {
-  mcp: "Access MCP gateways",
+  mcp: "Access MCP gateways and read skills you can access from the marketplace",
   a2a: "Access A2A agents",
   "llm:proxy": "Access LLM proxy endpoints",
   openid: "Verify your identity",

@@ -5,8 +5,8 @@
 //!   each login: from the OS ([`super::autostart::status`]).
 //! - Which Archestra this device is linked to: from the config file.
 //! - The version of this program, and where the log file is.
-//! - While the MCP bridge runs: the state of each MCP server, from the state
-//!   file that it writes ([`super::state_file`]).
+//! - While the MCP bridge runs: the update that waits and the state of each
+//!   MCP server, from the state file that it writes ([`super::state_file`]).
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -27,20 +27,43 @@ pub fn run() -> Result<ExitCode, AutostartError> {
         .flatten()
         .map(|config| config.control_plane.base_url);
     // The file of an MCP bridge that does not run any more says nothing.
-    let servers = status
+    let state = status
         .running
         .then(|| state_file::read(&state_file::path_beside(&config_path)));
+    let update = state
+        .as_ref()
+        .and_then(|file| file.as_ref()?.update.as_ref())
+        .map(|update| update_report(update.version.as_deref(), update.auto && cfg!(windows)));
     let mut text = report(
         status,
         archestra.as_deref(),
+        update.as_deref(),
         &layout::bridge_log_path(&home),
     );
-    if let Some(file) = servers {
+    if let Some(file) = state {
         text.push('\n');
         text.push_str(&servers_report(file.as_ref()));
     }
     println!("{text}");
     Ok(ExitCode::SUCCESS)
+}
+
+/// What the status says of an update. The MCP bridge installs it by itself
+/// on Windows, when Archestra allows that; on macOS and Linux the user runs
+/// the command.
+fn update_report(version: Option<&str>, installs_by_itself: bool) -> String {
+    let available = match version {
+        Some(version) => format!("version {version} is available"),
+        None => "a new version is available".to_owned(),
+    };
+    if installs_by_itself {
+        format!(
+            "{available}. It installs by itself when no tool call is running. \
+             To install it now: archestra update"
+        )
+    } else {
+        format!("{available}. Install it with: archestra update")
+    }
 }
 
 /// The MCP servers of the MCP bridge that runs. `None`: it wrote no state
@@ -86,7 +109,12 @@ fn server_state(server: &ServerLine) -> String {
     }
 }
 
-fn report(status: Status, archestra: Option<&str>, log_path: &Path) -> String {
+fn report(
+    status: Status,
+    archestra: Option<&str>,
+    update: Option<&str>,
+    log_path: &Path,
+) -> String {
     let running = if status.running {
         "running in the background"
     } else {
@@ -104,11 +132,16 @@ fn report(status: Status, archestra: Option<&str>, log_path: &Path) -> String {
                 .to_owned()
         }
     };
+    let update = match update {
+        Some(update) => format!("Update:      {update}\n"),
+        None => String::new(),
+    };
     format!(
         "MCP bridge:  {running}\n\
          Auto-start:  {auto_start}\n\
          Archestra:   {archestra}\n\
          Version:     {}\n\
+         {update}\
          Log file:    {}",
         env!("CARGO_PKG_VERSION"),
         log_path.display(),
@@ -127,6 +160,7 @@ mod tests {
                 auto_start: true,
             },
             Some("https://archestra.example.com"),
+            None,
             Path::new("/h/.archestra/mcp-bridge/mcp-bridge.log"),
         );
         assert_eq!(
@@ -147,11 +181,49 @@ mod tests {
                 auto_start: false,
             },
             None,
+            None,
             Path::new("/l.log"),
         );
         assert!(text.contains("not running. Start it with: archestra bridge start"));
         assert!(text.contains("off: it does not start at login"));
         assert!(text.contains("not linked. Link this device from the Device tab"));
+    }
+
+    #[test]
+    fn report_has_a_line_for_an_update_that_waits() {
+        let report_with = |update: &str| {
+            report(
+                Status {
+                    running: true,
+                    auto_start: true,
+                },
+                Some("https://archestra.example.com"),
+                Some(update),
+                Path::new("/l.log"),
+            )
+        };
+        // The user runs the command.
+        let text = report_with(&update_report(Some("0.2.0"), false));
+        assert!(
+            text.contains(&format!(
+                "\nVersion:     {}\n\
+                 Update:      version 0.2.0 is available. Install it with: archestra update\n\
+                 Log file:    /l.log",
+                env!("CARGO_PKG_VERSION")
+            )),
+            "{text}"
+        );
+        // Archestra does not know the version of its program.
+        assert_eq!(
+            update_report(None, false),
+            "a new version is available. Install it with: archestra update"
+        );
+        // The MCP bridge installs the update by itself.
+        assert_eq!(
+            update_report(Some("0.2.0"), true),
+            "version 0.2.0 is available. It installs by itself when no tool call is running. \
+             To install it now: archestra update"
+        );
     }
 
     fn line(name: &str, state: &str, error: Option<&str>) -> ServerLine {
@@ -175,6 +247,7 @@ mod tests {
                 line("notes", "stopped", None),
                 line("eda", "no_command", None),
             ]),
+            update: None,
         };
         assert_eq!(
             servers_report(Some(&file)),
@@ -190,12 +263,16 @@ mod tests {
     fn servers_report_before_the_states_are_known_and_with_none() {
         assert_eq!(servers_report(None), "MCP servers: starting");
         assert_eq!(
-            servers_report(Some(&StateFile { servers: None })),
+            servers_report(Some(&StateFile {
+                servers: None,
+                update: None,
+            })),
             "MCP servers: starting"
         );
         assert_eq!(
             servers_report(Some(&StateFile {
-                servers: Some(Vec::new())
+                servers: Some(Vec::new()),
+                update: None,
             })),
             "MCP servers: none. Add one from the MCP registry in Archestra"
         );

@@ -49,8 +49,6 @@ pub mod stop;
 mod sync;
 mod template;
 mod timestamp;
-#[cfg(any(target_os = "macos", windows))]
-pub mod tray;
 pub mod update;
 mod wait;
 #[cfg(windows)]
@@ -325,40 +323,23 @@ pub struct Bridge {
     sync_sender: mpsc::Sender<SyncRequest>,
 }
 
-/// What the tray menu has of a [`Bridge`]: its state, and the way to ask for
-/// a sync. A clone is cheap.
-#[derive(Debug, Clone)]
-pub struct BridgeHandle {
-    /// Closes when the [`Bridge`] is dropped.
-    pub state: watch::Receiver<BridgeState>,
-    sync_requests: mpsc::Sender<SyncRequest>,
-}
-
-impl BridgeHandle {
-    /// Asks for a sync from Archestra now. It does not wait for the sync:
-    /// `state` shows the result.
-    pub fn sync_now(&self) {
-        let _ = self.sync_requests.try_send(SyncRequest { reply: None });
-    }
-}
-
 impl Bridge {
-    pub fn new(options: RunOptions) -> (Self, BridgeHandle) {
+    pub fn new(options: RunOptions) -> Self {
         let mut state = BridgeState::new(options.sync);
         state.update = options.update.clone();
-        let (state_tx, state_rx) = watch::channel(state);
-        let (sync_tx, sync_rx) = mpsc::channel(SYNC_QUEUE);
-        let handle = BridgeHandle {
-            state: state_rx,
-            sync_requests: sync_tx.clone(),
-        };
-        let bridge = Self {
+        let (sync_sender, sync_requests) = mpsc::channel(SYNC_QUEUE);
+        Self {
             options,
-            state: state_tx,
-            sync_requests: sync_rx,
-            sync_sender: sync_tx,
-        };
-        (bridge, handle)
+            state: watch::Sender::new(state),
+            sync_requests,
+            sync_sender,
+        }
+    }
+
+    /// The state of the tunnel client, for a reader outside it. It closes
+    /// when the [`Bridge`] is dropped.
+    pub fn state(&self) -> watch::Receiver<BridgeState> {
+        self.state.subscribe()
     }
 
     /// Runs the tunnel client: keeps the MCP servers of the config file in

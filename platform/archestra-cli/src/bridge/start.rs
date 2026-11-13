@@ -23,7 +23,6 @@ pub struct StartArgs {
     pub url: Option<String>,
     /// The config file. Default: `~/.archestra/mcp-bridge/config.yaml`.
     pub config: Option<PathBuf>,
-    pub no_tray: bool,
     /// Run in this terminal, not in the background.
     pub foreground: bool,
     pub no_open: bool,
@@ -41,9 +40,6 @@ pub enum StartError {
     Runtime(std::io::Error),
     #[error(transparent)]
     Bridge(#[from] BridgeError),
-    #[cfg(any(target_os = "macos", windows))]
-    #[error(transparent)]
-    Tray(#[from] super::tray::TrayError),
     #[cfg(any(target_os = "linux", windows))]
     #[error("cannot take the lock of the MCP bridge in the background: {0}")]
     Lock(#[source] std::io::Error),
@@ -107,16 +103,13 @@ pub fn run(args: StartArgs) -> Result<ExitCode, StartError> {
         #[cfg(windows)]
         stop_requests,
     };
-    // For "Open Device tab" of the tray menu.
-    #[cfg(any(target_os = "macos", windows))]
-    let base_url = prepared.config.control_plane.base_url.clone();
     if args.background
         && let Some(home) = std::env::home_dir()
     {
         // A program that an update downloaded installed itself by now.
         super::update::remove_downloaded_program(&home);
     }
-    let (bridge, handle) = Bridge::new(RunOptions {
+    let bridge = Bridge::new(RunOptions {
         auto_update: auto_update_of(args.background),
         config_path,
         control_plane: prepared.config.control_plane,
@@ -124,21 +117,7 @@ pub fn run(args: StartArgs) -> Result<ExitCode, StartError> {
         sync: prepared.sync,
         update: prepared.update,
     });
-    #[cfg(any(target_os = "macos", windows))]
-    if !args.no_tray {
-        return run_with_tray(runtime, bridge, handle, &base_url, shutdown);
-    }
-    #[cfg(target_os = "linux")]
-    if !args.no_tray {
-        info!(
-            "Linux has no tray icon: the Device tab of Personal Settings in Archestra shows the state"
-        );
-    }
-
-    // No tray menu: nothing uses the handle. The sync, the requests of
-    // Archestra and the state report do not need it.
-    drop(handle);
-    let code = runtime.block_on(run_headless(bridge, shutdown));
+    let code = runtime.block_on(run_bridge(bridge, shutdown));
     // Held until the MCP bridge ended.
     #[cfg(any(target_os = "linux", windows))]
     drop(instance);
@@ -202,7 +181,7 @@ fn put_the_program_on_the_path() {
 }
 
 /// Runs until the device is signed out (exit code 1) or a stop comes.
-async fn run_headless(mut bridge: Bridge, shutdown: Shutdown) -> ExitCode {
+async fn run_bridge(mut bridge: Bridge, shutdown: Shutdown) -> ExitCode {
     tokio::select! {
         ended = bridge.run() => {
             match ended {
@@ -218,7 +197,7 @@ async fn run_headless(mut bridge: Bridge, shutdown: Shutdown) -> ExitCode {
     }
 }
 
-/// What stops the MCP bridge, besides Quit in the tray menu.
+/// What stops the MCP bridge.
 struct Shutdown {
     /// `archestra bridge stop`, for the MCP bridge in the background.
     #[cfg(windows)]
@@ -263,35 +242,6 @@ impl Shutdown {
             std::future::pending::<()>().await;
         }
     }
-}
-
-/// Runs the MCP bridge on the runtime and the tray icon on this (the main)
-/// thread. A signed-out MCP bridge stays, so that the tray shows the state.
-#[cfg(any(target_os = "macos", windows))]
-fn run_with_tray(
-    runtime: tokio::runtime::Runtime,
-    mut bridge: Bridge,
-    handle: super::BridgeHandle,
-    base_url: &str,
-    shutdown: Shutdown,
-) -> Result<ExitCode, StartError> {
-    runtime.spawn(async move {
-        let serve = async {
-            match bridge.run().await {
-                // Signed out: wait for Quit or a stop.
-                Ok(()) => std::future::pending::<()>().await,
-                Err(error) => error!(%error, "the MCP bridge stopped"),
-            }
-        };
-        tokio::select! {
-            () = serve => {}
-            () = shutdown.wait() => info!("stopping"),
-        }
-        // Dropping `bridge` here closes its state: that tells the tray to
-        // end the program.
-    });
-    super::tray::run(runtime, handle, base_url)?;
-    Ok(ExitCode::SUCCESS)
 }
 
 /// The log file of the MCP bridge in the background on Windows and Linux.

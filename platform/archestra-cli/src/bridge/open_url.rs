@@ -1,5 +1,5 @@
 //! Opens an address in the browser of the user: the approval page of the
-//! sign-in, and "Open Device tab" of the tray menu.
+//! sign-in.
 
 /// Opens `url` in the default browser. Returns false when that did not work;
 /// the caller then tells the user to open it by hand.

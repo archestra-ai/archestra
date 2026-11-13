@@ -1570,16 +1570,23 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     syncRetried: expect.stringContaining("HTTP 502"),
     instruction: expect.stringContaining("pulling again"),
   });
-  // So is a read the sync sanitised, and the validator out for now.
-  for (const reason of [
-    "Could not sync the APPA policy. Check the repository, file, and GitHub credential, then retry.",
-    "APPA could not check this policy right now. Git sync tries again at its next check.",
-  ]) {
+  // So is the validator out for now; the sync's generic message is not,
+  // since it covers a policy file that cannot be read as well.
+  for (const [reason, done] of [
+    [
+      "APPA could not check this policy right now. Git sync tries again at its next check.",
+      false,
+    ],
+    [
+      "Could not sync the APPA policy. Check the repository, file, and GitHub credential, then retry.",
+      true,
+    ],
+  ] as const) {
     await db
       .update(schema.openappaGithubSyncTable)
       .set({ lastSyncError: reason, lastSyncedAt: new Date(Date.now()) })
       .where(eq(schema.openappaGithubSyncTable.organizationId, org.id));
-    expect(await follow()).toMatchObject({ phase: "merged", done: false });
+    expect(await follow()).toMatchObject({ phase: "merged", done });
   }
   await db
     .update(schema.openappaGithubSyncTable)

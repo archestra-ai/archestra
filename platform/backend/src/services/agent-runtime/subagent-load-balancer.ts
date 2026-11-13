@@ -812,9 +812,10 @@ class SubagentLoadBalancer {
   }
 
   /**
-   * Releases a primary claim when a caller-error refusal (`reason === "refused"`,
-   * e.g., invalid tier request) prevented the run from launching. Candidate-specific
-   * failures (`credentials_misconfigured`, `agent_not_found`, etc.) must NOT
+   * Releases a primary claim when a caller-error refusal (`reason === "refused"`
+   * or `reason === "invalid_request"`, e.g., invalid tier request) prevented the
+   * run from launching. Candidate-specific failures (`credentials_misconfigured`,
+   * `credentials_admin_only`, `model_unready`, `agent_not_found`, etc.) must NOT
    * call this method so unhealthy workers rotate to the back of the queue
    * instead of pinning subsequent calls.
    */

@@ -157,12 +157,6 @@ class GitHubUserConnectionManager {
         client_secret: app.clientSecret,
         grant_type: "refresh_token",
         refresh_token: token.refreshToken,
-      }).catch((error: unknown) => {
-        // A refused refresh means the grant is gone (revoked, or the App's
-        // user tokens changed); only a new sign-in brings it back.
-        if (error instanceof ApiError && error.statusCode === 400)
-          throw new GitHubReconnectRequiredError(error.message);
-        throw error;
       });
       await assertOwned();
       await RuntimeCredentialConnectionModel.upsert({
@@ -244,14 +238,31 @@ class GitHubUserConnectionManager {
         redirect: "error",
       },
     );
-    const payload = response.ok
-      ? TokenResponseSchema.safeParse(await response.json())
-      : null;
-    if (!payload?.success)
+    if (!response.ok)
+      throw new ApiError(502, "Could not exchange GitHub authorization token");
+    let raw: unknown;
+    try {
+      raw = await response.json();
+    } catch {
+      throw new ApiError(502, "Could not exchange GitHub authorization token");
+    }
+    const payload = TokenResponseSchema.safeParse(raw);
+    if (!payload.success) {
+      const oauthError = OAuthErrorResponseSchema.safeParse(raw);
+      if (
+        body.grant_type === "refresh_token" &&
+        oauthError.success &&
+        STALE_REFRESH_OAUTH_ERRORS.has(oauthError.data.error)
+      ) {
+        throw new GitHubReconnectRequiredError(
+          "GitHub authorization expired or was revoked. Connect GitHub again.",
+        );
+      }
       throw new ApiError(
         400,
         "GitHub authorization failed. Connect GitHub again and ensure expiring user tokens are enabled.",
       );
+    }
     return {
       accessToken: payload.data.access_token,
       refreshToken: payload.data.refresh_token,
@@ -300,6 +311,14 @@ const TokenResponseSchema = z.object({
   expires_in: z.number().positive(),
   refresh_token_expires_in: z.number().positive(),
 });
+const OAuthErrorResponseSchema = z.object({
+  error: z.string(),
+});
+const STALE_REFRESH_OAUTH_ERRORS = new Set([
+  "bad_refresh_token",
+  "invalid_grant",
+  "expired_token",
+]);
 const StoredTokenSchema = z.object({
   accessToken: z.string(),
   refreshToken: z.string(),

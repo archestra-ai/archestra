@@ -399,7 +399,7 @@ async function requireSharedCredentialAccess(params: {
 }
 
 /** A person without organization settings access tried to run with an organization credential. */
-class SharedCredentialAccessDeniedError extends ApiError {
+export class SharedCredentialAccessDeniedError extends ApiError {
   constructor() {
     super(
       403,

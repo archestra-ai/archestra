@@ -1,4 +1,4 @@
-import { beforeEach, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 
 vi.mock("@/clients/anthropic-keyless-auth", () => ({
   isAnthropicKeylessAuthEnabled: vi.fn(),
@@ -42,9 +42,11 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
+import config from "@/config";
 import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
+  VirtualApiKeyModel,
 } from "@/models";
 import {
   fetchAnthropicModels,
@@ -75,6 +77,97 @@ describe("systemKeyManager", () => {
     vi.mocked(fetchAnthropicModels).mockResolvedValue([]);
     vi.mocked(fetchAzureModels).mockResolvedValue([]);
     vi.mocked(fetchBedrockModelsViaIam).mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    config.llmSystemKeys.autoDeleteEnabled = true;
+  });
+
+  /**
+   * One deployment with Vertex AI enabled creates the Gemini system key, and
+   * an admin maps a virtual key to it. Returns readers for the mapping and the
+   * model links that hang off the key.
+   */
+  async function setUpVertexKeyInUse(
+    organizationId: string,
+    makeVirtualApiKey: (
+      organizationId: string,
+      overrides: {
+        providerApiKeys: { provider: "gemini"; providerApiKeyId: string }[];
+      },
+    ) => Promise<{ id: string }>,
+  ) {
+    vi.mocked(fetchGeminiModelsViaVertexAi).mockResolvedValue([
+      {
+        id: "gemini-2.5-flash",
+        displayName: "Gemini 2.5 Flash",
+        provider: "gemini",
+      },
+    ]);
+    await systemKeyManager.syncSystemKeys(organizationId);
+    const geminiKey = await LlmProviderApiKeyModel.findSystemKey("gemini");
+    if (!geminiKey) throw new Error("expected a Vertex AI (Gemini) system key");
+    const virtualKey = await makeVirtualApiKey(organizationId, {
+      providerApiKeys: [{ provider: "gemini", providerApiKeyId: geminiKey.id }],
+    });
+    return {
+      geminiKey,
+      mappedKeyIds: async () =>
+        (await VirtualApiKeyModel.getProviderApiKeys(virtualKey.id)).map(
+          (mapping) => mapping.providerApiKeyId,
+        ),
+      linkedModelIds: async () =>
+        (
+          await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
+            geminiKey.id,
+          ])
+        ).map(({ model }) => model.modelId),
+    };
+  }
+
+  test("with auto-delete off, a deployment without Vertex AI leaves the key another deployment created", async ({
+    makeOrganization,
+    makeVirtualApiKey,
+  }) => {
+    const organization = await makeOrganization();
+    config.llmSystemKeys.autoDeleteEnabled = false;
+    const { geminiKey, mappedKeyIds, linkedModelIds } =
+      await setUpVertexKeyInUse(organization.id, makeVirtualApiKey);
+
+    // A second deployment on the same database, with no Vertex AI settings.
+    vi.mocked(isVertexAiEnabled).mockReturnValue(false);
+    expect(await systemKeyManager.syncSystemKeys(organization.id)).toEqual([]);
+
+    await expect(
+      LlmProviderApiKeyModel.findSystemKey("gemini"),
+    ).resolves.toMatchObject({ id: geminiKey.id });
+    expect(await mappedKeyIds()).toEqual([geminiKey.id]);
+    expect(await linkedModelIds()).toEqual(["gemini-2.5-flash"]);
+
+    // The first deployment syncs again and finds its key as it left it.
+    vi.mocked(isVertexAiEnabled).mockReturnValue(true);
+    expect(await systemKeyManager.syncSystemKeys(organization.id)).toEqual([]);
+    await expect(
+      LlmProviderApiKeyModel.findSystemKey("gemini"),
+    ).resolves.toMatchObject({ id: geminiKey.id });
+    expect(await mappedKeyIds()).toEqual([geminiKey.id]);
+  });
+
+  test("by default, deletes the system key of a provider that is no longer enabled", async ({
+    makeOrganization,
+    makeVirtualApiKey,
+  }) => {
+    const organization = await makeOrganization();
+    const { mappedKeyIds } = await setUpVertexKeyInUse(
+      organization.id,
+      makeVirtualApiKey,
+    );
+
+    vi.mocked(isVertexAiEnabled).mockReturnValue(false);
+    await systemKeyManager.syncSystemKeys(organization.id);
+
+    expect(await LlmProviderApiKeyModel.findSystemKey("gemini")).toBeNull();
+    expect(await mappedKeyIds()).toEqual([]);
   });
 
   test("reports failed providers while continuing to sync healthy system keys", async ({

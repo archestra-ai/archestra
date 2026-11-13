@@ -52,7 +52,7 @@ Decide once how every agent of a runtime runs, such as whether Claude Code bills
 The runtime shows **Locked**. Every agent of that runtime, existing ones included, gets its launch command, protocol, follow-up delivery, limits, tiers, and Claude account, plus a custom runtime's image. The agent's **Agent Runtime** tab shows them read-only.
 
 - An unlocked runtime's settings only set where new agents start.
-- Each agent keeps its own environment, credentials, ports, and model. Moving an agent off a locked runtime also needs `organizationSettings:update`.
+- Each agent keeps its own environment, credentials, ports, and model. Moving an agent off a locked runtime also needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 - Saving is refused, naming the agents, when the new settings would no longer work with an agent's model. Change that agent's model first.
 
 ### Update the Image

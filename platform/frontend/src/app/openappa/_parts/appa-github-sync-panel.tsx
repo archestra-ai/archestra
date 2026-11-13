@@ -254,12 +254,19 @@ export function AppaGithubSyncPanel() {
                   />
                 ) : null}
                 {connected &&
-                query.data.templateFiles?.state === "unavailable" ? (
+                (query.data.templateFiles?.state === "unavailable" ||
+                  // An access token has no App to grant it Workflows: what
+                  // it lacks shows here, not as a Finish setup step.
+                  (!source.githubAppConfigId &&
+                    (query.data.templateFiles?.state === "needs_permission" ||
+                      !!query.data.templateFiles?.withheld?.length))) ? (
                   <GitSourceNotice>
                     <InlineNotice variant="warning">
                       <AlertTriangle aria-hidden />
                       <span className="font-medium">
-                        Repository files could not be checked
+                        {query.data.templateFiles.state === "unavailable"
+                          ? "Repository files could not be checked"
+                          : "Repository files could not be updated"}
                       </span>
                       <InlineNoticeText className="flex-1">
                         {query.data.templateFiles.detail ??
@@ -403,8 +410,8 @@ function SelfServiceRow({
           <p className="text-xs text-muted-foreground">
             A branch {hostLink(selfService.leftoverRule.url, "ruleset")} still
             requires the {selfService.leftoverRule.checkName} check. {appName}{" "}
-            posts it as skipped on every pull request until you remove the rule,
-            or turn self-service on again.
+            keeps posting it, so pull requests merge once it passes. Remove the
+            rule before you move or stop Git sync.
           </p>
         ) : null}
         {selfService.enabled ? (

@@ -21,6 +21,7 @@ import {
   checkDueAppaGithubSyncs,
   configureAppaGithubSync,
   createAppaGithubRepository,
+  getAppaGithubAppGrants,
   getAppaGithubSync,
   getAppaSelfService,
   getRepositoryProtection,
@@ -2779,8 +2780,15 @@ async function serveAutoMergeRepository(params: {
   testMerges?: boolean;
   /** The repository files update Archestra's sync opens, as pull request 6. */
   filesUpdate?: boolean;
+  /** A setup pull request an earlier version opened, as pull request 7. */
+  setupPull?: boolean;
+  /** Permissions the installation does not grant. */
+  refuse?: string[];
 }) {
-  await connectApp({ organizationId: params.organizationId });
+  await connectApp({
+    organizationId: params.organizationId,
+    ...(params.refuse ? { refuse: params.refuse } : {}),
+  });
   const root = `include = ["mcp/*.toml"]\n${RULES}`;
   const results = Object.fromEntries(
     [1, 2, 3, 4, 5].map((number) => [number, String(number + 4).repeat(40)]),
@@ -2873,6 +2881,27 @@ async function serveAutoMergeRepository(params: {
           sha: results[6],
           commit: {
             message: "Update the OpenAPPA policy repository files",
+            verification: { verified: true, reason: "valid" },
+          },
+          author: bot,
+          committer: { login: "web-flow", type: "User" },
+        },
+      ],
+    };
+  }
+  if (params.setupPull) {
+    // Opened by an earlier version, before setup named who asked for it.
+    results[7] = "cd".repeat(20);
+    repo.files[results[7]] = repo.files[FIRST] ?? {};
+    pulls[7] = {
+      ref: "archestra/openappa-setup-0a32964f-f7bb-4102-96d3-4caa3b0bf3d4",
+      user: bot,
+      files: ["appa.toml"],
+      commits: [
+        {
+          sha: results[7],
+          commit: {
+            message: "Seed current OpenAPPA policy",
             verification: { verified: true, reason: "valid" },
           },
           author: bot,
@@ -3831,6 +3860,72 @@ test("a first refused merge is pending only for the retry the next minute brings
   } finally {
     later.mockRestore();
   }
+});
+
+test("a setup pull request an earlier version opened, before setup named who asked for it, is judged on its policy rather than failed for want of a requester", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, runs } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+    setupPull: true,
+  });
+  await db
+    .update(schema.openappaGithubSyncTable)
+    .set({ setupPullRequestNumber: 7 })
+    .where(eq(schema.openappaGithubSyncTable.organizationId, org.id));
+  await checkDueAppaGithubSyncs();
+  expect(runs.filter((run) => run.head_sha === results[7])).toEqual([
+    expect.objectContaining({ conclusion: "success" }),
+  ]);
+});
+
+test("a grants read lets a refused round of checks go once the App holds what the check needs, while it still lacks Workflows", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { runs } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+    refuse: ["workflows"],
+  });
+  // GitHub refuses the check: the round is held off for a while.
+  let refusing = true;
+  server.use(
+    http.post(`${REPO}/check-runs`, async ({ request }) => {
+      if (refusing)
+        return HttpResponse.json(
+          { message: "Resource not accessible by integration" },
+          { status: 403 },
+        );
+      runs.push((await request.json()) as (typeof runs)[number]);
+      return HttpResponse.json({ id: 1 }, { status: 201 });
+    }),
+  );
+  await checkDueAppaGithubSyncs();
+  refusing = false;
+  await checkDueAppaGithubSyncs();
+  expect(runs).toEqual([]);
+  // Checks is granted again; Workflows is still missing. The wizard's check
+  // again lets the next round post at once.
+  const grants = await getAppaGithubAppGrants(org.id);
+  expect(grants?.permissions).toContainEqual({
+    name: "workflows",
+    granted: false,
+  });
+  await checkDueAppaGithubSyncs();
+  expect(runs.length).toBeGreaterThan(0);
 });
 
 test("a merge GitHub refuses because someone merged or closed the pull request meanwhile completes gracefully, and a merge whose pull could not be queued is followed up the next minute", async ({

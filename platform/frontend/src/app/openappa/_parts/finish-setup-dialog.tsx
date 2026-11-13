@@ -65,7 +65,12 @@ export function finishSetupPieces(
   const urls = git.urls(source.repo);
   const files = status.templateFiles;
   const permissions: Permission[] = [];
-  if (files?.state === "needs_permission" || files?.withheld?.length)
+  // An App grants Workflows; a source read with an access token says what
+  // its token lacks on the card instead.
+  if (
+    source.githubAppConfigId &&
+    (files?.state === "needs_permission" || files?.withheld?.length)
+  )
     permissions.push("workflows");
   if (
     status.check?.state === "refused" ||

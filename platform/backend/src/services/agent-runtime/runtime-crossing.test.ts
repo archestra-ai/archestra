@@ -906,6 +906,42 @@ describe("model-facing runtime tools", () => {
       kind: "failed",
       reason: "failed",
     });
+
+    const outerConflictOrg = await makeOrganization();
+    const outerAdmin = await makeAdmin();
+    const outerMember = await makeUser();
+    await makeMember(outerAdmin.id, outerConflictOrg.id, { role: "admin" });
+    await makeMember(outerMember.id, outerConflictOrg.id, { role: "member" });
+    const outerAgent = await makeAgent({
+      organizationId: outerConflictOrg.id,
+      authorId: outerAdmin.id,
+      runtime: runtimeConfig(),
+    });
+    await releasedSpawn(outerConflictOrg.id);
+    vi.spyOn(startTask, "startDetachedAgentTask").mockRejectedValueOnce(
+      new ApiError(409, "GitHub connection is busy. Try again shortly."),
+    );
+
+    const outerConflictResult = await startDelegatedTask({
+      agentId: outerAgent.id,
+      message: "Do the work",
+      context: {
+        agent: { id: outerAgent.id, name: outerAgent.name },
+        userId: outerMember.id,
+        organizationId: outerConflictOrg.id,
+        openappaRuntimeCall: {
+          session: proofSession(outerConflictOrg.id),
+          toolCallId: "call-1",
+          spawn: true,
+        },
+      },
+    });
+
+    expect(outerConflictResult.isError).toBe(true);
+    expect(await recordedLaunch(outerConflictOrg.id)).toEqual({
+      kind: "failed",
+      reason: "failed",
+    });
   });
 
   test("a parent gets only the exact admitted turn value", async ({

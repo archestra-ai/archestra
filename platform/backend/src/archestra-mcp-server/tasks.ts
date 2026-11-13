@@ -432,7 +432,7 @@ async function launchDelegatedTask(params: {
       return failedLaunch(
         error.statusCode === 403
           ? "not_allowed"
-          : error.statusCode >= 500
+          : error.statusCode >= 500 || error.statusCode === 409
             ? "failed"
             : "invalid_request",
         errorResult(error.message),

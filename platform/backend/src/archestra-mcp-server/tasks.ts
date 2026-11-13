@@ -122,6 +122,7 @@ import {
 import {
   agentCredentialSetupUrl,
   catchError,
+  credentialsNeededMessage,
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
@@ -951,7 +952,11 @@ async function launchDelegatedTask(params: {
       throw error;
     }
     if (preflight.missing.length > 0) {
-      return credentialsNeededLaunch(agent.id, preflight.missing);
+      return await credentialsNeededLaunch(
+        context,
+        agent.id,
+        preflight.missing,
+      );
     }
     if (preflight.misconfigured.length > 0) {
       return failedLaunch(
@@ -968,7 +973,11 @@ async function launchDelegatedTask(params: {
     } catch (error) {
       const needed = missingCredentialsFrom(error);
       if (needed) {
-        return credentialsNeededLaunch(needed.agentId, needed.missing);
+        return await credentialsNeededLaunch(
+          context,
+          needed.agentId,
+          needed.missing,
+        );
       }
       if (error instanceof ApiError) {
         return failedLaunch("model_unready", errorResult(error.message));
@@ -1090,7 +1099,7 @@ async function launchDelegatedTask(params: {
     await restoreConsumedGrants?.();
     const needed = missingCredentialsFrom(error);
     if (needed) {
-      return credentialsNeededLaunch(needed.agentId, needed.missing);
+      return credentialsNeededLaunch(context, needed.agentId, needed.missing);
     }
     if (error instanceof SharedCredentialAccessDeniedError) {
       return failedLaunch("credentials_admin_only", errorResult(error.message));
@@ -2165,7 +2174,14 @@ const registry = defineArchestraTools([
       } catch (error) {
         const needed = missingCredentialsFrom(error);
         if (needed) {
-          return credentialsNeededResult(needed.agentId, needed.missing);
+          const posted = await postCredentialsNeededToThread(
+            context,
+            needed.agentId,
+            needed.missing,
+          );
+          return credentialsNeededResult(needed.agentId, needed.missing, {
+            posted,
+          });
         }
         const refused = crossingRefusal(error);
         if (refused) return errorResult(refused);
@@ -2601,23 +2617,67 @@ function tooLarge(bytes: number): string {
  */
 function credentialsNeededResult(
   agentId: string,
-  missing: Array<{ key: string; label: string; description?: string }>,
+  missing: MissingCredentialEntry[],
+  options: { posted?: boolean } = {},
 ) {
   const url = agentCredentialSetupUrl(
     agentId,
     missing.map(({ key }) => key),
   );
-  return errorResult(
-    `This Agent's Agent Runtime needs credentials you have not set up yet:\n${missing
-      .map(
-        (entry) =>
-          `- ${entry.label} (${entry.key})${entry.description ? `: ${entry.description}` : ""}`,
-      )
-      .join(
-        "\n",
-      )}\n\nPut this link in your reply text, never inside a question form, so the user can add them, then start the run again: ${url}`,
-  );
+  const heading = missing.every((entry) => entry.reconnect)
+    ? "This Agent's Agent Runtime needs the user to connect these again (their stored connection no longer works):"
+    : "This Agent's Agent Runtime needs credentials you have not set up yet:";
+  const list = missing
+    .map(
+      (entry) =>
+        `- ${entry.label} (${entry.key})${entry.reconnect ? " [connect again]" : ""}${entry.description ? `: ${entry.description}` : ""}`,
+    )
+    .join("\n");
+  const instruction = options.posted
+    ? `The setup link was already posted in the chat thread: ${url}\nDo not post it again; tell the user to use it, then start the run again.`
+    : `Put this link in your reply text, never inside a question form, so the user can add them, then start the run again: ${url}`;
+  return errorResult(`${heading}\n${list}\n\n${instruction}`);
 }
+
+/**
+ * Posts the setup link straight into the chat thread the caller is answering,
+ * so the person gets it whatever the model does with the tool result. Returns
+ * whether it was posted.
+ */
+async function postCredentialsNeededToThread(
+  context: Pick<
+    ArchestraContext,
+    "chatOpsBindingId" | "chatOpsThreadId" | "chatOpsPinnedAgentId"
+  >,
+  agentId: string,
+  missing: MissingCredentialEntry[],
+): Promise<boolean> {
+  if (!context.chatOpsBindingId || !context.chatOpsThreadId) return false;
+  try {
+    const { chatOpsManager } = await import("@/agents/chatops/chatops-manager");
+    const agent = await AgentModel.findById(agentId);
+    return await chatOpsManager.notifyBindingThread({
+      bindingId: context.chatOpsBindingId,
+      threadId: context.chatOpsThreadId,
+      pinnedAgentId: context.chatOpsPinnedAgentId,
+      agentName: agent?.name,
+      text: credentialsNeededMessage({ agentId, missing }),
+    });
+  } catch (error) {
+    logger.warn(
+      { err: error, agentId },
+      "Failed to post the credential setup link to the chat thread",
+    );
+    return false;
+  }
+}
+
+type MissingCredentialEntry = {
+  key: string;
+  label: string;
+  description?: string;
+  reconnect?: boolean;
+};
 
 function buildRunThread(
   row: Awaited<ReturnType<typeof AgentRunModel.listDashboard>>[number],
@@ -2654,7 +2714,7 @@ function countRuns(runs: Array<{ state: string }>) {
 /** The missing-credential list when the error is that refusal; null otherwise. */
 function missingCredentialsFrom(error: unknown): {
   agentId: string;
-  missing: Array<{ key: string; label: string; description?: string }>;
+  missing: MissingCredentialEntry[];
 } | null {
   if (
     error &&
@@ -2666,7 +2726,7 @@ function missingCredentialsFrom(error: unknown): {
   ) {
     return error as {
       agentId: string;
-      missing: Array<{ key: string; label: string; description?: string }>;
+      missing: MissingCredentialEntry[];
     };
   }
   return null;
@@ -2788,13 +2848,18 @@ function failedLaunch(
   return { result, outcome: { kind: "failed", reason, ...details } };
 }
 
-function credentialsNeededLaunch(
+async function credentialsNeededLaunch(
+  context: Pick<
+    ArchestraContext,
+    "chatOpsBindingId" | "chatOpsThreadId" | "chatOpsPinnedAgentId"
+  >,
   agentId: string,
-  missing: Array<{ key: string; label: string; description?: string }>,
+  missing: MissingCredentialEntry[],
 ) {
+  const posted = await postCredentialsNeededToThread(context, agentId, missing);
   return failedLaunch(
     "credentials_needed",
-    credentialsNeededResult(agentId, missing),
+    credentialsNeededResult(agentId, missing, { posted }),
     {
       setup_url: agentCredentialSetupUrl(
         agentId,

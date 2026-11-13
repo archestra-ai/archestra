@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
 import {
+  credentialsNeededMessage,
   deduplicateLabels,
   fencedBlock,
   formatAssignmentSummary,
@@ -368,5 +369,47 @@ describe("Zod error text never echoes the rejected value", () => {
     );
     expect(message).not.toContain(rejected);
     expect(message).toContain('set "type" to one of: "base64", "text"');
+  });
+});
+
+describe("credentialsNeededMessage", () => {
+  const agentId = "00000000-0000-4000-8000-000000000001";
+
+  test("asks to reconnect a connection that stopped working, with one link", () => {
+    const text = credentialsNeededMessage({
+      agentId,
+      missing: [{ key: "GITHUB_TOKEN", label: "GitHub", reconnect: true }],
+    });
+    expect(text).toContain("Your GitHub connection no longer works");
+    expect(text).toMatch(
+      /\[Reconnect\]\(\S+\/agents\/00000000-0000-4000-8000-000000000001\?setup=credentials&keys=GITHUB_TOKEN\), then send your message again\.$/,
+    );
+    expect(text).not.toContain("have not set up yet");
+  });
+
+  test("names both what to add and what to reconnect", () => {
+    const text = credentialsNeededMessage({
+      agentId,
+      missing: [
+        { key: "CLAUDE_CODE_OAUTH_TOKEN", label: "Claude Code token" },
+        { key: "GITHUB_TOKEN", label: "GitHub", reconnect: true },
+      ],
+    });
+    expect(text).toContain("have not set up yet: Claude Code token.");
+    expect(text).toContain("Your GitHub connection no longer works");
+    expect(text).toContain("[Set up credentials](");
+    expect(text).toContain("keys=CLAUDE_CODE_OAUTH_TOKEN%2CGITHUB_TOKEN");
+  });
+
+  test("tells a running run's owner it picks up the new connection itself", () => {
+    const text = credentialsNeededMessage({
+      agentId,
+      missing: [{ key: "GITHUB_TOKEN", label: "GitHub", reconnect: true }],
+      duringRun: true,
+    });
+    expect(text).toContain("stopped working during this run");
+    expect(text).toContain(
+      "The run uses the new connection as soon as it is saved.",
+    );
   });
 });

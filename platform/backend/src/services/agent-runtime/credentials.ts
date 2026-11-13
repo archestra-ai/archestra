@@ -10,7 +10,7 @@ import {
 } from "@/services/agent-runtime/runtime-credentials";
 import { CredentialAccess } from "@/services/credential-access";
 import { CredentialResolutionBatch } from "@/services/credentials";
-import { StaleGitHubUserConnectionError } from "@/services/github-user-connection";
+import { GitHubReconnectRequiredError } from "@/services/github-user-connection";
 import type {
   AgentRuntime,
   AgentRuntimeCredentialDeclaration,
@@ -153,14 +153,18 @@ export async function resolveAgentRuntimeCredentials(params: {
         continue;
       }
       const credential = declaration.credentialId
-        ? await resolvePersonalBatchCredential({
-            batch,
+        ? await resolvePersonalCredential(batch, {
             organizationId: params.organizationId,
+            scope: "personal",
             userId: params.userId,
             credentialId: declaration.credentialId,
             minimumValidityMs: 50 * 60_000,
           })
         : null;
+      if (credential === RECONNECT) {
+        missing.push({ ...toMissing(declaration), reconnect: true });
+        continue;
+      }
       const value = declaration.credentialId
         ? credential?.value
         : resolved.values[declaration.key];
@@ -318,19 +322,23 @@ export async function preflightAgentRuntimeCredentials(params: {
       const hasEphemeral =
         typeof effectiveEphemeral?.[declaration.key] === "string" &&
         effectiveEphemeral[declaration.key].length > 0;
+      const credential =
+        !hasEphemeral && declaration.credentialId
+          ? await resolvePersonalCredential(batch, {
+              organizationId: params.organizationId,
+              scope: "personal",
+              userId: params.userId,
+              credentialId: declaration.credentialId,
+            })
+          : null;
+      if (credential === RECONNECT) {
+        missing.push({ ...toMissing(declaration), reconnect: true });
+        continue;
+      }
       const connected =
         hasEphemeral ||
         (declaration.credentialId
-          ? Boolean(
-              (
-                await resolvePersonalBatchCredential({
-                  batch,
-                  organizationId: params.organizationId,
-                  userId: params.userId,
-                  credentialId: declaration.credentialId,
-                })
-              )?.value,
-            )
+          ? Boolean(credential?.value)
           : present.has(declaration.key));
       if (connected) {
         configured.push(declaration.key);
@@ -398,40 +406,6 @@ export class SharedCredentialAccessDeniedError extends ApiError {
       "Only admins can run this agent, because it uses an organization credential. Ask an admin to run it for you.",
     );
     this.name = "SharedCredentialAccessDeniedError";
-  }
-}
-
-async function resolvePersonalBatchCredential(params: {
-  batch: CredentialResolutionBatch;
-  organizationId: string;
-  userId: string;
-  credentialId: string;
-  minimumValidityMs?: number;
-}): Promise<{ value: string; expiresAt: number | null } | null> {
-  try {
-    return await params.batch.resolve({
-      organizationId: params.organizationId,
-      scope: "personal",
-      userId: params.userId,
-      credentialId: params.credentialId,
-      minimumValidityMs: params.minimumValidityMs,
-    });
-  } catch (error) {
-    // A rotated GitHub App clientId or revoked/expired refresh grant invalidates
-    // only the caller's personal authorization. Leave admin misconfiguration and
-    // upstream GitHub failures to propagate.
-    if (error instanceof StaleGitHubUserConnectionError) {
-      logger.info(
-        {
-          userId: params.userId,
-          credentialId: params.credentialId,
-          error: error.message,
-        },
-        "[agent-runtime] A personal GitHub connection can no longer be used",
-      );
-      return null;
-    }
-    throw error;
   }
 }
 
@@ -784,6 +758,26 @@ async function readSharedBag(
   }
   return secret.secret ?? {};
 }
+
+/**
+ * A personal value, or `RECONNECT` when the person's stored connection exists
+ * but no longer works. Other failures still propagate.
+ */
+async function resolvePersonalCredential(
+  batch: CredentialResolutionBatch,
+  params: Parameters<CredentialResolutionBatch["resolve"]>[0],
+): Promise<
+  Awaited<ReturnType<CredentialResolutionBatch["resolve"]>> | typeof RECONNECT
+> {
+  try {
+    return await batch.resolve(params);
+  } catch (error) {
+    if (error instanceof GitHubReconnectRequiredError) return RECONNECT;
+    throw error;
+  }
+}
+
+const RECONNECT = Symbol("reconnect");
 
 function toMissing(
   declaration: AgentRuntimeCredentialDeclaration,

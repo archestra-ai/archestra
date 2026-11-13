@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import config from "@/config";
@@ -327,87 +327,53 @@ test("a connected account joins the member roster of GitHub's deployed target", 
   }
 });
 
-test("treats a personal GitHub connection as disconnected when the backing GitHub App client ID rotates", async ({
-  makeAgent,
-}) => {
-  expect((await complete(await start())).statusCode).toBe(200);
+test("a connection made with a replaced GitHub App asks to connect again, even when the Agent marks it optional", async () => {
+  await complete(await start());
   await updateRuntimeCredentialDefinition({
     organizationId,
     key: "repository-app",
-    definition: { githubClientId: "rotated-client-id" },
+    definition: { githubClientId: "replacement-client" },
   });
-  const agent = await makeAgent({ organizationId });
-
-  const optionalRuntime = {
-    agentId: agent.id,
+  const runtime = {
+    agentId: randomUUID(),
     secretId: null,
     credentials: [
       {
         key: "GITHUB_TOKEN",
-        label: "GitHub token",
         scope: "per_user" as const,
         credentialId: "github-user",
+        label: "GitHub",
         required: false,
       },
     ],
   };
-  await expect(
-    preflightAgentRuntimeCredentials({
-      runtime: optionalRuntime,
-      organizationId,
-      userId: user.id,
-    }),
-  ).resolves.toEqual({ configured: [], missing: [], misconfigured: [] });
-  await expect(
-    resolveAgentRuntimeCredentials({
-      runtime: optionalRuntime,
-      organizationId,
-      userId: user.id,
-    }),
-  ).resolves.toEqual({
-    env: {},
-    renewableCredentials: {},
-    missing: [],
-    misconfigured: [],
-  });
 
-  const requiredRuntime = {
-    ...optionalRuntime,
-    credentials: [{ ...optionalRuntime.credentials[0], required: true }],
-  };
-  await expect(
-    preflightAgentRuntimeCredentials({
-      runtime: requiredRuntime,
-      organizationId,
-      userId: user.id,
-    }),
-  ).resolves.toMatchObject({
-    configured: [],
-    missing: [
-      {
-        key: "GITHUB_TOKEN",
-        credentialId: "github-user",
-        canConnect: true,
-      },
-    ],
-    misconfigured: [],
+  const check = await preflightAgentRuntimeCredentials({
+    runtime,
+    organizationId,
+    userId: user.id,
   });
-  await expect(
-    resolveAgentRuntimeCredentials({
-      runtime: requiredRuntime,
-      organizationId,
-      userId: user.id,
+  expect(check.configured).toEqual([]);
+  expect(check.missing).toEqual([
+    expect.objectContaining({
+      key: "GITHUB_TOKEN",
+      label: "GitHub",
+      reconnect: true,
     }),
-  ).resolves.toMatchObject({
-    env: {},
-    missing: [{ key: "GITHUB_TOKEN", credentialId: "github-user" }],
-    misconfigured: [],
+  ]);
+
+  const launch = await resolveAgentRuntimeCredentials({
+    runtime,
+    organizationId,
+    userId: user.id,
   });
+  expect(launch.env.GITHUB_TOKEN).toBeUndefined();
+  expect(launch.missing).toEqual([
+    expect.objectContaining({ key: "GITHUB_TOKEN", reconnect: true }),
+  ]);
 });
 
-test("treats a revoked refresh token as disconnected, while surfacing admin misconfiguration and GitHub outages", async ({
-  makeAgent,
-}) => {
+test("asks to reconnect on a stale refresh grant while surfacing admin misconfiguration and GitHub outages", async () => {
   expect((await complete(await start())).statusCode).toBe(200);
   const owner = {
     organizationId,
@@ -423,58 +389,80 @@ test("treats a revoked refresh token as disconnected, while surfacing admin misc
     value: JSON.stringify({ ...stored, expiresAt: Date.now() - 1 }),
   });
 
-  const agent = await makeAgent({ organizationId });
-  const optionalRuntime = {
-    agentId: agent.id,
+  const runtime = {
+    agentId: randomUUID(),
     secretId: null,
     credentials: [
       {
         key: "GITHUB_TOKEN",
-        label: "GitHub token",
         scope: "per_user" as const,
         credentialId: "github-user",
+        label: "GitHub",
         required: false,
       },
     ],
   };
-  const requiredRuntime = {
-    ...optionalRuntime,
-    credentials: [{ ...optionalRuntime.credentials[0], required: true }],
-  };
 
-  // 1. Revoked/expired refresh grant -> disconnected (null / missing with reconnect).
+  for (const oauthError of [
+    "bad_refresh_token",
+    "invalid_grant",
+    "expired_token",
+  ]) {
+    server.use(
+      http.post("https://github.com/login/oauth/access_token", () =>
+        HttpResponse.json({
+          error: oauthError,
+          error_description:
+            "The refresh token passed is incorrect or expired.",
+        }),
+      ),
+    );
+    const check = await preflightAgentRuntimeCredentials({
+      runtime,
+      organizationId,
+      userId: user.id,
+    });
+    expect(check.missing).toEqual([
+      expect.objectContaining({
+        key: "GITHUB_TOKEN",
+        label: "GitHub",
+        reconnect: true,
+      }),
+    ]);
+    const launch = await resolveAgentRuntimeCredentials({
+      runtime,
+      organizationId,
+      userId: user.id,
+    });
+    expect(launch.env.GITHUB_TOKEN).toBeUndefined();
+    expect(launch.missing).toEqual([
+      expect.objectContaining({ key: "GITHUB_TOKEN", reconnect: true }),
+    ]);
+  }
+
+  // Invalid OAuth client credentials on the GitHub App -> surfaces 400 instead of reconnect.
   server.use(
     http.post("https://github.com/login/oauth/access_token", () =>
       HttpResponse.json({
-        error: "bad_refresh_token",
-        error_description: "The refresh token passed is incorrect or expired.",
+        error: "incorrect_client_credentials",
+        error_description:
+          "The client_id and/or client_secret passed are incorrect.",
       }),
     ),
   );
   await expect(
     preflightAgentRuntimeCredentials({
-      runtime: optionalRuntime,
+      runtime,
       organizationId,
       userId: user.id,
     }),
-  ).resolves.toEqual({ configured: [], missing: [], misconfigured: [] });
-  await expect(
-    preflightAgentRuntimeCredentials({
-      runtime: requiredRuntime,
-      organizationId,
-      userId: user.id,
-    }),
-  ).resolves.toMatchObject({
-    missing: [
-      {
-        key: "GITHUB_TOKEN",
-        credentialId: "github-user",
-        canConnect: true,
-      },
-    ],
+  ).rejects.toMatchObject({
+    statusCode: 400,
+    message:
+      "GitHub authorization failed. Connect GitHub again and ensure expiring user tokens are enabled.",
   });
 
-  // 2. Transient GitHub 502 on refresh -> propagates instead of silently dropping GITHUB_TOKEN.
+  // Transient GitHub 502 on refresh -> surfaces 502 instead of falsely asking to reconnect.
   server.use(
     http.post("https://github.com/login/oauth/access_token", () =>
       HttpResponse.json({ message: "Bad Gateway" }, { status: 502 }),
@@ -482,7 +470,7 @@ test("treats a revoked refresh token as disconnected, while surfacing admin misc
   );
   await expect(
     resolveAgentRuntimeCredentials({
-      runtime: optionalRuntime,
+      runtime,
       organizationId,
       userId: user.id,
     }),
@@ -491,7 +479,7 @@ test("treats a revoked refresh token as disconnected, while surfacing admin misc
     message: "Could not exchange GitHub authorization token",
   });
 
-  // 3. Admin misconfiguration (missing client secret / missing client ID) -> propagates 400.
+  // Missing admin OAuth client secret / missing OAuth client ID -> surfaces 400.
   await setRuntimeCredentialConnection({
     organizationId,
     userId: user.id,
@@ -502,7 +490,7 @@ test("treats a revoked refresh token as disconnected, while surfacing admin misc
   });
   await expect(
     preflightAgentRuntimeCredentials({
-      runtime: requiredRuntime,
+      runtime,
       organizationId,
       userId: user.id,
     }),
@@ -518,7 +506,7 @@ test("treats a revoked refresh token as disconnected, while surfacing admin misc
   });
   await expect(
     preflightAgentRuntimeCredentials({
-      runtime: optionalRuntime,
+      runtime,
       organizationId,
       userId: user.id,
     }),

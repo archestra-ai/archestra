@@ -578,18 +578,41 @@ describe("protected runtime protocol", () => {
       "failed",
     );
 
-    const adminOnlyOrg = await makeOrganization();
-    const adminOnlyLaunch = await releasedLaunch(adminOnlyOrg.id, {
-      kind: "failed",
-      reason: "credentials_admin_only",
-    });
-    const adminOnlyOutcome = await adminOnlyLaunch.plugin.onToolResults({
-      ...adminOnlyLaunch.context,
-      toolResults: [reported],
-    });
-    expect(adminOnlyOutcome?.toolResultUpdates["runtime-call"]).toBe(
-      "No runtime was started. Only admins can run this Agent, because it uses an organization credential. Ask an admin to run it for you.",
-    );
+    for (const [reason, expectedMessage] of [
+      [
+        "credentials_admin_only",
+        "No runtime was started. Only admins can run this Agent, because it uses an organization credential. Ask an admin to run it for you.",
+      ],
+      [
+        "model_unready",
+        "No runtime was started. This Agent's model or provider credential is not set up for your account.",
+      ],
+      [
+        "backend_unavailable",
+        "No runtime was started. The Agent Runtime backend is not available right now.",
+      ],
+      [
+        "not_allowed",
+        "No runtime was started. This caller is not allowed to start a run on the requested Agent.",
+      ],
+      [
+        "invalid_request",
+        "No runtime was started. The launch request parameters or limits are not valid for this Agent.",
+      ],
+    ] as const) {
+      const reasonOrg = await makeOrganization();
+      const reasonLaunch = await releasedLaunch(reasonOrg.id, {
+        kind: "failed",
+        reason,
+      });
+      const reasonOutcome = await reasonLaunch.plugin.onToolResults({
+        ...reasonLaunch.context,
+        toolResults: [reported],
+      });
+      expect(reasonOutcome?.toolResultUpdates["runtime-call"]).toBe(
+        expectedMessage,
+      );
+    }
   });
 
   test("gives the model no handle when the gateway recorded no launch", async ({

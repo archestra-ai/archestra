@@ -11,10 +11,16 @@ import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-defini
 import VerificationModel from "@/models/verification";
 import { ApiError, GITHUB_COM_API_URL, GitHubUserIdSchema } from "@/types";
 
-export class StaleGitHubUserConnectionError extends ApiError {
+/**
+ * The person's stored GitHub connection exists but can no longer be used: the
+ * organization swapped its GitHub App, or GitHub refused the refresh. Only
+ * connecting again fixes it, so callers that can reach the person turn this
+ * into a reconnect link instead of a generic failure.
+ */
+export class GitHubReconnectRequiredError extends ApiError {
   constructor(message: string) {
     super(400, message);
-    this.name = "StaleGitHubUserConnectionError";
+    this.name = "GitHubReconnectRequiredError";
   }
 }
 
@@ -140,7 +146,7 @@ class GitHubUserConnectionManager {
       const token = StoredTokenSchema.parse(JSON.parse(raw));
       const app = await this.app(owner);
       if (token.clientId !== app.clientId)
-        throw new StaleGitHubUserConnectionError(
+        throw new GitHubReconnectRequiredError(
           "The GitHub App changed. Connect GitHub again.",
         );
       if (token.expiresAt - Date.now() > (owner.minimumValidityMs ?? 60_000))
@@ -243,7 +249,7 @@ class GitHubUserConnectionManager {
         oauthError.success &&
         STALE_REFRESH_OAUTH_ERRORS.has(oauthError.data.error)
       ) {
-        throw new StaleGitHubUserConnectionError(
+        throw new GitHubReconnectRequiredError(
           "GitHub authorization expired or was revoked. Connect GitHub again.",
         );
       }

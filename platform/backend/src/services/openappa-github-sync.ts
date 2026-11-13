@@ -2115,8 +2115,6 @@ type CheckedPull = {
   ref?: string;
   /** The commit checked: GitHub's merge result when it has one, else the head. */
   result: string;
-  /** The host's number for it, where the host gives one. */
-  number?: number;
   post: (outcome: PullOutcome) => Promise<void>;
   /**
    * The files Git sync reads that the pull request changes, and, for one
@@ -2248,7 +2246,7 @@ async function githubPullRequests(
         ? new CheckRefused(status)
         : new ApiError(502, `GitHub returned HTTP ${status}`),
   });
-  const checked = pulls.flatMap((pull) => {
+  const checked = pulls.flatMap((pull): CheckedPull[] => {
     const head = pull.head?.sha;
     if (!head || !/^[a-f0-9]{40}$/.test(head)) return [];
     const merged = pull.merge_commit_sha;
@@ -2264,7 +2262,6 @@ async function githubPullRequests(
           postGithubCheck({ base, token, head, appId, outcome, checkName }),
         ...(number
           ? {
-              number,
               judge: () =>
                 judgeGithubPull({
                   source,

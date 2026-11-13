@@ -2758,30 +2758,31 @@ async function serveAutoMergeRepository(params: {
   const results = Object.fromEntries(
     [1, 2, 3, 4, 5].map((number) => [number, String(number + 4).repeat(40)]),
   ) as Record<number, string>;
-  const repo = {
-    head: FIRST,
-    files: {
-      [FIRST]: { "appa.toml": root, "mcp/payments_api.toml": REFUNDS },
-      [results[1] as string]: {
-        "appa.toml": root,
-        "mcp/payments_api.toml": INVOICES,
+  const repo: { head: string; files: Record<string, Record<string, string>> } =
+    {
+      head: FIRST,
+      files: {
+        [FIRST]: { "appa.toml": root, "mcp/payments_api.toml": REFUNDS },
+        [results[1] as string]: {
+          "appa.toml": root,
+          "mcp/payments_api.toml": INVOICES,
+        },
+        // Rules for another server's tools: the policy check fails.
+        [results[2] as string]: {
+          "appa.toml": root,
+          "mcp/payments_api.toml": `${REFUNDS}\n[[policy.tool]]\nname = "helpdesk__close_ticket"\ndelta = {}\n`,
+        },
+        [results[3] as string]: {
+          "appa.toml": root,
+          "mcp/payments_api.toml": INVOICES,
+        },
+        [results[4] as string]: { "appa.toml": root },
+        [results[5] as string]: {
+          "appa.toml": root,
+          "mcp/payments_api.toml": INVOICES,
+        },
       },
-      // Rules for another server's tools: the policy check fails.
-      [results[2] as string]: {
-        "appa.toml": root,
-        "mcp/payments_api.toml": `${REFUNDS}\n[[policy.tool]]\nname = "helpdesk__close_ticket"\ndelta = {}\n`,
-      },
-      [results[3] as string]: {
-        "appa.toml": root,
-        "mcp/payments_api.toml": INVOICES,
-      },
-      [results[4] as string]: { "appa.toml": root },
-      [results[5] as string]: {
-        "appa.toml": root,
-        "mcp/payments_api.toml": INVOICES,
-      },
-    },
-  };
+    };
   serveRepository(repo);
   await syncAppaGithubPolicy(params.organizationId);
   const bot = { id: 900, login: "acme-guardrails[bot]", type: "Bot" };
@@ -2831,17 +2832,14 @@ async function serveAutoMergeRepository(params: {
       files: ["appa.toml"],
       commits: [signed(results[4] as string)],
     },
-    ...(params.another
-      ? {
-          5: {
-            ref: "archestra/openappa-server-payments_api-5e6f7a8b",
-            user: bot,
-            files: ["mcp/payments_api.toml"],
-            commits: [signed(results[5] as string)],
-          },
-        }
-      : {}),
   };
+  if (params.another)
+    pulls[5] = {
+      ref: "archestra/openappa-server-payments_api-5e6f7a8b",
+      user: bot,
+      files: ["mcp/payments_api.toml"],
+      commits: [signed(results[5] as string)],
+    };
   const runs: Array<{ head_sha: string; conclusion: string }> = [];
   const merges: Array<{ number: number; sha: string; merge_method: string }> =
     [];

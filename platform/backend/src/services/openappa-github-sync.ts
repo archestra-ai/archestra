@@ -66,6 +66,7 @@ import {
   githubAppLogin,
   githubAppProfile,
   hasRepositoryIncludeGlob,
+  keptSetupCommit,
   MissingGithubPermission,
   openappaRepositoryIncludes,
   type RepositorySource,
@@ -1430,6 +1431,19 @@ async function postSetupPendingChecks(row: SyncRow) {
     return;
   }
   if (!read.ok || !read.found) return;
+  // Only the commit Archestra opened the request with: a commit pushed onto
+  // its branch since would merge unchecked under the skip.
+  const { api } = await resolveOpenAppaGithubAccess(source, {
+    pull_requests: "read",
+  });
+  const kept = await keptSetupCommit({
+    organizationId: row.organizationId,
+    host: "github",
+    api,
+    repo: source.repo,
+    number: row.setupPullRequestNumber ?? 0,
+  });
+  if (!kept) return;
   let pulls: CheckedPull[];
   try {
     pulls = await githubPullRequests(source);
@@ -1453,7 +1467,9 @@ async function postSetupPendingChecks(row: SyncRow) {
     reason: `${archestraMcpBranding.appName} checks this repository's pull requests once its setup pull request has merged and the policy is pulled. A branch rule already requires this check${read.url ? ` (${read.url})` : ""}, so it is posted as skipped until then.`,
   };
   for (const pull of pulls.filter(
-    (candidate) => candidate.number === row.setupPullRequestNumber,
+    (candidate) =>
+      candidate.number === row.setupPullRequestNumber &&
+      candidate.head === kept,
   )) {
     const key = checkKey(
       "setup-posted",

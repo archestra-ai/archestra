@@ -1859,6 +1859,7 @@ describe("APPA GitHub sync", () => {
     const opened: unknown[] = [];
     let rules: Array<Record<string, unknown>> = [];
     const runs: Array<Record<string, unknown>> = [];
+    let setupHead = SETUP_COMMIT;
     server.use(
       http.get("https://api.github.com/repos/example/other-policy/pulls", () =>
         HttpResponse.json(
@@ -1867,7 +1868,7 @@ describe("APPA GitHub sync", () => {
             : [
                 {
                   number: 8,
-                  head: { sha: SETUP_COMMIT },
+                  head: { sha: setupHead },
                   merge_commit_sha: null,
                 },
                 // Someone else's pull request into the branch meanwhile.
@@ -2024,6 +2025,12 @@ describe("APPA GitHub sync", () => {
         }),
       }),
     ]);
+    // A commit pushed onto the setup branch since: not Archestra's commit,
+    // so it gets no skip and waits under the rule.
+    setupHead = "f".repeat(40);
+    await checkDueAppaGithubSyncs();
+    expect(runs).toHaveLength(1);
+    setupHead = SETUP_COMMIT;
     // Merged and pulled, the include is in place.
     pull = { merged: true, state: "closed" };
     await syncAppaGithubPolicy(organizationId);

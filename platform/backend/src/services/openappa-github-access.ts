@@ -785,6 +785,16 @@ export async function rememberSetupCommit(
   }
 }
 
+/** The commit a setup request was opened with, as kept; null once forgotten. */
+export async function keptSetupCommit(
+  params: SetupRequest,
+): Promise<string | null> {
+  const kept = await cacheManager
+    .get<string>(setupCommitKey(params))
+    .catch(() => undefined);
+  return typeof kept === "string" && /^[a-f0-9]{40}$/.test(kept) ? kept : null;
+}
+
 /** A setup request: one organization's, on one host, by repository and number. */
 type SetupRequest = {
   organizationId: string;

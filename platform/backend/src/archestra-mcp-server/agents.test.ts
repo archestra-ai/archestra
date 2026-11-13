@@ -1,4 +1,5 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
+
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_MCP_SERVER_NAME,
@@ -28,6 +29,7 @@ import {
   OrganizationModel,
   ToolModel,
 } from "@/models";
+import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
@@ -1536,6 +1538,52 @@ describe("agent runtime and model tools", () => {
     );
     expect(created?.accessAllTools).toBe(true);
     expect(created?.systemPrompt).toContain("You are Claude Code");
+  });
+
+  test("create_agent starts from an administrator's runtime settings and keeps locked ones", async () => {
+    const saveClaudeCode = (revision: number, locked: boolean) =>
+      AgentRuntimeTemplateModel.saveSettings({
+        organizationId,
+        settings: {
+          revision,
+          templates: [],
+          builtIns: {
+            "claude-code": {
+              locked,
+              settings: { ttlHours: 6, idleTimeoutMinutes: 30 },
+            },
+          },
+        },
+        popularAgentOverrides: null,
+      });
+    const create = async (name: string) =>
+      findCreated(
+        await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+          name,
+          runtime: { template: "claude-code", idleTimeoutMinutes: 240 },
+        }),
+      );
+
+    await saveClaudeCode(0, false);
+    expect((await create("Defaults"))?.runtime).toMatchObject({
+      ttlHours: 6,
+      idleTimeoutMinutes: 240,
+    });
+
+    await saveClaudeCode(1, true);
+    const locked = await create("Locked");
+    expect(locked?.runtime).toMatchObject({
+      ttlHours: 6,
+      idleTimeoutMinutes: 30,
+    });
+    const edited = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: locked?.id,
+      runtime: { template: "claude-code", ttlHours: 2 },
+    });
+    expect(edited.isError).not.toBe(true);
+    expect(
+      (await AgentModel.findById(locked?.id as string))?.runtime,
+    ).toMatchObject({ ttlHours: 6, idleTimeoutMinutes: 30 });
   });
 
   test("create_agent applies runtime overrides on top of a template", async ({

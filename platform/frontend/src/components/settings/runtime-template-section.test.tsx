@@ -21,7 +21,10 @@ import {
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { makeOrganization } from "@/mocks/data/organization";
+import {
+  agentRuntimeTiersSeed,
+  makeOrganization,
+} from "@/mocks/data/organization";
 import { RuntimeTemplateSection } from "./runtime-template-section";
 
 vi.mock("@/lib/auth/auth.query");
@@ -50,6 +53,9 @@ const server = setupServer(
   http.get("http://localhost:9000/api/credentials", () =>
     HttpResponse.json([]),
   ),
+  http.get("http://localhost:9000/api/organization/agent-runtime-tiers", () =>
+    HttpResponse.json(agentRuntimeTiersSeed),
+  ),
   http.put(
     "http://localhost:9000/api/agent-runtime-templates/settings",
     async ({ request }) => {
@@ -68,7 +74,11 @@ const server = setupServer(
         );
       settings = {
         revision: body.revision + 1,
-        templates: body.templates,
+        templates: body.templates.map((item) => ({
+          ...item,
+          locked: item.locked ?? false,
+        })),
+        builtIns: body.builtIns ?? {},
         popularAgentOverrides: body.popularAgentOverrides,
       };
       overrides = body.popularAgentOverrides;
@@ -80,7 +90,12 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterAll(() => server.close());
 afterEach(() => server.resetHandlers());
 beforeEach(() => {
-  settings = { revision: 0, templates: [], popularAgentOverrides: null };
+  settings = {
+    revision: 0,
+    templates: [],
+    builtIns: {},
+    popularAgentOverrides: null,
+  };
   overrides = null;
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
   vi.mocked(useSession).mockReturnValue({
@@ -117,6 +132,45 @@ function mount() {
 }
 
 describe("RuntimeTemplateSection", () => {
+  it("edits and locks a built-in runtime's settings", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(
+      await screen.findByRole("button", { name: "Actions for Claude Code" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit Claude Code" });
+    await user.click(
+      within(dialog).getByRole("combobox", { name: "Claude account" }),
+    );
+    await user.click(screen.getByRole("option", { name: "A company API key" }));
+    await user.type(
+      within(dialog).getByRole("spinbutton", { name: /Maximum duration/ }),
+      "8",
+    );
+    await user.click(
+      within(dialog).getByRole("switch", { name: "Lock settings" }),
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Update runtime" }),
+    );
+    expect(
+      within(screen.getByRole("list", { name: "Agent Runtimes" })).getByText(
+        "Locked",
+      ),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(settings.builtIns["claude-code"]).toMatchObject({
+        locked: true,
+        settings: {
+          ttlHours: 8,
+          claudeCode: { authentication: "provider" },
+        },
+      }),
+    );
+  });
+
   it("keeps sparse legacy saved positions ahead of unpositioned built-ins", async () => {
     settings.popularAgentOverrides = { codex: { position: 3 } };
     mount();
@@ -240,6 +294,7 @@ describe("RuntimeTemplateSection", () => {
         description: "Development",
         icon: null,
         hidden: false,
+        locked: false,
         position: 0,
         runtime: {
           ...buildCustomAgentRuntime({ image: "registry.example.com/dev:v1" }),
@@ -261,8 +316,8 @@ describe("RuntimeTemplateSection", () => {
     await user.click(screen.getByRole("button", { name: "Update template" }));
     await user.click(screen.getByRole("button", { name: "Actions for Codex" }));
     expect(
-      screen.queryByRole("menuitem", { name: "Edit runtime" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("menuitem", { name: "Edit runtime" }),
+    ).toBeInTheDocument();
     await user.click(
       screen.getByRole("menuitem", { name: "Remove from list" }),
     );
@@ -356,6 +411,7 @@ describe("RuntimeTemplateSection", () => {
       description: "Existing configuration",
       icon: null,
       hidden: false,
+      locked: false,
       position,
       runtime: {
         ...buildCustomAgentRuntime({

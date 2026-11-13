@@ -100415,6 +100415,10 @@
                         "minimum": 0,
                         "maximum": 1000
                       },
+                      "locked": {
+                        "default": false,
+                        "type": "boolean"
+                      },
                       "image": {
                         "type": "string"
                       }
@@ -100426,7 +100430,360 @@
                       "icon",
                       "hidden",
                       "position",
+                      "locked",
                       "image"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
+    "/api/agent-runtime-templates/built-ins": {
+      "get": {
+        "operationId": "listBuiltInAgentRuntimeSettings",
+        "tags": [
+          "Agents"
+        ],
+        "description": "List the settings administrators chose for the maintained runtimes, and which of them are locked.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "locked": {
+                        "type": "boolean"
+                      },
+                      "settings": {
+                        "type": "object",
+                        "properties": {
+                          "inferenceProtocol": {
+                            "type": "string",
+                            "enum": [
+                              "openai_responses",
+                              "openai_chat",
+                              "anthropic"
+                            ]
+                          },
+                          "steerMode": {
+                            "type": "string",
+                            "enum": [
+                              "pipe",
+                              "tmux_keys"
+                            ]
+                          },
+                          "tier": {
+                            "nullable": true,
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 32
+                          },
+                          "maxTier": {
+                            "nullable": true,
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 32
+                          },
+                          "ttlHours": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 720
+                          },
+                          "maxCostUsd": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100000
+                          },
+                          "idleTimeoutMinutes": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1440
+                          },
+                          "claudeCode": {
+                            "type": "object",
+                            "properties": {
+                              "authentication": {
+                                "type": "string",
+                                "enum": [
+                                  "provider",
+                                  "subscription"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "authentication"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "id": {
+                        "type": "string",
+                        "enum": [
+                          "claude-code",
+                          "codex",
+                          "opencode",
+                          "hermes",
+                          "openclaw",
+                          "grok",
+                          "kimi",
+                          "copilot"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "locked",
+                      "settings",
+                      "id"
                     ],
                     "additionalProperties": false
                   }
@@ -100727,6 +101084,10 @@
                             "minimum": 0,
                             "maximum": 1000
                           },
+                          "locked": {
+                            "default": false,
+                            "type": "boolean"
+                          },
                           "runtime": {
                             "type": "object",
                             "properties": {
@@ -100931,7 +101292,92 @@
                           "icon",
                           "hidden",
                           "position",
+                          "locked",
                           "runtime"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "builtIns": {
+                      "default": {},
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "locked": {
+                            "type": "boolean"
+                          },
+                          "settings": {
+                            "type": "object",
+                            "properties": {
+                              "inferenceProtocol": {
+                                "type": "string",
+                                "enum": [
+                                  "openai_responses",
+                                  "openai_chat",
+                                  "anthropic"
+                                ]
+                              },
+                              "steerMode": {
+                                "type": "string",
+                                "enum": [
+                                  "pipe",
+                                  "tmux_keys"
+                                ]
+                              },
+                              "tier": {
+                                "nullable": true,
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "maxTier": {
+                                "nullable": true,
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "ttlHours": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 720
+                              },
+                              "maxCostUsd": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100000
+                              },
+                              "idleTimeoutMinutes": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1440
+                              },
+                              "claudeCode": {
+                                "type": "object",
+                                "properties": {
+                                  "authentication": {
+                                    "type": "string",
+                                    "enum": [
+                                      "provider",
+                                      "subscription"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "authentication"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "locked",
+                          "settings"
                         ],
                         "additionalProperties": false
                       }
@@ -101059,6 +101505,7 @@
                   "required": [
                     "revision",
                     "templates",
+                    "builtIns",
                     "popularAgentOverrides"
                   ],
                   "additionalProperties": false
@@ -101311,7 +101758,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Save custom templates and the combined runtime order. Existing agents retain their runtime configuration. The revision prevents overwriting concurrent edits.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
+        "description": "Save custom templates, the maintained templates' settings, and the combined runtime order. Saving a locked runtime applies its settings to every agent of its type; an unlocked runtime's settings only start new agents. The revision prevents overwriting concurrent edits.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -101356,6 +101803,10 @@
                           "type": "integer",
                           "minimum": 0,
                           "maximum": 1000
+                        },
+                        "locked": {
+                          "default": false,
+                          "type": "boolean"
                         },
                         "runtime": {
                           "type": "object",
@@ -101561,6 +102012,87 @@
                       ]
                     }
                   },
+                  "builtIns": {
+                    "default": {},
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "locked": {
+                          "type": "boolean"
+                        },
+                        "settings": {
+                          "type": "object",
+                          "properties": {
+                            "inferenceProtocol": {
+                              "type": "string",
+                              "enum": [
+                                "openai_responses",
+                                "openai_chat",
+                                "anthropic"
+                              ]
+                            },
+                            "steerMode": {
+                              "type": "string",
+                              "enum": [
+                                "pipe",
+                                "tmux_keys"
+                              ]
+                            },
+                            "tier": {
+                              "nullable": true,
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 32
+                            },
+                            "maxTier": {
+                              "nullable": true,
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 32
+                            },
+                            "ttlHours": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 720
+                            },
+                            "maxCostUsd": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100000
+                            },
+                            "idleTimeoutMinutes": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 1440
+                            },
+                            "claudeCode": {
+                              "type": "object",
+                              "properties": {
+                                "authentication": {
+                                  "type": "string",
+                                  "enum": [
+                                    "provider",
+                                    "subscription"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "authentication"
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      "required": [
+                        "locked",
+                        "settings"
+                      ]
+                    }
+                  },
                   "popularAgentOverrides": {
                     "nullable": true,
                     "type": "object",
@@ -101735,6 +102267,10 @@
                             "type": "integer",
                             "minimum": 0,
                             "maximum": 1000
+                          },
+                          "locked": {
+                            "default": false,
+                            "type": "boolean"
                           },
                           "runtime": {
                             "type": "object",
@@ -101940,7 +102476,92 @@
                           "icon",
                           "hidden",
                           "position",
+                          "locked",
                           "runtime"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "builtIns": {
+                      "default": {},
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "locked": {
+                            "type": "boolean"
+                          },
+                          "settings": {
+                            "type": "object",
+                            "properties": {
+                              "inferenceProtocol": {
+                                "type": "string",
+                                "enum": [
+                                  "openai_responses",
+                                  "openai_chat",
+                                  "anthropic"
+                                ]
+                              },
+                              "steerMode": {
+                                "type": "string",
+                                "enum": [
+                                  "pipe",
+                                  "tmux_keys"
+                                ]
+                              },
+                              "tier": {
+                                "nullable": true,
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "maxTier": {
+                                "nullable": true,
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "ttlHours": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 720
+                              },
+                              "maxCostUsd": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100000
+                              },
+                              "idleTimeoutMinutes": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1440
+                              },
+                              "claudeCode": {
+                                "type": "object",
+                                "properties": {
+                                  "authentication": {
+                                    "type": "string",
+                                    "enum": [
+                                      "provider",
+                                      "subscription"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "authentication"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "locked",
+                          "settings"
                         ],
                         "additionalProperties": false
                       }
@@ -102068,6 +102689,7 @@
                   "required": [
                     "revision",
                     "templates",
+                    "builtIns",
                     "popularAgentOverrides"
                   ],
                   "additionalProperties": false
@@ -102370,6 +102992,10 @@
                       "minimum": 0,
                       "maximum": 1000
                     },
+                    "locked": {
+                      "default": false,
+                      "type": "boolean"
+                    },
                     "runtime": {
                       "type": "object",
                       "properties": {
@@ -102574,6 +103200,7 @@
                     "icon",
                     "hidden",
                     "position",
+                    "locked",
                     "runtime"
                   ],
                   "additionalProperties": false

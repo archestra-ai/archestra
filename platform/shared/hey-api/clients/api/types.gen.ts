@@ -26890,11 +26890,111 @@ export type ListAgentRuntimeTemplatesResponses = {
         icon: string | null;
         hidden: boolean;
         position: number;
+        locked: boolean;
         image: string;
     }>;
 };
 
 export type ListAgentRuntimeTemplatesResponse = ListAgentRuntimeTemplatesResponses[keyof ListAgentRuntimeTemplatesResponses];
+
+export type ListBuiltInAgentRuntimeSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime-templates/built-ins';
+};
+
+export type ListBuiltInAgentRuntimeSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListBuiltInAgentRuntimeSettingsError = ListBuiltInAgentRuntimeSettingsErrors[keyof ListBuiltInAgentRuntimeSettingsErrors];
+
+export type ListBuiltInAgentRuntimeSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        locked: boolean;
+        settings: {
+            inferenceProtocol?: 'openai_responses' | 'openai_chat' | 'anthropic';
+            steerMode?: 'pipe' | 'tmux_keys';
+            tier?: string | null;
+            maxTier?: string | null;
+            ttlHours?: number | null;
+            maxCostUsd?: number | null;
+            idleTimeoutMinutes?: number | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+            };
+        };
+        id: 'claude-code' | 'codex' | 'opencode' | 'hermes' | 'openclaw' | 'grok' | 'kimi' | 'copilot';
+    }>;
+};
+
+export type ListBuiltInAgentRuntimeSettingsResponse = ListBuiltInAgentRuntimeSettingsResponses[keyof ListBuiltInAgentRuntimeSettingsResponses];
 
 export type GetRuntimeTemplateSettingsData = {
     body?: never;
@@ -26984,6 +27084,7 @@ export type GetRuntimeTemplateSettingsResponses = {
             icon: string | null;
             hidden: boolean;
             position: number;
+            locked: boolean;
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -27016,6 +27117,23 @@ export type GetRuntimeTemplateSettingsResponses = {
                 idleTimeoutMinutes: number | null;
             };
         }>;
+        builtIns: {
+            [key: string]: {
+                locked: boolean;
+                settings: {
+                    inferenceProtocol?: 'openai_responses' | 'openai_chat' | 'anthropic';
+                    steerMode?: 'pipe' | 'tmux_keys';
+                    tier?: string | null;
+                    maxTier?: string | null;
+                    ttlHours?: number | null;
+                    maxCostUsd?: number | null;
+                    idleTimeoutMinutes?: number | null;
+                    claudeCode?: {
+                        authentication: 'provider' | 'subscription';
+                    };
+                };
+            };
+        };
         popularAgentOverrides: {
             'claude-code'?: {
                 hidden?: boolean;
@@ -27065,6 +27183,7 @@ export type SaveRuntimeTemplateSettingsData = {
             icon: string | null;
             hidden: boolean;
             position: number;
+            locked?: boolean;
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -27097,6 +27216,23 @@ export type SaveRuntimeTemplateSettingsData = {
                 idleTimeoutMinutes: number | null;
             };
         }>;
+        builtIns?: {
+            [key: string]: {
+                locked: boolean;
+                settings: {
+                    inferenceProtocol?: 'openai_responses' | 'openai_chat' | 'anthropic';
+                    steerMode?: 'pipe' | 'tmux_keys';
+                    tier?: string | null;
+                    maxTier?: string | null;
+                    ttlHours?: number | null;
+                    maxCostUsd?: number | null;
+                    idleTimeoutMinutes?: number | null;
+                    claudeCode?: {
+                        authentication: 'provider' | 'subscription';
+                    };
+                };
+            };
+        };
         popularAgentOverrides: {
             'claude-code'?: {
                 hidden?: boolean;
@@ -27218,6 +27354,7 @@ export type SaveRuntimeTemplateSettingsResponses = {
             icon: string | null;
             hidden: boolean;
             position: number;
+            locked: boolean;
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -27250,6 +27387,23 @@ export type SaveRuntimeTemplateSettingsResponses = {
                 idleTimeoutMinutes: number | null;
             };
         }>;
+        builtIns: {
+            [key: string]: {
+                locked: boolean;
+                settings: {
+                    inferenceProtocol?: 'openai_responses' | 'openai_chat' | 'anthropic';
+                    steerMode?: 'pipe' | 'tmux_keys';
+                    tier?: string | null;
+                    maxTier?: string | null;
+                    ttlHours?: number | null;
+                    maxCostUsd?: number | null;
+                    idleTimeoutMinutes?: number | null;
+                    claudeCode?: {
+                        authentication: 'provider' | 'subscription';
+                    };
+                };
+            };
+        };
         popularAgentOverrides: {
             'claude-code'?: {
                 hidden?: boolean;
@@ -27377,6 +27531,7 @@ export type GetAgentRuntimeTemplateResponses = {
         icon: string | null;
         hidden: boolean;
         position: number;
+        locked: boolean;
         runtime: {
             image: string;
             command: Array<string> | null;

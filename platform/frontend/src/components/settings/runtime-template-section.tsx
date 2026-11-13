@@ -5,6 +5,8 @@ import {
   AGENT_CATALOG_NAMES,
   type AgentCatalogId,
   type archestraApiTypes,
+  buildAgentCatalogRuntime,
+  withAgentRuntimeDefaults,
 } from "@archestra/shared";
 import {
   closestCenter,
@@ -24,6 +26,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  BadgeCheck,
   Box,
   ChevronDown,
   GripVertical,
@@ -33,7 +36,7 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { AgentIcon } from "@/components/agent-icon";
 import {
@@ -42,8 +45,10 @@ import {
   useAgentCatalogImages,
 } from "@/components/agent-pages/agent-catalog";
 import {
+  type AgentRuntimeConfig,
   AgentRuntimeEnvironmentFields,
   AgentRuntimeImageFields,
+  AgentRuntimeLimitFields,
   AgentRuntimeProtocolField,
   AgentRuntimeSteeringField,
   defaultAgentRuntime,
@@ -69,6 +74,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { FieldDescription } from "@/components/ui/field-description";
 import {
   Form,
   FormControl,
@@ -78,12 +84,20 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { runtimeTemplatePosition } from "@/lib/agent-runtime-template-order";
 import {
-  type RuntimeTemplate,
   useRuntimeTemplateCatalog,
   useRuntimeTemplateSettings,
   useSaveRuntimeTemplateSettings,
@@ -94,6 +108,10 @@ import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 
 type SaveBody = archestraApiTypes.SaveRuntimeTemplateSettingsData["body"];
+type TemplateDraft = SaveBody["templates"][number];
+type BuiltInRuntime = NonNullable<
+  NonNullable<SaveBody["builtIns"]>[AgentCatalogId]
+>;
 type Row = {
   id: string;
   name: string;
@@ -102,6 +120,7 @@ type Row = {
   icon: string | null;
   hidden: boolean;
   builtIn: boolean;
+  locked: boolean;
 };
 
 export function RuntimeTemplateSection({
@@ -124,10 +143,14 @@ export function RuntimeTemplateSection({
   const appName = useAppName();
   const builtIns = getAgentCatalogTemplates(images, appName);
   const [draft, setDraft] = useState<SaveBody | null>(null);
-  const [editing, setEditing] = useState<RuntimeTemplate | "new" | null>(null);
+  const [editing, setEditing] = useState<TemplateDraft | "new" | null>(null);
+  const [editingBuiltIn, setEditingBuiltIn] = useState<AgentCatalogId | null>(
+    null,
+  );
   const saved: SaveBody = {
     revision: settings.data?.revision ?? 0,
     templates: settings.data?.templates ?? [],
+    builtIns: settings.data?.builtIns ?? {},
     popularAgentOverrides: settings.data
       ? settings.data.popularAgentOverrides
       : (organization?.popularAgentOverrides ?? null),
@@ -152,12 +175,14 @@ export function RuntimeTemplateSection({
       icon: null,
       hidden: state.popularAgentOverrides?.[id]?.hidden ?? false,
       builtIn: true,
+      locked: state.builtIns?.[id]?.locked ?? false,
     })),
     ...(settings.data
       ? state.templates.map((item) => ({
           ...item,
           image: item.runtime.image,
           builtIn: false,
+          locked: item.locked ?? false,
         }))
       : (summaries.data ?? []).map((item) => ({ ...item, builtIn: false }))),
   ].sort((a, b) => position(a.id) - position(b.id));
@@ -242,7 +267,9 @@ export function RuntimeTemplateSection({
             These runtimes appear as configuration templates when creating an
             agent. Drag to change their order, add custom runtimes, or remove
             built-in and custom choices. Removed runtimes can be added back at
-            any time. Changes here don’t affect existing agents.
+            any time. A runtime’s settings only start new agents, unless you
+            lock them: a locked runtime’s settings apply to every agent that
+            uses it, and agent builders can’t change them.
           </p>
         </div>
         <DropdownMenu>
@@ -314,10 +341,13 @@ export function RuntimeTemplateSection({
                     onMove={(direction) => move(index, index + direction)}
                     onRemove={() => setAvailable(row, false)}
                     onEdit={() =>
-                      setEditing(
-                        state.templates.find((item) => item.id === row.id) ??
-                          null,
-                      )
+                      row.builtIn
+                        ? setEditingBuiltIn(row.id as AgentCatalogId)
+                        : setEditing(
+                            state.templates.find(
+                              (item) => item.id === row.id,
+                            ) ?? null,
+                          )
                     }
                   />
                 ))}
@@ -339,6 +369,21 @@ export function RuntimeTemplateSection({
         onSave={() => save.mutate(state, { onSuccess: () => setDraft(null) })}
         onCancel={() => setDraft(null)}
       />
+      {editingBuiltIn !== null && (
+        <BuiltInRuntimeDialog
+          id={editingBuiltIn}
+          image={images[editingBuiltIn]}
+          value={state.builtIns?.[editingBuiltIn]}
+          onClose={() => setEditingBuiltIn(null)}
+          onSave={(builtIn) => {
+            setDraft({
+              ...state,
+              builtIns: { ...state.builtIns, [editingBuiltIn]: builtIn },
+            });
+            setEditingBuiltIn(null);
+          }}
+        />
+      )}
       {editing !== null && (
         <RuntimeTemplateDialog
           key={editing === "new" ? "new" : editing.id}
@@ -396,7 +441,7 @@ function RuntimeTemplateRow({
     transition,
     isDragging,
   } = useSortable({ id: row.id, disabled });
-  const TypeIcon = row.builtIn ? LockKeyhole : Box;
+  const TypeIcon = row.builtIn ? BadgeCheck : Box;
   return (
     <li
       ref={setNodeRef}
@@ -439,6 +484,12 @@ function RuntimeTemplateRow({
               {row.builtIn ? "Built-in runtime" : "Custom runtime"}
             </span>
           </span>
+          {row.locked && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+              <LockKeyhole className="size-3" />
+              Locked
+            </span>
+          )}
         </div>
         <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
           <span className="max-w-full truncate" title={row.description}>
@@ -465,12 +516,10 @@ function RuntimeTemplateRow({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {!row.builtIn && (
-            <DropdownMenuItem onSelect={onEdit}>
-              <Pencil className="size-3.5" />
-              Edit runtime
-            </DropdownMenuItem>
-          )}
+          <DropdownMenuItem onSelect={onEdit}>
+            <Pencil className="size-3.5" />
+            Edit runtime
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={onRemove}>
             <X className="size-3.5" />
             Remove from list
@@ -497,12 +546,12 @@ function RuntimeTemplateDialog({
   onClose,
   onSave,
 }: {
-  template: RuntimeTemplate | null;
+  template: TemplateDraft | null;
   names: string[];
   onClose: () => void;
-  onSave: (template: RuntimeTemplate) => void;
+  onSave: (template: TemplateDraft) => void;
 }) {
-  const form = useForm<RuntimeTemplate>({
+  const form = useForm<TemplateDraft>({
     defaultValues: template ?? {
       id: crypto.randomUUID(),
       name: "",
@@ -510,6 +559,7 @@ function RuntimeTemplateDialog({
       icon: null,
       hidden: false,
       position: 0,
+      locked: false,
       runtime: { ...defaultAgentRuntime(), privileged: false },
     },
   });
@@ -528,8 +578,8 @@ function RuntimeTemplateDialog({
                 {template ? "Edit custom runtime" : "Add custom runtime"}
               </DialogTitle>
               <DialogDescription>
-                A reusable starting configuration for new agents. You can still
-                adjust each agent after selecting it.
+                A reusable starting configuration for new agents. Unless you
+                lock its settings, each agent can still adjust them.
               </DialogDescription>
             </DialogHeader>
             <DialogBody className="space-y-5">
@@ -628,8 +678,22 @@ function RuntimeTemplateDialog({
                         value={field.value}
                         onChange={field.onChange}
                       />
+                      <AgentRuntimeLimitFields
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
                     </div>
                   </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="locked"
+                render={({ field }) => (
+                  <LockSettingsField
+                    checked={field.value ?? false}
+                    onCheckedChange={field.onChange}
+                  />
                 )}
               />
             </DialogBody>
@@ -645,6 +709,150 @@ function RuntimeTemplateDialog({
         </Form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function BuiltInRuntimeDialog({
+  id,
+  image,
+  value,
+  onClose,
+  onSave,
+}: {
+  id: AgentCatalogId;
+  image: string;
+  value: BuiltInRuntime | undefined;
+  onClose: () => void;
+  onSave: (value: BuiltInRuntime) => void;
+}) {
+  const name = AGENT_CATALOG_NAMES[id];
+  const [runtime, setRuntime] = useState<AgentRuntimeConfig>(() =>
+    withAgentRuntimeDefaults({
+      runtime: buildAgentCatalogRuntime({ id, image }),
+      defaults: value?.settings,
+    }),
+  );
+  const [locked, setLocked] = useState(value?.locked ?? false);
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Edit {name}</DialogTitle>
+          <DialogDescription>
+            Where new {name} agents start. Its image and client stay the
+            maintained ones.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="space-y-5">
+          {runtime.claudeCode && (
+            <ClaudeAccountField
+              value={runtime.claudeCode.authentication}
+              onChange={(authentication) =>
+                setRuntime({
+                  ...runtime,
+                  claudeCode: { ...runtime.claudeCode, authentication },
+                })
+              }
+            />
+          )}
+          <AgentRuntimeLimitFields value={runtime} onChange={setRuntime} />
+          <LockSettingsField checked={locked} onCheckedChange={setLocked} />
+        </DialogBody>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={() =>
+              onSave({
+                locked,
+                settings: {
+                  tier: runtime.tier ?? null,
+                  maxTier: runtime.maxTier ?? null,
+                  ttlHours: runtime.ttlHours,
+                  maxCostUsd: runtime.maxCostUsd,
+                  idleTimeoutMinutes: runtime.idleTimeoutMinutes,
+                  ...(runtime.claudeCode && {
+                    claudeCode: {
+                      authentication: runtime.claudeCode.authentication,
+                    },
+                  }),
+                },
+              })
+            }
+          >
+            Update runtime
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ClaudeAccountField({
+  value,
+  onChange,
+}: {
+  value: "provider" | "subscription";
+  onChange: (value: "provider" | "subscription") => void;
+}) {
+  const id = useId();
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>Claude account</Label>
+      <Select
+        value={value}
+        onValueChange={(next) => onChange(next as "provider" | "subscription")}
+      >
+        <SelectTrigger id={id} className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="subscription">
+            Each person&apos;s Claude subscription
+          </SelectItem>
+          <SelectItem value="provider">A company API key</SelectItem>
+        </SelectContent>
+      </Select>
+      <FieldDescription>
+        Whose account runs the model: each user signs in with their own Pro or
+        Max plan, or runs are billed to an LLM provider connection.
+      </FieldDescription>
+    </div>
+  );
+}
+
+function LockSettingsField({
+  checked,
+  onCheckedChange,
+}: {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="flex items-start gap-3 rounded-lg border p-3">
+      <Switch
+        id={id}
+        className="mt-0.5 shrink-0"
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+      />
+      <div className="min-w-0 space-y-1">
+        <Label htmlFor={id}>Lock settings</Label>
+        <FieldDescription>
+          Every agent that uses this runtime gets these settings, existing
+          agents included, and agent builders can&apos;t change them. Each agent
+          keeps its own environment, credentials and ports.
+        </FieldDescription>
+      </div>
+    </div>
   );
 }
 

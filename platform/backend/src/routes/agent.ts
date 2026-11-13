@@ -82,6 +82,7 @@ import {
   assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
+import { applyAgentRuntimeLock } from "@/services/agent-runtime/agent-runtime-lock";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
@@ -794,6 +795,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Cannot create an agent in another organization",
         );
       }
+      body.runtime = await applyAgentRuntimeLock({
+        organizationId,
+        runtime: body.runtime,
+      });
       await requireAgentRuntimePermission({
         agentType,
         runtime: body.runtime,
@@ -2099,6 +2104,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         throw error;
       }
+      body.runtime = await applyAgentRuntimeLock({
+        organizationId,
+        runtime: body.runtime,
+      });
       await requireAgentRuntimePermission({
         agentType: existingAgent.agentType,
         runtime: body.runtime,

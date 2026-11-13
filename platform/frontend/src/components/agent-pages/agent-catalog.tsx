@@ -9,6 +9,7 @@ import {
   getAgentCatalogImages,
   MESSAGING_CHANNEL_LABELS,
   orderedPopularAgentIds,
+  withAgentRuntimeDefaults,
 } from "@archestra/shared";
 import {
   Bot,
@@ -33,6 +34,7 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import { runtimeTemplatePosition } from "@/lib/agent-runtime-template-order";
 import {
+  useBuiltInRuntimeDefaults,
   useResolveRuntimeTemplate,
   useRuntimeTemplateCatalog,
 } from "@/lib/agent-runtime-templates.query";
@@ -161,7 +163,19 @@ export function useAvailableAgentCatalogTemplates() {
     isFetching,
     refetch,
   } = useOrganization(true, { fresh: true });
-  const catalog = getAgentCatalogTemplates(images, appName);
+  const builtInDefaults = useBuiltInRuntimeDefaults();
+  const catalog = getAgentCatalogTemplates(images, appName).map((template) => ({
+    ...template,
+    initialValues: {
+      ...template.initialValues,
+      runtime:
+        template.initialValues.runtime &&
+        withAgentRuntimeDefaults({
+          runtime: template.initialValues.runtime,
+          defaults: builtInDefaults(template.id as AgentCatalogId),
+        }),
+    },
+  }));
   const custom = useRuntimeTemplateCatalog();
   const builtIns = orderedPopularAgentIds(
     organization?.popularAgentOverrides ?? null,

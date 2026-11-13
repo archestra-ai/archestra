@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-11
+lastUpdated: 2026-11-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -40,6 +40,20 @@ With [`organizationSettings:update`](/docs/reference/permissions#organizationSet
 3. Click **Save**. The Create Agent cards and Configuration runtime choices follow the saved order.
 
 Removing a choice preserves existing agents and their runtime configuration.
+
+### Set and Lock a Runtime's Settings
+
+Decide once how every agent of a runtime runs, such as whether Claude Code bills each person's Claude subscription or a company API key, and stop agent builders from changing it. This also uses [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+
+1. Go to **Settings → Agents → Agent Runtimes**, open a runtime's **⋯** menu, and click **Edit runtime**.
+2. Set its defaults. A built-in runtime has **Claude account** (Claude Code only), run limits, and tiers. A custom runtime also has its image, protocol, and follow-up delivery.
+3. Turn on **Lock settings**, click **Update runtime**, then click **Save**.
+
+The runtime shows **Locked**. Agents of that runtime, existing ones included, take its settings, and their **Agent Runtime** tab shows them read-only.
+
+- An unlocked runtime's settings only set where new agents start.
+- Each agent keeps its own environment, credentials, and ports.
+- Saving is refused, naming the agents, when the new settings would no longer work with an agent's model. Change that agent's model first.
 
 ### Update the Image
 

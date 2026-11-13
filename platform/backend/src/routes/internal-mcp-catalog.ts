@@ -1788,10 +1788,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // pass has frozen every row that HAS a live deployment. Block a
         // rename issued during the startup window until the pass completes;
         // fail it if the pass failed (churn-prevention outranks
-        // availability).
+        // availability). With the orchestrator turned off there is no adopt
+        // pass to wait for, and the rename stays a pure DB change.
         const k8sRuntimeConfigured =
-          Boolean(config.orchestrator.kubernetes.kubeconfig) ||
-          config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+          config.orchestrator.enabled !== false &&
+          (Boolean(config.orchestrator.kubernetes.kubeconfig) ||
+            config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster);
         if (k8sRuntimeConfigured) {
           await mcpServerRuntimeManager.deploymentNamesAdopted;
         }

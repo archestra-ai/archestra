@@ -395,6 +395,7 @@ export const handlers: HttpHandler[] = [
   }),
   ...getJson("/api/organization", organizationSeed),
   ...getJson("/api/agent-runtime-templates", []),
+  ...getJson("/api/agent-runtime-templates/built-ins", []),
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
   // Onboarding nudges: everything already seen / nothing eligible, so neither
   // the red dots nor the survey/feedback dialogs interfere with other tests.

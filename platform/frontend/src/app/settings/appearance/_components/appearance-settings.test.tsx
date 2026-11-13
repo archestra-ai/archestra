@@ -191,7 +191,7 @@ describe("Appearance settings", () => {
       "Workspace",
     );
     expect(setHeader).toHaveBeenLastCalledWith({
-      title: "Appearance",
+      title: "Branding",
       description: "Name, logos, and colors for your organization.",
     });
   });

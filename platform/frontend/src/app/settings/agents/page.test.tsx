@@ -155,8 +155,16 @@ import {
   useUpdateIntegrationSettings,
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
-
+import { AgentRuntimeSettings } from "./_parts/agent-runtime-settings";
 import AgentSettingsPage from "./page";
+
+function renderRuntimesPage() {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <AgentRuntimeSettings />
+    </QueryClientProvider>,
+  );
+}
 
 function renderPage() {
   const queryClient = new QueryClient({
@@ -221,12 +229,10 @@ beforeEach(() => {
 });
 
 describe("AgentSettingsPage", () => {
-  it("shows the configured runtime backend as a managed row only when enabled", () => {
-    const { rerender } = renderPage();
+  it("shows the configured runtime backend as a managed row below the runtime templates, only when enabled", () => {
+    const { rerender } = renderRuntimesPage();
 
-    expect(
-      screen.getByRole("heading", { name: "Agent Runtime Beta" }),
-    ).toBeVisible();
+    expect(screen.getByText("Runtime templates")).toBeVisible();
 
     expect(
       screen.queryByRole("heading", { name: "Runtime backend" }),
@@ -246,7 +252,7 @@ describe("AgentSettingsPage", () => {
     };
     rerender(
       <QueryClientProvider client={new QueryClient()}>
-        <AgentSettingsPage />
+        <AgentRuntimeSettings />
       </QueryClientProvider>,
     );
 
@@ -264,12 +270,12 @@ describe("AgentSettingsPage", () => {
       screen.queryByText("registry.example.test/agent:latest"),
     ).not.toBeInTheDocument();
 
-    const messagingChannels = screen.getByText("Available messaging channels");
+    const runtimeTemplates = screen.getByText("Runtime templates");
     const runtimeBackend = screen.getByRole("heading", {
       name: "Runtime backend",
     });
     expect(
-      messagingChannels.compareDocumentPosition(runtimeBackend) &
+      runtimeTemplates.compareDocumentPosition(runtimeBackend) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });

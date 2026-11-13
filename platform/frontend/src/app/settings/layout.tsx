@@ -8,14 +8,19 @@ import { createContext, useContext, useMemo, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { SectionNav } from "@/components/section-nav";
+import { Badge } from "@/components/ui/badge";
 import { useDisableInvitations } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useSecretsType } from "@/lib/secrets.query";
+import { AgentsSubnav } from "./agents/_parts/agents-navigation";
 import { AppearanceSubnav } from "./appearance/_components/appearance-navigation";
 import { MessagingProvidersSubnav } from "./messaging-channels/_components/messaging-providers";
 import { resolveSettingsSection, useSettingsTabs } from "./settings-tabs";
 
-const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
+const PAGE_CONFIG: Record<
+  string,
+  { title: string; description: ReactNode; status?: ReactNode }
+> = {
   "/settings/service-accounts": {
     title: "Service Accounts",
     description:
@@ -27,9 +32,14 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
       "Register applications for MCP Gateway, A2A, and LLM Proxy. One client can access several APIs, as itself or for signed-in users.",
   },
   "/settings/agents": {
-    title: "Agents",
+    title: "General",
     description:
-      "Defaults for agents and chats — default model, default agent, file uploads, and the channels agents can be reached through.",
+      "The default model and agent, file uploads, and the channels agents answer on.",
+  },
+  "/settings/agents/runtimes": {
+    title: "Runtimes",
+    description: "The runtimes agents run in and the backend that hosts them.",
+    status: <Badge variant="secondary">Beta</Badge>,
   },
   "/settings/messaging-channels": {
     title: "Messaging Channels",
@@ -195,8 +205,10 @@ export default function SettingsLayout({
   // it knows its subject; until then the prefix match keeps a detail page
   // under a section reading as that section rather than as bare "Settings".
   const sectionHref = resolveSettingsSection(pathname, tabs);
+  // A section's own pages (Agents → Runtimes, say) have their own header.
   const config = sectionHref
-    ? (PAGE_CONFIG[sectionHref] ?? {
+    ? (PAGE_CONFIG[pathname] ??
+      PAGE_CONFIG[sectionHref] ?? {
         title: "Settings",
         description: "Configure your platform, teams, and integrations.",
       })
@@ -224,7 +236,7 @@ export default function SettingsLayout({
           description={pageHeader?.description}
           icon={pageHeader?.icon}
           backLink={pageHeader?.backLink}
-          status={pageHeader?.status}
+          status={pageHeader?.status ?? config.status}
           tabs={pageHeader?.tabs}
           mobileVisibleCount={pageHeader?.tabs?.length}
           actionButton={actionButton}
@@ -243,7 +255,7 @@ export default function SettingsLayout({
         description={pageHeader ? pageHeader.description : config.description}
         icon={pageHeader?.icon}
         backLink={pageHeader?.backLink}
-        status={pageHeader?.status}
+        status={pageHeader?.status ?? config.status}
         tabs={pageHeader?.tabs}
         // Every tab stays on the row rather than collapsing into an overflow
         // popover: a record page here carries a handful of facets, not the
@@ -265,7 +277,9 @@ export default function SettingsLayout({
                   ? { ...tab, subnav: <MessagingProvidersSubnav /> }
                   : tab.href === "/settings/appearance"
                     ? { ...tab, subnav: <AppearanceSubnav /> }
-                    : tab,
+                    : tab.href === "/settings/agents"
+                      ? { ...tab, subnav: <AgentsSubnav /> }
+                      : tab,
               )}
               activeHref={sectionHref}
             />

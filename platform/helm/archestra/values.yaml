@@ -659,6 +659,12 @@ archestra:
 
   # Configuration for the MCP Server Runtime
   orchestrator:
+    # Set to false to turn the Kubernetes orchestrator off: the platform loads
+    # no Kubernetes credentials and touches nothing in the cluster, and the
+    # chart skips the orchestrator RBAC (rbac, mcpServerRbac). For an install
+    # that shares its database with another install that runs the MCP servers.
+    enabled: true
+
     # Base image for MCP server containers
     # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.31" # x-release-please-version
     # (released charts pin it to its digest; see releaseImageDigests)

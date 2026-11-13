@@ -2487,6 +2487,17 @@ describe("isCodeRuntimeEnabled", () => {
     loadKubeconfigFromCurrentCluster: undefined,
   };
 
+  test("disabled when the orchestrator is turned off, even with the flag and k8s configured", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "true",
+        loadKubeconfigFromCurrentCluster: "true",
+        orchestratorEnabledEnv: "false",
+      }),
+    ).toBe(false);
+  });
+
   test("enabled when an explicit runner host is configured, even without k8s", () => {
     expect(
       isCodeRuntimeEnabled({

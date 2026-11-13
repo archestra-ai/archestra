@@ -373,7 +373,13 @@ export class McpServerRuntimeManager {
       this.k8sLog = clients.log;
       this.namespace = clients.namespace;
     } catch (error) {
-      logger.error({ err: error }, "Failed to load Kubernetes config");
+      if (config.orchestrator.enabled !== false) {
+        logger.error({ err: error }, "Failed to load Kubernetes config");
+      } else {
+        logger.info(
+          "Kubernetes orchestrator is disabled (ARCHESTRA_ORCHESTRATOR_ENABLED=false)",
+        );
+      }
       this.rejectDeploymentNamesAdopted(
         new Error(
           "Kubernetes runtime failed to initialize; deployment names were not adopted",

@@ -813,6 +813,10 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
 
 ## MCP Server Orchestrator
 
+- **`ARCHESTRA_ORCHESTRATOR_ENABLED`** - Set to `false` to turn the Kubernetes orchestrator off. Archestra then loads no Kubernetes credentials, including the in-cluster service account, and creates, changes or deletes nothing in the cluster.
+  - Default: `true`. The Helm chart sets it from `archestra.orchestrator.enabled`.
+  - Use it for an install that shares its database with another install that runs the MCP servers. Self-hosted MCP servers, Agent Runtime and the code sandbox it provisions are unavailable on that install.
+
 - **`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`** - Uses the in-cluster service account to reach Kubernetes.
   - Default: `false`. The Helm chart sets `true`.
   - When Archestra runs outside the target cluster, leave it `false` and set [`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_KUBECONFIG).

@@ -1,0 +1,133 @@
+name: Build Dagger Engine Docker Image
+
+# The patched Dagger engine (platform/Dockerfile target dagger-engine) that the
+# backend provisions for each organization: upstream's engine image with every
+# Go binary rebuilt against the dependency floors in platform/docker/dagger-deps.sh.
+#
+# Reusable via workflow_call (release + dev publishes); also runs a build-only
+# validation (no push) on pull requests that touch its inputs.
+on:
+  workflow_call:
+    inputs:
+      image_registry:
+        description: "Destination registry prefix"
+        type: string
+        default: ghcr.io/archestra-ai
+      push_to_gcr:
+        description: "Whether to push the built image to GCR"
+        required: true
+        type: boolean
+      version:
+        description: "Version tag for the Docker image"
+        required: true
+        type: string
+      checkout_ref:
+        description: "Optional ref to checkout when building the image"
+        required: false
+        type: string
+        default: ""
+      reuse_from_version:
+        description: "Previous main SHA whose image may be reused when inputs are unchanged"
+        required: false
+        type: string
+        default: ""
+      environment:
+        description: "GitHub Environment whose secrets the publishing jobs read (release-publish for releases); empty for none"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
+        required: false
+      GCP_SERVICE_ACCOUNT_NAME:
+        required: false
+  pull_request:
+    paths:
+      - "platform/Dockerfile"
+      - "platform/docker/dagger-deps.sh"
+      - "platform/docker/dagger-dockercompat/**"
+      - ".github/workflows/build-dagger-engine-docker-image.yml"
+
+permissions: {}
+
+concurrency:
+  group: build-dagger-engine-docker-image-${{ inputs.version || github.event.pull_request.number || github.ref }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # workflow_call path (release-please / deploy-dev): callers always pass a
+  # version, so gate on it — `github.event_name` is the CALLER's event here.
+  build-dagger-engine-image:
+    name: Build Dagger Engine Image
+    if: ${{ inputs.version != '' }}
+    permissions:
+      contents: read # Required to checkout the repository and build the image.
+      packages: write # Publish CI images with the repository token.
+      id-token: write # Required for Workload Identity Federation when pushing images.
+    uses: $/.github/workflows/build-native-multi-arch-image.yml
+    with:
+      environment: ${{ inputs.environment }}
+      image_directory: ./platform
+      dockerfile: ./platform/Dockerfile
+      target: dagger-engine
+      image_name: dagger-engine
+      image_registry: ${{ inputs.image_registry }}
+      version: ${{ inputs.version }}
+      push_image: ${{ inputs.push_to_gcr }}
+      auth_provider: ${{ startsWith(inputs.image_registry, 'ghcr.io/') && 'ghcr' || 'gar' }}
+      checkout_ref: ${{ inputs.checkout_ref }}
+      reuse_from_version: ${{ inputs.reuse_from_version }}
+      reuse_paths: '["platform/Dockerfile", "platform/docker/dagger-deps.sh", "platform/docker/dagger-dockercompat", ".github/workflows/build-dagger-engine-docker-image.yml"]'
+    secrets:
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+  # Direct pull_request path: build-only validation, never pushes. A plain
+  # single-arch build (same pattern docker-image-scanning.yml uses for the MCP
+  # server base image) instead of the reusable multi-arch workflow, because
+  # that workflow's jobs request `id-token: write`, which fork PRs are not
+  # allowed and which would fail the run.
+  validate-dagger-engine-image:
+    name: Validate Dagger Engine Image Build
+    if: ${{ inputs.version == '' }}
+    runs-on: ubuntu-24.04-16core
+    permissions:
+      contents: read # Required to checkout the repository and build the image.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Build Dagger engine image
+        uses: $/.github/actions/build-docker-image
+        with:
+          context: ./platform
+          dockerfile: ./platform/Dockerfile
+          target: dagger-engine
+          platforms: linux/amd64
+          push: "false"
+          load: "true"
+          tags: dagger-engine:${{ github.sha }}
+          # Read-only: the publish paths own cache export for this image.
+          cache-from: type=registry,ref=ghcr.io/archestra-ai/ci/dagger-engine:buildcache-amd64
+
+      # The engine must still start and run a container with the rebuilt
+      # binaries; a compile that drifts from upstream's flags fails here.
+      - name: Smoke test Dagger engine image
+        env:
+          IMAGE: dagger-engine:${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker network create dagger-smoke
+          docker run -d --name dagger-smoke --network dagger-smoke --privileged "$IMAGE" --addr tcp://0.0.0.0:1234
+          for _ in $(seq 1 60); do
+            docker exec dagger-smoke buildctl debug workers >/dev/null 2>&1 && break
+            sleep 2
+          done
+          output="$(docker run --rm --network dagger-smoke \
+            -e _EXPERIMENTAL_DAGGER_RUNNER_HOST=tcp://dagger-smoke:1234 \
+            --entrypoint dagger "$IMAGE" \
+            core --silent container from --address=alpine:3.22 with-exec --args=echo,engine-ok stdout)"
+          test "$output" = engine-ok

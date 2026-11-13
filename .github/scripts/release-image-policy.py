@@ -46,6 +46,8 @@ def candidate_matrix(root):
     images = [
         {"image": "platform", "context": "./platform", "dockerfile": "./platform/Dockerfile", "target": ""},
         {"image": "platform-slim", "context": "./platform", "dockerfile": "./platform/Dockerfile", "target": "unified-slim"},
+        # The patched Dagger engine the backend provisions per organization.
+        {"image": "dagger-engine", "context": "./platform", "dockerfile": "./platform/Dockerfile", "target": "dagger-engine"},
     ]
     for image, directory in (("mcp-server-base", "mcp_server"), ("p4-shim", "p4_shim"),
                              ("sandbox-base", "sandbox_base")):

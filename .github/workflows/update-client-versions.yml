@@ -7,6 +7,8 @@ name: Update Client Versions
 #   held back by a cooldown, and left for review because the image validation
 #   builds are not required checks.
 # - playwright-mcp: upstream browser MCP image. Daily, review required.
+# - dagger: the Dagger engine image, CLI and vendored Rust SDK, which move
+#   together. Daily, held back by a cooldown, review required.
 on:
   schedule:
     - cron: "23 * * * *"
@@ -572,15 +574,139 @@ jobs:
           fi
           gh pr view "$pr" --repo "$GH_REPO" --json url --jq '"url=" + .url' >> "$GITHUB_OUTPUT"
 
+  dagger:
+    name: Propose Dagger engine and SDK updates
+    if: github.repository == 'archestra-ai/archestra' && github.event.schedule != '23 * * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      pushed: ${{ steps.push.outputs.pushed }}
+      summary: ${{ steps.update.outputs.summary }}
+      pull_request_url: ${{ steps.pr.outputs.url }}
+    env:
+      BRANCH: automation/dagger
+    steps:
+      - name: Checkout trusted main branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Generate releaser token
+        id: token
+        uses: archestra-ai/.github/actions/github-app-token@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Configure Git identity
+        uses: $/.github/actions/configure-git-identity
+
+      - name: Prepare automation branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git --hostname github.com --force
+          git fetch origin main
+
+          target="$RUNNER_TEMP/dagger-branch"
+          existing="$(git ls-remote --heads origin "refs/heads/$BRANCH")"
+          if [[ -n "$existing" ]]; then
+            git fetch origin "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+            git worktree add -b "$BRANCH" "$target" "origin/$BRANCH"
+            git -C "$target" -c core.hooksPath=/dev/null merge --no-edit origin/main
+          else
+            git worktree add -b "$BRANCH" "$target" origin/main
+          fi
+          echo "path=$target" >> "$GITHUB_OUTPUT"
+
+      # Execute only the updater from trusted main. It verifies every upstream
+      # value (tag commit, engine index digest, CLI checksum, crate checksum)
+      # and stops without edits when the vendored SDK cannot carry forward.
+      - name: Update Dagger
+        id: update
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ steps.branch.outputs.path }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/update-dagger.py --root "$TARGET" | tee "$RUNNER_TEMP/dagger.log"
+          if [[ -z "$(git -C "$TARGET" status --porcelain)" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            summary="$(sed -n 's/^Updated Dagger //p' "$RUNNER_TEMP/dagger.log")"
+            echo "summary=$summary" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push update
+        id: push
+        if: steps.update.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          TARGET: ${{ steps.branch.outputs.path }}
+          SUMMARY: ${{ steps.update.outputs.summary }}
+        run: |
+          set -euo pipefail
+          git -C "$TARGET" add -A
+          git -C "$TARGET" -c core.hooksPath=/dev/null commit -m "fix(deps): update Dagger engine and SDK ($SUMMARY)"
+          git -C "$TARGET" push origin "HEAD:refs/heads/$BRANCH"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      # Also recovers a branch pushed by an earlier run whose PR creation failed.
+      # No auto-merge: a new engine needs a compatibility and security review.
+      - name: Open or update pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET: ${{ steps.branch.outputs.path }}
+          SUMMARY: ${{ steps.update.outputs.summary }}
+        run: |
+          set -euo pipefail
+          if git -C "$TARGET" diff --quiet origin/main HEAD; then
+            echo "Dagger already matches main."
+            exit 0
+          else
+            status=$?
+            if [[ "$status" -ne 1 ]]; then
+              exit "$status"
+            fi
+          fi
+
+          pr_title="fix(deps): update Dagger engine and SDK"
+          pr_body="Move every Dagger pin to the newest stable upstream release that has been public for at least 7 days, matching the repository's \`minimumReleaseAge\`: the engine image the backend provisions, the CLI built into \`platform/Dockerfile\`, the vendored Rust SDK, and the CI and benchmark fixtures. \`.github/scripts/update-dagger.py\` resolved the tag commit, engine index digest, CLI checksum and crate checksum from upstream and verified each one.
+
+          The vendored SDK takes the new crate's sources unchanged and keeps its hand-normalized dependency backport, which the updater only carries forward when upstream's published manifest is unchanged. runc follows the version Dagger's own engine build pins. **Validate Dagger Engine Image Build** rebuilds and smoke-tests the patched engine, **Dagger SDK Integration** runs the SDK against a live engine, and the release scan checks the patched engine for CVEs. Review the upstream release notes before merging. Existing engine StatefulSets keep their image until they are recreated."
+          owner="${GH_REPO%%/*}"
+          existing_pr="$(gh api "repos/$GH_REPO/pulls?state=open&head=$owner:$BRANCH&base=main&per_page=1" --jq '.[0].number // empty')"
+          if [[ -z "$existing_pr" ]]; then
+            pr="$(gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "$pr_title" \
+              --body "$pr_body")"
+          else
+            pr="$existing_pr"
+            gh pr edit "$pr" --title "$pr_title" --body "$pr_body"
+          fi
+          gh pr view "$pr" --repo "$GH_REPO" --json url --jq '"url=" + .url' >> "$GITHUB_OUTPUT"
+
   # Runs stay quiet unless a job fails or pushes a new version.
   notify:
     name: Report update results
-    needs: [identity, agent-runtime, playwright-mcp]
+    needs: [identity, agent-runtime, playwright-mcp, dagger]
     if: >-
       always() && github.repository == 'archestra-ai/archestra' && (
         needs.identity.result == 'failure' || needs.identity.outputs.pushed == 'true' ||
         needs.agent-runtime.result == 'failure' || needs.agent-runtime.outputs.pushed == 'true' ||
-        needs.playwright-mcp.result == 'failure' || needs.playwright-mcp.outputs.pushed == 'true')
+        needs.playwright-mcp.result == 'failure' || needs.playwright-mcp.outputs.pushed == 'true' ||
+        needs.dagger.result == 'failure' || needs.dagger.outputs.pushed == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 3
     permissions:
@@ -616,6 +742,10 @@ jobs:
           PLAYWRIGHT_PUSHED: ${{ needs.playwright-mcp.outputs.pushed }}
           PLAYWRIGHT_SUMMARY: ${{ needs.playwright-mcp.outputs.summary }}
           PLAYWRIGHT_PULL_REQUEST_URL: ${{ needs.playwright-mcp.outputs.pull_request_url }}
+          DAGGER_RESULT: ${{ needs.dagger.result }}
+          DAGGER_PUSHED: ${{ needs.dagger.outputs.pushed }}
+          DAGGER_SUMMARY: ${{ needs.dagger.outputs.summary }}
+          DAGGER_PULL_REQUEST_URL: ${{ needs.dagger.outputs.pull_request_url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -650,6 +780,8 @@ jobs:
               "$RUNTIME_SUMMARY" "$RUNTIME_PULL_REQUEST_URL" " — merge once the Validate agent-* checks pass."
             report "Playwright MCP image" "$PLAYWRIGHT_RESULT" "$PLAYWRIGHT_PUSHED" \
               "$PLAYWRIGHT_SUMMARY" "$PLAYWRIGHT_PULL_REQUEST_URL" " — review upstream runtime vulnerabilities and browser compatibility before merging."
+            report "Dagger engine and SDK" "$DAGGER_RESULT" "$DAGGER_PUSHED" \
+              "$DAGGER_SUMMARY" "$DAGGER_PULL_REQUEST_URL" " — merge once Validate Dagger Engine Image Build and Dagger SDK Integration pass."
           )"
           if [[ -z "$message" ]]; then
             exit 0

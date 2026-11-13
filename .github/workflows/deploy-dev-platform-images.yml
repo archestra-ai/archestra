@@ -179,6 +179,23 @@ jobs:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME || vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER || vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
+  publish-dev-dagger-engine-image:
+    name: Build Dagger Engine Dev Image
+    uses: $/.github/workflows/build-dagger-engine-docker-image.yml
+    permissions:
+      contents: read # Required to invoke the reusable Dagger engine image workflow.
+      packages: write # Publish development images and build caches to GHCR.
+      id-token: write # Required for Workload Identity Federation.
+    with:
+      image_registry: ghcr.io/archestra-ai/ci
+      push_to_gcr: true
+      version: ${{ inputs.version || github.sha }}
+      # Retag the previous main image when the engine's build inputs did not change.
+      reuse_from_version: ${{ github.event_name == 'push' && github.event.before || '' }}
+    secrets:
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME || vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER || vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
   publish-dev-sandbox-base-image:
     name: Build Sandbox Base Dev Image
     uses: $/.github/workflows/build-sandbox-base-docker-image.yml

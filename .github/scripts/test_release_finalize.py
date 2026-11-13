@@ -303,7 +303,7 @@ class HoldWorkflowTests(unittest.TestCase):
         release = (self.ROOT / ".github/workflows/release-please.yml").read_text()
         hold = release.split("  hold-rejected-release:\n", 1)[1].split("\n  publish-platform-helm-chart:", 1)[0]
         builds = re.findall(r"^  (build-and-push-[\w-]+):$", release, re.M)
-        self.assertEqual(len(builds), 5)
+        self.assertEqual(len(builds), 6)
         for job in builds:
             self.assertIn(f"      - {job}\n", hold)
         self.assertIn("always()", hold)

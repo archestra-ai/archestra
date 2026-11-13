@@ -2,7 +2,7 @@
 # build KinD, Docker CLI, Dagger CLI, and kubectl from source with a patched Go toolchain.
 # the Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
-ARG GOLANG_IMAGE=golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0
+ARG GOLANG_IMAGE=golang:1.26.10-alpine@sha256:87c65a688975c0b1d4585d204874c45ca78354670e3a5f11368c5a492303d696
 ARG NODE_IMAGE=node:24-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
 ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
@@ -10,6 +10,11 @@ ARG DOCKER_CLI_VERSION=v29.3.0
 ARG DOCKER_CLI_COMMIT=5927d80c76b3ce5cf782be818922966e8a0d87a3
 ARG DAGGER_VERSION=v0.21.11
 ARG DAGGER_COMMIT=631cdb609aaddc0037c2ba713e7642cadf645ff4
+# The upstream engine image the patched dagger-engine target starts from, and
+# the runc it ships (toolchains/engine-dev/consts in the Dagger checkout).
+ARG DAGGER_ENGINE_BASE_IMAGE=registry.dagger.io/engine:v0.21.11@sha256:6b557cc8b5fdfee0e2e8c82d451ac922097a1255482143e1b96c0be3ff2a303c
+ARG RUNC_VERSION=v1.4.2
+ARG RUNC_COMMIT=c241c0bb5e60a8e8c1b2e53d4eca8d0068d8d57e
 ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
 ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:8.0-alpine@sha256:8a80a27ddac789b4cb6d09d244f9c8d840da599c5ad22f7233c04be470e55261
@@ -86,59 +91,82 @@ ARG TARGETARCH
 ARG DAGGER_VERSION
 ARG DAGGER_COMMIT
 COPY docker/dagger-dockercompat /dagger-dockercompat
+COPY docker/dagger-deps.sh /dagger-deps.sh
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/dagger.git /dagger && \
     test "$(git -C /dagger rev-parse HEAD)" = "${DAGGER_COMMIT}" && \
     cd /dagger && \
     cp -R /dagger-dockercompat ./dockercompat && \
-    # dagger v0.21.11's vendored Go SDK requires go >= 1.26.1; align the module directive.
-    go mod edit -go=1.26.1 && \
-    # cve-2026-34040: replace Dagger's BuildKit Docker monolith imports with split Moby modules.
-    go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \
-    go mod edit -replace=github.com/docker/docker=./dockercompat && \
-    # CVE-2026-34986 and CVE-2026-116587: patched go-jose JWE/JWK parsing.
-    go get github.com/go-jose/go-jose/v4@v4.1.6 && \
-    # cve-2026-45022: go-git validation issue fixed in >= 5.19.0
-    # cve-2026-71556: go-git link following fixed in >= 5.19.2
-    go get github.com/go-git/go-git/v5@v5.19.2 && \
-    # cve-2026-44973: go-billy path traversal fixed in >= 5.9.0
-    go get github.com/go-git/go-billy/v5@v5.9.0 && \
-    # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
-    # cve-2026-46600: x/net HIGH fixed in >= 0.56.0.
-    # x/net <0.60.0: HTTP/2 security fixes (CVE-2026-78663/78669/78660/78659).
-    # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.
-    go get golang.org/x/net@v0.62.0 && \
-    # cve-2026-46597: x/crypto issue fixed in >= 0.52.0; keep this after x/net.
-    # cve-2026-78662 / cve-2026-56855: x/crypto HIGH fixed in >= 0.56.0.
-    # Keep >= 0.58.0 to satisfy x/net@v0.62.0 without downgrading it.
-    go get golang.org/x/crypto@v0.58.0 && \
-    # cve-2026-56865: x/mod/sumdb/tlog tile verification bypass (HIGH) fixed in >= 0.40.0.
-    # cve-2026-56864: x/mod/sumdb accepts unauthenticated hashes; same fix version.
-    # Arrives transitively (dagger and containerd both floor it at 0.36.0), so it needs
-    # an explicit requirement rather than a bump of any single dependency.
-    # Keep the patched x/mod floor when updating transitive dependencies.
-    go get golang.org/x/mod@v0.41.0 && \
-    # cve-2026-17106: go-archive path traversal fixed in >= 0.3.0 (matches dockercompat's floor).
-    # sys/user must be >= 0.4.1 here — go-archive 0.3.0 requires it, and asking for 0.4.0 in the
-    # same `go get` would make go resolve the conflict by downgrading go-archive below 0.3.0.
-    go get github.com/moby/go-archive@v0.3.0 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.1 && \
-    # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
-    # cve-2026-53488/53492/53489: containerd injection/input-validation/symlink-following fixed in >= 2.2.5
-    # cve-2026-95837: containerd improper privilege management (HIGH) fixed in >= 2.2.7
-    go get github.com/containerd/containerd/v2@v2.2.7 && \
-    # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
-    # CVE-2026-84304: grpc resource exhaustion fixed in >= 1.83.1.
-    # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
-    # CVE-2026-116591: Dagger's transitive zstd decoder must use compress >= 1.20.2.
-    # Keep these security floors in the LAST `go get` before `go mod tidy` — earlier
-    # dependency updates can otherwise downgrade the explicit requirements.
-    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 github.com/klauspost/compress@v1.20.2 && \
-    go mod tidy && \
+    sh /dagger-deps.sh && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" \
     -o /dagger-binary ./cmd/dagger && \
-    cd / && rm -rf /dagger /dagger-dockercompat
+    cd / && rm -rf /dagger /dagger-dockercompat /dagger-deps.sh
+
+# <----- Patched Dagger engine (release target: dagger-engine) ----->
+# The backend runs one engine per organization. Upstream's engine ships Go
+# binaries built against dependencies with fixable CVEs, so rebuild every Go
+# binary it carries from the same pinned checkout and dependency floors as the
+# CLI above, and lay them over the upstream image. Versions and flags follow
+# Dagger's own engine build (toolchains/engine-dev/build/builder.go).
+FROM go-builder-base AS dagger-engine-builder
+ARG TARGETARCH
+ARG DAGGER_VERSION
+ARG DAGGER_COMMIT
+COPY docker/dagger-dockercompat /dagger-dockercompat
+COPY docker/dagger-deps.sh /dagger-deps.sh
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/dagger.git /dagger && \
+    test "$(git -C /dagger rev-parse HEAD)" = "${DAGGER_COMMIT}" && \
+    cd /dagger && \
+    cp -R /dagger-dockercompat ./dockercompat && \
+    sh /dagger-deps.sh && \
+    # dockercompat's idtools.IDMap is moby/sys/user's, whose fields are
+    # ID/ParentID/Count rather than Docker's ContainerID/HostID/Size. Only the
+    # engine compiles this mapping; fail if upstream changes the code.
+    f=internal/buildkit/executor/oci/spec_linux.go && \
+    sed -i -e 's/uint32(item\.HostID)/uint32(item.ParentID)/' \
+      -e 's/uint32(item\.ContainerID)/uint32(item.ID)/' \
+      -e 's/uint32(item\.Size)/uint32(item.Count)/' "$f" && \
+    test "$(grep -cE 'uint32\(item\.(ParentID|ID|Count)\)' "$f")" = 3 && \
+    mkdir /out && \
+    version="-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" && \
+    export CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} && \
+    # dfexcludepatterns/dfparents enable COPY --exclude/--parents in the engine's dockerfile2llb.
+    go build -trimpath -tags dfexcludepatterns,dfparents -ldflags "-s -w ${version}" -o /out/dagger-engine ./cmd/engine && \
+    go build -trimpath -ldflags "-s -w ${version}" -o /out/dagger ./cmd/dagger && \
+    go build -trimpath -ldflags "-s -w" -o /out/dagger-init ./cmd/init && \
+    go build -trimpath -ldflags "-s -w" -o /out/dial-stdio ./cmd/dialstdio && \
+    go build -trimpath -ldflags "-s -w" -o /out/dnsname ./cmd/dnsname && \
+    cd / && rm -rf /dagger /dagger-dockercompat /dagger-deps.sh
+
+FROM go-builder-base AS runc-builder
+ARG RUNC_VERSION
+ARG RUNC_COMMIT
+RUN apk add --no-cache build-base pkgconf libseccomp-dev libseccomp-static
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    git clone --depth 1 --branch "${RUNC_VERSION}" https://github.com/opencontainers/runc.git /runc && \
+    test "$(git -C /runc rev-parse HEAD)" = "${RUNC_COMMIT}" && \
+    cd /runc && \
+    # x/net <0.62.0: HTTP/2 security fixes (CVE-2026-39821/46600/78661 and others).
+    go get golang.org/x/net@v0.62.0 && \
+    go mod tidy && \
+    go mod vendor && \
+    CGO_ENABLED=1 go build -trimpath -buildmode=pie -tags "seccomp netgo osusergo" \
+    -ldflags "-X main.version=${RUNC_VERSION} -linkmode external -extldflags -static-pie" \
+    -o /runc-binary . && \
+    cd / && rm -rf /runc
+
+FROM ${DAGGER_ENGINE_BASE_IMAGE} AS dagger-engine
+COPY --from=dagger-engine-builder /out/dagger-engine /usr/local/bin/dagger-engine
+COPY --from=dagger-engine-builder /out/dagger /usr/local/bin/dagger
+COPY --from=dagger-engine-builder /out/dagger-init /usr/local/bin/dagger-init
+COPY --from=dagger-engine-builder /out/dial-stdio /usr/bin/dial-stdio
+COPY --from=dagger-engine-builder /out/dnsname /opt/cni/bin/dnsname
+COPY --from=runc-builder /runc-binary /usr/local/bin/runc
 
 FROM go-builder-base AS kubectl-builder
 ARG TARGETARCH

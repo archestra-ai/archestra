@@ -22,8 +22,8 @@ import KbFileModel from "@/models/kb-file";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
-import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import ManagedOauthClientModel from "@/models/managed-oauth-client";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
@@ -191,9 +191,9 @@ export const AUDIT_DECISIONS = {
   modelPoolsTable: { audited: true, model: ModelPoolModel },
   autoRoutersTable: { audited: true, model: AutoRouterModel },
   // oauthClientsTable stores every managed OAuth client (/api/oauth-clients).
-  // Admin CRUD is audited at the route level via AUDITABLE_ROUTES; this
-  // table-level model is the LLM snapshot.
-  oauthClientsTable: { audited: true, model: LlmOauthClientModel },
+  // Admin CRUD is audited at the route level via AUDITABLE_ROUTES, which
+  // snapshots through the same managed-client model.
+  oauthClientsTable: { audited: true, model: ManagedOauthClientModel },
   organizationsTable: { audited: true, model: OrganizationModel },
   organizationRolesTable: { audited: true, model: OrganizationRoleModel },
   scheduleTriggersTable: { audited: true, model: ScheduleTriggerModel },

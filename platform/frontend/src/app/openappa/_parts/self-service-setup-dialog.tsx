@@ -4,8 +4,6 @@ import type { archestraApiTypes } from "@archestra/shared";
 import {
   ArrowLeft,
   Check,
-  CheckCircle2,
-  CircleDashed,
   Download,
   ExternalLink,
   LoaderCircle,
@@ -25,11 +23,14 @@ import { Label } from "@/components/ui/label";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useAppaGithubAppGrants,
-  useAppaRepositoryProtection,
+  useAppaGithubSync,
+  useAppaGithubSyncing,
   useFreshAppaRepositoryProtection,
   useUpdateAppaGithubSync,
 } from "@/lib/openappa-github-sync.query";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
+import { appaGitHost } from "./appa-git-host";
 
 type Step = "app" | "folder" | "enable";
 type Grants = NonNullable<
@@ -42,7 +43,7 @@ type Protection = NonNullable<
 const STEPS: { id: Step; label: string }[] = [
   { id: "app", label: "GitHub App" },
   { id: "folder", label: "Folder" },
-  { id: "enable", label: "Turn on" },
+  { id: "enable", label: "Finish" },
 ];
 const NEEDED = ["checks"] as const;
 const DEFAULT_FOLDER = "mcp";
@@ -199,7 +200,8 @@ export function SelfServiceSetupDialog({
         </div>
       ) : null}
       {step === "enable" ? (
-        <SelfServiceOutcomeStep
+        <SetupChecklist
+          selfService
           run={() =>
             update.mutateAsync({
               action: "self_service",
@@ -232,8 +234,8 @@ function headerFor(step: Step, appName: string, githubApp: string | null) {
       description: "Where each MCP server's own rules file lives.",
     };
   return {
-    title: "Turning MCP Guardrails Self-Service on",
-    description: "This takes a few seconds.",
+    title: "Finish setup",
+    description: "What is in place, and what still waits for you.",
   };
 }
 
@@ -409,39 +411,53 @@ function joined(names: string[], separator: string): ReactNode {
 type Progress = "waiting" | "running" | "done" | "failed";
 
 /**
- * A step that brings self-service about and what it brings, each with its
- * own progress: `run` (the switch, or a Git sync save that turns it on), the
- * pull request that starts the folder and includes it, and the branch
- * ruleset, which the administrator imports on GitHub and checks here. Runs
- * once when shown; a failed part offers a retry. The Git sync wizard shows
- * it too, so the dialog stays open on the pull request, and on the setup
- * pull request a connect may open, which carries the include itself.
+ * The setup's Finish step, the last step of every Git sync wizard: what is in
+ * place and what still waits, each with its own progress. With `run` (a
+ * save, a connect, the self-service switch), that work comes first, once,
+ * when the step is shown; the rest reads what it brought about, and with
+ * self-service on, the include it needs is opened. Without `run`, it reads
+ * what is in place now, so the step can be opened again at any time.
  */
-export function SelfServiceOutcomeStep({
+export function SetupChecklist({
   run: first,
   labels,
-  directory,
-  policyFile,
+  selfService: selfServiceGiven,
+  directory: directoryGiven,
+  policyFile: policyFileGiven,
 }: {
   /**
    * The first row's work; the rest reads the protection once it settles.
    * A result with `setupPull` names the pull request that carries the
    * current policy, so the first row waits on its merge.
    */
-  run: () => Promise<unknown>;
-  labels: {
+  run?: () => Promise<unknown>;
+  labels?: {
     pending: string;
     done: string;
     /** The first row with a setup pull request, before its link. */
     proposed?: string;
     failed: string;
   };
-  directory: string;
-  policyFile: string;
+  /** Whether the self-service rows show; the saved setting unless given. */
+  selfService?: boolean;
+  directory?: string;
+  policyFile?: string;
 }) {
+  const words: NonNullable<typeof labels> = labels ?? {
+    pending: "",
+    done: "",
+    failed: "",
+  };
+  const status = useAppaGithubSync().data;
+  const selfService = selfServiceGiven ?? status?.selfService?.enabled === true;
+  const directory = directoryGiven ?? status?.selfService?.directory ?? "mcp";
+  const policyFile =
+    policyFileGiven ?? status?.source?.path?.split("/").pop() ?? "appa.toml";
   const update = useUpdateAppaGithubSync();
   const fresh = useFreshAppaRepositoryProtection();
-  const [switched, setSwitched] = useState<Progress>("waiting");
+  const [switched, setSwitched] = useState<Progress>(
+    first ? "waiting" : "done",
+  );
   const [setupPull, setSetupPull] = useState<SetupPull | null>(null);
   const [rules, setRules] = useState<{
     /** `action`: the administrator imports or edits the ruleset on GitHub. */
@@ -451,7 +467,8 @@ export function SelfServiceOutcomeStep({
     name?: string;
   }>({ state: "waiting" });
   const [include, setInclude] = useState<{
-    state: Progress;
+    /** `action`: the include is missing and waits for its pull request. */
+    state: Progress | "action";
     detail?: Protection["include"];
     error?: string;
   }>({ state: "waiting" });
@@ -462,20 +479,22 @@ export function SelfServiceOutcomeStep({
   const refetch = fresh.mutateAsync;
 
   async function run() {
-    try {
-      setSwitched("running");
-      const outcome = await first();
-      setSetupPull(setupPullOf(outcome));
-      setSwitched("done");
-    } catch (error) {
-      setSwitched("failed");
-      setRules({ state: "waiting" });
-      setInclude({
-        state: "waiting",
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return;
-    }
+    if (first)
+      try {
+        setSwitched("running");
+        const outcome = await first();
+        setSetupPull(setupPullOf(outcome));
+        setSwitched("done");
+      } catch (error) {
+        setSwitched("failed");
+        setRules({ state: "waiting" });
+        setInclude({
+          state: "waiting",
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+    if (!selfService) return;
     // The switch is done whatever the reads after it bring: a read that
     // fails shows on its own row, with a check-again.
     setRules({ state: "running" });
@@ -483,6 +502,10 @@ export function SelfServiceOutcomeStep({
     const read = await readProtection();
     if (read === undefined) return setInclude({ state: "waiting" });
     setRules(rulesStateOf(read));
+    // Opened again, the checklist only reads: a missing include waits for
+    // its button rather than opening a pull request on its own.
+    if (!first && read?.include.state === "missing")
+      return setInclude({ state: "action", detail: read.include });
     await settleInclude(read);
   }
   /** The protection from GitHub, or undefined once a failed read is shown. */
@@ -615,6 +638,12 @@ export function SelfServiceOutcomeStep({
           {include.error ? `: ${include.error}` : "."}
         </span>
       );
+    if (include.state === "action")
+      return (
+        <span>
+          {policyFile} does not include <code>{directory}/*.toml</code> yet.
+        </span>
+      );
     return (
       <span>
         Open the pull request that starts <code>{directory}/</code> and adds{" "}
@@ -628,35 +657,44 @@ export function SelfServiceOutcomeStep({
         className="space-y-3 rounded-lg border bg-card p-4"
         aria-live="polite"
       >
-        <ProgressRow state={switched}>
-          {switched === "done" && setupPull ? (
-            <span>
-              {labels.proposed ?? labels.done}.{" "}
-              <a
-                href={setupPull.url}
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium text-foreground underline underline-offset-4"
-              >
-                Pull request #{setupPull.number}
-              </a>{" "}
-              carries the current policy: merge it, and the next sync finishes
-              setup.
-            </span>
-          ) : (
-            <span>
-              {switched === "done"
-                ? labels.done
-                : switched === "failed"
-                  ? `${labels.failed}${include.error ? `: ${include.error}` : "."}`
-                  : labels.pending}
-            </span>
-          )}
-        </ProgressRow>
-        <ProgressRow state={rules.state}>{rulesLine}</ProgressRow>
-        <ProgressRow state={include.state}>{includeLine}</ProgressRow>
+        {first ? (
+          <ProgressRow state={switched}>
+            {switched === "done" && setupPull ? (
+              <span>
+                {words.proposed ?? words.done}.{" "}
+                <a
+                  href={setupPull.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-foreground underline underline-offset-4"
+                >
+                  Pull request #{setupPull.number}
+                </a>{" "}
+                carries the current policy: merge it, and the next sync finishes
+                setup.
+              </span>
+            ) : (
+              <span>
+                {switched === "done"
+                  ? words.done
+                  : switched === "failed"
+                    ? `${words.failed}${include.error ? `: ${include.error}` : "."}`
+                    : words.pending}
+              </span>
+            )}
+          </ProgressRow>
+        ) : null}
+        {switched === "done" ? <SourceRows /> : null}
+        {selfService ? (
+          <>
+            <ProgressRow state={rules.state}>{rulesLine}</ProgressRow>
+            <ProgressRow state={include.state}>{includeLine}</ProgressRow>
+          </>
+        ) : null}
       </ul>
-      {switched === "failed" || include.state === "failed" ? (
+      {switched === "failed" ||
+      include.state === "failed" ||
+      include.state === "action" ? (
         <Button
           type="button"
           variant="outline"
@@ -685,10 +723,181 @@ export function SelfServiceOutcomeStep({
             }
           }}
         >
-          <span>Try again</span>
+          <span>
+            {include.state === "action" ? "Open the pull request" : "Try again"}
+          </span>
         </Button>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The rows every source has, as the last sync left them: the repository and
+ * the setup pull request it may wait on, the policy check on its pull
+ * requests, and the files beside the policy. A setup pull request that
+ * waits is checked again on coming back to this tab.
+ */
+function SourceRows() {
+  const query = useAppaGithubSync();
+  const status = query.data;
+  const source = status?.source;
+  const files = status?.templateFiles;
+  const app = !!source?.githubAppConfigId;
+  const lacksGrant =
+    status?.check?.state === "refused" ||
+    files?.state === "needs_permission" ||
+    (files?.withheld?.length ?? 0) > 0;
+  const grants = useAppaGithubAppGrants(app && lacksGrant);
+  const update = useUpdateAppaGithubSync();
+  const syncing = useAppaGithubSyncing();
+  const waiting = !!source?.setupPullRequestNumber;
+  const { mutate } = update;
+  useEffect(() => {
+    if (!waiting) return;
+    const check = () => {
+      if (document.visibilityState === "visible" && !syncing)
+        mutate({ action: "sync" });
+    };
+    window.addEventListener("focus", check);
+    return () => window.removeEventListener("focus", check);
+  }, [waiting, syncing, mutate]);
+  if (!status || !source?.repo) return null;
+  const git = appaGitHost(status);
+  const urls = git.urls(source.repo);
+  const link = (href: string, text: string) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="font-medium text-foreground underline underline-offset-4"
+    >
+      {text}
+    </a>
+  );
+  const grantActions = grants.data ? (
+    <span className="mt-2 flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="xs"
+        onClick={() =>
+          openGithubWindow(grants.data?.settingsUrl ?? "", GITHUB_WINDOW)
+        }
+      >
+        <span>Update App</span>
+        <ExternalLink aria-hidden />
+      </Button>
+      {grants.data.installationUrl ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          onClick={() =>
+            openGithubWindow(grants.data?.installationUrl ?? "", GITHUB_WINDOW)
+          }
+        >
+          <span>Approve the request</span>
+          <ExternalLink aria-hidden />
+        </Button>
+      ) : null}
+    </span>
+  ) : null;
+  const checked = source.lastSyncedAt
+    ? ` · checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`
+    : "";
+  return (
+    <>
+      <ProgressRow
+        state={source.lastSyncError ? "failed" : waiting ? "action" : "done"}
+      >
+        {source.lastSyncError ? (
+          <span>Could not sync the policy: {source.lastSyncError}</span>
+        ) : waiting && source.setupPullRequestNumber ? (
+          <span>
+            {link(
+              urls.changeRequest(source.setupPullRequestNumber),
+              `${git.changeRequestShort} #${source.setupPullRequestNumber}`,
+            )}{" "}
+            carries the initial policy: waiting for merge{checked}.
+          </span>
+        ) : (
+          <span>
+            The policy syncs from {link(urls.repo, source.repo)}
+            {checked}.
+          </span>
+        )}
+      </ProgressRow>
+      {app && status.check && status.check.state !== "none" ? (
+        <ProgressRow
+          state={status.check.state === "posted" ? "done" : "action"}
+        >
+          {status.check.state === "posted" ? (
+            <span>
+              The {status.check.name} check goes on every {git.changeRequest}.
+            </span>
+          ) : (
+            <span className="block">
+              <span className="block">
+                The {status.check.name} check is not posted: the GitHub App
+                needs the Checks permission.
+              </span>
+              {grantActions}
+            </span>
+          )}
+        </ProgressRow>
+      ) : null}
+      {files && files.state !== "not_applicable" ? (
+        <ProgressRow
+          state={
+            files.state === "current"
+              ? "done"
+              : files.state === "unavailable"
+                ? "failed"
+                : "action"
+          }
+        >
+          {files.state === "current" ? (
+            <span>The files beside the policy are current.</span>
+          ) : files.state === "unavailable" ? (
+            <span>
+              Could not compare the files beside the policy
+              {files.detail ? `: ${files.detail}` : "."}
+            </span>
+          ) : (
+            <span className="block">
+              <span className="block">
+                {files.pull ? (
+                  <span>
+                    {link(
+                      files.pull.url,
+                      `${git.changeRequestShort} #${files.pull.number}`,
+                    )}{" "}
+                    updates the files beside the policy: waiting for merge.
+                  </span>
+                ) : (
+                  <span>
+                    The validation workflow update waits for the Workflows
+                    permission.
+                  </span>
+                )}
+                {files.pull && (files.withheld?.length ?? 0) > 0 ? (
+                  <span>
+                    {" "}
+                    The validation workflow follows once the App may write
+                    workflows.
+                  </span>
+                ) : null}
+              </span>
+              {(files.withheld?.length ?? 0) > 0 ||
+              files.state === "needs_permission"
+                ? grantActions
+                : null}
+            </span>
+          )}
+        </ProgressRow>
+      ) : null}
+    </>
   );
 }
 
@@ -814,89 +1023,6 @@ export function BranchRuleActions({
   );
 }
 
-/**
- * The branch ruleset that makes the policy check required, as a row of the
- * Self-service step, so the step stays in view once it is done. With
- * self-service saved on, GitHub's state now: in place with its link, or
- * what to import or change. Otherwise, where the import comes.
- */
-export function BranchRulesetRow({
-  saved,
-  after,
-}: {
-  /** Self-service is on for the saved source, so its rules can be read. */
-  saved: boolean;
-  /** What brings the last step, "save" or "connect". */
-  after: string;
-}) {
-  const protection = useAppaRepositoryProtection(saved);
-  const fresh = useFreshAppaRepositoryProtection();
-  const rules = saved ? protection.data?.branchRules : undefined;
-  const checkName = protection.data?.checkName ?? "policy";
-  const reading = saved && protection.isPending;
-  const active = rules?.state === "active";
-  return (
-    <div className="flex items-start gap-3">
-      <span
-        className="mt-0.5 flex size-4 shrink-0 items-center justify-center"
-        aria-hidden
-      >
-        {reading ? (
-          <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
-        ) : active ? (
-          <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
-        ) : (
-          <CircleDashed className="size-4 text-muted-foreground" />
-        )}
-      </span>
-      <div className="min-w-0 space-y-1">
-        <p className="text-sm font-medium">Branch ruleset</p>
-        <div className="text-xs text-muted-foreground">
-          {!saved ? (
-            <span>
-              After you {after}, the last step offers the ruleset to import on
-              GitHub. It makes the check required, so a pull request merges only
-              once it passes.
-            </span>
-          ) : reading ? (
-            <span>Reading the branch rules…</span>
-          ) : !rules ? (
-            <span>
-              Could not read the branch rules. The last step checks them again
-              after you {after}.
-            </span>
-          ) : active ? (
-            <span>
-              The{" "}
-              {rules.url ? (
-                <a
-                  href={rules.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-medium text-foreground underline underline-offset-4"
-                >
-                  ruleset
-                </a>
-              ) : (
-                <span>ruleset</span>
-              )}{" "}
-              requires the {checkName} check, so a pull request merges only once
-              it passes.
-            </span>
-          ) : (
-            <BranchRuleActions
-              rules={rules}
-              checkName={checkName}
-              checking={fresh.isPending}
-              onCheckAgain={() => void fresh.mutateAsync().catch(() => null)}
-            />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /** The ruleset as a file, named after the check, for GitHub's import. */
 function downloadRuleset(ruleset: object, checkName: string) {
   const name = `${checkName
@@ -958,8 +1084,17 @@ function ProgressRow({
 /** Close, once the last step has settled; the dialog cannot be dismissed before. */
 function EnableFooter({ onClose }: { onClose: () => void }) {
   const update = useUpdateAppaGithubSync();
+  const syncing = useAppaGithubSyncing();
   return (
-    <Button type="button" disabled={update.isPending} onClick={onClose}>
+    <Button
+      type="button"
+      disabled={update.isPending}
+      onClick={() => {
+        // Done syncs at once, so the card shows what the checklist brought.
+        if (!syncing) update.mutate({ action: "sync" });
+        onClose();
+      }}
+    >
       <span>Done</span>
     </Button>
   );

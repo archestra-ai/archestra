@@ -6,7 +6,7 @@ import {
   getDocsUrl,
   type gitWebUrls,
 } from "@archestra/shared";
-import { AlertTriangle, GitBranch, ListChecks } from "lucide-react";
+import { AlertTriangle, GitBranch } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -59,11 +59,7 @@ import {
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { appaGitHost } from "./appa-git-host";
-import {
-  FinishSetupDialog,
-  finishSetupPieces,
-  finishSetupSummary,
-} from "./finish-setup-dialog";
+import { FinishSetupNotice, useFinishSetupPieces } from "./finish-setup-dialog";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
 import { SelfServiceSetupDialog } from "./self-service-setup-dialog";
 
@@ -83,6 +79,7 @@ export function AppaGithubSyncPanel() {
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
   });
+  const pieces = useFinishSetupPieces();
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -245,11 +242,10 @@ export function AppaGithubSyncPanel() {
                   ) : undefined
                 }
               >
-                {connected ? (
-                  <FinishSetupNotice
-                    status={query.data}
-                    canManage={canManage === true}
-                  />
+                {connected && pieces ? (
+                  <GitSourceNotice>
+                    <FinishSetupNotice pieces={pieces} />
+                  </GitSourceNotice>
                 ) : null}
                 {source.lastSyncError ? (
                   <GitSourceError
@@ -438,52 +434,6 @@ function SelfServiceRow({
           directory={selfService.directory}
           alreadyOn={selfService.enabled}
         />
-      ) : null}
-    </GitSourceNotice>
-  );
-}
-
-/**
- * One notice for whatever the setup still waits on: the App's permissions,
- * the self-service protection, the pull requests to merge. Finish setup
- * opens the wizard composed from those pieces. Nothing shows once all is
- * in place.
- */
-function FinishSetupNotice({
-  status,
-  canManage,
-}: {
-  status: archestraApiTypes.GetAppaGithubSyncResponses["200"];
-  canManage: boolean;
-}) {
-  const protection = useAppaRepositoryProtection(status.selfService.enabled);
-  const [open, setOpen] = useState(false);
-  const pieces = finishSetupPieces(status, protection.data);
-  if (!pieces) return null;
-  const git = appaGitHost(status);
-  return (
-    <GitSourceNotice>
-      <InlineNotice variant="info">
-        <ListChecks aria-hidden />
-        <span className="font-medium">Finish the Git sync setup</span>
-        <InlineNoticeText className="flex-1">
-          {finishSetupSummary(pieces, git.changeRequestShort)}
-        </InlineNoticeText>
-        {canManage ? (
-          <Button
-            type="button"
-            size="xs"
-            variant="outline"
-            className="ml-auto"
-            data-slot="inline-notice-action"
-            onClick={() => setOpen(true)}
-          >
-            <span>Finish setup</span>
-          </Button>
-        ) : null}
-      </InlineNotice>
-      {open ? (
-        <FinishSetupDialog pieces={pieces} onOpenChange={setOpen} />
       ) : null}
     </GitSourceNotice>
   );

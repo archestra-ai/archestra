@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ExternalLink,
   GitPullRequestArrow,
+  ListChecks,
   LoaderCircle,
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -12,6 +13,8 @@ import { SetupStepper } from "@/components/git/git-setup-chrome";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useAppaGithubAppGrants,
   useAppaGithubSync,
@@ -24,7 +27,7 @@ import { cn } from "@/lib/utils/tailwind";
 import { appaGitHost } from "./appa-git-host";
 import {
   GithubAppPermissionsStep,
-  SelfServiceOutcomeStep,
+  SetupChecklist,
 } from "./self-service-setup-dialog";
 
 type Status = archestraApiTypes.GetAppaGithubSyncResponses["200"];
@@ -86,18 +89,72 @@ export function finishSetupPieces(
   )
     pulls.push({ kind: "include", ...protection.include.pull });
   const selfService =
-    status.selfService.enabled &&
+    status.selfService?.enabled &&
     protection &&
     (protection.branchRules.state !== "active" ||
       protection.include.state === "missing")
       ? {
-          directory: status.selfService.directory,
+          directory: status.selfService?.directory ?? "mcp",
           policyFile: source.path.slice(source.path.lastIndexOf("/") + 1),
         }
       : null;
   if (permissions.length === 0 && !selfService && pulls.length === 0)
     return null;
   return { permissions, selfService, pulls };
+}
+
+/**
+ * What the Git sync setup still waits on, the same everywhere a page asks:
+ * the Git sync settings and every Guardrails page. Null when nothing does.
+ */
+export function useFinishSetupPieces(): FinishSetupPieces | null {
+  const status = useAppaGithubSync().data;
+  const protection = useAppaRepositoryProtection(
+    status?.selfService?.enabled === true,
+  );
+  return status?.source?.interval
+    ? finishSetupPieces(status, protection.data)
+    : null;
+}
+
+/**
+ * The one notice for whatever the Git sync setup still waits on: the App's
+ * permissions, the self-service protection, the pull requests to merge.
+ * Finish setup opens the wizard composed from those pieces; who may not
+ * change the settings reads the same notice without it.
+ */
+export function FinishSetupNotice({ pieces }: { pieces: FinishSetupPieces }) {
+  const git = appaGitHost(useAppaGithubSync().data);
+  const { data: canManage } = useHasPermissions({
+    organizationSettings: ["update"],
+  });
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <InlineNotice variant="info">
+        <ListChecks aria-hidden />
+        <span className="font-medium">Finish the Git sync setup</span>
+        <InlineNoticeText className="flex-1">
+          {finishSetupSummary(pieces, git.changeRequestShort)}
+        </InlineNoticeText>
+        {canManage ? (
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            className="ml-auto"
+            data-slot="inline-notice-action"
+            onClick={() => setOpen(true)}
+          >
+            <span>Finish setup</span>
+          </Button>
+        ) : null}
+      </InlineNotice>
+      {open ? (
+        <FinishSetupDialog pieces={pieces} onOpenChange={setOpen} />
+      ) : null}
+    </>
+  );
 }
 
 /** The pieces in a phrase for the card: "grant …, finish …, merge …". */
@@ -133,11 +190,11 @@ const PULL_TITLES: Record<SetupPull["kind"], string> = {
   include: "Servers' folder include",
 };
 
-type Step = "app" | "self_service" | "pulls";
+type Step = "app" | "pulls" | "finish";
 const STEP_LABELS: Record<Step, string> = {
   app: "GitHub App",
-  self_service: "Self-service",
   pulls: "Pull requests",
+  finish: "Finish",
 };
 
 /**
@@ -155,15 +212,17 @@ export function FinishSetupDialog({
 }) {
   const [steps] = useState<Step[]>(() => [
     ...(initial.permissions.length ? (["app"] as const) : []),
-    ...(initial.selfService ? (["self_service"] as const) : []),
     // A permission granted here proposes a pull request on the next sync,
     // so the pull requests step follows the App step always.
     ...(initial.pulls.length || initial.permissions.length
       ? (["pulls"] as const)
       : []),
+    // Last, and open again at any time: what is in place and what still
+    // waits, the self-service ruleset and include among it.
+    "finish" as const,
   ]);
   const [index, setIndex] = useState(0);
-  const step = steps[index] ?? "pulls";
+  const step = steps[index] ?? "finish";
   const last = index >= steps.length - 1;
   const query = useAppaGithubSync();
   const git = appaGitHost(query.data);
@@ -247,9 +306,7 @@ export function FinishSetupDialog({
             )} permission${initial.permissions.length > 1 ? "s" : ""}`}
         />
       ) : null}
-      {step === "self_service" && initial.selfService ? (
-        <SelfServiceStep selfService={initial.selfService} />
-      ) : null}
+      {step === "finish" ? <SetupChecklist /> : null}
       {step === "pulls" ? (
         <PullRequestsStep
           initial={initial.pulls}
@@ -271,11 +328,10 @@ function headerFor(
       title: "Finish the GitHub App setup",
       description: `The GitHub App needs ${pieces.permissions.length > 1 ? "two more permissions" : "one more permission"}: ${pieces.permissions.map((name) => permissionPurpose(name, changeRequest)).join("; ")}.`,
     };
-  if (step === "self_service")
+  if (step === "finish")
     return {
-      title: "Finish MCP Guardrails Self-Service",
-      description:
-        "The branch ruleset that requires the check, and the include that makes the servers' files apply.",
+      title: "Finish setup",
+      description: "What is in place, and what still waits for you.",
     };
   // A permission granted on the way opens one more.
   const count = Math.max(pieces.pulls.length, 1);
@@ -325,33 +381,6 @@ function joinCodes(names: Permission[]): ReactNode {
   ));
 }
 
-/** Self-service repaired in place: the same rows as turning it on. */
-function SelfServiceStep({
-  selfService,
-}: {
-  selfService: NonNullable<FinishSetupPieces["selfService"]>;
-}) {
-  const update = useUpdateAppaGithubSync();
-  return (
-    <SelfServiceOutcomeStep
-      run={() =>
-        update.mutateAsync({
-          action: "self_service",
-          enabled: true,
-          directory: selfService.directory,
-        })
-      }
-      labels={{
-        pending: "Check MCP Guardrails Self-Service",
-        done: "MCP Guardrails Self-Service is on",
-        failed: "Could not check MCP Guardrails Self-Service",
-      }}
-      directory={selfService.directory}
-      policyFile={selfService.policyFile}
-    />
-  );
-}
-
 /**
  * The pull requests to merge, as the status reports them now: one sync when
  * a permission was just granted, so the pull request it unblocks opens, and
@@ -368,7 +397,7 @@ function PullRequestsStep({
 }) {
   const query = useAppaGithubSync();
   const protection = useAppaRepositoryProtection(
-    query.data?.selfService.enabled === true,
+    query.data?.selfService?.enabled === true,
   );
   const update = useUpdateAppaGithubSync();
   const started = useRef(false);

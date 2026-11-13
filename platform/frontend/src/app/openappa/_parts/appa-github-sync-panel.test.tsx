@@ -176,8 +176,15 @@ test("one Finish setup notice names what still waits, and its wizard takes the p
   expect(
     within(dialog).getByRole("link", { name: "Review and merge" }),
   ).toHaveAttribute("href", "https://github.com/example/policies/pull/4");
-  // One step: no stepper, Done alone, and Done syncs at once.
+  // The pull request, then the Finish step, where Done syncs at once.
   expect(within(dialog).queryByText("GitHub App")).toBeNull();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+  dialog = await screen.findByRole("dialog", { name: "Finish setup" });
+  expect(
+    await within(dialog).findByText(
+      /updates the files beside the policy: waiting for merge/,
+    ),
+  ).toBeVisible();
   const actions: unknown[] = [];
   server.use(
     http.patch(url, async ({ request }) => {
@@ -486,6 +493,7 @@ test("Enable walks through the App's permission, the folder, the include pull re
         enabled?: boolean;
       };
       actions.push(body);
+      if (body.action === "sync") return HttpResponse.json(state);
       if (body.action === "include_servers") {
         include = {
           folder: "rules/servers",
@@ -908,9 +916,20 @@ test("links an existing repository whose policy lives elsewhere through Advanced
   expect(
     await screen.findByText(/Found policy\/appa.toml/, {}, { timeout: 3000 }),
   ).toBeVisible();
+  server.use(http.patch(url, () => HttpResponse.json(state)));
   fireEvent.click(screen.getByRole("button", { name: "Connect repository" }));
+  // The Finish step follows the connect, and Done closes it.
+  const checklist = await screen.findByRole("dialog", { name: "Finish setup" });
+  expect(
+    await within(checklist).findByText(
+      "Repository connected and the policy pulled",
+    ),
+  ).toBeVisible();
+  fireEvent.click(within(checklist).getByRole("button", { name: "Done" }));
   expect(await screen.findByText("Waiting for the first sync")).toBeVisible();
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
 });
 
 test("starts fresh from the template, connects it through a chosen App and finishes once the setup PR merges", async () => {
@@ -984,18 +1003,20 @@ test("starts fresh from the template, connects it through a chosen App and finis
     await screen.findByText("OpenAPPA template", {}, { timeout: 3000 }),
   ).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Connect repository" }));
-  // Repository rules require a pull request: the dialog waits on it.
-  expect(await screen.findByText("Finish Git sync")).toBeVisible();
-  expect(screen.getByText("Merge the setup PR")).toBeVisible();
+  // Repository rules require a pull request: the Finish step waits on it.
+  const checklist = await screen.findByRole("dialog", { name: "Finish setup" });
   expect(
-    within(screen.getByRole("dialog")).getByRole("link", {
-      name: "Review and merge",
-    }),
+    await within(checklist).findByText(
+      /carries the initial policy: waiting for merge/,
+    ),
+  ).toBeVisible();
+  expect(
+    within(checklist).getByRole("link", { name: "PR #7" }),
   ).toHaveAttribute(
     "href",
     "https://github.com/example/openappa-policy/pull/7",
   );
-  // Not merged yet: the check stays quiet, since the dialog already says so.
+  // Not merged yet: the check stays quiet, since the Finish step says so.
   let checks = 0;
   server.use(
     http.patch(url, () => {
@@ -1009,7 +1030,11 @@ test("starts fresh from the template, connects it through a chosen App and finis
     expect(screen.queryByText("Checking…")).not.toBeInTheDocument(),
   );
   expect(toast.info).not.toHaveBeenCalled();
-  expect(screen.getByText("Finish Git sync")).toBeVisible();
+  expect(
+    within(checklist).getByText(
+      /carries the initial policy: waiting for merge/,
+    ),
+  ).toBeVisible();
   server.use(
     http.patch(url, async ({ request }) => {
       expect(await request.json()).toEqual({ action: "sync" });
@@ -1028,14 +1053,15 @@ test("starts fresh from the template, connects it through a chosen App and finis
   );
   // Coming back from merging on GitHub checks at once.
   fireEvent.focus(window);
-  expect(await screen.findByText("Setup finished")).toBeVisible();
-  expect(screen.getByText("Merged")).toBeVisible();
+  expect(
+    await within(checklist).findByText(/^The policy syncs from/),
+  ).toBeVisible();
   expect(toast.success).toHaveBeenCalledWith(
     "Initial policy merged. Policy synced from GitHub.",
   );
-  fireEvent.click(screen.getByRole("button", { name: "Done" }));
+  fireEvent.click(within(checklist).getByRole("button", { name: "Done" }));
   await waitFor(() =>
-    expect(screen.queryByText("Setup finished")).not.toBeInTheDocument(),
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
 });
 
@@ -1122,7 +1148,7 @@ test("editing an App-backed source keeps its repository and only warns about mis
   });
 });
 
-test("the Self-service step of an edit keeps the branch ruleset in view: in place with its link, or what to import; turned on anew, where the import comes", async () => {
+test("the Self-service step leaves the branch ruleset to the Finish step, which shows it once App and repository are set: in place with its link, or what to import", async () => {
   state = {
     ...state,
     source: { ...source, githubAppConfigId: appId },
@@ -1145,30 +1171,38 @@ test("the Self-service step of an edit keeps the branch ruleset in view: in plac
       }),
     ),
   );
-  const openSelfServiceStep = async () => {
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+  const openStep = async (name: RegExp) => {
     const dialog = await screen.findByRole("dialog");
-    const stepper = within(dialog).getByRole("list", {
-      name: "Setup progress",
-    });
     fireEvent.click(
-      within(stepper).getByRole("button", { name: /Self-service/ }),
+      within(
+        within(dialog).getByRole("list", { name: "Setup progress" }),
+      ).getByRole("button", { name }),
     );
-    expect(await within(dialog).findByText("Branch ruleset")).toBeVisible();
     return dialog;
   };
   show();
-  let dialog = await openSelfServiceStep();
+  fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+  let dialog = await openStep(/Self-service/);
   expect(
     await within(dialog).findByText(
-      (_, element) =>
-        element?.tagName === "SPAN" &&
-        /^The ruleset requires the Check OpenAPPA Guardrails check/.test(
-          element.textContent ?? "",
-        ),
+      /The branch ruleset that makes the check required comes on the Finish step/,
     ),
   ).toBeVisible();
-  expect(within(dialog).getByRole("link", { name: "ruleset" })).toHaveAttribute(
+  expect(within(dialog).queryByText(/Download ruleset/)).toBeNull();
+  // The Finish step opens from any step of an edit, and reads what is in place.
+  dialog = await openStep(/Finish/);
+  expect(
+    (
+      await within(dialog).findAllByText(
+        (_, element) =>
+          element?.tagName === "SPAN" &&
+          /^Ruleset requires the Check OpenAPPA Guardrails check on the branch/.test(
+            element.textContent ?? "",
+          ),
+      )
+    )[0],
+  ).toBeVisible();
+  expect(within(dialog).getByRole("link", { name: "Ruleset" })).toHaveAttribute(
     "href",
     "https://github.com/example/policies/rules/5",
   );
@@ -1181,38 +1215,13 @@ test("the Self-service step of an edit keeps the branch ruleset in view: in plac
     ruleset: { name: "Check OpenAPPA Guardrails" },
   };
   show();
-  dialog = await openSelfServiceStep();
+  fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+  dialog = await openStep(/Finish/);
   expect(
     await within(dialog).findByRole("button", { name: "Download ruleset" }),
   ).toBeVisible();
   expect(
     within(dialog).getByRole("button", { name: "Open rulesets" }),
-  ).toBeVisible();
-  cleanup();
-
-  // Off when saved, ticked here: the import comes after the save.
-  state = {
-    ...state,
-    source: { ...source, githubAppConfigId: appId, selfService: false },
-    selfService: { ...state.selfService, enabled: false, setting: false },
-  };
-  show();
-  fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-  dialog = await screen.findByRole("dialog");
-  fireEvent.click(
-    within(
-      within(dialog).getByRole("list", { name: "Setup progress" }),
-    ).getByRole("button", { name: /Self-service/ }),
-  );
-  fireEvent.click(
-    await within(dialog).findByRole("checkbox", {
-      name: "MCP Guardrails Self-Service",
-    }),
-  );
-  expect(
-    await within(dialog).findByText(
-      /After you save, the last step offers the ruleset to import on GitHub/,
-    ),
   ).toBeVisible();
 });
 
@@ -1778,12 +1787,14 @@ test("keeps the merge notice after reload, and Done in the wizard syncs at once 
   show();
   expect(await screen.findByText("Merge PR #7.")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
-  const dialog = await screen.findByRole("dialog", {
+  const pulls = await screen.findByRole("dialog", {
     name: "Merge the pull request",
   });
   expect(
-    within(dialog).getByRole("link", { name: "Initial policy #7" }),
+    within(pulls).getByRole("link", { name: "Initial policy #7" }),
   ).toHaveAttribute("href", "https://github.com/example/policies/pull/7");
+  fireEvent.click(within(pulls).getByRole("button", { name: "Continue" }));
+  const dialog = await screen.findByRole("dialog", { name: "Finish setup" });
   // Merged on GitHub meanwhile: Done syncs at once, the card shows the sync
   // running, and the notice goes once it lands.
   let finish!: () => void;
@@ -1866,12 +1877,20 @@ test("links the pull request that includes the servers' folder while it waits, a
     ),
   ).toBeVisible();
   expect(screen.getByText("Finish the self-service protection.")).toBeVisible();
-  // Already on: the wizard repairs in place, with the folder fixed.
+  // Already on: the wizard is the Finish step alone, and the missing include
+  // waits for its button.
   fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
-  const dialog = await screen.findByRole("dialog", {
-    name: "Finish MCP Guardrails Self-Service",
-  });
+  const dialog = await screen.findByRole("dialog", { name: "Finish setup" });
   expect(
-    await within(dialog).findByText(/MCP Guardrails Self-Service is on/),
+    (
+      await within(dialog).findAllByText(
+        (_, element) =>
+          element?.tagName === "SPAN" &&
+          element.textContent === "appa.toml does not include mcp/*.toml yet.",
+      )
+    )[0],
+  ).toBeVisible();
+  expect(
+    within(dialog).getByRole("button", { name: "Open the pull request" }),
   ).toBeVisible();
 });

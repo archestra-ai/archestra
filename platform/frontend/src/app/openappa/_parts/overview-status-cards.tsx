@@ -9,7 +9,6 @@ import {
   Github,
   LoaderCircle,
   MessageCircle,
-  RefreshCw,
   ShieldAlert,
 } from "lucide-react";
 import Link from "next/link";
@@ -30,17 +29,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import {
-  useAppaGithubSync,
-  useUpdateAppaGithubSync,
-} from "@/lib/openappa-github-sync.query";
+import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import {
   useOpenAppaPolicyTestRuns,
   useOpenAppaPolicyTests,
 } from "@/lib/openappa-policy-tests.query";
 import { useOpenAppaYellsSummary } from "@/lib/openappa-yells.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { cn } from "@/lib/utils/tailwind";
 import { ValidationStatusBadge } from "../validation/_parts/validation-parts";
 import { breakTheGlassSummary } from "./break-the-glass-summary";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
@@ -94,7 +89,6 @@ export function OverviewStatusCards() {
 
 function GithubSyncCard() {
   const sync = useAppaGithubSync();
-  const update = useUpdateAppaGithubSync();
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
   });
@@ -158,36 +152,8 @@ function GithubSyncCard() {
           )
         }
         action={
-          !sync.data?.enabled ? null : connected &&
-            source?.setupPullRequestNumber ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="outline" asChild>
-                <a
-                  href={`https://github.com/${source.repo}/pull/${source.setupPullRequestNumber}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <span>Review and merge PR</span>
-                  <ArrowRight />
-                </a>
-              </Button>
-              {canManage && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={update.isPending}
-                  onClick={() => update.mutate({ action: "sync" })}
-                >
-                  <RefreshCw
-                    className={cn(update.isPending && "animate-spin")}
-                  />
-                  <span>
-                    {update.isPending ? "Checking…" : "Check if merged"}
-                  </span>
-                </Button>
-              )}
-            </div>
-          ) : !canManage ? (
+          // A setup that waits is finished from the Finish setup notice above.
+          !sync.data?.enabled ? null : !canManage ? (
             connected ? null : (
               <p className="text-sm text-muted-foreground">
                 Ask an administrator to connect a repository.

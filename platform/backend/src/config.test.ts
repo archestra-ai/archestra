@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import {
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
@@ -104,6 +105,7 @@ describe("getAnalyticsConfig", () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     delete process.env.ARCHESTRA_ANALYTICS;
+    delete process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED;
     delete process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY;
     delete process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST;
   });
@@ -135,6 +137,35 @@ describe("getAnalyticsConfig", () => {
     process.env.ARCHESTRA_ANALYTICS = "enabled";
 
     expect(getAnalyticsConfig().enabled).toBe(true);
+  });
+
+  test("defaults to disabled in production with an enterprise license", () => {
+    process.env.NODE_ENV = "production";
+    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED = "true";
+
+    expect(getAnalyticsConfig().enabled).toBe(false);
+  });
+
+  test("explicit ARCHESTRA_ANALYTICS=enabled wins with an enterprise license", () => {
+    process.env.NODE_ENV = "production";
+    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED = "true";
+    process.env.ARCHESTRA_ANALYTICS = "enabled";
+
+    expect(getAnalyticsConfig().enabled).toBe(true);
+  });
+
+  test.each([
+    ["false", true],
+    ["true", false],
+  ])("the released image with ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=%s and no operator override is enabled=%s", (enterpriseLicense, expected) => {
+    const imageEnv = readDockerfileEnv(
+      new URL("../../Dockerfile", import.meta.url),
+    );
+    process.env.NODE_ENV = imageEnv.NODE_ENV;
+    process.env.ARCHESTRA_ANALYTICS = imageEnv.ARCHESTRA_ANALYTICS;
+    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED = enterpriseLicense;
+
+    expect(getAnalyticsConfig().enabled).toBe(expected);
   });
 
   test("explicit ARCHESTRA_ANALYTICS=disabled wins in production", () => {
@@ -3635,6 +3666,7 @@ describe("OpenAPPA feature configuration", () => {
     "true",
     " true ",
   ])("requires explicit opt-in for external reports independently of analytics (%s)", (forwarding) => {
+    vi.stubEnv("ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED", undefined);
     for (const analytics of ["disabled", "enabled", undefined]) {
       vi.stubEnv("ARCHESTRA_ANALYTICS", analytics);
       for (const environment of ["production", "development"]) {
@@ -4003,3 +4035,15 @@ describe("resolved pod shutdown budgets", () => {
     ).not.toThrow();
   });
 });
+
+// === Internal helpers ===
+
+function readDockerfileEnv(path: URL): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const match of readFileSync(path, "utf8").matchAll(
+    /^ENV (\w+)=(?:"([^"]*)"|(\S*))$/gm,
+  )) {
+    env[match[1]] = match[2] ?? match[3];
+  }
+  return env;
+}

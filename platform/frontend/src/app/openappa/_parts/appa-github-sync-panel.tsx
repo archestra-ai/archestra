@@ -47,6 +47,7 @@ import {
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { getVisibleDocsUrl } from "@/lib/docs/docs";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github-credential";
 import {
   useAppaGithubSync,
@@ -331,7 +332,7 @@ type Protection = NonNullable<
 
 /**
  * The repository's protection for server rules files: the branch ruleset
- * Archestra keeps in line at each sync.
+ * the administrator imports, which Archestra reads at each sync.
  */
 /**
  * MCP Guardrails Self-Service as the deployment sets it: whether each MCP
@@ -352,6 +353,7 @@ function SelfServiceRow({
   selfService: archestraApiTypes.GetAppaGithubSyncResponses["200"]["selfService"];
   canManage: boolean;
 }) {
+  const appName = useAppName();
   const eligible = !!source.githubAppConfigId;
   const [setup, setSetup] = useState(false);
   const protection = useAppaRepositoryProtection(selfService.enabled);
@@ -383,7 +385,7 @@ function SelfServiceRow({
   const description = (
     <>
       {eligible
-        ? "Lets MCP owners manage their MCPs' Guardrails. Additional GitHub App permissions are added to ensure the related pull requests are checked."
+        ? "MCP owners can manage MCP Guardrails. The GitHub App checks their pull requests, and a branch ruleset you import makes the check required."
         : "Connect the policy repository through a GitHub App so MCP owners can manage MCP Guardrails."}{" "}
       <SelfServiceDocsLink />
     </>
@@ -440,6 +442,14 @@ function SelfServiceRow({
             },
           ]}
         />
+        {selfService.leftoverRule ? (
+          <p className="pt-2 text-sm leading-5 text-muted-foreground">
+            A branch {hostLink(selfService.leftoverRule.url, "ruleset")} still
+            requires the {selfService.leftoverRule.checkName} check. {appName}{" "}
+            posts it as skipped on every pull request until you remove the rule,
+            or turn self-service on again.
+          </p>
+        ) : null}
         {data ? (
           <RepositoryState
             data={data}

@@ -160,7 +160,9 @@ test("a ruleset still to set up: the row says ready to be Enabled, with Finish s
         branchRules: {
           state: "incomplete",
           url: "https://github.com/example/policies/rules/5",
-          bypassActors: 2,
+          settingsUrl: "https://github.com/example/policies/settings/rules",
+          detail:
+            "The rule takes the Guardrails Policy Admission check from any source, so a passing one could be posted with any token. Edit it to take the check from the GitHub App only.",
         },
       }),
     ),
@@ -235,7 +237,6 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
           { name: "contents", granted: true },
           { name: "pull_requests", granted: true },
           { name: "checks", granted },
-          { name: "administration", granted },
         ],
       }),
     ),
@@ -255,7 +256,7 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
     await within(dialog).findByText(
       (_, element) =>
         element?.tagName === "SPAN" &&
-        /^Missing: Administration and Checks\./.test(element.textContent ?? ""),
+        /^Missing: Checks\./.test(element.textContent ?? ""),
     ),
   ).toBeVisible();
   expect(
@@ -279,7 +280,7 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
   ).toBeVisible();
 });
 
-test("Finish setup walks through the App's permissions, the ruleset and the include pull request", async () => {
+test("Finish setup walks through the App's permission, the include pull request and the ruleset the administrator imports", async () => {
   state = {
     ...state,
     source: { ...source, githubAppConfigId: "app-1" },
@@ -289,16 +290,51 @@ test("Finish setup walks through the App's permissions, the ruleset and the incl
     folder: "rules/servers",
     state: "missing",
   };
+  const ruleset = {
+    name: "Guardrails Policy Admission",
+    target: "branch",
+    source_type: "Repository",
+    source: "example/policies",
+    enforcement: "active",
+    conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
+    bypass_actors: [],
+    rules: [
+      {
+        type: "required_status_checks",
+        parameters: {
+          strict_required_status_checks_policy: false,
+          required_status_checks: [
+            { context: "Guardrails Policy Admission", integration_id: 123 },
+          ],
+        },
+      },
+    ],
+  };
+  let branchRules: Record<string, unknown> = {
+    state: "missing",
+    settingsUrl: "https://github.com/example/policies/settings/rules",
+    ruleset,
+  };
   const protection = vi.fn(() =>
     HttpResponse.json({
       checkName: "Guardrails Policy Admission",
       include,
-      branchRules: {
-        state: "active",
-        url: "https://github.com/example/policies/rules/5",
-      },
+      branchRules,
     }),
   );
+  const opened = vi.spyOn(window, "open").mockImplementation(() => null);
+  const files: Blob[] = [];
+  let downloaded: string | null = null;
+  URL.createObjectURL = vi.fn((blob: Blob | MediaSource) => {
+    files.push(blob as Blob);
+    return "blob:ruleset";
+  });
+  URL.revokeObjectURL = vi.fn();
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    downloaded = this.download;
+  });
   const actions: unknown[] = [];
   server.use(
     http.get(`${url}/app-grants`, () =>
@@ -311,7 +347,6 @@ test("Finish setup walks through the App's permissions, the ruleset and the incl
           { name: "contents", granted: true },
           { name: "pull_requests", granted: true },
           { name: "checks", granted: true },
-          { name: "administration", granted: true },
         ],
       }),
     ),
@@ -319,7 +354,7 @@ test("Finish setup walks through the App's permissions, the ruleset and the incl
     http.patch(url, async ({ request }) => {
       const body = (await request.json()) as { action: string };
       actions.push(body);
-      // Only the include step opens the pull request; protect keeps the ruleset.
+      // Only the include step opens the pull request; protect reads the rules.
       if (body.action === "include_servers")
         include = {
           folder: "rules/servers",
@@ -351,13 +386,10 @@ test("Finish setup walks through the App's permissions, the ruleset and the incl
   ).toBeVisible();
   fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
 
-  // The switch is the deployment's; the ruleset, then the pull request,
+  // The switch is the deployment's; the pull request, then the ruleset,
   // each reported.
   expect(
     await within(dialog).findByText("MCP Guardrails Self-Service is on"),
-  ).toBeVisible();
-  expect(
-    await within(dialog).findByText(/Branch ruleset created/),
   ).toBeVisible();
   expect(
     (await within(dialog).findByRole("link", { name: "Pull request #12" }))
@@ -369,6 +401,43 @@ test("Finish setup walks through the App's permissions, the ruleset and the incl
     { action: "protect" },
     { action: "include_servers" },
   ]);
+  // The ruleset is the administrator's to import: the file, the page, and
+  // a way to check once it is in.
+  expect(
+    await within(dialog).findByText(/Import the branch ruleset on GitHub/),
+  ).toHaveTextContent(
+    "so a pull request merges only once the Guardrails Policy Admission check passes",
+  );
+  fireEvent.click(
+    within(dialog).getByRole("button", { name: "Download ruleset" }),
+  );
+  expect(downloaded).toBe("guardrails-policy-admission.ruleset.json");
+  expect(JSON.parse(await (files[0] as Blob).text())).toEqual(ruleset);
+  fireEvent.click(
+    within(dialog).getByRole("button", { name: "Open rulesets" }),
+  );
+  expect(opened).toHaveBeenCalledWith(
+    "https://github.com/example/policies/settings/rules",
+    "archestra-github-app",
+  );
+  branchRules = {
+    state: "active",
+    url: "https://github.com/example/policies/rules/5",
+  };
+  fireEvent.click(
+    within(dialog).getByRole("button", {
+      name: "Check the branch rules again",
+    }),
+  );
+  expect(
+    await within(dialog).findByText(
+      /requires the Guardrails Policy Admission check on the branch/,
+    ),
+  ).toBeVisible();
+  expect(within(dialog).getByRole("link", { name: "Ruleset" })).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/rules/5",
+  );
   fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
@@ -630,8 +699,6 @@ test("links an existing repository whose policy lives elsewhere through Advanced
     target: { value: "example" },
   });
   fireEvent.click(screen.getByText("Use an existing repository"));
-  // The Self-service step comes first; nothing to change here.
-  fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
   // With a single App there is nothing to pick: it goes straight to its repositories.
   fireEvent.click(await screen.findByText("Use an App I already have"));
   fireEvent.click(await screen.findByRole("combobox", { name: "Repository" }));
@@ -711,10 +778,9 @@ test("starts fresh from the template, connects it through a chosen App and finis
     visibility: "private",
   });
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-  // The Self-service step comes first; nothing to change here.
-  fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
   fireEvent.click(await screen.findByText("Use an App I already have"));
   fireEvent.click(await screen.findByRole("radio", { name: /Policy App/ }));
+  // Checks is among the permissions every App gets, self-service or not.
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   // The new template copy is picked without a search.
   expect(
@@ -808,6 +874,19 @@ test("editing an App-backed source keeps its repository and only warns about mis
   show();
   fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
   expect(await screen.findByText("Edit Git sync")).toBeVisible();
+  // Every earlier step opens again, as for a new setup: the organization
+  // and the start choice, then the App, where another can be created.
+  const stepper = screen.getByRole("list", { name: "Setup progress" });
+  fireEvent.click(within(stepper).getByRole("button", { name: /Start/ }));
+  expect(screen.getByLabelText("Organization")).toHaveValue("example");
+  fireEvent.click(screen.getByText("Use an existing repository"));
+  expect(
+    await screen.findByRole("radio", { name: /Policy App/ }),
+  ).toBeChecked();
+  expect(
+    screen.getByRole("button", { name: "Create a new GitHub App instead" }),
+  ).toBeVisible();
+  fireEvent.click(within(stepper).getByRole("button", { name: /Repository/ }));
   expect(
     await screen.findByText("No traces/ folder", {}, { timeout: 3000 }),
   ).toBeVisible();
@@ -823,7 +902,7 @@ test("editing an App-backed source keeps its repository and only warns about mis
     await within(dialog).findByText("Git sync saved and the policy pulled"),
   ).toBeVisible();
   expect(
-    await within(dialog).findByText(/Branch ruleset created/),
+    await within(dialog).findByText(/requires the .* check on the branch/),
   ).toBeVisible();
   expect(await within(dialog).findByText(/already includes/)).toHaveTextContent(
     "appa.toml already includes mcp/*.toml.",
@@ -842,6 +921,153 @@ test("editing an App-backed source keeps its repository and only warns about mis
     gitlabTokenId: null,
     githubAppConfigId: appId,
   });
+});
+
+test("connecting an existing repository with self-service keeps the checklist open on the setup pull request, with the ruleset to import", async () => {
+  // On by the deployment's variable: the connect step stays open on what it brought.
+  state = {
+    ...state,
+    hasPolicy: true,
+    source: null,
+    selfService: selfServiceSetting(true),
+  };
+  serveApps([[appId, "Policy App"]]);
+  serveRepositories({ [appId]: ["example/policies"] });
+  const actions: unknown[] = [];
+  server.use(
+    http.get(`${githubApp}/repository`, () =>
+      HttpResponse.json({ status: "policy", validations: true }),
+    ),
+    http.post(`${url}/repository`, async ({ request }) => {
+      expect(await request.json()).toEqual({
+        owner: "example",
+        name: "policies",
+        githubAppConfigId: appId,
+        interval: "1h",
+        existing: true,
+        replace: false,
+      });
+      // The repository holds its own policy: the current one goes in as a
+      // pull request, the servers' include with it.
+      state = {
+        ...state,
+        source: {
+          ...source,
+          githubAppConfigId: appId,
+          sourceCommit: null,
+          setupPullRequestNumber: 8,
+        },
+      };
+      return HttpResponse.json(state);
+    }),
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Check OpenAPPA Guardrails",
+        include: {
+          folder: "mcp",
+          state: "pull_open",
+          pull: {
+            number: 8,
+            url: "https://github.com/example/policies/pull/8",
+          },
+        },
+        branchRules: {
+          state: "missing",
+          settingsUrl: "https://github.com/example/policies/settings/rules",
+          ruleset: { name: "Check OpenAPPA Guardrails" },
+        },
+      }),
+    ),
+    http.patch(url, async ({ request }) => {
+      actions.push(await request.json());
+      return HttpResponse.json(state);
+    }),
+  );
+  show();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Set up Git sync" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: /^GitHub/ }));
+  fireEvent.change(screen.getByLabelText("Organization"), {
+    target: { value: "example" },
+  });
+  fireEvent.click(screen.getByText("Use an existing repository"));
+  // With a single App there is nothing to pick: it goes straight to its repositories.
+  fireEvent.click(await screen.findByText("Use an App I already have"));
+  fireEvent.click(await screen.findByRole("combobox", { name: "Repository" }));
+  fireEvent.click(screen.getByRole("option", { name: /example\/policies/ }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Connect repository" }),
+    ).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Connect repository" }));
+  // No separate pull request dialog: the checklist names the setup pull
+  // request, the ruleset to import, and the include the pull request carries.
+  const dialog = await screen.findByRole("dialog");
+  const setup = await within(dialog).findByRole("link", {
+    name: "Pull request #8",
+  });
+  expect(setup).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/pull/8",
+  );
+  expect(setup.parentElement).toHaveTextContent(
+    "Repository connected. Pull request #8 carries the current policy: merge it, and the next sync finishes setup.",
+  );
+  expect(
+    await within(dialog).findByRole("button", { name: "Download ruleset" }),
+  ).toBeVisible();
+  expect(
+    within(dialog).getByText(/The setup pull request includes/),
+  ).toHaveTextContent("The setup pull request includes mcp/*.toml.");
+  // Nothing else opened: the pull request on its way is the include.
+  expect(actions).toEqual([]);
+  expect(screen.queryByText("Finish Git sync")).not.toBeInTheDocument();
+  // Without the Checks permission the import waits: a rule requiring a
+  // check nobody posts would hold every pull request, so no file to import.
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Check OpenAPPA Guardrails",
+        include: {
+          folder: "mcp",
+          state: "pull_open",
+          pull: {
+            number: 8,
+            url: "https://github.com/example/policies/pull/8",
+          },
+        },
+        branchRules: {
+          state: "needs_permission",
+          detail:
+            "The GitHub App needs the Checks permission (read and write).",
+          settingsUrl: "https://github.com/example/policies/settings/rules",
+          ruleset: { name: "Check OpenAPPA Guardrails" },
+        },
+      }),
+    ),
+  );
+  fireEvent.click(
+    within(dialog).getByRole("button", {
+      name: "Check the branch rules again",
+    }),
+  );
+  expect(
+    await within(dialog).findByText(/Grant it with Finish setup/),
+  ).toHaveTextContent(
+    "The GitHub App needs the Checks permission (read and write). Grant it with Finish setup on the Git sync card, then import the ruleset.",
+  );
+  expect(
+    within(dialog).queryByRole("button", { name: "Download ruleset" }),
+  ).toBeNull();
+  expect(
+    within(dialog).queryByRole("button", { name: "Open rulesets" }),
+  ).toBeNull();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
 });
 
 test("creates a private GitLab project in a group with the saved token", async () => {
@@ -1196,7 +1422,6 @@ test("links the pull request that includes the servers' folder while it waits, a
           { name: "contents", granted: true },
           { name: "pull_requests", granted: true },
           { name: "checks", granted: true },
-          { name: "administration", granted: true },
         ],
       }),
     ),

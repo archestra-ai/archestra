@@ -437,6 +437,11 @@ export const azureAdapterFactory: LLMProvider<
   },
 
   extractErrorMessage(error: unknown): string {
+    // Without synced deployment metadata the request reaches Foundry, whose
+    // answer for a Claude deployment says nothing about the endpoint.
+    if (get(error, "error.code") === "api_not_supported") {
+      return AZURE_CHAT_COMPLETIONS_NOT_SUPPORTED_MESSAGE;
+    }
     const azureMessage = get(error, "error.message");
     if (typeof azureMessage === "string") {
       return azureMessage;
@@ -515,6 +520,12 @@ function defaultAzureReasoningEffort(request: AzureRequest): {
 }
 
 const DEFAULT_AZURE_REASONING_EFFORT: ReasoningEffort = "medium";
+
+const AZURE_CHAT_COMPLETIONS_NOT_SUPPORTED_MESSAGE =
+  "This Azure deployment does not serve the OpenAI Chat Completions API (api_not_supported). " +
+  "Claude deployments on Microsoft Foundry are served over the Responses API, or under the Anthropic provider with base URL " +
+  'https://<resource>.services.ai.azure.com/anthropic and model "anthropic:<deployment>". ' +
+  "Refresh this provider's models so Archestra rejects such requests before sending them.";
 
 /**
  * Azure's OpenAI reasoning deployments reject `max_tokens` ("Use

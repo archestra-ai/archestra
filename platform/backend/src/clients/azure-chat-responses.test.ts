@@ -22,11 +22,31 @@ afterEach(async () => {
   proxyApp = undefined;
 });
 
+// Foundry rejects Claude on Chat Completions; a Claude deployment's alias is
+// free-form, so only its synced backing model can select Responses.
+const claudeEvidence = {
+  kind: "text",
+  underlyingModelName: "claude-haiku-5-5",
+  operations: ["responses"],
+  source: "deployment",
+  status: "known",
+} as const;
+
 describe.each(
-  ["gpt-5.4", "gpt-6.1-sol", "gpt-6.1-luna"].flatMap((modelName) =>
-    ["/openai/v1", "/openai"].map((basePath) => ({ modelName, basePath })),
+  [
+    ...["gpt-5.4", "gpt-6.1-sol", "gpt-6.1-luna"].map((modelName) => ({
+      modelName,
+      azureCapabilities: undefined,
+    })),
+    { modelName: "team-haiku", azureCapabilities: claudeEvidence },
+  ].flatMap((model) =>
+    ["/openai/v1", "/openai"].map((basePath) => ({ ...model, basePath })),
   ),
-)("Azure $modelName on $basePath", ({ modelName, basePath }) => {
+)("Azure $modelName on $basePath", ({
+  modelName,
+  azureCapabilities,
+  basePath,
+}) => {
   test("streams a tool turn and replays it on the next turn through Responses", async ({
     makeOrganization,
     makeAgent,
@@ -103,6 +123,7 @@ describe.each(
       modelName,
       baseUrl: `${upstreamUrl}${basePath}`,
       source: "chat",
+      azureCapabilities,
     });
     const executedPaths: string[] = [];
     const tools = {

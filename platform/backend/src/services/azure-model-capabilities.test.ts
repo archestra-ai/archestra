@@ -167,6 +167,50 @@ describe("Azure resource capability evidence", () => {
     });
   });
 
+  test("a Claude deployment is rejected on Chat with guidance and allowed on Responses", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "synthetic-key" } });
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "azure",
+      baseUrl,
+    });
+    // The alias says nothing about Claude; the backing model does.
+    server.use(
+      http.get(`${baseUrl}/deployments`, () =>
+        HttpResponse.json({
+          data: [{ id: "team-assistant", model: "claude-haiku-5-5" }],
+        }),
+      ),
+    );
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: key.id,
+      provider: "azure",
+      apiKeyValue: "synthetic-key",
+      baseUrl,
+    });
+
+    const chat = validateAzureModelOperation({
+      providerApiKeyId: key.id,
+      modelId: "team-assistant",
+      operation: "chat",
+    });
+    await expect(chat).rejects.toMatchObject({ statusCode: 400 });
+    await expect(chat).rejects.toThrow(
+      /claude-haiku-5-5.*Chat Completions.*Responses API.*services\.ai\.azure\.com\/anthropic.*"anthropic:team-assistant"/,
+    );
+    expect(
+      await validateAzureModelOperation({
+        providerApiKeyId: key.id,
+        modelId: "team-assistant",
+        operation: "responses",
+      }),
+    ).toMatchObject({ status: "known", operations: ["responses"] });
+  });
+
   test("explicit deployment flags classify missing backing names without trusting aliases", async ({
     makeOrganization,
     makeSecret,

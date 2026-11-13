@@ -1,6 +1,7 @@
-import type {
-  AzureModelEvidence,
-  AzureModelOperation,
+import {
+  type AzureModelEvidence,
+  type AzureModelOperation,
+  isAzureAnthropicBackingModel,
 } from "@archestra/shared/azure-models";
 import { z } from "zod";
 import config from "@/config";
@@ -85,6 +86,20 @@ export async function validateAzureModelOperation(params: {
   const evidence = await resolveAzureModelCapabilities(params);
   if (evidence.status !== "known") return evidence;
   if (!evidence.operations.includes(params.operation)) {
+    if (
+      params.operation === "chat" &&
+      isAzureAnthropicBackingModel({
+        underlyingModelName: evidence.underlyingModelName,
+      })
+    ) {
+      throw new ApiError(
+        400,
+        azureClaudeChatCompletionsUnsupportedMessage({
+          deployment: params.modelId,
+          underlyingModelName: evidence.underlyingModelName,
+        }),
+      );
+    }
     throw new ApiError(
       400,
       `This Azure deployment does not support ${params.operation}; supported operations: ${evidence.operations.join(", ")}.`,
@@ -102,6 +117,24 @@ export async function validateAzureModelOperation(params: {
     });
   }
   return evidence;
+}
+
+/**
+ * Guidance for a Claude deployment called over Chat Completions, which
+ * Microsoft Foundry answers with `404 api_not_supported`.
+ */
+export function azureClaudeChatCompletionsUnsupportedMessage(params: {
+  deployment: string;
+  underlyingModelName: string | null;
+}): string {
+  const backing = params.underlyingModelName
+    ? ` is backed by ${params.underlyingModelName}, which`
+    : "";
+  return (
+    `Azure deployment "${params.deployment}"${backing} is a Claude model that Microsoft Foundry does not serve over the OpenAI Chat Completions API. ` +
+    `Send the request to the Responses API instead, or configure the Foundry resource under the Anthropic provider with base URL ` +
+    `https://<resource>.services.ai.azure.com/anthropic and call "anthropic:${params.deployment}" with a key mapped to that credential.`
+  );
 }
 
 function validateImageParameters(params: {

@@ -1514,6 +1514,15 @@ export class McpServerRuntimeManager {
       }
       await lease.assertOwned();
 
+      // Status feeds read the in-memory map without lazy-loading installs.
+      // Restore each sibling's own object: they share a physical Deployment,
+      // but still carry distinct install identity and connection context.
+      for (const install of installs) {
+        if (install.id !== representative.id) {
+          await this.getOrLoadDeployment(install.id);
+        }
+      }
+
       logger.info(
         { catalogId, representativeId: representative.id },
         "Shared deployment reinstalled successfully",

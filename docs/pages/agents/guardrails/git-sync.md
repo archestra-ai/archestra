@@ -26,7 +26,7 @@ When setup is done, the card on **Settings → Guardrails** shows **Connected**.
 3. **MCP Guardrails Self-Service:** tick it to let [MCP owners manage their servers' Guardrails](#mcp-guardrails-self-service), and pick the folder their policy files go to, `mcp` unless you change it. You can turn it on later too.
 4. Choose the repository and click **Connect repository**. To change the **Branch**, **Policy file** (`appa.toml`), **Validations folder** (`traces`), or **Sync schedule**, open **Advanced** first.
 
-The App needs **Read & write** on Contents, Pull requests, and Checks, and on Workflows too on GitHub Enterprise Server. Checks is for the policy check self-service posts on pull requests; the App asks for it up front, so turning self-service on later needs no change to the App. If repository rules block the first commit, setup opens a pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass. With self-service on, the last step of setup keeps the checklist open: the pull request, the branch ruleset to import, and the include it carries.
+The App needs **Read & write** on Contents, Pull requests, and Checks, and on Workflows too on GitHub Enterprise Server. Checks is for the policy check self-service posts on pull requests, asked for up front so that turning self-service on later changes nothing about the App. If repository rules block the first commit, setup opens a pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass. With self-service on, the last step of setup keeps the checklist open: the pull request, the branch ruleset to import, and the include it carries.
 
 ### GitLab
 

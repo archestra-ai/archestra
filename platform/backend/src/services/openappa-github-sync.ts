@@ -934,7 +934,9 @@ export async function syncAppaGithubPolicy(organizationId: string) {
       await queuePolicyValidation(organizationId, contentHash);
   } catch (error) {
     logger.warn({ err: error, organizationId }, "OpenAPPA GitHub sync failed");
-    // Never persist raw transport/native diagnostics, which can contain credentials or policy bytes.
+    // Never persist raw transport/native diagnostics, which can contain
+    // credentials or policy bytes. A host unreachable for now is named as
+    // such, so a status that follows a merge knows to wait for the next pull.
     await OpenAppaGithubSyncModel.finish({
       organizationId,
       revision: row.revision,
@@ -942,7 +944,9 @@ export async function syncAppaGithubPolicy(organizationId: string) {
         error:
           error instanceof ApiError
             ? error.message
-            : "Could not sync the APPA policy. Check the repository, file, and GitHub credential, then retry.",
+            : isTransportError(error)
+              ? "Could not reach GitHub to sync the APPA policy. Git sync tries again at its next check."
+              : "Could not sync the APPA policy. Check the repository, file, and GitHub credential, then retry.",
       },
     });
   }
@@ -2514,6 +2518,17 @@ async function saveSource(params: {
           "OpenAPPA could not forget a held merge",
         ),
       );
+}
+
+/** A rejected or timed-out network call, as `fetch` and `AbortSignal.timeout` raise them. */
+function isTransportError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (["TimeoutError", "AbortError"].includes(error.name) ||
+      (error instanceof TypeError &&
+        /fetch failed|failed to fetch|network/i.test(error.message)) ||
+      /ECONN|ENOTFOUND|EAI_AGAIN|socket hang up/i.test(error.message))
+  );
 }
 
 /** The policy at a GitHub source's ref, or the setup pull request's state while it is open. */

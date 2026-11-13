@@ -1578,6 +1578,10 @@ test("a server's editors propose its rules as a pull request; readers and outsid
       false,
     ],
     [
+      "Could not reach GitHub to sync the APPA policy. Git sync tries again at its next check.",
+      false,
+    ],
+    [
       "Could not sync the APPA policy. Check the repository, file, and GitHub credential, then retry.",
       true,
     ],
@@ -3528,6 +3532,22 @@ test("a pull request GitHub lists no files for yet is checked the next minute, n
   expect(merges).toEqual([
     { number: 1, sha: results[1], merge_method: "squash" },
   ]);
+});
+
+test("a pull whose policy read fails at the network records the host as unreachable, not the policy as broken", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  await connect({ organizationId: org.id });
+  serveRepository({ head: FIRST, files: { [FIRST]: { "appa.toml": RULES } } });
+  server.use(
+    http.get(`${REPO}/contents/appa.toml`, () => HttpResponse.error()),
+  );
+  await syncAppaGithubPolicy(org.id);
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.lastSyncError).toMatch(
+    /^Could not reach GitHub to sync/,
+  );
 });
 
 test("a policy in a folder of a repository that holds other work gets the same one-rule ruleset, and a pull request that changes no policy file gets the check as skipped at once", async ({

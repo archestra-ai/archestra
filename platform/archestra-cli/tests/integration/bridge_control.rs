@@ -786,8 +786,10 @@ async fn the_variables_of_a_command_are_replaced_on_the_device() {
     let mock = MockControlPlane::start().await;
     let dir = TestDir::new();
     // The root folder of the test server has the name of the user in it,
-    // in both forms of the variable. A system with no `USER` keeps the text.
-    let folder = match std::env::var("USER") {
+    // in both forms of the variable. A system with no user name keeps the
+    // text. The bridge takes the name from `USERNAME` on Windows.
+    let user_variable = if cfg!(windows) { "USERNAME" } else { "USER" };
+    let folder = match std::env::var(user_variable) {
         Ok(user) if !user.is_empty() => format!("{user}-{user}"),
         _ => "${USER}-$USER".to_owned(),
     };

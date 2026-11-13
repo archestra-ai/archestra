@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { useConfig } from "@/lib/config/config.query";
+import { FinishSetupHost } from "./_parts/finish-setup-dialog";
 import { OpenAppaLicenceRequired } from "./_parts/openappa-licence-required";
 import { OpenAppaPageLayout } from "./_parts/openappa-page-layout";
 
@@ -38,5 +39,10 @@ export default function OpenAppaLayout({
   if (!config.features.openappaEnabled)
     return <OpenAppaLicenceRequired tier={config.smallTeamTier} />;
 
-  return <OpenAppaPageLayout>{children}</OpenAppaPageLayout>;
+  return (
+    <>
+      <OpenAppaPageLayout>{children}</OpenAppaPageLayout>
+      <FinishSetupHost />
+    </>
+  );
 }

@@ -2423,12 +2423,23 @@ describe("APPA GitHub sync", () => {
     expect(tasks).toHaveLength(1);
   });
 
-  test("schedule changes persist and successful recent syncs are not due", async () => {
+  test("schedule changes persist, queue a pull at once, and successful recent syncs are not due", async () => {
     await configure();
-    expect(
-      (await action({ action: "schedule", interval: "15m" })).json().source
-        .interval,
-    ).toBe("15m");
+    const pulls = () =>
+      db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
+    for (const interval of ["5m", "15m"] as const) {
+      // Saving the source queued one already: start from none.
+      await db
+        .delete(schema.tasksTable)
+        .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
+      expect(
+        (await action({ action: "schedule", interval })).json().source.interval,
+      ).toBe(interval);
+      expect(await pulls()).toHaveLength(1);
+    }
     await syncAppaGithubPolicy(organizationId);
     expect(await OpenAppaGithubSyncModel.findDue()).toEqual([]);
   });

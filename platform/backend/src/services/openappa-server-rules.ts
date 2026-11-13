@@ -5,6 +5,7 @@ import {
   TimeInMs,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
@@ -21,6 +22,8 @@ import {
   isServerRulesBranch,
   parsePolicyToml,
   repositoryIncludePaths,
+  requesterOf,
+  SELF_SERVICE_INCLUDE_BRANCH,
   serverRulesBranch,
   serverRulesInclude,
   serverRulesPath,
@@ -58,6 +61,7 @@ import {
   selfServiceSetupComplete,
   syncAppaGithubPolicy,
 } from "@/services/openappa-github-sync";
+import { withOpenAppaLease } from "@/services/openappa-leases";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError } from "@/types";
 
@@ -73,9 +77,6 @@ import { ApiError } from "@/types";
  * repository; whether and when it applies is the repository's review to
  * decide, and Git sync applies it once merged. Nothing is stored here.
  */
-
-/** The branch of the pull request that includes the self-service folder. */
-const INCLUDE_BRANCH = "archestra/openappa-self-service";
 
 type Caller = { organizationId: string; userId: string };
 
@@ -1056,7 +1057,12 @@ async function includeSituation(params: {
     await OpenAppaGithubSyncModel.enqueue(organizationId);
     return { state: "included" };
   }
-  const pull = await openPullFor({ token, base, repo, head: INCLUDE_BRANCH });
+  const pull = await openPullFor({
+    token,
+    base,
+    repo,
+    head: SELF_SERVICE_INCLUDE_BRANCH,
+  });
   // A lookup that failed is not an absent pull request: closing or replacing
   // one on that reading would lose a valid pull request to a passing fault.
   if (pull === undefined)
@@ -1081,11 +1087,19 @@ async function setupPullFor(params: {
   token: string;
   base: string;
   number: number;
-}): Promise<{ number: number; url: string; headSha: string } | null> {
+}): Promise<{
+  number: number;
+  url: string;
+  headSha: string;
+  /** Its branch, which an include added later goes onto. */
+  headRef: string;
+  body: string | null;
+} | null> {
   const pull = await github<{
     state?: string;
     html_url?: string;
-    head?: { sha?: string };
+    body?: string | null;
+    head?: { sha?: string; ref?: string };
   }>({
     token: params.token,
     url: `${params.base}/pulls/${params.number}`,
@@ -1096,7 +1110,13 @@ async function setupPullFor(params: {
     );
   });
   return pull.state === "open" && pull.html_url && pull.head?.sha
-    ? { number: params.number, url: pull.html_url, headSha: pull.head.sha }
+    ? {
+        number: params.number,
+        url: pull.html_url,
+        headSha: pull.head.sha,
+        headRef: pull.head.ref ?? "",
+        body: pull.body ?? null,
+      }
     : null;
 }
 
@@ -1129,7 +1149,11 @@ async function rootAt(params: {
  * include list, in the caller's name, when the file lacks it and no such
  * pull request waits. Returns what was opened, or null when nothing was:
  * an include already in place, or on its way, needs no pull request, and
- * one of ours left from an earlier folder is closed first.
+ * one of ours left from an earlier folder is closed first. A setup pull
+ * request still waiting takes the include onto its own branch instead, so
+ * one pull request brings both. Another caller opening it right now is
+ * waited for, up to half a minute, then found; past that, the request
+ * answers null and the pull request shows once that caller opens it.
  */
 export async function ensureSelfServiceInclude(params: Caller) {
   // A source just saved has no accepted commit yet: pull it now rather than
@@ -1138,9 +1162,52 @@ export async function ensureSelfServiceInclude(params: Caller) {
   const saved = await OpenAppaGithubSyncModel.find(params.organizationId);
   if (selfServiceActive(saved) && !saved.sourceCommit)
     await syncAppaGithubPolicy(params.organizationId);
+  const user = await UserModel.getById(params.userId);
+  const leased = await withOpenAppaLease({
+    key: includeLeaseKey(params.organizationId),
+    ttlMs: INCLUDE_LEASE_MS,
+    waitMs: INCLUDE_WAIT_MS,
+    work: () =>
+      openSelfServiceInclude({
+        organizationId: params.organizationId,
+        requester: user ? { name: user.name, email: user.email } : null,
+      }),
+  });
+  return leased.ran ? leased.value : null;
+}
+
+/**
+ * After a pull, with self-service on and the include missing: the App
+ * proposes it at once, so the Git sync setup lists its pull request waiting
+ * rather than a step that asks for one. Another caller opening it right now
+ * is left to it. Returns what was opened, or null.
+ */
+export async function proposeSelfServiceInclude(organizationId: string) {
+  const leased = await withOpenAppaLease({
+    key: includeLeaseKey(organizationId),
+    ttlMs: INCLUDE_LEASE_MS,
+    work: () => openSelfServiceInclude({ organizationId, requester: null }),
+  });
+  return leased.ran ? leased.value : null;
+}
+
+/** How long one caller may take to open the include before another may. */
+const INCLUDE_LEASE_MS = 2 * TimeInMs.Minute;
+/** How long a person's request waits for another caller opening it. */
+const INCLUDE_WAIT_MS = 30 * TimeInMs.Second;
+
+function includeLeaseKey(organizationId: string): AllowedCacheKey {
+  return `${CacheKey.OpenAppaPolicyCheck}-include-lease-${organizationId}`;
+}
+
+async function openSelfServiceInclude(params: {
+  organizationId: string;
+  /** Who turned self-service on, named on the pull request; none for a pull. */
+  requester: { name: string; email: string } | null;
+}): Promise<{ number: number; url: string } | null> {
   // A connect that proposed the current policy in a setup pull request has
-  // no accepted commit until it merges: the seed carries the include, so
-  // nothing opens, and a seed without it waits for the merge.
+  // no accepted commit until it merges, and the include changes that
+  // policy: it goes onto the setup pull request's branch.
   const pending = await OpenAppaGithubSyncModel.find(params.organizationId);
   if (
     pending?.interval &&
@@ -1150,16 +1217,18 @@ export async function ensureSelfServiceInclude(params: Caller) {
     !pending.sourceCommit
   ) {
     if (!selfServiceActive(pending)) throw new ApiError(409, SELF_SERVICE_OFF);
-    const situation = await includeSituation({
-      organizationId: params.organizationId,
-      source: pending,
+    // A setup pull request is a GitHub App's: a token source has none.
+    if (!pending.githubAppConfigId) return null;
+    return includeInSetupPull({
+      source: {
+        ...pending,
+        repo: pending.repo,
+        path: pending.path,
+        githubAppConfigId: pending.githubAppConfigId,
+      },
+      number: pending.setupPullRequestNumber,
       folder: configuredServerRulesFolder(),
     });
-    if (situation.state !== "missing") return null;
-    throw new ApiError(
-      409,
-      "The setup pull request that carries the current policy has not merged yet. Merge it first; the include follows.",
-    );
   }
   const source = await requireSource(params.organizationId);
   const folder = configuredServerRulesFolder();
@@ -1185,8 +1254,7 @@ export async function ensureSelfServiceInclude(params: Caller) {
     });
   }
   const after = await withInclude(root.content, folder);
-  const requester = await UserModel.getById(params.userId);
-  const title = `Include each MCP server's Guardrails rules file`;
+  const { requester } = params;
   // Git keeps no empty folder: a README starts it, and says what goes there.
   const readme = repositoryPath(source, `${folder}/README.md`);
   const folderExists = await githubFetch({
@@ -1198,14 +1266,18 @@ export async function ensureSelfServiceInclude(params: Caller) {
   const body = [
     `Adds \`${entry}\` to \`${source.path}\`'s include list, so the rules file each MCP server keeps in \`${folder}/\` applies once merged and pulled by Git sync.${folderExists ? "" : ` Starts \`${folder}/\` with a README.`}`,
     "",
-    `Requested in ${archestraMcpBranding.appName} by ${requester?.name ?? "an administrator"}${requester?.email ? ` (${requester.email})` : ""}, who turned MCP Guardrails Self-Service on.`,
+    requester
+      ? `Requested in ${archestraMcpBranding.appName} by ${requester.name || "an administrator"} (${requester.email}), who turned MCP Guardrails Self-Service on.`
+      : `Opened by ${archestraMcpBranding.appName}: MCP Guardrails Self-Service is on, and \`${source.path}\` does not include \`${entry}\` yet.`,
   ].join("\n");
   // A branch left by an earlier, closed pull request would refuse the new ref.
-  await deleteBranch({ token, base, head: INCLUDE_BRANCH });
+  await deleteBranch({ token, base, head: SELF_SERVICE_INCLUDE_BRANCH });
   return openGithubPull({
     source,
-    title,
-    message: requester ? withRequester(title, requester.email) : title,
+    title: INCLUDE_TITLE,
+    message: requester
+      ? withRequester(INCLUDE_TITLE, requester.email)
+      : INCLUDE_TITLE,
     body,
     files: [
       { path: source.path, content: after },
@@ -1218,8 +1290,117 @@ export async function ensureSelfServiceInclude(params: Caller) {
             },
           ]),
     ],
-    head: INCLUDE_BRANCH,
+    head: SELF_SERVICE_INCLUDE_BRANCH,
   });
+}
+
+const INCLUDE_TITLE = "Include each MCP server's Guardrails rules file";
+
+/**
+ * Add the include to the setup pull request's branch when the policy it
+ * seeds lacks it: the setup pull request then stands for the include until
+ * it merges, as it does for a connect with self-service on. Its commit names
+ * the requester the setup commit names, or none when that commit names none
+ * (one from an earlier version), so the check still reads one requester for
+ * the whole pull request. Returns that pull request, or null when it carries
+ * the include already or no longer waits.
+ */
+async function includeInSetupPull(params: {
+  source: NonNullable<
+    Awaited<ReturnType<typeof OpenAppaGithubSyncModel.find>>
+  > & {
+    repo: string;
+    path: string;
+    githubAppConfigId: string;
+  };
+  number: number;
+  folder: string;
+}): Promise<{ number: number; url: string } | null> {
+  const { source, folder } = params;
+  const { token, api } = await githubWriter(source);
+  const base = `${api}/repos/${source.repo}`;
+  const setup = await setupPullFor({ token, base, number: params.number });
+  // Its branch is not on this repository (a fork): nothing to add onto.
+  if (!setup?.headRef) return null;
+  const seeded = await rootAt({
+    token,
+    base,
+    path: source.path,
+    ref: setup.headSha,
+  });
+  if (seeded === null || includesServerRulesFolder(seeded, folder)) return null;
+  const after = await withInclude(seeded, folder);
+  const readme = repositoryPath(source, `${folder}/README.md`);
+  const folderExists = await githubFetch({
+    url: `${base}/contents/${repositoryPath(source, folder)}?ref=${setup.headSha}`,
+    token,
+  })
+    .then((response) => response.ok)
+    .catch(() => false);
+  const files: ChangedFile[] = [
+    { path: source.path, content: after },
+    ...(folderExists
+      ? []
+      : [{ path: readme, content: serverRulesReadme(folder, source.path) }]),
+  ];
+  const parent = await github<{ tree?: { sha?: string }; message?: string }>({
+    token,
+    url: `${base}/git/commits/${setup.headSha}`,
+  });
+  const requester = requesterOf(parent.message);
+  const tree = await github<{ sha: string }>({
+    token,
+    url: `${base}/git/trees`,
+    method: "POST",
+    body: {
+      base_tree: checkedSha(parent.tree?.sha),
+      tree: files.map((file) => ({
+        path: file.path,
+        mode: "100644",
+        type: "blob",
+        content: file.content,
+      })),
+    },
+  });
+  const commit = await github<{ sha: string }>({
+    token,
+    url: `${base}/git/commits`,
+    method: "POST",
+    // No author or committer: GitHub signs the commit for the App only then.
+    body: {
+      message: requester
+        ? withRequester(INCLUDE_TITLE, requester)
+        : INCLUDE_TITLE,
+      tree: checkedSha(tree.sha),
+      parents: [setup.headSha],
+    },
+  });
+  // A fast-forward of the setup branch: whoever pushed onto it meanwhile
+  // keeps their commit, and this one is refused rather than written over it.
+  await github({
+    token,
+    url: `${base}/git/refs/heads/${setup.headRef}`,
+    method: "PATCH",
+    body: { sha: checkedSha(commit.sha) },
+  });
+  await github({
+    token,
+    url: `${base}/pulls/${setup.number}`,
+    method: "PATCH",
+    body: {
+      body: `${setup.body ? `${setup.body}\n\n` : ""}It also adds \`${serverRulesInclude(folder)}\` to \`${source.path}\`'s include list: MCP Guardrails Self-Service is on, so each MCP server's rules file applies once this merges.`,
+    },
+  }).catch((error) =>
+    logger.warn(
+      { organizationId: source.organizationId, error },
+      "OpenAPPA could not note the include on the setup pull request",
+    ),
+  );
+  logger.info(
+    { organizationId: source.organizationId, pull: setup.number },
+    "OpenAPPA added the servers' folder include to the setup pull request",
+  );
+  return { number: setup.number, url: setup.url };
 }
 
 /** What the servers' folder is for, for whoever opens it on GitHub. */

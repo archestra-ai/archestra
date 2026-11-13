@@ -17,6 +17,7 @@ import {
   resolveOpenAppaGitlabAccess,
 } from "@/services/openappa-github-access";
 import { openappaGitlab } from "@/services/openappa-gitlab";
+import { withOpenAppaLease } from "@/services/openappa-leases";
 import { ApiError } from "@/types";
 import type { AppaTemplateFiles } from "@/types/openappa-github-sync";
 
@@ -123,9 +124,27 @@ type SyncRow = NonNullable<
  * Compare the repository's files at the accepted commit with the template
  * and bring them in line: open the pull request that updates them when none
  * waits, leave the one that does, close one left from an earlier template.
- * Never fails the sync: the outcome is recorded for the settings page.
+ * Never fails the sync: the outcome is recorded for the settings page. One
+ * pull compares at a time across replicas: another that finds one comparing
+ * leaves the outcome to it rather than proposing the same files again.
  */
 export async function maintainTemplateFiles(
+  row: SyncRow & { repo: string; path: string; sourceCommit: string },
+): Promise<AppaTemplateFiles | undefined> {
+  const leased = await withOpenAppaLease({
+    key: `${CacheKey.OpenAppaPolicyCheck}-template-lease-${row.organizationId}`,
+    ttlMs: COMPARE_LEASE_MS,
+    work: () => compareAndRecord(row),
+  });
+  return leased.ran
+    ? leased.value
+    : await getTemplateFilesState(row.organizationId);
+}
+
+/** How long one pull may take to compare and propose before another may. */
+const COMPARE_LEASE_MS = 2 * 60_000;
+
+async function compareAndRecord(
   row: SyncRow & { repo: string; path: string; sourceCommit: string },
 ): Promise<AppaTemplateFiles> {
   const previous = await getTemplateFilesState(row.organizationId);
@@ -189,14 +208,19 @@ async function compareAndPropose(
         "The policy repository is read without a credential that can open pull requests.",
       checkedAt,
     };
-  const drifted = await driftedTemplateFiles((path) =>
-    host.read(row.sourceCommit, path),
-  );
+  // Our earlier pull request: still waiting, merged, or closed.
+  const earlier = previous?.pull ? await host.pull(previous.pull.number) : null;
+  const open = earlier?.state === "open" ? earlier.pull : null;
+  // Merged after the commit this sync read, so its files are on the branch
+  // but not at that commit: they are read at its merge commit instead, or
+  // they would read as drift that a second pull request proposes again.
+  const commit =
+    earlier?.state === "merged" &&
+    !(await host.contains(row.sourceCommit, earlier.mergeCommit))
+      ? earlier.mergeCommit
+      : row.sourceCommit;
+  const drifted = await driftedTemplateFiles((path) => host.read(commit, path));
   const paths = drifted.map((file) => file.path).sort();
-  // Our earlier pull request, if it still waits.
-  const open = previous?.pull
-    ? await host.openPull(previous.pull.number)
-    : null;
   if (drifted.length === 0) {
     // Brought current another way: the pull request has nothing left to do.
     if (open) await host.closePull(open.number, "the files are current now");
@@ -231,7 +255,7 @@ async function compareAndPropose(
     const files = drifted.filter((file) => !left.includes(file.path));
     if (files.length === 0) return null;
     return host.propose({
-      base: row.sourceCommit,
+      base: commit,
       files,
       title: PULL_TITLE,
       body: pullBody(
@@ -337,11 +361,19 @@ function pullBody(
 /** The pull request Archestra opened, by its number. */
 type Pull = { number: number; url: string };
 
+/** Where a pull request of ours stands: a merge names the commit it left. */
+type PullState =
+  | { state: "open"; pull: Pull }
+  | { state: "merged"; mergeCommit: string }
+  | { state: "closed" };
+
 type RepositoryHost = {
   /** One file's text at a commit; null when the commit has no such file. */
   read(commit: string, path: string): Promise<string | null>;
-  /** The pull request by number while it is open; null once merged or closed. */
-  openPull(number: number): Promise<Pull | null>;
+  /** Our pull request by number: open, merged, or closed unmerged. */
+  pull(number: number): Promise<PullState>;
+  /** Whether `commit` has `ancestor` in its history. */
+  contains(commit: string, ancestor: string): Promise<boolean>;
   /** Close a pull request of ours, saying why; a failure is logged. */
   closePull(number: number, why: string): Promise<void>;
   /** Why a workflow file cannot be written, or null when it can. */
@@ -413,15 +445,29 @@ async function githubHost(
       // Larger than any template file: it differs.
       return bytes ? bytes.toString("utf8") : "";
     },
-    async openPull(number) {
+    async pull(number) {
       const pull = await github<{
         number?: number;
         html_url?: string;
         state?: string;
+        merged?: boolean;
+        merge_commit_sha?: string | null;
       }>({ url: `${base}/pulls/${number}` });
-      return pull.state === "open" && pull.number && pull.html_url
-        ? { number: pull.number, url: pull.html_url }
-        : null;
+      if (pull.state === "open" && pull.number && pull.html_url)
+        return {
+          state: "open",
+          pull: { number: pull.number, url: pull.html_url },
+        };
+      return pull.merged && pull.merge_commit_sha
+        ? { state: "merged", mergeCommit: pull.merge_commit_sha }
+        : { state: "closed" };
+    },
+    async contains(commit, ancestor) {
+      if (commit === ancestor) return true;
+      const compared = await github<{ status?: string }>({
+        url: `${base}/compare/${ancestor}...${commit}`,
+      });
+      return compared.status === "ahead" || compared.status === "identical";
     },
     async closePull(number, why) {
       try {
@@ -579,12 +625,19 @@ async function gitlabHost(
       });
       return bytes ? bytes.toString("utf8") : null;
     },
-    async openPull(number) {
+    async pull(number) {
       const request = await client.gitlabMergeRequest(row.repo, number);
-      return request.state === "open"
-        ? { number: request.iid, url: request.webUrl }
-        : null;
+      if (request.state === "open")
+        return {
+          state: "open",
+          pull: { number: request.iid, url: request.webUrl },
+        };
+      return request.state === "merged" && request.mergeCommitSha
+        ? { state: "merged", mergeCommit: request.mergeCommitSha }
+        : { state: "closed" };
     },
+    contains: (commit, ancestor) =>
+      client.gitlabContains(row.repo, commit, ancestor),
     async closePull(number, why) {
       try {
         await client.json(

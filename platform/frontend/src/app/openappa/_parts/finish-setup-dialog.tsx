@@ -2,13 +2,21 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import {
+  AlertTriangle,
   CheckCircle2,
   ExternalLink,
   GitPullRequestArrow,
   ListChecks,
   LoaderCircle,
 } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { SetupStepper } from "@/components/git/git-setup-chrome";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +28,7 @@ import {
   useAppaGithubSync,
   useAppaGithubSyncing,
   useAppaRepositoryProtection,
+  useFreshAppaRepositoryProtection,
   useUpdateAppaGithubSync,
 } from "@/lib/openappa-github-sync.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
@@ -53,6 +62,11 @@ export type FinishSetupPieces = {
   /** Self-service is on and its ruleset or include is not in place yet. */
   selfService: { directory: string; policyFile: string } | null;
   pulls: SetupPull[];
+  /**
+   * Self-service is on and nothing includes its folder yet: the wizard opens
+   * that pull request itself and lists it with the others.
+   */
+  includeMissing: boolean;
 };
 
 export function finishSetupPieces(
@@ -93,11 +107,13 @@ export function finishSetupPieces(
     protection.include.pull.number !== source.setupPullRequestNumber
   )
     pulls.push({ kind: "include", ...protection.include.pull });
+  const includeMissing =
+    status.selfService?.enabled === true &&
+    protection?.include.state === "missing";
   const selfService =
     status.selfService?.enabled &&
     protection &&
-    (protection.branchRules.state !== "active" ||
-      protection.include.state === "missing")
+    (protection.branchRules.state !== "active" || includeMissing)
       ? {
           directory: status.selfService?.directory ?? "mcp",
           policyFile: source.path.slice(source.path.lastIndexOf("/") + 1),
@@ -105,7 +121,7 @@ export function finishSetupPieces(
       : null;
   if (permissions.length === 0 && !selfService && pulls.length === 0)
     return null;
-  return { permissions, selfService, pulls };
+  return { permissions, selfService, pulls, includeMissing };
 }
 
 /**
@@ -133,34 +149,69 @@ export function FinishSetupNotice({ pieces }: { pieces: FinishSetupPieces }) {
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
   });
-  const [open, setOpen] = useState(false);
   return (
-    <>
-      <InlineNotice variant="info">
-        <ListChecks aria-hidden />
-        <span className="font-medium">Finish the Git sync setup</span>
-        <InlineNoticeText className="flex-1">
-          {finishSetupSummary(pieces, git.changeRequestShort)}
-        </InlineNoticeText>
-        {canManage ? (
-          <Button
-            type="button"
-            size="xs"
-            variant="outline"
-            className="ml-auto"
-            data-slot="inline-notice-action"
-            onClick={() => setOpen(true)}
-          >
-            <span>Finish setup</span>
-          </Button>
-        ) : null}
-      </InlineNotice>
-      {open ? (
-        <FinishSetupDialog pieces={pieces} onOpenChange={setOpen} />
+    <InlineNotice variant="info">
+      <ListChecks aria-hidden />
+      <span className="font-medium">Finish the Git sync setup</span>
+      <InlineNoticeText className="flex-1">
+        {finishSetupSummary(pieces, git.changeRequestShort)}
+      </InlineNoticeText>
+      {canManage ? (
+        <Button
+          type="button"
+          size="xs"
+          variant="outline"
+          className="ml-auto"
+          data-slot="inline-notice-action"
+          onClick={() => openWizard.set(pieces)}
+        >
+          <span>Finish setup</span>
+        </Button>
       ) : null}
-    </>
+    </InlineNotice>
   );
 }
+
+/**
+ * The wizard {@link FinishSetupNotice} opens, mounted once where the notice
+ * shows: in the Guardrails layout and on the Guardrails settings. The notice
+ * goes once setup completes, and a wizard of its own would close with it
+ * before its Finish step shows what is in place.
+ */
+export function FinishSetupHost() {
+  const pieces = useSyncExternalStore(
+    openWizard.subscribe,
+    openWizard.get,
+    () => null,
+  );
+  // Leaving the page closes the wizard.
+  useEffect(() => () => openWizard.set(null), []);
+  return pieces ? (
+    <FinishSetupDialog
+      pieces={pieces}
+      onOpenChange={(open) => {
+        if (!open) openWizard.set(null);
+      }}
+    />
+  ) : null;
+}
+
+/** The open wizard's pieces as they were when it opened; null while closed. */
+const openWizard = (() => {
+  let pieces: FinishSetupPieces | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => pieces,
+    set: (next: FinishSetupPieces | null) => {
+      pieces = next;
+      for (const listener of listeners) listener();
+    },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+})();
 
 /** The pieces in a phrase for the card: "grant …, finish …, merge …". */
 export function finishSetupSummary(
@@ -206,33 +257,51 @@ const STEP_LABELS: Record<Step, string> = {
  * One wizard for whatever setup still waits on, its steps composed from the
  * pieces at hand when it opens: the App's missing permissions, the
  * self-service protection, then the pull requests to merge, waited on like
- * the setup one. Pieces that settle meanwhile show as done.
+ * the setup one. Pieces that settle meanwhile show as done. Every step shows
+ * its own outcome, so none of its syncs toasts.
  */
-export function FinishSetupDialog({
+function FinishSetupDialog({
   pieces: initial,
   onOpenChange,
 }: {
   pieces: FinishSetupPieces;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [steps] = useState<Step[]>(() => [
-    ...(initial.permissions.length ? (["app"] as const) : []),
-    // A permission granted here proposes a pull request on the next sync,
-    // so the pull requests step follows the App step always.
-    ...(initial.pulls.length || initial.permissions.length
-      ? (["pulls"] as const)
-      : []),
-    // Last, and open again at any time: what is in place and what still
-    // waits, the self-service ruleset and include among it.
-    "finish" as const,
-  ]);
-  const [index, setIndex] = useState(0);
-  const step = steps[index] ?? "finish";
-  const last = index >= steps.length - 1;
   const query = useAppaGithubSync();
   const git = appaGitHost(query.data);
+  const protection = useAppaRepositoryProtection(
+    query.data?.selfService?.enabled === true,
+  );
+  // What waits now: a sync while the wizard is open can find more, such as
+  // a pull request it just opened or a permission taken away.
+  const live = query.data
+    ? finishSetupPieces(query.data, protection.data)
+    : initial;
+  // Steps join as something new waits, in their place, and never leave, so
+  // the stepper does not jump under the person using it.
+  const [steps, setSteps] = useState<Step[]>(() => stepsFor(initial));
+  const wanted = live ? stepsFor(live) : steps;
+  if (wanted.some((entry) => !steps.includes(entry)))
+    setSteps(
+      STEP_ORDER.filter(
+        (entry) => steps.includes(entry) || wanted.includes(entry),
+      ),
+    );
+  // Permissions the App step asks for: those at hand when it opened, and
+  // any found missing since.
+  const [needed, setNeeded] = useState<Permission[]>(initial.permissions);
+  const unseen = (live?.permissions ?? []).filter(
+    (name) => !needed.includes(name),
+  );
+  if (unseen.length > 0) setNeeded([...needed, ...unseen]);
+  const [current, setCurrent] = useState<Step>(() => steps[0] ?? "finish");
+  const index = Math.max(steps.indexOf(current), 0);
+  const step = steps[index] ?? "finish";
+  const last = index >= steps.length - 1;
+  // Every pull request merged: the wizard shows what is in place now.
+  const toFinish = useCallback(() => setCurrent("finish"), []);
   const grants = useAppaGithubAppGrants(step === "app");
-  const update = useUpdateAppaGithubSync();
+  const update = useUpdateAppaGithubSync({ quiet: true });
   const syncing = useAppaGithubSyncing();
   // Done syncs at once, so the card shows what was just merged or granted;
   // a sync already running reads the same state, so none is started twice.
@@ -240,12 +309,58 @@ export function FinishSetupDialog({
     if (!syncing) update.mutate({ action: "sync" });
     onOpenChange(false);
   };
-  const ready = initial.permissions.every(
+  // Opening the wizard syncs, so it starts from what the repository holds
+  // and a pull request still to open opens now. The pull requests step
+  // syncs as it shows, so a wizard that starts there needs no other.
+  const openSynced = useRef(false);
+  const { mutate: syncNow } = update;
+  const firstStep = steps[0];
+  useEffect(() => {
+    if (openSynced.current) return;
+    openSynced.current = true;
+    if (firstStep !== "pulls" && !syncing) syncNow({ action: "sync" });
+  }, [firstStep, syncing, syncNow]);
+  // The include the self-service folder needs opens as a pull request as
+  // soon as it is missing, so the pull requests step lists it with the
+  // rest; a setup pull request still to merge takes it onto its branch.
+  const fresh = useFreshAppaRepositoryProtection();
+  const includeNeeded = live?.includeMissing ?? false;
+  const [include, setInclude] = useState<{
+    phase: "idle" | "opening" | "opened" | "failed";
+    error?: string;
+  }>({ phase: "idle" });
+  const openInclude = update.mutateAsync;
+  const readProtection = fresh.mutateAsync;
+  useEffect(() => {
+    if (!includeNeeded || include.phase !== "idle") return;
+    setInclude({ phase: "opening" });
+    openInclude({ action: "include_servers" })
+      .then(() => readProtection())
+      .then(() => setInclude({ phase: "opened" }))
+      .catch((error: unknown) =>
+        setInclude({
+          phase: "failed",
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+  }, [includeNeeded, include.phase, openInclude, readProtection]);
+  // Opening, or about to: the pull requests step waits for its row.
+  const includePending =
+    include.phase === "opening" || (includeNeeded && include.phase === "idle");
+  const ready = needed.every(
     (name) =>
       grants.data?.permissions.find((entry) => entry.name === name)?.granted ===
       true,
   );
-  const header = headerFor(step, initial, git.changeRequest);
+  const header = headerFor(
+    step,
+    { ...initial, permissions: needed, pulls: live?.pulls ?? initial.pulls },
+    git.changeRequest,
+  );
+  // "the Workflows permission", "the Workflows and Checks permissions"
+  const permissions = `the ${needed
+    .map((name) => PERMISSION_LABELS[name])
+    .join(" and ")} permission${needed.length > 1 ? "s" : ""}`;
   return (
     <StandardDialog
       open
@@ -272,8 +387,11 @@ export function FinishSetupDialog({
           ) : (
             <Button
               type="button"
-              disabled={step === "app" && !ready}
-              onClick={() => setIndex(index + 1)}
+              disabled={
+                (step === "app" && !ready) ||
+                (step === "pulls" && includePending)
+              }
+              onClick={() => setCurrent(steps[index + 1] ?? "finish")}
             >
               <span>Continue</span>
             </Button>
@@ -285,7 +403,7 @@ export function FinishSetupDialog({
         <SetupStepper
           steps={steps.map((entry) => STEP_LABELS[entry])}
           current={index}
-          onSelect={setIndex}
+          onSelect={(target) => setCurrent(steps[target] ?? "finish")}
         />
       ) : null}
       {step === "app" ? (
@@ -296,31 +414,44 @@ export function FinishSetupDialog({
           checking={grants.isFetching}
           ready={ready}
           onCheckAgain={() => void grants.refetch()}
-          needed={initial.permissions}
-          title={(name) => (
-            <>
-              Grant the {joinCodes(initial.permissions)} permission
-              {initial.permissions.length > 1 ? "s" : ""} to the {name} App
-            </>
-          )}
-          hint={permissionsHint(initial.permissions)}
-          readyText={`the ${initial.permissions
-            .map((name) => PERMISSION_LABELS[name])
-            .join(
-              " and ",
-            )} permission${initial.permissions.length > 1 ? "s" : ""}`}
+          needed={needed}
+          title={(name) => `Grant ${permissions} to the ${name} App`}
+          hint={permissionsHint(needed)}
+          readyText={permissions}
         />
       ) : null}
       {step === "finish" ? <SetupChecklist /> : null}
       {step === "pulls" ? (
         <PullRequestsStep
           initial={initial.pulls}
-          syncFirst={initial.permissions.length > 0}
           changeRequestShort={git.changeRequestShort}
+          include={{ pending: includePending, error: include.error }}
+          onSettled={toFinish}
         />
       ) : null}
     </StandardDialog>
   );
+}
+
+/** The wizard's steps, in this order, for what waits. */
+const STEP_ORDER: Step[] = ["app", "pulls", "finish"];
+
+function stepsFor(pieces: FinishSetupPieces | null): Step[] {
+  if (!pieces) return ["finish"];
+  return [
+    ...(pieces.permissions.length ? (["app"] as const) : []),
+    // A permission granted here proposes a pull request on the next sync,
+    // and a missing include is opened as one, so either takes the pull
+    // requests step.
+    ...(pieces.pulls.length ||
+    pieces.permissions.length ||
+    pieces.includeMissing
+      ? (["pulls"] as const)
+      : []),
+    // Last, and open again at any time: what is in place and what still
+    // waits, the self-service ruleset and include among it.
+    "finish" as const,
+  ];
 }
 
 function headerFor(
@@ -362,7 +493,7 @@ function permissionsHint(permissions: Permission[]): ReactNode {
     <>
       <span>
         Set {permissions.length > 1 ? "both" : "it"} to{" "}
-        <code>Read and write</code>.
+        <strong>Read and write</strong>.
       </span>
       {permissions.includes("workflows") ? (
         <span> Workflows lets the App write the validation workflow.</span>
@@ -377,140 +508,224 @@ function permissionsHint(permissions: Permission[]): ReactNode {
   );
 }
 
-function joinCodes(names: Permission[]): ReactNode {
-  return names.map((name, index) => (
-    <span key={name}>
-      {index > 0 ? <span> and </span> : null}
-      <code>{PERMISSION_LABELS[name]}</code>
-    </span>
-  ));
-}
+/** How long merged rows show before the wizard moves on to Finish. */
+const SETTLED_PAUSE_MS = 1200;
 
 /**
  * The pull requests to merge, as the status reports them now: one sync when
- * a permission was just granted, so the pull request it unblocks opens, and
- * one each time the tab comes back from the host while any still waits.
+ * the step shows, so its rows start current and a permission just granted
+ * opens the pull request it unblocks, and one each time the tab comes back
+ * from the host while any still waits. A pull request keeps its row once it
+ * merges, marked merged; once a sync finds none waiting, the wizard moves on
+ * to its Finish step.
  */
 function PullRequestsStep({
   initial,
-  syncFirst,
   changeRequestShort,
+  include,
+  onSettled,
 }: {
   initial: SetupPull[];
-  syncFirst: boolean;
   changeRequestShort: string;
+  /** The include's pull request the wizard opens: still to come, or failed. */
+  include: { pending: boolean; error?: string };
+  /** Every pull request merged, as a sync read it: on to Finish. */
+  onSettled: () => void;
 }) {
   const query = useAppaGithubSync();
   const protection = useAppaRepositoryProtection(
     query.data?.selfService?.enabled === true,
   );
-  const update = useUpdateAppaGithubSync();
-  const started = useRef(false);
-  const { mutate, isPending } = update;
+  const update = useUpdateAppaGithubSync({ quiet: true });
+  const syncing = useAppaGithubSyncing();
+  const { mutate } = update;
   const live = query.data
     ? (finishSetupPieces(query.data, protection.data)?.pulls ?? [])
     : initial;
   const waiting = live.length > 0;
+  // Every pull request the step has shown, those it opened with first.
+  const [seen, setSeen] = useState(initial);
+  const unseen = live.filter(
+    (pull) => !seen.some((entry) => samePull(entry, pull)),
+  );
+  if (unseen.length > 0) setSeen([...seen, ...unseen]);
+  // Whether a sync ended while the step showed: its answer replaces the
+  // status before it ends, so the rows are what it read.
+  const [synced, setSynced] = useState(false);
+  const sync = useCallback(
+    () => mutate({ action: "sync" }, { onSuccess: () => setSynced(true) }),
+    [mutate],
+  );
+  // A sync started elsewhere counts too, once it ends.
+  const wasSyncing = useRef(syncing);
+  useEffect(() => {
+    if (wasSyncing.current && !syncing) setSynced(true);
+    wasSyncing.current = syncing;
+  }, [syncing]);
+  const started = useRef(false);
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    if (syncFirst) mutate({ action: "sync" });
-  }, [syncFirst, mutate]);
+    // A sync already running reads the same state.
+    if (!syncing) sync();
+  }, [syncing, sync]);
   useEffect(() => {
     if (!waiting) return;
     const check = () => {
-      if (document.visibilityState === "visible" && !isPending)
-        mutate({ action: "sync" });
+      if (document.visibilityState === "visible" && !syncing) sync();
     };
     window.addEventListener("focus", check);
     return () => window.removeEventListener("focus", check);
-  }, [waiting, isPending, mutate]);
-  // Every pull request that waits, plus those the wizard opened with that
-  // no longer do: merged, unless a newer one of their kind took their place.
-  const rows: Array<SetupPull & { merged: boolean }> = [
-    ...live.map((pull) => ({ ...pull, merged: false })),
-    ...initial
-      .filter((pull) => !live.some((open) => open.kind === pull.kind))
-      .map((pull) => ({ ...pull, merged: true })),
-  ];
+  }, [waiting, syncing, sync]);
+  const settled = synced && !syncing && !waiting && !include.pending;
+  useEffect(() => {
+    if (!settled) return;
+    const timer = window.setTimeout(onSettled, SETTLED_PAUSE_MS);
+    return () => window.clearTimeout(timer);
+  }, [settled, onSettled]);
+  // A pull request that no longer waits merged, unless a newer one of its
+  // kind took its place (GitLab opens each update anew): that one goes.
+  const rows = seen
+    .filter(
+      (pull) =>
+        live.some((open) => samePull(open, pull)) ||
+        !live.some((open) => open.kind === pull.kind),
+    )
+    .map((pull) => ({
+      ...pull,
+      merged: !live.some((open) => samePull(open, pull)),
+    }));
   const checked = query.data?.source?.lastSyncedAt
     ? formatRelativeTimeFromNow(query.data.source.lastSyncedAt).toLowerCase()
     : null;
-  if (rows.length === 0)
+  const failures = (
+    <>
+      {include.error ? (
+        <InlineNotice variant="error">
+          <AlertTriangle aria-hidden />
+          <span className="font-medium">
+            {`Could not open the ${changeRequestShort} for the servers' folder`}
+          </span>
+          <InlineNoticeText className="flex-1">
+            {include.error}
+          </InlineNoticeText>
+        </InlineNotice>
+      ) : null}
+      {query.data?.source?.lastSyncError ? (
+        <InlineNotice variant="error">
+          <AlertTriangle aria-hidden />
+          <span className="font-medium">Could not sync</span>
+          <InlineNoticeText className="flex-1">
+            {query.data.source.lastSyncError}
+          </InlineNoticeText>
+        </InlineNotice>
+      ) : null}
+    </>
+  );
+  // The include's pull request is still being opened: its row waits for it.
+  const opening =
+    include.pending && !rows.some((pull) => pull.kind === "include");
+  if (rows.length === 0 && !opening)
     return (
-      <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        {isPending ? (
-          <LoaderCircle className="size-4 animate-spin" aria-hidden />
-        ) : (
-          <CheckCircle2
-            className="size-4 text-emerald-600 dark:text-emerald-400"
-            aria-hidden
-          />
-        )}
-        <span>
-          {isPending
-            ? "Syncing…"
-            : `Nothing waits for a ${changeRequestShort}.`}
-        </span>
-      </p>
+      <div className="space-y-3">
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          {syncing ? (
+            <LoaderCircle className="size-4 animate-spin" aria-hidden />
+          ) : (
+            <CheckCircle2
+              className="size-4 text-emerald-600 dark:text-emerald-400"
+              aria-hidden
+            />
+          )}
+          <span>
+            {syncing
+              ? "Syncing…"
+              : `Nothing waits for a ${changeRequestShort}.`}
+          </span>
+        </p>
+        {failures}
+      </div>
     );
   return (
-    <div className="divide-y rounded-lg border bg-card" aria-live="polite">
-      {rows.map((pull) => (
-        <div
-          key={`${pull.kind}-${pull.number}`}
-          className="flex items-center gap-3 p-4"
-        >
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
-            <GitPullRequestArrow className="size-4 text-muted-foreground" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <a
-              className="block truncate text-sm font-medium hover:underline underline-offset-4"
-              href={pull.url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {PULL_TITLES[pull.kind]}{" "}
-              <span className="font-normal text-muted-foreground">
-                #{pull.number}
-              </span>
-            </a>
-            <p className="flex items-center gap-1 text-xs text-muted-foreground">
-              {pull.merged ? (
-                <span>Merged</span>
-              ) : (
-                <>
-                  <LoaderCircle
-                    className={cn("size-3", isPending && "animate-spin")}
-                    aria-hidden
-                  />
-                  <span>
-                    {isPending
-                      ? "Checking…"
-                      : checked
-                        ? `Waiting for merge · checked ${checked}`
-                        : "Waiting for merge"}
-                  </span>
-                </>
-              )}
-            </p>
-          </div>
-          {pull.merged ? (
-            <Badge variant="outline">
-              <CheckCircle2 className="text-emerald-600 dark:text-emerald-400" />
-              <span>Merged</span>
-            </Badge>
-          ) : (
-            <Button asChild size="sm" variant="outline">
-              <a href={pull.url} target="_blank" rel="noreferrer">
-                <span>Review and merge</span>
-                <ExternalLink className="size-3" aria-hidden />
+    <div className="space-y-3">
+      <div className="divide-y rounded-lg border bg-card" aria-live="polite">
+        {rows.map((pull) => (
+          <div
+            key={`${pull.kind}-${pull.number}`}
+            className="flex items-center gap-3 p-4"
+          >
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
+              <GitPullRequestArrow className="size-4 text-muted-foreground" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <a
+                className="block truncate text-sm font-medium hover:underline underline-offset-4"
+                href={pull.url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {PULL_TITLES[pull.kind]}{" "}
+                <span className="font-normal text-muted-foreground">
+                  #{pull.number}
+                </span>
               </a>
-            </Button>
-          )}
-        </div>
-      ))}
+              <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                {pull.merged ? (
+                  <span>Merged</span>
+                ) : (
+                  <>
+                    <LoaderCircle
+                      className={cn("size-3", syncing && "animate-spin")}
+                      aria-hidden
+                    />
+                    <span>
+                      {syncing
+                        ? "Checking…"
+                        : checked
+                          ? `Waiting for merge · checked ${checked}`
+                          : "Waiting for merge"}
+                    </span>
+                  </>
+                )}
+              </p>
+            </div>
+            {pull.merged ? (
+              <Badge variant="outline">
+                <CheckCircle2 className="text-emerald-600 dark:text-emerald-400" />
+                <span>Merged</span>
+              </Badge>
+            ) : (
+              <Button asChild size="sm" variant="outline">
+                <a href={pull.url} target="_blank" rel="noreferrer">
+                  <span>Review and merge</span>
+                  <ExternalLink className="size-3" aria-hidden />
+                </a>
+              </Button>
+            )}
+          </div>
+        ))}
+        {opening ? (
+          <div className="flex items-center gap-3 p-4">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
+              <GitPullRequestArrow className="size-4 text-muted-foreground" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">
+                {PULL_TITLES.include}
+              </p>
+              <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                <LoaderCircle className="size-3 animate-spin" aria-hidden />
+                <span>{`Opening the ${changeRequestShort}…`}</span>
+              </p>
+            </div>
+          </div>
+        ) : null}
+      </div>
+      {failures}
     </div>
   );
+}
+
+function samePull(left: SetupPull, right: SetupPull): boolean {
+  return left.kind === right.kind && left.number === right.number;
 }

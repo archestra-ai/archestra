@@ -538,7 +538,9 @@ type StatusExtra = {
  * by itself, so the Keeper keeps following rather than giving up.
  */
 function isTransientSyncError(reason: string): boolean {
-  return /could not reach|HTTP 5\d\d|timed out|timeout|ECONN|fetch failed|socket/i.test(
+  // The host for now, as the sync records it: GitHub's 5xx, a read it
+  // sanitises to "then retry", and the validator that is out for now.
+  return /could not reach|HTTP 5\d\d|timed out|timeout|then retry|tries again at its next check|right now/i.test(
     reason,
   );
 }

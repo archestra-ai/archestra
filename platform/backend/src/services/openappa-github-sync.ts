@@ -895,6 +895,10 @@ export async function syncAppaGithubPolicy(organizationId: string) {
               : null,
         },
       });
+      // The branch rules are read all the same: the ruleset is imported
+      // while the setup pull request waits, and the variable may be turned
+      // off meanwhile.
+      await readProtectionAfterSync(organizationId);
       return;
     }
     const { content } = read;
@@ -937,17 +941,7 @@ export async function syncAppaGithubPolicy(organizationId: string) {
       },
     });
   }
-  // Every sync also reads the repository's protection for server rules
-  // files: whether a branch rule requires the policy check. A failure there
-  // shows in the protection status and never fails the pull.
-  try {
-    await maintainRepositoryProtection(organizationId);
-  } catch (error) {
-    logger.warn(
-      { organizationId, error },
-      "OpenAPPA could not read the policy repository's protection",
-    );
-  }
+  await readProtectionAfterSync(organizationId);
 }
 /**
  * Every check a pull makes before it accepts a commit's policy, storing
@@ -1051,6 +1045,22 @@ async function queuePolicyValidation(
     );
   }
 }
+/**
+ * Every sync also reads the repository's protection for server rules files:
+ * whether a branch rule requires the policy check. A failure there shows in
+ * the protection status and never fails the pull.
+ */
+async function readProtectionAfterSync(organizationId: string) {
+  try {
+    await maintainRepositoryProtection(organizationId);
+  } catch (error) {
+    logger.warn(
+      { organizationId, error },
+      "OpenAPPA could not read the policy repository's protection",
+    );
+  }
+}
+
 export async function checkDueAppaGithubSyncs() {
   if (!enterpriseTier.isOpenappaActive()) return;
   for (const row of await OpenAppaGithubSyncModel.findDue())
@@ -1075,13 +1085,15 @@ export async function checkDueAppaGithubSyncs() {
     },
   );
   // A setup pull request still open, with a rule that already requires the
-  // check: posted as skipped, so setup can finish.
+  // check: posted as skipped, so setup can finish. Off, the same rule left
+  // behind gets the check posted as skipped, as on a connected repository.
   await mapWithConcurrency(
     await OpenAppaGithubSyncModel.findAwaitingSetup(),
     4,
     async (row) => {
       try {
         if (selfServiceActive(row)) await postSetupPendingChecks(row);
+        else await postLeftoverChecks(row);
       } catch (error) {
         logger.warn(
           { organizationId: row.organizationId, error },
@@ -1358,6 +1370,15 @@ async function postSetupPendingChecks(row: SyncRow) {
     return;
   }
   if (!read.ok || !read.found) return;
+  // A rule requires the check here: turned off before the first sync, the
+  // minute's round still reads the branch for the rule left behind.
+  await cacheManager
+    .set(
+      selfServiceSeenKey(row.organizationId, source.repo),
+      true,
+      LEFTOVER_TTL,
+    )
+    .catch(() => undefined);
   // Only the commit Archestra opened the request with: a commit pushed onto
   // its branch since would merge unchecked under the skip.
   const { api } = await resolveOpenAppaGithubAccess(source, {
@@ -3309,13 +3330,7 @@ async function maintainRepositoryProtection(
     // Only a repository self-service was on for lately can have a rule left
     // behind; the rest is not read for one.
     const source = { ...row, repo: row.repo };
-    if (
-      options.turnedOff ||
-      (await recordedLeftoverRule(source)) ||
-      (await cacheManager
-        .get(selfServiceSeenKey(organizationId, row.repo))
-        .catch(() => undefined))
-    )
+    if (options.turnedOff || (await mayHaveLeftoverRule(source)))
       await recordLeftoverRule(source);
   }
   return null;
@@ -3345,9 +3360,10 @@ async function beforeSourceChange(
   )
     return;
   const source = { ...current, repo: current.repo };
-  // Off, only a rule recorded as left behind can hold the change; it is
-  // read again below, so one removed on GitHub meanwhile holds nothing.
-  if (!selfServiceActive(current) && !(await recordedLeftoverRule(source)))
+  // Off, only a repository self-service was on for lately can have a rule
+  // left behind, recorded or not yet read for; it is read again below, so
+  // one removed on GitHub meanwhile holds nothing.
+  if (!selfServiceActive(current) && !(await mayHaveLeftoverRule(source)))
     return;
   const leaves =
     !next ||
@@ -3705,6 +3721,22 @@ async function recordedLeftoverRule(
  * administrator which rule to remove. Read at each sync; a read that fails
  * keeps the last record.
  */
+/**
+ * Whether the repository may have a rule left behind: one recorded, or
+ * self-service on for it lately, with the record still to be read for. The
+ * rest is not read for one.
+ */
+async function mayHaveLeftoverRule(
+  source: Pick<RuledSource, "organizationId" | "repo">,
+): Promise<boolean> {
+  return (
+    !!(await recordedLeftoverRule(source)) ||
+    !!(await cacheManager
+      .get(selfServiceSeenKey(source.organizationId, source.repo))
+      .catch(() => undefined))
+  );
+}
+
 async function recordLeftoverRule(source: RuledSource) {
   const checkName = POLICY_CHECK_NAME;
   const key = leftoverRuleKey(source.organizationId, source.repo);
@@ -3777,11 +3809,15 @@ async function leftoverRule(
  */
 async function postLeftoverChecks(row: SyncRow) {
   if (!row.repo || !row.path || !row.githubAppConfigId) return;
-  const leftover = await cacheManager.get<LeftoverRule>(
-    leftoverRuleKey(row.organizationId, row.repo),
-  );
-  if (!leftover) return;
   const source = { ...row, repo: row.repo, path: row.path };
+  let leftover = await recordedLeftoverRule(source);
+  if (!leftover && (await mayHaveLeftoverRule(source))) {
+    // Turned off since the last sync: the rule is read for now, not at the
+    // next sync, which may be a day away. Nothing found forgets the repository.
+    await recordLeftoverRule(source);
+    leftover = await recordedLeftoverRule(source);
+  }
+  if (!leftover) return;
   const refused = refusedChecksKey(row.organizationId, source.repo);
   if (await cacheManager.get(refused)) return;
   let pulls: CheckedPull[];

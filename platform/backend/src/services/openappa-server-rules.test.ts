@@ -1992,18 +1992,28 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
     selfServiceSetting(false),
   );
   expect(await getAppaSelfService(org.id)).toEqual({ enabled: false });
-  // With the rule still in place: Archestra cannot take it off, so the next
-  // sync records it, the settings name it, and the minute's round posts the
-  // check as skipped on every open pull request, once each, so none waits
-  // on a check nobody judges any more.
+  // With the rule still in place: Archestra cannot take it off. Before any
+  // sync, a stop is refused all the same, since the repository had
+  // self-service on lately; the minute's round reads the branch for the
+  // rule, records it, and posts the check as skipped on every open pull
+  // request, once each, so none waits on a check nobody judges any more.
   calls.length = 0;
-  await syncAppaGithubPolicy(org.id);
+  await expect(
+    updateAppaGithubSync({ organizationId: org.id, action: "disconnect" }),
+  ).rejects.toMatchObject({ statusCode: 409 });
   expect(calls).toEqual(["GET rules main"]);
-  expect(await getRepositoryProtection(org.id)).toBeNull();
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.interval).toBe("1h");
+  await checkDueAppaGithubSyncs();
+  expect(runs).toHaveLength(2);
   expect((await getAppaGithubSync(org.id)).selfService).toEqual({
     ...selfServiceSetting(false),
     leftoverRule: { checkName: CHECK, url: rulesetUrl },
   });
+  // The next sync reads it again, and the settings keep naming it.
+  calls.length = 0;
+  await syncAppaGithubPolicy(org.id);
+  expect(calls).toEqual(["GET rules main"]);
+  expect(await getRepositoryProtection(org.id)).toBeNull();
   await checkDueAppaGithubSyncs();
   expect(runs).toHaveLength(2);
   expect(runs[1]).toEqual({

@@ -2048,6 +2048,28 @@ describe("APPA GitHub sync", () => {
       await checkDueAppaGithubSyncs();
       expect(runs).toHaveLength(1);
       setupHead = SETUP_COMMIT;
+      // Turned off while the setup pull request waits, with the rule in
+      // place and no sync yet: the rule left behind is read for at once, and
+      // the check is posted as skipped on every open pull request, so none
+      // waits on a check nobody judges.
+      config.openappa.selfService = "disabled";
+      await checkDueAppaGithubSyncs();
+      expect(runs.slice(1)).toEqual([
+        expect.objectContaining({
+          head_sha: SETUP_COMMIT,
+          conclusion: "skipped",
+          output: expect.objectContaining({
+            title: "MCP Guardrails Self-Service is off",
+          }),
+        }),
+        expect.objectContaining({
+          head_sha: "e".repeat(40),
+          conclusion: "skipped",
+        }),
+      ]);
+      await checkDueAppaGithubSyncs();
+      expect(runs).toHaveLength(3);
+      config.openappa.selfService = "enabled";
       // Merged and pulled, the include is in place.
       pull = { merged: true, state: "closed" };
       await syncAppaGithubPolicy(organizationId);

@@ -58,11 +58,16 @@ describe("list_openappa_yells", () => {
     config.openappa.enabled = originalEnabled;
   });
 
-  test("lists every caller's yells newest first and filters by status and session", async () => {
+  test("lists the caller's own yells newest first and filters by status and session", async () => {
     const oldest = await seedYell({
       sessionId: "chat-a",
       toolCallId: "call-1",
       createdAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    await seedYell({
+      sessionId: "chat-a",
+      toolCallId: "call-other",
+      createdAt: new Date("2026-01-04T00:00:00Z"),
       callerId: "user:someone-else",
     });
     const middle = await seedYell({
@@ -102,6 +107,30 @@ describe("list_openappa_yells", () => {
     expect(
       (await list({ sessionId: "chat-b", status: "unresolved" })).yells,
     ).toEqual([]);
+  });
+
+  test("lists every caller's yells for a log admin", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const own = await seedYell({ sessionId: "chat", toolCallId: "own" });
+    const other = await seedYell({
+      sessionId: "chat",
+      toolCallId: "other",
+      callerId: "user:someone-else",
+    });
+    expect((await list({})).yells.map((yell) => yell.id)).toEqual([own]);
+
+    const admin = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: { log: ["read", "admin"] },
+    });
+    await makeMember(admin.id, organizationId, { role: role.role });
+    context = { ...context, userId: admin.id };
+    expect((await list({})).yells.map((yell) => yell.id).sort()).toEqual(
+      [own, other].sort(),
+    );
   });
 
   test("shortens long messages and pages at a fixed limit", async () => {

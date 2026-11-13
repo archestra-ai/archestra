@@ -49,13 +49,14 @@ import {
   resourceDisplayName,
 } from "./audit-log-action-labels";
 import {
+  AUDIT_DIFF_METADATA_KEYS,
   AuditLogDiffView,
   summarizeAuditDiffHints,
 } from "./audit-log-diff-view";
 
 /**
  * One audit event in a right drawer built for walking the trail: the header
- * steps through the table's rows (buttons, ↑/↓ or j/k) and carries the
+ * steps through the table's rows (buttons or j/k) and carries the
  * event's identity; the body splits into Overview, Changes and Raw.
  */
 export function AuditLogDetailDrawer({
@@ -93,10 +94,15 @@ export function AuditLogDetailDrawer({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       if (isTypingTarget(e.target)) return;
+      // j/k step anywhere; the arrows only from the header, so they still
+      // scroll a long Overview or Raw tab.
+      const fromHeader =
+        e.target instanceof HTMLElement &&
+        !!e.target.closest("[data-drawer-header]");
       const target =
-        e.key === "ArrowDown" || e.key === "j"
+        e.key === "j" || (fromHeader && e.key === "ArrowDown")
           ? next
-          : e.key === "ArrowUp" || e.key === "k"
+          : e.key === "k" || (fromHeader && e.key === "ArrowUp")
             ? prev
             : undefined;
       if (!target) return;
@@ -147,8 +153,6 @@ type DrawerTab = "overview" | "changes" | "raw";
 
 type Snapshot = Record<string, unknown> | null;
 
-const METADATA_KEYS = new Set(["updatedAt", "createdAt"]);
-
 const TAB_TRIGGER_CLASS =
   "relative h-full flex-none rounded-none border-0 px-0 text-sm font-medium text-muted-foreground shadow-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:after:bg-foreground dark:text-muted-foreground dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-foreground";
 
@@ -184,11 +188,11 @@ function DrawerBody({
       onValueChange={(value) => onTabChange(value as DrawerTab)}
       className="flex min-h-0 flex-1 flex-col gap-0"
     >
-      <header className="shrink-0 border-b">
+      <header data-drawer-header className="shrink-0 border-b">
         <div className="flex h-12 items-center gap-1 px-2 sm:px-4">
           <NavButton
             label="Previous event"
-            keys={["↑", "K"]}
+            keys={["K"]}
             target={prev}
             onOpenEvent={onOpenEvent}
           >
@@ -196,7 +200,7 @@ function DrawerBody({
           </NavButton>
           <NavButton
             label="Next event"
-            keys={["↓", "J"]}
+            keys={["J"]}
             target={next}
             onOpenEvent={onOpenEvent}
           >
@@ -678,12 +682,13 @@ function countChangedFields(before: Snapshot, after: Snapshot): number {
   if (before === null && after === null) return 0;
   if (before === null || after === null) {
     const snapshot = (before ?? after) as Record<string, unknown>;
-    return Object.keys(snapshot).filter((k) => !METADATA_KEYS.has(k)).length;
+    return Object.keys(snapshot).filter((k) => !AUDIT_DIFF_METADATA_KEYS.has(k))
+      .length;
   }
   const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
   let count = 0;
   for (const key of keys) {
-    if (METADATA_KEYS.has(key)) continue;
+    if (AUDIT_DIFF_METADATA_KEYS.has(key)) continue;
     if (stableStringify(before[key]) !== stableStringify(after[key])) count++;
   }
   return count;

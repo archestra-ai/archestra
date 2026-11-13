@@ -3,7 +3,7 @@ import {
   AUDIT_EVENT_ENTRIES,
   findAuditEventEntry,
 } from "./audit-event-taxonomy";
-import { ALL_ACTIONS } from "./audit-log-action-labels";
+import { ALL_ACTIONS, formatAction } from "./audit-log-action-labels";
 
 describe("audit event taxonomy", () => {
   it("files every event under exactly one picker entry", () => {
@@ -27,6 +27,13 @@ describe("audit event taxonomy", () => {
     expect(findAuditEventEntry({ action: "desktopDeviceSignIn.updated" })).toBe(
       devices,
     );
+  });
+
+  it("reads an event name it has no label for as a sentence", () => {
+    expect(formatAction("optimizationRule.created")).toBe(
+      "Optimization rule created",
+    );
+    expect(formatAction("teamToken.rotated")).toBe("Team token rotated");
   });
 
   it("drops the noun only from the primary type's verbs", () => {

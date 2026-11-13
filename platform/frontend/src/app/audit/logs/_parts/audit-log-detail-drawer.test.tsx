@@ -179,4 +179,17 @@ describe("AuditLogDetailDrawer", () => {
     await userEvent.keyboard("k");
     expect(onOpenEvent).toHaveBeenLastCalledWith(first);
   });
+
+  it("leaves the arrow keys to scroll the body, stepping only from the header", async () => {
+    const first = makeEvent({ id: "evt-1" });
+    const second = makeEvent({ id: "evt-2" });
+    const { onOpenEvent } = renderDrawer(first, { events: [first, second] });
+
+    await userEvent.keyboard("{ArrowDown}");
+    expect(onOpenEvent).not.toHaveBeenCalled();
+
+    screen.getByRole("button", { name: "Next event" }).focus();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(onOpenEvent).toHaveBeenLastCalledWith(second);
+  });
 });

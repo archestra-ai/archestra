@@ -123588,7 +123588,7 @@
                           },
                           "detail": {
                             "nullable": true,
-                            "description": "A second line to tell resources apart: the owner (agents, apps, MCP servers, skills) and the description, joined by ' · '. Null when neither is set or the resource is deleted",
+                            "description": "A second line to tell resources apart: the owner (agents, apps, MCP servers, skills) and the description, joined by ' · '. Null when neither is set or the resource's row is gone",
                             "type": "string"
                           }
                         },

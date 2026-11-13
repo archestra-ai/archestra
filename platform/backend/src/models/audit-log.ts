@@ -8,6 +8,7 @@ import {
   gte,
   ilike,
   inArray,
+  isNull,
   lt,
   lte,
   or,
@@ -461,8 +462,9 @@ class AuditLogModel {
         ];
   }
   /**
-   * A second line for each listed resource, read from the resource itself
-   * (deleted ones get none): its owner, then its description. The owner
+   * A second line for each listed resource, read from the resource itself:
+   * its owner, then its description. A resource whose row is gone gets none;
+   * a soft-deleted one keeps its line, which still tells it apart. The owner
    * comes first because per-member objects share a name ("My Assistant" is
    * seeded once per member).
    */
@@ -540,7 +542,11 @@ class AuditLogModel {
             .leftJoin(owner, eq(owner.id, schema.mcpServersTable.ownerId))
             .where(
               and(
-                eq(schema.internalMcpCatalogTable.organizationId, org),
+                // A catalog entry without an organization serves every one.
+                or(
+                  isNull(schema.internalMcpCatalogTable.organizationId),
+                  eq(schema.internalMcpCatalogTable.organizationId, org),
+                ),
                 inArray(schema.mcpServersTable.id, ids),
               ),
             ),

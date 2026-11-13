@@ -388,6 +388,57 @@ describe("AuditLogTable", () => {
     );
   });
 
+  it("drops a picked resource once the picked event rules its type out", () => {
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(
+        "action=team.created&resourceId=agent-1",
+      ) as unknown as ReturnType<typeof useSearchParams>,
+    );
+    mockUseAuditLogs.mockReturnValue(withEmpty());
+    mockUseResourceSearch.mockReturnValue({
+      options: [],
+      selected: {
+        resourceType: "agent",
+        resourceId: "agent-1",
+        name: "My Assistant",
+      },
+      onSearchQueryChange: vi.fn(),
+      isSearching: false,
+    });
+
+    renderTable();
+
+    const url = String(push.mock.calls.at(-1)?.[0]);
+    expect(url).toContain("action=team.created");
+    expect(url).not.toContain("resourceId");
+  });
+
+  it("lists no names from the previous type while the next one loads", async () => {
+    mockUseAuditLogs.mockReturnValue(withEmpty());
+    mockUseResourceSearch.mockReturnValue({
+      options: [
+        { resourceType: "agent", resourceId: "agent-1", name: "Old agent" },
+      ],
+      selected: undefined,
+      onSearchQueryChange: vi.fn(),
+      isSearching: true,
+      isPreviousData: true,
+    });
+
+    renderTable();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Resource filter: All resources" }),
+    );
+
+    expect(await screen.findByText("Loading…")).toBeInTheDocument();
+    expect(screen.queryByText("Old agent")).not.toBeInTheDocument();
+  });
+
   it("labels a resource preselected from the URL without opening the picker", () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("resourceId=team-9") as unknown as ReturnType<

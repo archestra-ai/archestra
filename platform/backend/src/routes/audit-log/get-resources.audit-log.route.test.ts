@@ -5,7 +5,7 @@
  *   from its latest named event; other types and other organizations' events
  *   are not offered.
  * - Each option carries a second line from the live resource: its owner and
- *   description; none once the resource is gone.
+ *   description; none once the resource's row is gone.
  * - `search` matches the name case-insensitively and literally; `resourceId`
  *   returns just that resource; `limit` bounds the page.
  * - Without auditLog:admin only resources from the caller's own events are
@@ -199,10 +199,26 @@ describe("GET /api/audit-logs/resources", () => {
     expect(await ids("?resourceType=user")).toEqual([]);
   });
 
-  test("adds the owner and description from the live resource, none once deleted", async ({
+  test("adds the owner and description from the live resource, none once its row is gone", async ({
     makeAgent,
     makeTeam,
+    makeInternalMcpCatalog,
+    makeMcpServer,
   }) => {
+    // A catalog entry without an organization still serves this one.
+    const sharedCatalog = await makeInternalMcpCatalog({
+      organizationId: null,
+      description: "Issues and projects",
+    });
+    const server = await makeMcpServer({
+      catalogId: sharedCatalog.id,
+      ownerId: user.id,
+    });
+    await seed({
+      resourceType: "mcpServer",
+      resourceId: server.id,
+      resourceName: "Linear",
+    });
     const owned = await makeAgent({
       organizationId,
       authorId: user.id,
@@ -237,6 +253,7 @@ describe("GET /api/audit-logs/resources", () => {
         .data.find((option: { name: string }) => option.name === name)?.detail;
     expect(detailOf("My Assistant")).toBe(`${user.name} · Answers questions`);
     expect(detailOf("Ops")).toBe("Runs production");
+    expect(detailOf("Linear")).toBe(`${user.name} · Issues and projects`);
     expect(detailOf("Deleted agent")).toBeNull();
   });
 

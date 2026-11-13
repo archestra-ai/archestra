@@ -77,6 +77,8 @@ export function useAuditLogResourceSearch(params: {
       selected.data?.[0],
     onSearchQueryChange: setSearchQuery,
     isSearching: searchQuery.trim() !== search || options.isFetching,
+    /** The options are still the previous query's while the new one loads. */
+    isPreviousData: options.isPlaceholderData,
     /** The page is full, so more resources may match than are listed. */
     isTruncated: (options.data?.length ?? 0) >= RESOURCE_OPTION_LIMIT,
   };

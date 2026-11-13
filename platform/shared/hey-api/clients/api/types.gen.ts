@@ -33514,7 +33514,7 @@ export type GetAuditLogResourcesResponses = {
             resourceId: string;
             name: string;
             /**
-             * A second line to tell resources apart: the owner (agents, apps, MCP servers, skills) and the description, joined by ' · '. Null when neither is set or the resource is deleted
+             * A second line to tell resources apart: the owner (agents, apps, MCP servers, skills) and the description, joined by ' · '. Null when neither is set or the resource's row is gone
              */
             detail: string | null;
         }>;

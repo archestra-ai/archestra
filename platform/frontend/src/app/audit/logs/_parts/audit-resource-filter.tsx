@@ -82,10 +82,28 @@ export function AuditResourceFilter({
     resourceType: trimmed ? types.join(",") : shownType,
   });
   const selected = search.selected;
+  // Until the new type's (or search's) names arrive, the hook still holds the
+  // previous ones; list none rather than show them under the wrong heading.
+  const options = search.isPreviousData ? [] : search.options;
+
+  // An event picked after the resource can rule its type out; drop the
+  // resource then, or the two filters together match nothing.
+  const staleResourceId =
+    resourceId &&
+    resourceTypes &&
+    (types.length === 0 || (selected && !types.includes(selected.resourceType)))
+      ? resourceId
+      : null;
+  const clearedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!staleResourceId || clearedRef.current === staleResourceId) return;
+    clearedRef.current = staleResourceId;
+    onChange(null);
+  }, [staleResourceId, onChange]);
 
   const groups = useMemo(() => {
-    const byType = new Map<string, typeof search.options>();
-    for (const option of search.options) {
+    const byType = new Map<string, typeof options>();
+    for (const option of options) {
       const list = byType.get(option.resourceType) ?? [];
       list.push(option);
       byType.set(option.resourceType, list);
@@ -97,7 +115,7 @@ export function AuditResourceFilter({
         options,
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [search.options]);
+  }, [options]);
 
   const setSearch = (value: string) => {
     setQuery(value);
@@ -177,8 +195,8 @@ export function AuditResourceFilter({
     }
   };
 
-  const optionRows = (options: typeof search.options, nav: string) =>
-    options.map((option) => {
+  const optionRows = (rows: typeof options, nav: string) =>
+    rows.map((option) => {
       const Icon = auditResourceIcon(option.resourceType);
       return (
         <PickerRow
@@ -205,11 +223,12 @@ export function AuditResourceFilter({
       <span>Loading…</span>
     </div>
   ) : null;
-  const truncatedNote = search.isTruncated ? (
-    <p className="px-2 py-2 text-xs text-muted-foreground">
-      Showing the first {search.options.length}. Search to find more.
-    </p>
-  ) : null;
+  const truncatedNote =
+    search.isTruncated && !search.isPreviousData ? (
+      <p className="px-2 py-2 text-xs text-muted-foreground">
+        Showing the first {options.length}. Search to find more.
+      </p>
+    ) : null;
 
   const leftPane = (
     <div
@@ -310,8 +329,8 @@ export function AuditResourceFilter({
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1"
         onWheelCapture={(event) => event.stopPropagation()}
       >
-        {search.options.length > 0
-          ? optionRows(search.options, "right")
+        {options.length > 0
+          ? optionRows(options, "right")
           : (status ?? (
               <div className="px-4 py-8 text-center text-sm text-muted-foreground">
                 No {pluralType(shownType).toLowerCase()} in the trail yet.

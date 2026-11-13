@@ -430,7 +430,8 @@ function deepEqual(a: unknown, b: unknown): boolean {
   return false;
 }
 
-const AUDIT_DIFF_METADATA_KEYS = new Set(["updatedAt", "createdAt"]);
+/** Bookkeeping fields that never count as a change. */
+export const AUDIT_DIFF_METADATA_KEYS = new Set(["updatedAt", "createdAt"]);
 
 /**
  * One-line summary of which top-level fields differ between two audit

@@ -358,10 +358,13 @@ function SelfServiceRow({
   const [setup, setSetup] = useState(false);
   const protection = useAppaRepositoryProtection(selfService.enabled);
   const data = selfService.enabled ? (protection.data ?? null) : null;
-  // What Finish setup still does: the ruleset, or the include pull request.
+  // What Finish setup still does: the ruleset, the App's Checks permission
+  // the required check is posted with, or the include pull request.
   const toFinish =
     !!data &&
-    (data.branchRules.state !== "active" || data.include.state === "missing");
+    (data.branchRules.state !== "active" ||
+      data.branchRules.checkRule === "unposted" ||
+      data.include.state === "missing");
   // On in full only once the ruleset holds and the include line is merged.
   const ready = toFinish || data?.include.state === "pull_open";
   const heading = (() => {
@@ -512,11 +515,15 @@ function RepositoryState({
 }) {
   const policyFile = policyPath.slice(policyPath.lastIndexOf("/") + 1);
   const include = includeSentence(data.include, policyFile);
+  // Ready, the heading says what is missing; a rule that holds pull requests
+  // until the App may post the check is said all the same.
+  const protection = protectionSentence(data.branchRules, branchUrl, data.app);
   const lines = ready
-    ? data.include.state === "pull_open"
-      ? [include]
-      : []
-    : [protectionSentence(data.branchRules, branchUrl, data.app), include];
+    ? [
+        data.branchRules.checkRule === "unposted" ? protection : null,
+        data.include.state === "pull_open" ? include : null,
+      ]
+    : [protection, include];
   const shown = lines.filter((line) => line != null);
   if (shown.length === 0) return null;
   // The repository's state reads at the rows' size, set off from the settings.

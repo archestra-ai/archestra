@@ -2183,7 +2183,7 @@ test("without the Checks permission the import waits, a rule already in place is
   await connectApp({ organizationId: org.id, refuse });
   serveRepository({
     head: FIRST,
-    files: { [FIRST]: { "appa.toml": RULES } },
+    files: { [FIRST]: { "appa.toml": `include = ["mcp/*.toml"]\n${RULES}` } },
   });
   let rules: Array<Record<string, unknown>> = [];
   server.use(
@@ -2217,12 +2217,16 @@ test("without the Checks permission the import waits, a rule already in place is
     checkRule: "unposted",
     detail: expect.stringContaining("Checks (read and write)"),
   });
+  // The rule holds pull requests until the App may post the check: setup is
+  // not complete, so the registry offers nothing and the Keeper's tools refuse.
+  expect(await getAppaSelfService(org.id)).toEqual({ enabled: false });
 
   refuse.length = 0;
   expect((await syncAndProtect(org.id))?.branchRules).toEqual({
     state: "active",
     url: "https://github.com/example/policies/rules/5",
   });
+  expect(await getAppaSelfService(org.id)).toEqual({ enabled: true });
 });
 
 test("the policy check judges who asked for a pull request Archestra opened, reads the policy alone for one a person opened, and skips one that changes nothing it reads", async ({

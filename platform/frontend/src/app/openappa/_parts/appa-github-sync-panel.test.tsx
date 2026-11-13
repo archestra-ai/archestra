@@ -212,6 +212,43 @@ test("on in full: the row says Enabled and names the ruleset", async () => {
   expect(screen.queryByRole("button", { name: "Finish setup" })).toBeNull();
 });
 
+test("a rule the App cannot post the check for: the row says ready to be Enabled, says the rule holds pull requests, and offers Finish setup", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: "app-1" },
+    selfService: selfServiceSetting(true),
+  };
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Guardrails Policy Admission",
+        include: { folder: "mcp", state: "included" },
+        app: { name: "Policy App", url: "https://github.com/apps/policy-app" },
+        branchRules: {
+          state: "active",
+          url: "https://github.com/example/policies/rules/5",
+          checkRule: "unposted",
+          detail:
+            "The GitHub App needs the Checks permission (read and write).",
+        },
+      }),
+    ),
+  );
+  show();
+  expect(
+    await screen.findByRole("heading", {
+      name: "MCP Guardrails Self-Service is ready to be Enabled",
+    }),
+  ).toBeVisible();
+  expect(screen.getByRole("button", { name: "Finish setup" })).toBeEnabled();
+  expect(
+    await screen.findByText(/holds pull requests until the/),
+  ).toHaveTextContent(
+    "The Self-service branch protection ruleset holds pull requests until the Policy App App can post the check.",
+  );
+  expect(screen.queryByText(/protects the policy on the/)).toBeNull();
+});
+
 test("Finish setup lists the permissions an existing GitHub App lacks, with where to grant and accept them", async () => {
   state = {
     ...state,

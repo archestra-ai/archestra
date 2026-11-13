@@ -169,9 +169,11 @@ export async function selfServiceInForce(organizationId: string) {
  * Whether self-service is set up in full, which is when the registry offers
  * its action and the Keeper's server rules tools work: on by the variable,
  * a GitHub App source that has synced, the servers' folder included by the
- * accepted policy, and the branch ruleset active. Before that, Finish setup
- * on the Git sync card completes it; the ruleset's state is the protection
- * read the card shows, kept for a minute and replaced by each sync.
+ * accepted policy, and the branch ruleset active with a check the App can
+ * post: a required check nobody posts would hold every pull request the
+ * editors open. Before that, Finish setup on the Git sync card completes it;
+ * the ruleset's state is the protection read the card shows, kept for a
+ * minute and replaced by each sync.
  */
 export async function selfServiceSetupComplete(
   organizationId: string,
@@ -182,7 +184,10 @@ export async function selfServiceSetupComplete(
   if (!includesServerRulesFolder(policy.content, configuredServerRulesFolder()))
     return false;
   const protection = await getRepositoryProtection(organizationId);
-  return protection?.branchRules.state === "active";
+  return (
+    protection?.branchRules.state === "active" &&
+    protection.branchRules.checkRule !== "unposted"
+  );
 }
 
 /** What the MCP registry asks: whether its servers' editors may change their rules now. */

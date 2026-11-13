@@ -17,13 +17,15 @@ import {
 import {
   AGENT_RUNTIME_PROTOCOL_LABELS,
   type AgentRuntimeConfig,
+  AgentRuntimeContainerOptions,
   AgentRuntimeEnvironmentFields,
   AgentRuntimeImageFields,
+  AgentRuntimeLimitFields,
   AgentRuntimeProtocolField,
-  AgentRuntimeRunControls,
   AgentRuntimeSteeringField,
   defaultAgentRuntime,
   isClaudeCodeRuntimeConfig,
+  LockedRuntimeNotice,
 } from "@/components/agent-runtime-fields";
 import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavailable-notice";
 import { ConfigurationRow } from "@/components/configuration-row";
@@ -52,6 +54,7 @@ export function AgentRuntimePicker({
   modelBlock,
   modelSummary,
   modelAttention,
+  lockedBy,
   onChangeTemplate,
 }: {
   selectedId: AgentRuntimeSelection;
@@ -64,6 +67,8 @@ export function AgentRuntimePicker({
   modelBlock: ReactNode;
   modelSummary: string;
   modelAttention?: string;
+  /** The locked Agent Runtime that sets this runtime's settings, if any. */
+  lockedBy?: string | null;
   /**
    * Set when the runtime was picked from the catalog. The picker then shows
    * that choice as a summary rather than asking a second time, and this
@@ -224,6 +229,7 @@ export function AgentRuntimePicker({
         />
       )}
       {runtimeEnabled === false && <AgentRuntimeUnavailableNotice />}
+      {lockedBy && <LockedRuntimeNotice name={lockedBy} />}
       <Accordion
         type="multiple"
         value={expandedRows}
@@ -293,12 +299,14 @@ export function AgentRuntimePicker({
                 description="The API the harness uses to call models."
                 summary={protocol}
               >
-                <AgentRuntimeProtocolField
-                  value={value}
-                  onChange={onChange}
-                  hideLabel
-                  constrainToHarness
-                />
+                <fieldset disabled={!!lockedBy}>
+                  <AgentRuntimeProtocolField
+                    value={value}
+                    onChange={onChange}
+                    hideLabel
+                    constrainToHarness
+                  />
+                </fieldset>
               </ConfigurationRow>
             )}
             <ConfigurationRow
@@ -308,11 +316,13 @@ export function AgentRuntimePicker({
               description="What happens to a message you send while it works."
               summary={steering}
             >
-              <AgentRuntimeSteeringField
-                value={value}
-                onChange={onChange}
-                hideLabel
-              />
+              <fieldset disabled={!!lockedBy}>
+                <AgentRuntimeSteeringField
+                  value={value}
+                  onChange={onChange}
+                  hideLabel
+                />
+              </fieldset>
             </ConfigurationRow>
             <ConfigurationRow
               id={`${id}-controls`}
@@ -321,7 +331,15 @@ export function AgentRuntimePicker({
               description="Idle timeout, maximum duration, spend cap, CPU and memory."
               summary={runControlsSummary(value)}
             >
-              <AgentRuntimeRunControls value={value} onChange={onChange} />
+              <div className="space-y-5">
+                <fieldset disabled={!!lockedBy}>
+                  <AgentRuntimeLimitFields value={value} onChange={onChange} />
+                </fieldset>
+                <AgentRuntimeContainerOptions
+                  value={value}
+                  onChange={onChange}
+                />
+              </div>
             </ConfigurationRow>
           </>
         )}

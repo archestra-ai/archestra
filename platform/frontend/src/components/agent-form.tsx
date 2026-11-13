@@ -69,10 +69,12 @@ import {
   AgentChannelHowItWorks,
   AgentOtherTaskSources,
 } from "@/components/agent-other-task-sources";
+import { useAgentCatalogImages } from "@/components/agent-pages/agent-catalog";
 import {
   type AgentRuntimeConfig,
   AgentRuntimeFields,
   isClaudeCodeRuntimeConfig,
+  LockedRuntimeNotice,
   supportsClaudeCodeSubscription as runtimeSupportsClaudeCodeSubscription,
 } from "@/components/agent-runtime-fields";
 import { AgentRuntimeHowItWorks } from "@/components/agent-runtime-how-it-works";
@@ -179,6 +181,7 @@ import {
 } from "@/lib/agent-knowledge-source-exclusions.query";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
+import { useLockedRuntimeName } from "@/lib/agent-runtime-templates.query";
 import {
   useAgentSkillExclusions,
   useAgentSkills,
@@ -1498,6 +1501,13 @@ export function AgentForm({
   const supportsClaudeCodeSubscription =
     runtimeSupportsClaudeCodeSubscription(runtime);
   const isClaudeCodeRuntime = isClaudeCodeRuntimeConfig(runtime);
+  const agentCatalogImages = useAgentCatalogImages();
+  // Its Agent Runtime's settings, when locked, are this agent's: read-only.
+  // An existing agent's runtime is the saved one, never the unsaved draft.
+  const lockedRuntimeName = useLockedRuntimeName(
+    agent ? agent.runtime : runtime,
+    agentCatalogImages,
+  );
   const agentRuntimeEnabled = useFeature("agentRuntime") === true;
   // A runtime saved before the deployment turned Agent Runtime off stays
   // editable, so it can be switched off.
@@ -3089,6 +3099,7 @@ export function AgentForm({
               }
             >
               <ClaudeCodeInferenceSettings
+                authenticationLocked={!!lockedRuntimeName}
                 agentId={agent?.id ?? ""}
                 disabled={canConfigureRuntime !== true}
                 authentication={
@@ -3322,6 +3333,7 @@ export function AgentForm({
                             }
                           }}
                           onChange={setAgentRuntime}
+                          lockedBy={lockedRuntimeName}
                           onChangeTemplate={onChangeRuntimeTemplate}
                           modelBlock={showsModelControl ? modelBlock : null}
                           modelSummary={modelSummary}
@@ -3814,10 +3826,14 @@ export function AgentForm({
                     </InlineNoticeBody>
                   </InlineNotice>
                 )}
+                {canConfigureRuntime && lockedRuntimeName && (
+                  <LockedRuntimeNotice name={lockedRuntimeName} />
+                )}
                 <fieldset disabled={canConfigureRuntime !== true}>
                   <AgentRuntimeFields
                     value={runtime}
                     onChange={setAgentRuntime}
+                    locked={!!lockedRuntimeName}
                   />
                 </fieldset>
               </div>

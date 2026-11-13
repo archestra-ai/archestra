@@ -1,4 +1,12 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  AGENT_CATALOG_NAMES,
+  type AgentCatalogId,
+  type AgentRuntimeDefaults,
+  archestraApiSdk,
+  type archestraApiTypes,
+  type LockableAgentRuntime,
+  resolveAgentRuntimeTemplate,
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { organizationKeys } from "@/lib/organization.query";
@@ -9,6 +17,7 @@ export type RuntimeTemplate =
 export type RuntimeTemplateSummary =
   archestraApiTypes.ListAgentRuntimeTemplatesResponses["200"][number];
 const catalogKey = ["agent-runtime-templates"] as const;
+const builtInsKey = ["agent-runtime-templates", "built-ins"] as const;
 const settingsKey = ["agent-runtime-template-settings"] as const;
 
 export function useRuntimeTemplateCatalog() {
@@ -22,6 +31,52 @@ export function useRuntimeTemplateCatalog() {
     refetchOnMount: "always",
     staleTime: 0,
   });
+}
+
+/** The settings administrators chose for the maintained runtimes. */
+export function useBuiltInRuntimeSettings() {
+  return useQuery({
+    queryKey: builtInsKey,
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.listBuiltInAgentRuntimeSettings();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+  });
+}
+
+/** A maintained runtime's defaults, as its administrators set them. */
+export function useBuiltInRuntimeDefaults(): (
+  id: AgentCatalogId,
+) => AgentRuntimeDefaults | undefined {
+  const { data } = useBuiltInRuntimeSettings();
+  return (id) => data?.find((item) => item.id === id)?.settings;
+}
+
+/**
+ * The name of the locked Agent Runtime a runtime is an Agent of, or null.
+ * Its settings are then the runtime's, and agent forms show them read-only.
+ */
+export function useLockedRuntimeName(
+  runtime: Pick<LockableAgentRuntime, "image" | "command"> | null | undefined,
+  catalogImages: Record<AgentCatalogId, string>,
+): string | null {
+  const { data: customs } = useRuntimeTemplateCatalog();
+  const { data: builtIns } = useBuiltInRuntimeSettings();
+  if (!runtime) return null;
+  const ref = resolveAgentRuntimeTemplate({
+    runtime,
+    catalogImages,
+    customTemplates: customs ?? [],
+  });
+  if (!ref) return null;
+  if (ref.kind === "built-in")
+    return builtIns?.find((item) => item.id === ref.id)?.locked
+      ? AGENT_CATALOG_NAMES[ref.id]
+      : null;
+  const custom = customs?.find((item) => item.id === ref.id);
+  return custom?.locked ? custom.name : null;
 }
 
 export function useRuntimeTemplateSettings(enabled: boolean) {
@@ -67,10 +122,11 @@ export function useSaveRuntimeTemplateSettings() {
     onSuccess: async (data) => {
       client.setQueryData(settingsKey, data);
       await Promise.all([
+        // Also refreshes the maintained runtimes' settings under it.
         client.invalidateQueries({ queryKey: catalogKey }),
         client.invalidateQueries({ queryKey: organizationKeys.details() }),
       ]);
-      toast.success("Agent Runtimes updated");
+      toast.success("Available runtimes updated");
     },
   });
 }

@@ -48,7 +48,7 @@ export function AppearanceSettings() {
     APPEARANCE_PAGES[0];
   const setPageHeader = useSetSettingsPageHeader();
   useEffect(() => {
-    setPageHeader({ title: "Appearance", description: page.description });
+    setPageHeader({ title: page.label, description: page.description });
     return () => setPageHeader(null);
   }, [page, setPageHeader]);
   const { data: canRead } = useHasPermissions({

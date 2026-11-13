@@ -41,6 +41,7 @@ describe("PUT /api/agent-runtime-templates/settings", () => {
     expect(created.json()).toEqual({
       revision: 1,
       templates: [template],
+      builtIns: {},
       popularAgentOverrides: overrides,
     });
     const stored = await db.select().from(schema.secretsTable);
@@ -185,6 +186,7 @@ describe("PUT /api/agent-runtime-templates/settings", () => {
     expect(read.json()).toEqual({
       revision: 2,
       templates: [template],
+      builtIns: {},
       popularAgentOverrides: updated,
     });
   });

@@ -1,5 +1,6 @@
 export const RouteId = {
   ListAgentRuntimeTemplates: "listAgentRuntimeTemplates",
+  ListBuiltInAgentRuntimeSettings: "listBuiltInAgentRuntimeSettings",
   GetAgentRuntimeTemplate: "getAgentRuntimeTemplate",
   GetRuntimeTemplateSettings: "getRuntimeTemplateSettings",
   SaveRuntimeTemplateSettings: "saveRuntimeTemplateSettings",

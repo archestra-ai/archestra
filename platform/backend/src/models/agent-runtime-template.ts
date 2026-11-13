@@ -6,6 +6,7 @@ import type { Organization } from "@/types";
 import type {
   RuntimeTemplateEditorSettings,
   RuntimeTemplateSettings,
+  RuntimeTemplateSettingsInput,
 } from "@/types/agent-runtime-template";
 import { RuntimeTemplateSettingsSchema } from "@/types/agent-runtime-template";
 import OrganizationModel from "./organization";
@@ -37,9 +38,16 @@ class AgentRuntimeTemplateModel {
 
   static async saveSettings(params: {
     organizationId: string;
-    settings: RuntimeTemplateSettings;
+    settings: RuntimeTemplateSettingsInput;
     popularAgentOverrides: PopularAgentOverrides | null;
+    /** Runs in the saving transaction, after the new settings are written. */
+    afterWrite?: (params: {
+      tx: Transaction;
+      settings: RuntimeTemplateSettings;
+      previous: RuntimeTemplateSettings;
+    }) => Promise<void>;
   }): Promise<RuntimeTemplateEditorSettings> {
+    const input = RuntimeTemplateSettingsSchema.parse(params.settings);
     const saved = await withDbTransaction(async (tx) => {
       const [row] = await tx
         .select({ id: schema.organizationsTable.id })
@@ -51,20 +59,18 @@ class AgentRuntimeTemplateModel {
         params.organizationId,
         tx,
       );
-      if (current.revision !== params.settings.revision)
+      if (current.revision !== input.revision)
         throw new ApiError(
           409,
           "Runtime templates changed. Reload the settings before saving again.",
         );
-      const settings = {
-        revision: params.settings.revision + 1,
-        templates: params.settings.templates,
-      };
+      const settings = { ...input, revision: input.revision + 1 };
       await AgentRuntimeTemplateModel.writeStoredSettings(
         params.organizationId,
         settings,
         tx,
       );
+      await params.afterWrite?.({ tx, settings, previous: current });
       await tx
         .update(schema.organizationsTable)
         .set({
@@ -140,6 +146,7 @@ class AgentRuntimeTemplateModel {
     return {
       revision: settings.revision,
       popularAgentOverrides: settings.popularAgentOverrides,
+      builtIns: settings.builtIns,
       templates: settings.templates.map(({ runtime, ...template }) => ({
         ...template,
         icon: template.icon ? "(set)" : null,
@@ -171,7 +178,7 @@ class AgentRuntimeTemplateModel {
     );
     return row
       ? RuntimeTemplateSettingsSchema.parse(row.secret)
-      : { revision: 0, templates: [] };
+      : { revision: 0, templates: [], builtIns: {} };
   }
 
   private static async writeStoredSettings(

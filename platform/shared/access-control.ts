@@ -493,6 +493,7 @@ export const requiredEndpointPermissionsMap: Partial<
    */
   [RouteId.GetOrganization]: {},
   [RouteId.ListAgentRuntimeTemplates]: {},
+  [RouteId.ListBuiltInAgentRuntimeSettings]: {},
   [RouteId.GetAgentRuntimeTemplate]: {}, // Scoped create/update check in the handler.
   [RouteId.GetRuntimeTemplateSettings]: { organizationSettings: ["update"] },
   [RouteId.SaveRuntimeTemplateSettings]: { organizationSettings: ["update"] },
@@ -2097,6 +2098,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/mcp": { organizationSettings: ["read"] },
   "/settings/skills": { organizationSettings: ["read"] },
   "/settings/agents": { organizationSettings: ["read"] },
+  "/settings/agents/runtimes": { organizationSettings: ["read"] },
   "/settings/messaging-channels": { organizationSettings: ["read"] },
   "/settings/messaging-channels/slack": { organizationSettings: ["read"] },
   "/settings/messaging-channels/ms-teams": { organizationSettings: ["read"] },

@@ -70,24 +70,36 @@ export function followAgentCatalogImage(params: {
   image: string;
   catalogImages: Record<AgentCatalogId, string>;
 }): string {
+  const id = agentCatalogIdForImage(params);
+  return id ? params.catalogImages[id] : params.image;
+}
+
+/**
+ * The maintained template whose image a saved runtime launches, or null for
+ * any other image. Matches the same references `followAgentCatalogImage`
+ * moves to the current catalog image.
+ */
+export function agentCatalogIdForImage(params: {
+  image: string;
+  catalogImages: Record<AgentCatalogId, string>;
+}): AgentCatalogId | null {
   const at = params.image.indexOf("@");
-  if (at !== -1 && !hasTag(params.image.slice(0, at))) return params.image;
+  if (at !== -1 && !hasTag(params.image.slice(0, at))) return null;
   const repository = imageRepository(params.image);
   for (const [id, name] of Object.entries(AGENT_CATALOG_IMAGE_NAMES) as [
     AgentCatalogId,
     string,
   ][]) {
-    const current = params.catalogImages[id];
     if (
-      repository === imageRepository(current) ||
+      repository === imageRepository(params.catalogImages[id]) ||
       repository === `${AGENT_CATALOG_IMAGE_REGISTRY}/${name}` ||
       repository ===
         `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/${name}`
     ) {
-      return current;
+      return id;
     }
   }
-  return params.image;
+  return null;
 }
 
 /** Display name of each maintained CLI template. */

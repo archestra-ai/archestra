@@ -26,6 +26,7 @@ export function ClaudeCodeInferenceSettings({
   showModelSelector = true,
   runtimeCommand = "archestra-claude-code",
   disabled = false,
+  authenticationLocked = false,
 }: {
   agentId: string;
   authentication: "provider" | "subscription";
@@ -46,6 +47,8 @@ export function ClaudeCodeInferenceSettings({
   runtimeCommand?: string | null;
   /** Disables the runtime-owned authentication radio cards without disabling `apiKeySelector`/`modelSelector`. */
   disabled?: boolean;
+  /** Its locked Agent Runtime chooses the account: shown read-only. */
+  authenticationLocked?: boolean;
 }) {
   const id = useId();
   const appName = useAppName();
@@ -62,7 +65,7 @@ export function ClaudeCodeInferenceSettings({
     <div className="space-y-2">
       <RadioGroup
         aria-label="Authentication"
-        disabled={disabled}
+        disabled={disabled || authenticationLocked}
         value={effectiveAuthentication}
         onValueChange={(value) =>
           onAuthenticationChange(value as "provider" | "subscription")

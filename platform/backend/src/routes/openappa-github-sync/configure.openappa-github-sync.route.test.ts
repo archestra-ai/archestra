@@ -1857,7 +1857,33 @@ describe("APPA GitHub sync", () => {
     });
     let pull = { merged: false, state: "open" };
     const opened: unknown[] = [];
+    let rules: Array<Record<string, unknown>> = [];
+    const runs: Array<Record<string, unknown>> = [];
     server.use(
+      http.get("https://api.github.com/repos/example/other-policy/pulls", () =>
+        HttpResponse.json(
+          pull.merged
+            ? []
+            : [
+                {
+                  number: 8,
+                  head: { sha: SETUP_COMMIT },
+                  merge_commit_sha: null,
+                },
+              ],
+        ),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/commits/:sha/check-runs",
+        () => HttpResponse.json({ check_runs: [] }),
+      ),
+      http.post(
+        "https://api.github.com/repos/example/other-policy/check-runs",
+        async ({ request }) => {
+          runs.push((await request.json()) as Record<string, unknown>);
+          return HttpResponse.json({ id: 1 }, { status: 201 });
+        },
+      ),
       http.post(
         `https://api.github.com/app/installations/${installationId}/access_tokens`,
         () =>
@@ -1906,7 +1932,7 @@ describe("APPA GitHub sync", () => {
       ),
       http.get(
         "https://api.github.com/repos/example/other-policy/rules/branches/main",
-        () => HttpResponse.json([]),
+        () => HttpResponse.json(rules),
       ),
       contentsOf("example/other-policy", git.files, () =>
         pull.merged ? [commit, SETUP_COMMIT] : [SETUP_COMMIT],
@@ -1935,18 +1961,18 @@ describe("APPA GitHub sync", () => {
     });
     // Until it merges, the setup pull request is the include on its way:
     // the protection names it, and nothing else opens.
-    const protection = async () => {
+    const protection = async (branchRules: string) => {
       const read = await app.inject({
         method: "GET",
-        url: "/api/openappa/github-sync/protection",
+        url: "/api/openappa/github-sync/protection?fresh=true",
       });
       expect(read.statusCode, read.body).toBe(200);
       // The branch rules are read meanwhile: the ruleset can be imported
       // before the merge.
-      expect(read.json().branchRules).toMatchObject({ state: "missing" });
+      expect(read.json().branchRules).toMatchObject({ state: branchRules });
       return read.json().include;
     };
-    expect(await protection()).toEqual({
+    expect(await protection("missing")).toEqual({
       folder: "mcp",
       state: "pull_open",
       pull: {
@@ -1961,6 +1987,36 @@ describe("APPA GitHub sync", () => {
     });
     expect(include.statusCode, include.body).toBe(200);
     expect(opened).toHaveLength(1);
+    // No rule yet: the minute's round posts nothing on the setup pull
+    // request. The ruleset imported meanwhile: the check it requires is
+    // posted as skipped, once, so the pull request can merge.
+    await checkDueAppaGithubSyncs();
+    expect(runs).toEqual([]);
+    rules = [
+      {
+        type: "required_status_checks",
+        parameters: {
+          strict_required_status_checks_policy: false,
+          required_status_checks: [
+            { context: "Check OpenAPPA Guardrails", integration_id: 123 },
+          ],
+        },
+        ruleset_id: 5,
+        ruleset_source_type: "Repository",
+        ruleset_source: "example/other-policy",
+      },
+    ];
+    await checkDueAppaGithubSyncs();
+    await checkDueAppaGithubSyncs();
+    expect(runs).toEqual([
+      expect.objectContaining({
+        head_sha: SETUP_COMMIT,
+        conclusion: "skipped",
+        output: expect.objectContaining({
+          title: "Git sync setup in progress",
+        }),
+      }),
+    ]);
     // Merged and pulled, the include is in place.
     pull = { merged: true, state: "closed" };
     await syncAppaGithubPolicy(organizationId);
@@ -1969,7 +2025,10 @@ describe("APPA GitHub sync", () => {
       setupPullRequestNumber: null,
       lastSyncError: null,
     });
-    expect(await protection()).toEqual({ folder: "mcp", state: "included" });
+    expect(await protection("active")).toEqual({
+      folder: "mcp",
+      state: "included",
+    });
   });
 
   test("a policy that reads repository files no commit was accepted for is not moved, and nothing is created", async () => {

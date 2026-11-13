@@ -1146,6 +1146,22 @@ export async function checkDueAppaGithubSyncs() {
       }
     },
   );
+  // A setup pull request still open, with a rule that already requires the
+  // check: posted as skipped, so setup can finish.
+  await mapWithConcurrency(
+    await OpenAppaGithubSyncModel.findAwaitingSetup(),
+    4,
+    async (row) => {
+      try {
+        if (selfServiceActive(row)) await postSetupPendingChecks(row);
+      } catch (error) {
+        logger.warn(
+          { organizationId: row.organizationId, error },
+          "OpenAPPA could not post the policy check on the setup pull request",
+        );
+      }
+    },
+  );
 }
 
 // =============================================================================
@@ -1259,21 +1275,7 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   // What the source reads decides which files a pull request governs, so a
   // policy file or servers' folder moved makes every stored result stale,
   // the unrelated ones included.
-  const keys = checking.map((pull) =>
-    checkKey(
-      "checked",
-      "v3",
-      organizationId,
-      source.repo,
-      source.ref ?? "",
-      source.path,
-      serverRulesFolderOf(source),
-      String(source.githubAppConfigId ?? ""),
-      checkName,
-      pull.head,
-      pull.result,
-    ),
-  );
+  const keys = checking.map((pull) => checkedResultKey(source, pull));
   const checked = await cacheManager.getMany<CheckedResult>(keys);
   for (const [index, pull] of checking.entries()) {
     const key = keys[index] as AllowedCacheKey;
@@ -1361,6 +1363,12 @@ async function checkAppaGithubPullRequests(organizationId: string) {
         );
         continue;
       }
+    // The verdict stands on GitHub now: a later off round posts skipped over it.
+    await cacheManager
+      .delete(
+        checkKey("leftover-posted", organizationId, source.repo, pull.head),
+      )
+      .catch(() => undefined);
     await cacheManager
       .set(key, result, CHECKED_TTL)
       .catch((err) =>
@@ -1369,6 +1377,105 @@ async function checkAppaGithubPullRequests(organizationId: string) {
           "OpenAPPA could not record a posted policy check; the next pass checks it again",
         ),
       );
+  }
+}
+
+/**
+ * The key a pull request's posted verdict is kept under. What the source
+ * reads decides which files a pull request governs, so a policy file or
+ * servers' folder moved makes every stored result stale, the unrelated ones
+ * included.
+ */
+function checkedResultKey(
+  source: PolicySource,
+  pull: Pick<CheckedPull, "head" | "result">,
+) {
+  return checkKey(
+    "checked",
+    "v3",
+    source.organizationId,
+    source.repo,
+    source.ref ?? "",
+    source.path,
+    serverRulesFolderOf(source),
+    String(source.githubAppConfigId ?? ""),
+    POLICY_CHECK_NAME,
+    pull.head,
+    pull.result,
+  );
+}
+
+/**
+ * A setup pull request still open while a rule already requires the check:
+ * nothing can be judged before the first commit is accepted, so the check is
+ * posted as skipped on every open pull request, once each, and setup can
+ * finish. Without such a rule nothing is posted.
+ */
+async function postSetupPendingChecks(row: SyncRow) {
+  if (!row.repo || !row.path || !row.githubAppConfigId) return;
+  const source = {
+    ...row,
+    repo: row.repo,
+    path: row.path,
+    sourceCommit: row.sourceCommit ?? "",
+  };
+  const refused = refusedChecksKey(row.organizationId, source.repo);
+  if (await cacheManager.get(refused)) return;
+  let read: Awaited<ReturnType<typeof readPolicyCheckRule>>;
+  try {
+    read = await readPolicyCheckRule(source, POLICY_CHECK_NAME);
+  } catch {
+    return;
+  }
+  if (!read.ok || !read.found) return;
+  let pulls: CheckedPull[];
+  try {
+    pulls = await githubPullRequests(source);
+  } catch (error) {
+    if (
+      !(error instanceof MissingGithubPermission) &&
+      !(error instanceof CheckRefused)
+    )
+      throw error;
+    await refuseChecks({
+      key: refused,
+      organizationId: row.organizationId,
+      reason: error.message,
+    });
+    return;
+  }
+  const outcome: PullOutcome = {
+    accepted: true,
+    skipped: true,
+    title: "Git sync setup in progress",
+    reason: `${archestraMcpBranding.appName} checks this repository's pull requests once its setup pull request has merged and the policy is pulled. A branch rule already requires this check${read.url ? ` (${read.url})` : ""}, so it is posted as skipped until then.`,
+  };
+  for (const pull of pulls.slice(0, MAX_CHECKED_PULLS)) {
+    const key = checkKey(
+      "setup-posted",
+      row.organizationId,
+      source.repo,
+      pull.head,
+    );
+    if (await cacheManager.get(key)) continue;
+    try {
+      await pull.post(outcome);
+    } catch (error) {
+      if (error instanceof CheckRefused) {
+        await refuseChecks({
+          key: refused,
+          organizationId: row.organizationId,
+          reason: "a GitHub App needs the Checks permission (read and write)",
+        });
+        return;
+      }
+      logger.warn(
+        { organizationId: row.organizationId, err: error },
+        "OpenAPPA could not post the policy check on the setup pull request; it tries again next minute",
+      );
+      continue;
+    }
+    await cacheManager.set(key, true, CHECKED_TTL).catch(() => undefined);
   }
 }
 
@@ -1400,7 +1507,8 @@ function checkKey(
     | "leftover"
     | "leftover-posted"
     | "leftover-read"
-    | "self-service-seen",
+    | "self-service-seen"
+    | "setup-posted",
   ...parts: string[]
 ) {
   return `${CacheKey.OpenAppaPolicyCheck}-${kind}-${createHash("sha256")
@@ -3725,6 +3833,11 @@ async function postLeftoverChecks(row: SyncRow) {
       );
       continue;
     }
+    // Skipped stands on GitHub now: on again, the verdict is posted afresh
+    // rather than taken as still standing.
+    await cacheManager
+      .delete(checkedResultKey(source, pull))
+      .catch(() => undefined);
     await cacheManager
       .set(key, true, CHECKED_TTL)
       .catch((err) =>

@@ -1892,6 +1892,15 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
     url: rulesetUrl,
   });
 
+  // An open pull request gets its verdict while on. A pull request GitHub
+  // numbers not: the policy at its head is checked, and nothing judged.
+  pulls = [{ head: { sha: SECOND } }];
+  await checkDueAppaGithubSyncs();
+  expect(runs).toHaveLength(1);
+  expect(runs[0]).toMatchObject({ head_sha: SECOND });
+  expect(runs[0]?.conclusion).not.toBe("skipped");
+  const verdict = runs[0]?.conclusion;
+
   // The environment variable, while set, decides, and the setting cannot
   // be edited; unset, the saved setting applies again.
   config.openappa.selfService = "disabled";
@@ -1921,7 +1930,6 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
     // the minute's round posts the check as skipped on every open pull
     // request, once each, so none waits on a check nobody judges any more.
     calls.length = 0;
-    pulls = [{ number: 3, head: { sha: SECOND } }];
     await syncAppaGithubPolicy(org.id);
     expect(calls).toEqual(["GET rules main"]);
     expect(await getRepositoryProtection(org.id)).toBeNull();
@@ -1930,20 +1938,19 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
       leftoverRule: { checkName: CHECK, url: rulesetUrl },
     });
     await checkDueAppaGithubSyncs();
-    expect(runs).toEqual([
-      {
-        name: CHECK,
-        head_sha: SECOND,
-        status: "completed",
-        conclusion: "skipped",
-        output: {
-          title: "MCP Guardrails Self-Service is off",
-          summary: expect.stringContaining(rulesetUrl),
-        },
+    expect(runs).toHaveLength(2);
+    expect(runs[1]).toEqual({
+      name: CHECK,
+      head_sha: SECOND,
+      status: "completed",
+      conclusion: "skipped",
+      output: {
+        title: "MCP Guardrails Self-Service is off",
+        summary: expect.stringContaining(rulesetUrl),
       },
-    ]);
+    });
     await checkDueAppaGithubSyncs();
-    expect(runs).toHaveLength(1);
+    expect(runs).toHaveLength(2);
     // The rule removed: nothing left to name, and nothing more is posted.
     rules = [];
     calls.length = 0;
@@ -1955,6 +1962,11 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
     expect(calls).toEqual(["GET rules main"]);
     config.openappa.selfService = "enabled";
     await OpenAppaGithubSyncModel.setSelfService(org.id, false);
+    // On again: the verdict skipped stood over is posted afresh, unchanged
+    // as it is, so the skipped result does not pass for it.
+    await checkDueAppaGithubSyncs();
+    expect(runs).toHaveLength(3);
+    expect(runs[2]).toMatchObject({ head_sha: SECOND, conclusion: verdict });
     expect((await getAppaGithubSync(org.id)).selfService).toMatchObject({
       enabled: true,
       setting: false,

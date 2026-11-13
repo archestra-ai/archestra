@@ -14,6 +14,12 @@ import McpDeploymentLeaseModel, {
 import { isByosEnabled } from "@/secrets-manager";
 import { ApiError, GITHUB_COM_API_URL, GitHubUserIdSchema } from "@/types";
 
+/**
+ * The person's stored GitHub connection exists but can no longer be used: the
+ * organization swapped its GitHub App, or GitHub refused the refresh. Only
+ * connecting again fixes it, so callers that can reach the person turn this
+ * into a reconnect link instead of a generic failure.
+ */
 export class GitHubReconnectRequiredError extends ApiError {
   constructor(message: string) {
     super(400, message);
@@ -159,6 +165,12 @@ class GitHubUserConnectionManager {
         client_secret: app.clientSecret,
         grant_type: "refresh_token",
         refresh_token: token.refreshToken,
+      }).catch((error: unknown) => {
+        // A refused refresh means the grant is gone (revoked, or the App's
+        // user tokens changed); only a new sign-in brings it back.
+        if (error instanceof ApiError && error.statusCode === 400)
+          throw new GitHubReconnectRequiredError(error.message);
+        throw error;
       });
       await assertOwned();
       await RuntimeCredentialConnectionModel.upsert({

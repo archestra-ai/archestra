@@ -327,14 +327,14 @@ test("a connected account joins the member roster of GitHub's deployed target", 
   }
 });
 
-test("a connection made with a replaced GitHub App is omitted when optional and reported missing when required", async () => {
+test("a connection made with a replaced GitHub App asks to connect again, even when the Agent marks it optional", async () => {
   await complete(await start());
   await updateRuntimeCredentialDefinition({
     organizationId,
     key: "repository-app",
     definition: { githubClientId: "replacement-client" },
   });
-  const optionalRuntime = {
+  const runtime = {
     agentId: randomUUID(),
     secretId: null,
     credentials: [
@@ -348,41 +348,32 @@ test("a connection made with a replaced GitHub App is omitted when optional and 
     ],
   };
 
-  const optionalCheck = await preflightAgentRuntimeCredentials({
-    runtime: optionalRuntime,
+  const check = await preflightAgentRuntimeCredentials({
+    runtime,
     organizationId,
     userId: user.id,
   });
-  expect(optionalCheck.configured).toEqual([]);
-  expect(optionalCheck.missing).toEqual([]);
-
-  const optionalLaunch = await resolveAgentRuntimeCredentials({
-    runtime: optionalRuntime,
-    organizationId,
-    userId: user.id,
-  });
-  expect(optionalLaunch.env.GITHUB_TOKEN).toBeUndefined();
-  expect(optionalLaunch.missing).toEqual([]);
-
-  const requiredRuntime = {
-    ...optionalRuntime,
-    credentials: [{ ...optionalRuntime.credentials[0], required: true }],
-  };
-  const requiredCheck = await preflightAgentRuntimeCredentials({
-    runtime: requiredRuntime,
-    organizationId,
-    userId: user.id,
-  });
-  expect(requiredCheck.missing).toEqual([
+  expect(check.configured).toEqual([]);
+  expect(check.missing).toEqual([
     expect.objectContaining({
       key: "GITHUB_TOKEN",
       label: "GitHub",
-      canConnect: true,
+      reconnect: true,
     }),
+  ]);
+
+  const launch = await resolveAgentRuntimeCredentials({
+    runtime,
+    organizationId,
+    userId: user.id,
+  });
+  expect(launch.env.GITHUB_TOKEN).toBeUndefined();
+  expect(launch.missing).toEqual([
+    expect.objectContaining({ key: "GITHUB_TOKEN", reconnect: true }),
   ]);
 });
 
-test("treats stale refresh grants as unconfigured while surfacing admin misconfiguration and GitHub outages", async () => {
+test("asks to reconnect on a stale refresh grant while surfacing admin misconfiguration and GitHub outages", async () => {
   expect((await complete(await start())).statusCode).toBe(200);
   const owner = {
     organizationId,
@@ -398,7 +389,7 @@ test("treats stale refresh grants as unconfigured while surfacing admin misconfi
     value: JSON.stringify({ ...stored, expiresAt: Date.now() - 1 }),
   });
 
-  const optionalRuntime = {
+  const runtime = {
     agentId: randomUUID(),
     secretId: null,
     credentials: [
@@ -410,10 +401,6 @@ test("treats stale refresh grants as unconfigured while surfacing admin misconfi
         required: false,
       },
     ],
-  };
-  const requiredRuntime = {
-    ...optionalRuntime,
-    credentials: [{ ...optionalRuntime.credentials[0], required: true }],
   };
 
   for (const oauthError of [
@@ -430,37 +417,30 @@ test("treats stale refresh grants as unconfigured while surfacing admin misconfi
         }),
       ),
     );
-    const optionalCheck = await preflightAgentRuntimeCredentials({
-      runtime: optionalRuntime,
+    const check = await preflightAgentRuntimeCredentials({
+      runtime,
       organizationId,
       userId: user.id,
     });
-    expect(optionalCheck.configured).toEqual([]);
-    expect(optionalCheck.missing).toEqual([]);
-
-    const optionalLaunch = await resolveAgentRuntimeCredentials({
-      runtime: optionalRuntime,
-      organizationId,
-      userId: user.id,
-    });
-    expect(optionalLaunch.env.GITHUB_TOKEN).toBeUndefined();
-    expect(optionalLaunch.missing).toEqual([]);
-
-    const requiredCheck = await preflightAgentRuntimeCredentials({
-      runtime: requiredRuntime,
-      organizationId,
-      userId: user.id,
-    });
-    expect(requiredCheck.missing).toEqual([
+    expect(check.missing).toEqual([
       expect.objectContaining({
         key: "GITHUB_TOKEN",
         label: "GitHub",
-        canConnect: true,
+        reconnect: true,
       }),
+    ]);
+    const launch = await resolveAgentRuntimeCredentials({
+      runtime,
+      organizationId,
+      userId: user.id,
+    });
+    expect(launch.env.GITHUB_TOKEN).toBeUndefined();
+    expect(launch.missing).toEqual([
+      expect.objectContaining({ key: "GITHUB_TOKEN", reconnect: true }),
     ]);
   }
 
-  // Invalid OAuth client credentials on the GitHub App -> surfaces 400 instead of silently omitting.
+  // Invalid OAuth client credentials on the GitHub App -> surfaces 400 instead of reconnect.
   server.use(
     http.post("https://github.com/login/oauth/access_token", () =>
       HttpResponse.json({
@@ -472,7 +452,7 @@ test("treats stale refresh grants as unconfigured while surfacing admin misconfi
   );
   await expect(
     preflightAgentRuntimeCredentials({
-      runtime: optionalRuntime,
+      runtime,
       organizationId,
       userId: user.id,
     }),
@@ -498,7 +478,7 @@ test("treats stale refresh grants as unconfigured while surfacing admin misconfi
   expect(malformedCallback.statusCode).toBe(502);
   await expect(
     resolveAgentRuntimeCredentials({
-      runtime: optionalRuntime,
+      runtime,
       organizationId,
       userId: user.id,
     }),
@@ -514,7 +494,7 @@ test("treats stale refresh grants as unconfigured while surfacing admin misconfi
   );
   await expect(
     resolveAgentRuntimeCredentials({
-      runtime: optionalRuntime,
+      runtime,
       organizationId,
       userId: user.id,
     }),
@@ -534,7 +514,7 @@ test("treats stale refresh grants as unconfigured while surfacing admin misconfi
   });
   await expect(
     preflightAgentRuntimeCredentials({
-      runtime: optionalRuntime,
+      runtime,
       organizationId,
       userId: user.id,
     }),
@@ -550,7 +530,7 @@ test("treats stale refresh grants as unconfigured while surfacing admin misconfi
   });
   await expect(
     preflightAgentRuntimeCredentials({
-      runtime: optionalRuntime,
+      runtime,
       organizationId,
       userId: user.id,
     }),
@@ -560,6 +540,7 @@ test("treats stale refresh grants as unconfigured while surfacing admin misconfi
       "Configure an organization GitHub.com App with an OAuth client ID first",
   });
 });
+
 async function start() {
   const result = await app.inject({
     method: "POST",

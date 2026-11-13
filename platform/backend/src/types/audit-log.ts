@@ -29,26 +29,17 @@ export const AuditEventNameSchema = z.enum([
   // recorded with identity only — a purge record must not preserve a copy of
   // the content the caller asked to destroy.
   "agent.purged",
-  // No route writes this any more (the bulk visibility endpoint is gone); it
-  // stays so records written before the removal still parse.
-  "agent.bulk_updated",
   "agent.bulk_deleted",
   "agentRun.created",
   "agentRun.canceled",
   "agentRun.updated",
   "agentRun.deleted",
   "agentRun.reviewDecided",
-  // No route emits these any more; kept so earlier records still parse.
-  "agentRun.shared",
-  "agentRun.unshared",
   // An admin signed a member out of the browser: their saved cookies were deleted
   "browserStorageState.deleted",
   "credential.created",
   "credential.updated",
   "credential.deleted",
-  "runtimeCredential.created",
-  "runtimeCredential.updated",
-  "runtimeCredential.deleted",
   "agentTool.created",
   "agentTool.updated",
   "agentTool.deleted",
@@ -64,8 +55,6 @@ export const AuditEventNameSchema = z.enum([
   "app.created",
   "app.updated",
   "app.deleted",
-  // Retired with the bulk visibility endpoint; kept so old records parse.
-  "app.bulk_updated",
   "app.bulk_deleted",
   "chatOpsBinding.created",
   "chatOpsBinding.updated",
@@ -78,7 +67,6 @@ export const AuditEventNameSchema = z.enum([
   "plugin.syncTriggered",
   "clientConnection.updated",
   "connectedClient.disconnected",
-  "connectionPromptSession.created",
   "connector.created",
   "connector.updated",
   "connector.deleted",
@@ -95,12 +83,6 @@ export const AuditEventNameSchema = z.enum([
   "environment.updated",
   "environment.deleted",
   "environment.bulk_deleted",
-  "githubAppConfig.created",
-  "githubAppConfig.updated",
-  "githubAppConfig.deleted",
-  "githubPat.created",
-  "githubPat.updated",
-  "githubPat.deleted",
   "identityProvider.created",
   "identityProvider.updated",
   "identityProvider.deleted",
@@ -120,17 +102,11 @@ export const AuditEventNameSchema = z.enum([
   "knowledgeDirectory.created",
   "knowledgeDirectory.updated",
   "knowledgeDirectory.deleted",
-  // Retired with the directory bulk visibility endpoint; kept so old records
-  // still parse.
-  "knowledgeDirectory.bulk_updated",
   "knowledgeDirectory.bulk_deleted",
   "knowledgeFile.created",
   "knowledgeFile.updated",
   "knowledgeFile.content_upserted",
   "knowledgeFile.deleted",
-  // Retired with the document bulk visibility endpoint; kept so old records
-  // still parse.
-  "knowledgeFile.bulk_updated",
   "knowledgeFile.bulk_deleted",
   "limit.created",
   "limit.updated",
@@ -145,20 +121,11 @@ export const AuditEventNameSchema = z.enum([
   "oauthClient.deleted",
   "oauthClient.rotated",
   "oauthClient.bulk_deleted",
-  "llmOauthClient.created",
-  "llmOauthClient.updated",
-  "llmOauthClient.deleted",
-  "llmOauthClient.rotated",
-  "llmOauthClient.bulk_deleted",
   "llmProviderApiKey.created",
   "llmProviderApiKey.updated",
   "llmProviderApiKey.deleted",
   "llmProxy.updated",
   "llmProviderApiKey.bulk_deleted",
-  "mcpOauthClient.created",
-  "mcpOauthClient.updated",
-  "mcpOauthClient.deleted",
-  "mcpOauthClient.rotated",
   "mcpServer.created",
   "mcpServer.updated",
   "mcpServer.deleted",
@@ -167,30 +134,15 @@ export const AuditEventNameSchema = z.enum([
   "mcpServer.hardReset",
   "mcpServer.bulk_deleted",
   "member.bulk_deleted",
-  // Retired with the MCP server installation request feature. Kept in the
-  // vocabulary because audit rows written before its removal still carry these
-  // names — dropping them would render that history as raw dotted keys. No
-  // route produces them any more.
-  "mcpServerInstallationRequest.created",
-  "mcpServerInstallationRequest.updated",
   "member.created",
   "member.role_updated",
   "member.deleted",
-  // Retired with the LLM optimization rules feature. Kept in the vocabulary
-  // because audit rows written before its removal still carry these names —
-  // dropping them would render that history as raw dotted keys. No route
-  // produces them any more.
-  "optimizationRule.created",
-  "optimizationRule.updated",
-  "optimizationRule.deleted",
   "organization.updated",
   "project.created",
   "project.updated",
   "project.deleted",
   "project.restored",
   "project.purged",
-  // No route emits this any more; kept so earlier records still parse.
-  "project.bulk_updated",
   "project.bulk_deleted",
   "role.created",
   "role.updated",
@@ -207,12 +159,10 @@ export const AuditEventNameSchema = z.enum([
   "serviceAccount.bulk_updated",
   "skill.created",
   "skill.updated",
+  "skill.deleted",
   // Soft-deleted across a batch of skills in one request. Distinct from the
   // per-skill actions so a sweep over many skills is recognizable as one act
-  // rather than a burst of unrelated edits. `bulk_updated` was the retired
-  // bulk visibility endpoint; it stays so records written before still parse.
-  "skill.bulk_updated",
-  "skill.deleted",
+  // rather than a burst of unrelated edits.
   "skill.bulk_deleted",
   "skill.restored",
   "skill.purged",
@@ -224,7 +174,6 @@ export const AuditEventNameSchema = z.enum([
   "team.updated",
   "team.deleted",
   "team.bulk_deleted",
-  "teamToken.rotated",
   "guardrailsPolicy.updated",
   "openappaYell.updated",
   "openappaBatteryInstall.created",

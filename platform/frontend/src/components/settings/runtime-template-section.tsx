@@ -272,8 +272,9 @@ export function RuntimeTemplateSection({
           <h3 className="text-sm font-medium">Available runtimes</h3>
           <p className="max-w-2xl text-sm text-muted-foreground">
             The runtimes people can pick when creating an agent. A locked
-            runtime&apos;s settings apply to every agent that uses it, and agent
-            builders can&apos;t change them.
+            runtime&apos;s settings apply to every agent that uses it and change
+            only here, with <Permission>organizationSettings:update</Permission>
+            .
           </p>
         </div>
         <DropdownMenu>
@@ -445,7 +446,6 @@ function RuntimeTemplateRow({
     transition,
     isDragging,
   } = useSortable({ id: row.id, disabled });
-  const TypeIcon = row.builtIn ? BadgeCheck : Box;
   return (
     <li
       ref={setNodeRef}
@@ -479,15 +479,7 @@ function RuntimeTemplateRow({
           <span className="truncate text-sm font-medium" title={row.name}>
             {row.name}
           </span>
-          <span
-            className="inline-flex shrink-0 text-muted-foreground/70"
-            title={row.builtIn ? "Built-in runtime" : "Custom runtime"}
-          >
-            <TypeIcon className="size-3" />
-            <span className="sr-only">
-              {row.builtIn ? "Built-in runtime" : "Custom runtime"}
-            </span>
-          </span>
+          <RuntimeKindLabel builtIn={row.builtIn} />
           {row.locked && (
             <span className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
               <LockKeyhole className="size-3" />
@@ -586,7 +578,15 @@ function RuntimeTemplateDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent
+        className="sm:max-w-2xl"
+        onOpenAutoFocus={(event) => {
+          // Start on the name rather than the first row, whose focus ring
+          // would show before anything was done.
+          event.preventDefault();
+          form.setFocus("name");
+        }}
+      >
         <Form {...form}>
           <form
             className="contents"
@@ -598,9 +598,12 @@ function RuntimeTemplateDialog({
             })}
           >
             <DialogHeader>
-              <DialogTitle>
-                {template ? "Edit custom runtime" : "Add custom runtime"}
-              </DialogTitle>
+              <div className="flex items-center gap-2">
+                <DialogTitle>
+                  {template ? `Edit ${template.name}` : "Add custom runtime"}
+                </DialogTitle>
+                <RuntimeKindLabel builtIn={false} />
+              </div>
               <DialogDescription>
                 Defaults for new agents that use this runtime.
               </DialogDescription>
@@ -831,9 +834,20 @@ function BuiltInRuntimeDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent
+        className="sm:max-w-2xl"
+        onOpenAutoFocus={(event) => {
+          // Focus the dialog itself: its first control is a row, whose focus
+          // ring would show before anything was done.
+          event.preventDefault();
+          (event.currentTarget as HTMLElement).focus();
+        }}
+      >
         <DialogHeader>
-          <DialogTitle>Edit {name}</DialogTitle>
+          <div className="flex items-center gap-2">
+            <DialogTitle>Edit {name}</DialogTitle>
+            <RuntimeKindLabel builtIn />
+          </div>
           <DialogDescription>Defaults for new {name} agents.</DialogDescription>
         </DialogHeader>
         <DialogBody>
@@ -955,6 +969,32 @@ function ClaudeAccountField({
   );
 }
 
+function Permission({ children }: { children: string }) {
+  return (
+    <code className="rounded-sm bg-muted px-1 py-px font-mono text-[0.85em]">
+      {children}
+    </code>
+  );
+}
+
+/** Whether a runtime is one of the maintained ones or the organization's own. */
+function RuntimeKindLabel({ builtIn }: { builtIn: boolean }) {
+  const Icon = builtIn ? BadgeCheck : Box;
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-[11px] font-medium",
+        builtIn
+          ? "bg-sky-500/10 text-sky-700 dark:text-sky-300"
+          : "bg-violet-500/10 text-violet-700 dark:text-violet-300",
+      )}
+    >
+      <Icon aria-hidden="true" className="size-3" />
+      {builtIn ? "Built-in" : "Custom"}
+    </span>
+  );
+}
+
 function withRuntimeOrder(state: SaveBody, ids: string[]): SaveBody {
   const overrides = { ...state.popularAgentOverrides };
   ids.forEach((id, position) => {
@@ -1002,9 +1042,17 @@ function FooterLock({
           Lock settings
         </Label>
         <p className="text-xs text-muted-foreground">
-          {checked
-            ? "Every agent uses these. Environment and ports stay per agent."
-            : "Agent builders can change these."}
+          {checked ? (
+            <>
+              Every agent uses these; change them here with{" "}
+              <Permission>organizationSettings:update</Permission>.
+            </>
+          ) : (
+            <>
+              Changeable per agent with{" "}
+              <Permission>agent:configure-runtime</Permission>.
+            </>
+          )}
         </p>
       </div>
     </div>

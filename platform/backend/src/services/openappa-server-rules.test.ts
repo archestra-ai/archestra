@@ -4414,33 +4414,35 @@ test("a pull with self-service on and the policy file lacking the servers' folde
   });
 });
 
-test("an include pull request someone closed without merging is not opened again by a pull: a person asking still opens a fresh one", async ({
-  makeOrganization,
-  makeUser,
-  makeMember,
-}) => {
-  config.openappa.enabled = true;
-  const org = await makeOrganization();
-  const admin = await makeUser({ name: "Alex" });
-  await makeMember(admin.id, org.id, { role: "admin" });
-  await connectApp({ organizationId: org.id });
+/**
+ * A repository whose policy file lacks the servers' folder, with the include
+ * pull requests GitHub keeps: numbers opened, those closed without merging.
+ */
+function serveIncludePulls(params: { closedBefore?: number }) {
   serveRepository({
     head: FIRST,
     files: { [FIRST]: { "appa.toml": RULES }, main: { "appa.toml": RULES } },
   });
-  const pulls: Array<{ head: string }> = [];
-  const closed = new Set<number>();
+  const pulls: number[] = params.closedBefore ? [params.closedBefore] : [];
+  const closed = new Set<number>(pulls);
+  const opened: Array<{ head: string }> = [];
   server.use(
     http.get(`${REPO}/rulesets`, () => HttpResponse.json([])),
-    // None waits open: the one opened is closed below.
-    http.get(`${REPO}/pulls`, () => HttpResponse.json([])),
-    http.get(`${REPO}/pulls/:number`, ({ params }) =>
-      HttpResponse.json({
-        number: Number(params.number),
-        state: closed.has(Number(params.number)) ? "closed" : "open",
-        merged: false,
-      }),
-    ),
+    // Open ones by default; every state, newest first, when asked.
+    http.get(`${REPO}/pulls`, ({ request }) => {
+      const all = new URL(request.url).searchParams.get("state") === "all";
+      return HttpResponse.json(
+        [...pulls]
+          .reverse()
+          .filter((number) => all || !closed.has(number))
+          .map((number) => ({
+            number,
+            html_url: `https://github.com/example/policies/pull/${number}`,
+            state: closed.has(number) ? "closed" : "open",
+            merged_at: null,
+          })),
+      );
+    }),
     http.get(`${REPO}/git/commits/${FIRST}`, () =>
       HttpResponse.json({ tree: { sha: TREE } }),
     ),
@@ -4456,22 +4458,37 @@ test("an include pull request someone closed without merging is not opened again
       () => new HttpResponse(null, { status: 422 }),
     ),
     http.post(`${REPO}/pulls`, async ({ request }) => {
-      pulls.push((await request.json()) as { head: string });
-      const number = 8 + pulls.length;
+      opened.push((await request.json()) as { head: string });
+      const number = 8 + opened.length;
+      pulls.push(number);
       return HttpResponse.json({
         number,
         html_url: `https://github.com/example/policies/pull/${number}`,
       });
     }),
   );
+  return { opened, closed };
+}
+
+test("an include pull request someone closed without merging is not opened again by a pull: a person asking still opens a fresh one", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ name: "Alex" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  await connectApp({ organizationId: org.id });
+  const { opened, closed } = serveIncludePulls({});
 
   await syncAppaGithubPolicy(org.id);
-  expect(pulls).toHaveLength(1);
+  expect(opened).toHaveLength(1);
   // Someone closes it without merging: the next pulls leave it closed.
   closed.add(9);
   await syncAppaGithubPolicy(org.id);
   await syncAppaGithubPolicy(org.id);
-  expect(pulls).toHaveLength(1);
+  expect(opened).toHaveLength(1);
   // A person asking, from Finish setup, still opens a fresh one.
   expect(
     await ensureSelfServiceInclude({
@@ -4479,7 +4496,19 @@ test("an include pull request someone closed without merging is not opened again
       userId: admin.id,
     }),
   ).toEqual({ number: 10, url: "https://github.com/example/policies/pull/10" });
-  expect(pulls).toHaveLength(2);
+  expect(opened).toHaveLength(2);
+});
+
+test("an include pull request closed without merging before this version counts as declined too", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  await connectApp({ organizationId: org.id });
+  // GitHub keeps it: an earlier version opened #7, and someone closed it.
+  const { opened } = serveIncludePulls({ closedBefore: 7 });
+  await syncAppaGithubPolicy(org.id);
+  expect(opened).toEqual([]);
 });
 
 test("a pull and a person asking for the include at once open one pull request: whoever comes second finds it waiting", async ({

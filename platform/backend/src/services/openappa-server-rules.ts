@@ -5,7 +5,7 @@ import {
   TimeInMs,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
@@ -1263,7 +1263,7 @@ async function openSelfServiceInclude(params: {
   ].join("\n");
   // A branch left by an earlier, closed pull request would refuse the new ref.
   await deleteBranch({ token, base, head: SELF_SERVICE_INCLUDE_BRANCH });
-  const opened = await openGithubPull({
+  return openGithubPull({
     source,
     title: INCLUDE_TITLE,
     message: requester
@@ -1283,34 +1283,15 @@ async function openSelfServiceInclude(params: {
     ],
     head: SELF_SERVICE_INCLUDE_BRANCH,
   });
-  await cacheManager
-    .set(
-      includePullKey(params.organizationId),
-      { repo: source.repo, number: opened.number },
-      INCLUDE_PULL_MEMORY_MS,
-    )
-    .catch((error) =>
-      logger.warn(
-        { organizationId: params.organizationId, error },
-        "OpenAPPA could not remember the include pull request it opened",
-      ),
-    );
-  return opened;
 }
 
 const INCLUDE_TITLE = "Include each MCP server's Guardrails rules file";
 
-/** How long the include pull request last opened is remembered. */
-const INCLUDE_PULL_MEMORY_MS = 90 * TimeInMs.Day;
-
-function includePullKey(organizationId: string): AllowedCacheKey {
-  return `${CacheKey.OpenAppaPolicyCheck}-include-pull-${organizationId}`;
-}
-
 /**
- * Whether the include pull request last opened on this repository was closed
- * without merging. A failed read counts as not closed: the include is then
- * proposed as it would have been anyway.
+ * Whether the newest include pull request on the repository was closed
+ * without merging: someone declined it. GitHub keeps every pull request, so
+ * one an earlier version opened counts too. A failed read counts as not
+ * declined: the include is then proposed as it would have been anyway.
  */
 async function includeDeclined(params: {
   organizationId: string;
@@ -1318,25 +1299,24 @@ async function includeDeclined(params: {
   token: string;
   base: string;
 }): Promise<boolean> {
-  const last = await cacheManager.get<{ repo: string; number: number }>(
-    includePullKey(params.organizationId),
-  );
-  if (!last || last.repo !== params.repo) return false;
+  const owner = params.repo.slice(0, params.repo.indexOf("/"));
   try {
-    const pull = await github<{ state?: string; merged?: boolean }>({
+    const [newest] = await github<
+      Array<{ number?: number; state?: string; merged_at?: string | null }>
+    >({
       token: params.token,
-      url: `${params.base}/pulls/${last.number}`,
+      url: `${params.base}/pulls?state=all&sort=created&direction=desc&per_page=1&head=${encodeURIComponent(`${owner}:${SELF_SERVICE_INCLUDE_BRANCH}`)}`,
     });
-    if (pull.state !== "closed" || pull.merged === true) return false;
+    if (newest?.state !== "closed" || newest.merged_at) return false;
     logger.info(
-      { organizationId: params.organizationId, pull: last.number },
+      { organizationId: params.organizationId, pull: newest.number },
       "OpenAPPA leaves the include of the self-service folder to a person: its pull request was closed without merging",
     );
     return true;
   } catch (error) {
     logger.debug(
       { organizationId: params.organizationId, error },
-      "OpenAPPA could not read the include pull request it last opened",
+      "OpenAPPA could not read the include pull requests",
     );
     return false;
   }

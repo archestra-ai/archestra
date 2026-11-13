@@ -118,7 +118,8 @@ describe("connect_guardrails_repository", () => {
         repo: "example/existing-policy",
         path: "policies/appa.toml",
         ref: null,
-        interval: "1h",
+        // No schedule given: every 15 minutes, as in the settings.
+        interval: "15m",
         sourceCommit: commit,
         lastSyncError: null,
       },

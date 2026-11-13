@@ -154,7 +154,10 @@ import {
   ExternalConsultOutcomeSchema,
   ExternalConsultRoleSchema,
 } from "@/types/openappa-external-consults";
-import { AppaGithubSourceSchema } from "@/types/openappa-github-sync";
+import {
+  AppaGithubSourceSchema,
+  AppaSyncIntervalSchema,
+} from "@/types/openappa-github-sync";
 import { RunPolicyTestsSchema } from "@/types/openappa-policy-tests";
 import {
   PreviewOpenAppaValidationChangeSchema,
@@ -480,7 +483,7 @@ const registry = defineArchestraTools([
       name: z.string().regex(/^[a-zA-Z0-9_.-]+$/),
       githubAppConfigId: z.string().uuid().optional(),
       gitlabTokenId: z.string().uuid().optional(),
-      interval: z.enum(["15m", "1h", "1d"]).default("1h"),
+      interval: AppaSyncIntervalSchema.default("15m"),
     }),
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(context);
@@ -535,7 +538,7 @@ const registry = defineArchestraTools([
         .uuid()
         .optional()
         .describe("A GitLab access token, for a GitLab project."),
-      interval: z.enum(["15m", "1h", "1d"]).default("1h"),
+      interval: AppaSyncIntervalSchema.default("15m"),
     }),
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(context);

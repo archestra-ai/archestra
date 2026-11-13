@@ -4,7 +4,7 @@ import { openappaGithubSyncTable } from "@/database/schemas/openappa-github-sync
 import { GitProviderSchema } from "./git-host";
 import { PolicyTestDirectorySchema } from "./openappa-policy-tests";
 
-const AppaSyncIntervalSchema = z.enum(["5m", "15m", "1h", "1d"]);
+export const AppaSyncIntervalSchema = z.enum(["5m", "15m", "1h", "1d"]);
 export type AppaSyncInterval = z.infer<typeof AppaSyncIntervalSchema>;
 
 const AppaGithubRefSchema = z

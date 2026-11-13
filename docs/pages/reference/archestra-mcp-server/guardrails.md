@@ -128,7 +128,7 @@ Required RBAC permission: [`organizationSettings:update`](/docs/reference/permis
 | `name` | `string` | Yes |  |
 | `githubAppConfigId` | `string` | No |  |
 | `gitlabTokenId` | `string` | No |  |
-| `interval` | `"15m" \| "1h" \| "1d"` | No |  |
+| `interval` | `"5m" \| "15m" \| "1h" \| "1d"` | No |  |
 
 
 ### connect_guardrails_repository
@@ -144,7 +144,7 @@ Required RBAC permission: [`organizationSettings:update`](/docs/reference/permis
 | `ref` | `string \| null` | No | Branch, tag, or commit to follow. Omit to follow the default branch. |
 | `githubAppConfigId` | `string` | No | An organization GitHub App, for a GitHub repository. |
 | `gitlabTokenId` | `string` | No | A GitLab access token, for a GitLab project. |
-| `interval` | `"15m" \| "1h" \| "1d"` | No |  |
+| `interval` | `"5m" \| "15m" \| "1h" \| "1d"` | No |  |
 
 
 ### sync_guardrails_repository

@@ -2,7 +2,7 @@
 title: Add a Server
 description: Configure a remote or self-hosted MCP server and test its connection
 order: 1
-lastUpdated: 2026-10-05
+lastUpdated: 2026-11-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -12,6 +12,8 @@ Add any MCP server: paste its URL, or give Archestra a package or image to run. 
 You set it up once: where it runs, how it signs in, and who can find it. Everyone else clicks **Install** and brings their own account.
 
 You need [`mcpRegistry:create`](/docs/reference/permissions#mcpRegistry:create).
+
+For an MCP server that runs on each person's own device, see [Desktop MCP Servers](/docs/mcp/servers/desktop).
 
 ## Add a Remote Server
 

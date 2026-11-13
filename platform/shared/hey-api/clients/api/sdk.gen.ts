@@ -4683,7 +4683,7 @@ export const getConnectedClients = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * [`log:admin`](/docs/reference/permissions#log:admin): View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)
+ * [`log:admin`](/docs/reference/permissions#log:admin): View every LLM, MCP, and Guardrails consult log and yell in your organization (also requires Read)
  * [`member:read`](/docs/reference/permissions#member:read): View organization members and their roles
  */
 export const getConnectedClientLog = <ThrowOnError extends boolean = false>(options?: Options<GetConnectedClientLogData, ThrowOnError>) => (options?.client ?? client).get<GetConnectedClientLogResponses, GetConnectedClientLogErrors, ThrowOnError>({ url: '/api/connected-clients/log', ...options });
@@ -4697,7 +4697,7 @@ export const getConnectedClientLog = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * [`log:admin`](/docs/reference/permissions#log:admin): View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)
+ * [`log:admin`](/docs/reference/permissions#log:admin): View every LLM, MCP, and Guardrails consult log and yell in your organization (also requires Read)
  * [`member:read`](/docs/reference/permissions#member:read): View organization members and their roles
  */
 export const getAgentAdoption = <ThrowOnError extends boolean = false>(options?: Options<GetAgentAdoptionData, ThrowOnError>) => (options?.client ?? client).get<GetAgentAdoptionResponses, GetAgentAdoptionErrors, ThrowOnError>({ url: '/api/connected-clients/adoption', ...options });
@@ -4711,7 +4711,7 @@ export const getAgentAdoption = <ThrowOnError extends boolean = false>(options?:
  *
  * Authorization:
  *
- * [`log:admin`](/docs/reference/permissions#log:admin): View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)
+ * [`log:admin`](/docs/reference/permissions#log:admin): View every LLM, MCP, and Guardrails consult log and yell in your organization (also requires Read)
  * [`member:read`](/docs/reference/permissions#member:read): View organization members and their roles
  */
 export const getAgentAdoptionUsage = <ThrowOnError extends boolean = false>(options?: Options<GetAgentAdoptionUsageData, ThrowOnError>) => (options?.client ?? client).get<GetAgentAdoptionUsageResponses, GetAgentAdoptionUsageErrors, ThrowOnError>({ url: '/api/connected-clients/adoption/usage', ...options });
@@ -6498,7 +6498,7 @@ export const deleteIncomingEmailSubscription = <ThrowOnError extends boolean = f
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  *
  * [`log:read`](/docs/reference/permissions#log:read) returns the caller's rows. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the active organization.
  */
@@ -6513,7 +6513,7 @@ export const getLlmProxyLogs = <ThrowOnError extends boolean = false>(options?: 
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  *
  * [`log:read`](/docs/reference/permissions#log:read) returns the caller's rows. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the active organization.
  */
@@ -6528,7 +6528,7 @@ export const getLlmProxyLogSummaries = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  *
  * [`log:read`](/docs/reference/permissions#log:read) returns the caller's sessions. [`log:admin`](/docs/reference/permissions#log:admin) includes every session in the active organization.
  */
@@ -6543,7 +6543,7 @@ export const getLlmProxyLogSessions = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  */
 export const getLlmProxyLogSessionLineage = <ThrowOnError extends boolean = false>(options: Options<GetLlmProxyLogSessionLineageData, ThrowOnError>) => (options.client ?? client).get<GetLlmProxyLogSessionLineageResponses, GetLlmProxyLogSessionLineageErrors, ThrowOnError>({ url: '/api/llm-proxy-logs/sessions/{sessionId}/lineage', ...options });
 
@@ -6556,7 +6556,7 @@ export const getLlmProxyLogSessionLineage = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  */
 export const getLlmProxyLogSessionHandoffs = <ThrowOnError extends boolean = false>(options: Options<GetLlmProxyLogSessionHandoffsData, ThrowOnError>) => (options.client ?? client).get<GetLlmProxyLogSessionHandoffsResponses, GetLlmProxyLogSessionHandoffsErrors, ThrowOnError>({ url: '/api/llm-proxy-logs/sessions/{sessionId}/handoffs', ...options });
 
@@ -6569,7 +6569,7 @@ export const getLlmProxyLogSessionHandoffs = <ThrowOnError extends boolean = fal
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  *
  * [`log:read`](/docs/reference/permissions#log:read) returns identifiers from the caller's rows. [`log:admin`](/docs/reference/permissions#log:admin) includes identifiers from every row in the active organization.
  */
@@ -6584,7 +6584,7 @@ export const getLlmProxyLogExternalAgentIds = <ThrowOnError extends boolean = fa
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  *
  * [`log:read`](/docs/reference/permissions#log:read) returns the caller's identity. [`log:admin`](/docs/reference/permissions#log:admin) includes every represented user in the active organization.
  */
@@ -6599,7 +6599,7 @@ export const getLlmProxyLogUserIds = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  */
 export const getLlmProxyLogAutoRouting = <ThrowOnError extends boolean = false>(options: Options<GetLlmProxyLogAutoRoutingData, ThrowOnError>) => (options.client ?? client).get<GetLlmProxyLogAutoRoutingResponses, GetLlmProxyLogAutoRoutingErrors, ThrowOnError>({ url: '/api/llm-proxy-logs/{logId}/auto-routing', ...options });
 
@@ -6612,7 +6612,7 @@ export const getLlmProxyLogAutoRouting = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  *
  * [`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the active organization.
  */
@@ -9188,7 +9188,7 @@ export const reloadMcpServerTools = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  *
  * [`log:read`](/docs/reference/permissions#log:read) returns rows attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) includes every row in the active organization.
  */
@@ -9203,7 +9203,7 @@ export const getMcpToolCalls = <ThrowOnError extends boolean = false>(options?: 
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  *
  * [`log:read`](/docs/reference/permissions#log:read) permits a row attributed to the caller. [`log:admin`](/docs/reference/permissions#log:admin) permits any row in the active organization.
  */
@@ -10754,7 +10754,7 @@ export const getOpenappaCoverageSummary = <ThrowOnError extends boolean = false>
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  */
 export const getOpenappaExternalConsults = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaExternalConsultsData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaExternalConsultsResponses, GetOpenappaExternalConsultsErrors, ThrowOnError>({ url: '/api/openappa/external-consults', ...options });
 
@@ -10767,7 +10767,7 @@ export const getOpenappaExternalConsults = <ThrowOnError extends boolean = false
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  */
 export const getOpenappaExternalConsult = <ThrowOnError extends boolean = false>(options: Options<GetOpenappaExternalConsultData, ThrowOnError>) => (options.client ?? client).get<GetOpenappaExternalConsultResponses, GetOpenappaExternalConsultErrors, ThrowOnError>({ url: '/api/openappa/external-consults/{id}', ...options });
 
@@ -11018,7 +11018,7 @@ export const consultOpenappaBatteryHelper = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  */
 export const getOpenappaLabelChanges = <ThrowOnError extends boolean = false>(options: Options<GetOpenappaLabelChangesData, ThrowOnError>) => (options.client ?? client).get<GetOpenappaLabelChangesResponses, GetOpenappaLabelChangesErrors, ThrowOnError>({ url: '/api/openappa/label-changes', ...options });
 
@@ -11162,7 +11162,7 @@ export const getOpenappaTrustAudience = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  */
 export const getOpenAppaYells = <ThrowOnError extends boolean = false>(options?: Options<GetOpenAppaYellsData, ThrowOnError>) => (options?.client ?? client).get<GetOpenAppaYellsResponses, GetOpenAppaYellsErrors, ThrowOnError>({ url: '/api/openappa/yells', ...options });
 
@@ -11173,7 +11173,7 @@ export const getOpenAppaYells = <ThrowOnError extends boolean = false>(options?:
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  */
 export const getOpenAppaYellsSummary = <ThrowOnError extends boolean = false>(options?: Options<GetOpenAppaYellsSummaryData, ThrowOnError>) => (options?.client ?? client).get<GetOpenAppaYellsSummaryResponses, GetOpenAppaYellsSummaryErrors, ThrowOnError>({ url: '/api/openappa/yells/summary', ...options });
 
@@ -11184,7 +11184,7 @@ export const getOpenAppaYellsSummary = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  */
 export const getOpenAppaYell = <ThrowOnError extends boolean = false>(options: Options<GetOpenAppaYellData, ThrowOnError>) => (options.client ?? client).get<GetOpenAppaYellResponses, GetOpenAppaYellErrors, ThrowOnError>({ url: '/api/openappa/yells/{id}', ...options });
 
@@ -11195,7 +11195,7 @@ export const getOpenAppaYell = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  */
 export const updateOpenAppaYell = <ThrowOnError extends boolean = false>(options: Options<UpdateOpenAppaYellData, ThrowOnError>) => (options.client ?? client).patch<UpdateOpenAppaYellResponses, UpdateOpenAppaYellErrors, ThrowOnError>({
     url: '/api/openappa/yells/{id}',
@@ -11213,7 +11213,7 @@ export const updateOpenAppaYell = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
+ * [`log:read`](/docs/reference/permissions#log:read): View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells
  */
 export const downloadOpenAppaYell = <ThrowOnError extends boolean = false>(options: Options<DownloadOpenAppaYellData, ThrowOnError>) => (options.client ?? client).get<DownloadOpenAppaYellResponses, unknown, ThrowOnError>({ url: '/api/openappa/yells/{id}/archive', ...options });
 

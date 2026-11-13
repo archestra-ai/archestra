@@ -13,6 +13,7 @@ import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { packageContentHash } from "@/openappa/declarations";
+import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
 import { secretManager } from "@/secrets-manager";
 import { createGitlabToken } from "@/services/git-credentials";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
@@ -46,6 +47,12 @@ const server = useMswServer();
 // checked, every replica sees.
 setupTestCacheManager();
 const REPO = "https://api.github.com/repos/example/policies";
+/** The template's files beside the policy, as a fresh copy holds them. */
+const TEMPLATE_FILES = Object.fromEntries(
+  OPENAPPA_TEMPLATE.files
+    .filter((file) => file.path !== "appa.toml")
+    .map((file) => [file.path, file.content]),
+);
 const FIRST = "1".repeat(40);
 const SECOND = "2".repeat(40);
 const TREE = "3".repeat(40);
@@ -95,9 +102,15 @@ function serveRepository(state: {
     "mcp/github.toml",
     "mcp/README.toml",
     "teams/support.toml",
+    ...Object.keys(TEMPLATE_FILES),
   ];
-  const at = (request: Request) =>
-    state.files[new URL(request.url).searchParams.get("ref") ?? ""];
+  // Every commit holds the template's current files beside the policy, so
+  // no sync proposes an update to them here.
+  const at = (request: Request) => {
+    const files =
+      state.files[new URL(request.url).searchParams.get("ref") ?? ""];
+    return files ? { ...TEMPLATE_FILES, ...files } : undefined;
+  };
   server.use(
     http.get(`${REPO}/commits/:ref`, () =>
       HttpResponse.json({ sha: state.head }),
@@ -1937,7 +1950,7 @@ test("Archestra reads the branch's rules and writes none: a missing rule comes w
   );
 });
 
-test("self-service is opt-in: off, no check is posted and server rules are not read; on reads the branch rules at once; the environment variable locks the setting; off again with the rule still in place names it and posts the check as skipped; a move or a stop waits for its removal", async ({
+test("self-service is opt-in: off, server rules are not read while the check is still posted; on reads the branch rules at once; the environment variable locks the setting; off again with the rule still in place names it; a move or a stop waits for its removal", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -1998,15 +2011,15 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
     }),
   );
 
-  // Off from the start: the sync reads no branch rules, since a rule left
-  // behind takes self-service having been on; the minute's check reads no
-  // pull request, the registry shows no action, and the Keeper's tools
-  // refuse.
+  // Off: the sync keeps no ruleset, the registry shows no action, and the
+  // Keeper's tools refuse. The minute's check still reads the pull requests:
+  // every App source gets the policy check, self-service or not.
   await syncAppaGithubPolicy(org.id);
   expect(await getRepositoryProtection(org.id)).toBeNull();
   expect(calls).toEqual([]);
   await checkDueAppaGithubSyncs();
-  expect(calls).toEqual([]);
+  expect(calls).toEqual(["GET pulls"]);
+  calls.length = 0;
   expect(await getAppaSelfService(org.id)).toEqual({ enabled: false });
   expect((await getAppaGithubSync(org.id)).selfService).toEqual({
     enabled: false,
@@ -2090,9 +2103,9 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
       message: expect.stringContaining("ARCHESTRA_OPENAPPA_SELF_SERVICE"),
     });
     // Off by the variable, with the rule still in place: Archestra cannot
-    // take it off, so the next sync records it, the settings name it, and
-    // the minute's round posts the check as skipped on every open pull
-    // request, once each, so none waits on a check nobody judges any more.
+    // take it off, so the next sync records it and the settings name it.
+    // The check is posted on every pull request, self-service or not, so
+    // the verdict that stands is not posted again.
     calls.length = 0;
     await syncAppaGithubPolicy(org.id);
     expect(calls).toEqual(["GET rules main"]);
@@ -2102,20 +2115,8 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
       leftoverRule: { checkName: CHECK, url: rulesetUrl },
     });
     await checkDueAppaGithubSyncs();
-    expect(runs).toHaveLength(2);
-    expect(runs[1]).toEqual({
-      name: CHECK,
-      head_sha: SECOND,
-      status: "completed",
-      conclusion: "skipped",
-      output: {
-        title: "MCP Guardrails Self-Service is off",
-        summary: expect.stringContaining(rulesetUrl),
-      },
-    });
-    await checkDueAppaGithubSyncs();
-    expect(runs).toHaveLength(2);
-    // The rule removed: nothing left to name, and nothing more is posted.
+    expect(runs).toHaveLength(1);
+    // The rule removed: nothing left to name.
     rules = [];
     calls.length = 0;
     await syncAppaGithubPolicy(org.id);
@@ -2123,14 +2124,13 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
       (await getAppaGithubSync(org.id)).selfService.leftoverRule,
     ).toBeUndefined();
     await checkDueAppaGithubSyncs();
-    expect(calls).toEqual(["GET rules main"]);
+    expect(calls).toEqual(["GET rules main", "GET pulls"]);
     config.openappa.selfService = "enabled";
     await OpenAppaGithubSyncModel.setSelfService(org.id, false);
-    // On again: the verdict skipped stood over is posted afresh, unchanged
-    // as it is, so the skipped result does not pass for it.
+    // On again: the verdict stands as it is.
     await checkDueAppaGithubSyncs();
-    expect(runs).toHaveLength(3);
-    expect(runs[2]).toMatchObject({ head_sha: SECOND, conclusion: verdict });
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({ head_sha: SECOND, conclusion: verdict });
     expect((await getAppaGithubSync(org.id)).selfService).toMatchObject({
       enabled: true,
       setting: false,

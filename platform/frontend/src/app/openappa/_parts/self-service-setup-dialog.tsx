@@ -238,6 +238,7 @@ const PERMISSION_LABELS = {
   contents: "Contents",
   pull_requests: "Pull requests",
   checks: "Checks",
+  workflows: "Workflows",
 } as const;
 
 /** The App's permissions: what it has, and where to grant the rest. */

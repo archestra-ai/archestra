@@ -216,6 +216,7 @@
     "src/services/openappa-label-changes.ts",
     "src/services/openappa-policy-change.ts",
     "src/services/openappa-policy-tests.ts",
+    "src/services/openappa-template-files.ts",
     "src/services/openappa-validation-change.ts",
     "src/services/openappa-yells.ts",
     "src/skills/github-app-token.ts",

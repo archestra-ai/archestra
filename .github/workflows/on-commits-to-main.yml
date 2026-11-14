@@ -37,6 +37,7 @@ jobs:
       contents: read # Required to invoke the reusable image publishing workflow.
       packages: write # Publish development images and build caches to GHCR.
       id-token: write # Required for Workload Identity Federation.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       version: ${{ github.sha }}
     secrets:

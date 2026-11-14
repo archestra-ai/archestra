@@ -109,6 +109,7 @@ import {
   requiresNewUserInputForReinstall,
 } from "@/services/mcp-reinstall";
 import { decorateMcpServerListEntries } from "@/services/mcp-server-list";
+import { reallocateCatalogToolPrefix } from "@/services/mcp-tool-names";
 import { transferResourceOwnership } from "@/services/resource-ownership";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -330,6 +331,8 @@ const McpRegistryIssueIndexSchema = z.object({
       serverType: true,
       multitenant: true,
     }).extend({
+      /** Present when the item's tools carry a prefix other than its slugified name. */
+      toolPrefix: z.string().optional(),
       dynamicConnectionMcpServerId: z.string().optional(),
       environmentId: z.string().optional(),
       authorId: z.string().optional(),
@@ -1734,7 +1737,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           restBody.deploymentSpecYaml !== undefined
             ? restBody.deploymentSpecYaml
             : originalCatalogItemForGate.deploymentSpecYaml;
-        const renamedTools = await InternalMcpCatalogModel.renameCascade({
+        const cascadedTools = await InternalMcpCatalogModel.renameCascade({
           id,
           newName: newCatalogName,
           flagReinstallRequired:
@@ -1744,6 +1747,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ),
           freezeDeploymentNames: k8sRuntimeConfigured,
         });
+        // A new name too long for one of the tools moves them all to a
+        // shorter prefix; the policy sees each tool's old name and final one.
+        const renamedTools = composeRenames(
+          cascadedTools,
+          await reallocateCatalogToolPrefix(id),
+        );
         // The rename moved every tool prefix a policy's alias targets spell, so
         // those targets follow it where the deployment owns the text, and the
         // recompose shows `server_missing` where the repository owns it.
@@ -3493,4 +3502,23 @@ function assertDesktopMcpOffered(serverType: string | undefined): void {
       "Desktop MCP servers are in alpha and need ARCHESTRA_BETA=true.",
     );
   }
+}
+
+/**
+ * Two rounds of tool renames as one: a tool renamed in both keeps its first
+ * old name and its last new one.
+ */
+function composeRenames(
+  first: ReadonlyArray<{ oldName: string; newName: string }>,
+  second: ReadonlyArray<{ oldName: string; newName: string }>,
+): Array<{ oldName: string; newName: string }> {
+  const secondByOld = new Map(second.map((pair) => [pair.oldName, pair]));
+  const composed = first.map((pair) => {
+    const next = secondByOld.get(pair.newName);
+    if (next) secondByOld.delete(pair.newName);
+    return { oldName: pair.oldName, newName: next?.newName ?? pair.newName };
+  });
+  return [...composed, ...secondByOld.values()].filter(
+    (pair) => pair.oldName !== pair.newName,
+  );
 }

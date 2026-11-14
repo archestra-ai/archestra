@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
+  catalogToolPrefix,
   isBuiltInCatalogId,
-  slugifyMcpServerName,
   TimeInMs,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -691,9 +691,9 @@ async function serverFor(
       409,
       `${catalog.name} has no tools yet. Connect it first, so its rules have tools to name.`,
     );
-  // The file is named by the server's own slug, and governs every server
-  // whose tools carry that prefix: those servers share it.
-  const prefix = slugifyMcpServerName(catalog.name);
+  // The file is named by the server's own tool prefix, and governs every
+  // server whose tools carry that prefix: those servers share it.
+  const prefix = catalogToolPrefix(catalog);
   const prefixes = await catalogToolPrefixes(organizationId, {
     targets: [prefix],
     catalogIds: [catalog.id],

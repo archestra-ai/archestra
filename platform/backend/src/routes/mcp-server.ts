@@ -74,6 +74,7 @@ import {
 } from "@/services/mcp-reinstall";
 import { filterMcpServersAssignableToTarget } from "@/services/mcp-server-assignability";
 import { decorateMcpServerListEntries } from "@/services/mcp-server-list";
+import { mintCatalogToolNames } from "@/services/mcp-tool-names";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import {
@@ -956,7 +957,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           try {
             // Capture catalogId before async callback to ensure it's available
             const capturedCatalogId = catalogItem.id;
-            const capturedCatalogName = catalogItem.name;
             const capturedCatalogItem = catalogItem;
             const capturedEnterpriseManagedConfig =
               catalogItem.enterpriseManagedConfig;
@@ -1041,11 +1041,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     })
                   : await McpServerModel.getToolsFromServer(mcpServer);
 
-                // Persist tools in the database
-                // Use catalog item name (without userId) for tool naming to avoid duplicates across users
-                const toolNamePrefix = capturedCatalogName || mcpServer.name;
+                // Persist tools in the database, named by the catalog item
+                // (not the per-user install) so users share them.
+                const toolNameFor = await mintCatalogToolNames({
+                  catalogId: capturedCatalogId,
+                  rawToolNames: tools.map((tool) => tool.name),
+                });
                 const toolsToCreate = tools.map((tool) => ({
-                  name: ToolModel.slugifyName(toolNamePrefix, tool.name),
+                  name: toolNameFor(tool.name),
                   rawToolName: tool.name,
                   description: tool.description ?? null,
                   parameters: tool.inputSchema,
@@ -1224,10 +1227,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             catalogItem.enterpriseManagedConfig !== null,
         });
 
-        // Persist tools in the database with source='mcp_server' and mcpServerId
-        // Note: For remote servers, mcpServer.name doesn't include userId, so we can use it directly
+        // Persist tools in the database, named by the catalog item.
+        const toolNameFor = await mintCatalogToolNames({
+          catalogId: catalogItem.id,
+          rawToolNames: tools.map((tool) => tool.name),
+        });
         const toolsToCreate = tools.map((tool) => ({
-          name: ToolModel.slugifyName(mcpServer.name, tool.name),
+          name: toolNameFor(tool.name),
           rawToolName: tool.name,
           description: tool.description ?? null,
           parameters: tool.inputSchema,

@@ -358158,6 +358158,10 @@
                       "name": {
                         "type": "string"
                       },
+                      "toolPrefix": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "version": {
                         "nullable": true,
                         "type": "string"
@@ -358929,6 +358933,7 @@
                     "required": [
                       "id",
                       "name",
+                      "toolPrefix",
                       "version",
                       "description",
                       "instructions",
@@ -359982,6 +359987,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "toolPrefix": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "version": {
                       "nullable": true,
                       "type": "string"
@@ -360668,6 +360677,7 @@
                   "required": [
                     "id",
                     "name",
+                    "toolPrefix",
                     "version",
                     "description",
                     "instructions",
@@ -362605,6 +362615,9 @@
                           "multitenant": {
                             "type": "boolean"
                           },
+                          "toolPrefix": {
+                            "type": "string"
+                          },
                           "dynamicConnectionMcpServerId": {
                             "type": "string"
                           },
@@ -363782,6 +363795,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "toolPrefix": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "version": {
                       "nullable": true,
                       "type": "string"
@@ -364501,6 +364518,7 @@
                   "required": [
                     "id",
                     "name",
+                    "toolPrefix",
                     "version",
                     "description",
                     "instructions",
@@ -365405,6 +365423,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "toolPrefix": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "version": {
                       "nullable": true,
                       "type": "string"
@@ -366091,6 +366113,7 @@
                   "required": [
                     "id",
                     "name",
+                    "toolPrefix",
                     "version",
                     "description",
                     "instructions",
@@ -368218,6 +368241,10 @@
                       "name": {
                         "type": "string"
                       },
+                      "toolPrefix": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "version": {
                         "nullable": true,
                         "type": "string"
@@ -368904,6 +368931,7 @@
                     "required": [
                       "id",
                       "name",
+                      "toolPrefix",
                       "version",
                       "description",
                       "instructions",
@@ -369224,6 +369252,10 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "toolPrefix": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "version": {
@@ -369912,6 +369944,7 @@
                   "required": [
                     "id",
                     "name",
+                    "toolPrefix",
                     "version",
                     "description",
                     "instructions",

@@ -10,6 +10,7 @@ export function makeCatalogItem(
   return {
     id: "test-catalog",
     name: "test-catalog",
+    toolPrefix: null,
     version: null,
     description: null,
     instructions: null,

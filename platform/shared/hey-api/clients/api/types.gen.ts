@@ -90900,6 +90900,7 @@ export type GetInternalMcpCatalogResponses = {
     200: Array<{
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -91298,6 +91299,7 @@ export type CreateInternalMcpCatalogItemResponses = {
     200: {
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -91955,6 +91957,7 @@ export type GetMcpRegistryIssueIndexResponses = {
             name: string;
             serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
             multitenant: boolean;
+            toolPrefix?: string;
             dynamicConnectionMcpServerId?: string;
             environmentId?: string;
             authorId?: string;
@@ -92386,6 +92389,7 @@ export type GetInternalMcpCatalogItemResponses = {
     200: {
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -92753,6 +92757,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
     200: {
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -93455,6 +93460,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
     200: Array<{
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -93689,6 +93695,7 @@ export type ApproveCatalogItemImageResponses = {
     200: {
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;

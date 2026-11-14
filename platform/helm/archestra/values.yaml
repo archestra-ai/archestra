@@ -761,6 +761,14 @@ archestra:
       # MCP-manager permissions there.
       namespace: ""
 
+      # Namespace for Agent Runtime pods (ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE),
+      # so runs live apart from MCP servers. An Agent's Environment namespace
+      # still wins. Empty keeps runs in the organization's default Environment
+      # namespace, or else the namespace above. Create this namespace before
+      # installing; the chart grants its platform ServiceAccount the same
+      # permissions there.
+      agentRuntimeNamespace: ""
+
       # Kubernetes cluster DNS domain for internal service URL construction (streamable-http MCP servers)
       # If not set, defaults to cluster.local
       clusterDomain: ""

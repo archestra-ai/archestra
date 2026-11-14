@@ -40,7 +40,9 @@ Browser tools live in `/opt/agent-tools`, with their commands exposed on PATH.
 Python scripts importing Playwright can use `/opt/agent-tools/bin/python`;
 project-specific Python dependencies belong in their own virtual environment.
 The matching Chromium binaries live at `$PLAYWRIGHT_BROWSERS_PATH`
-(`/opt/playwright`), outside the writable home/workspace mounts. Projects using
+(`/opt/playwright`), outside the writable home/workspace mounts. The Playwright
+driver runs on the image's Node.js: the Node build its wheel bundles falls
+behind Node's security releases, and the release image scan rejects it. Projects using
 a different Playwright version must install its matching browser into a writable
 cache, or prepare it in a derived image.
 

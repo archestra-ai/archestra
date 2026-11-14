@@ -108,8 +108,15 @@ RUN curl -fsSL \
 # hide them. Skills are loaded at run time; no workflow or credentials ship here.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 COPY docker_images/agent/requirements.lock /opt/agent-tools-requirements.lock
+# The Playwright wheel bundles its own Node build for its driver, and that
+# build falls behind Node's security releases (1.64.0 ships 24.21.0). The
+# driver runs on the image's Node instead, which follows the base image.
 RUN uv venv --python /usr/bin/python3 /opt/agent-tools \
  && uv pip sync --python /opt/agent-tools/bin/python --require-hashes /opt/agent-tools-requirements.lock \
+ && playwright_node="$(/opt/agent-tools/bin/python -c 'import pathlib, playwright; print(pathlib.Path(playwright.__file__).parent / "driver" / "node")')" \
+ && test -f "$playwright_node" \
+ && rm "$playwright_node" \
+ && ln -s /usr/local/bin/node "$playwright_node" \
  && ln -s /opt/agent-tools/bin/shot-scraper /usr/local/bin/shot-scraper \
  && ln -s /opt/agent-tools/bin/playwright /usr/local/bin/playwright \
  && playwright install --with-deps chromium \

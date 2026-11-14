@@ -661,6 +661,7 @@ async function resolveToolAssignment(params: {
     return null;
   if (
     shortName === TOOL_START_AGENT_RUN_SHORT_NAME &&
+    !context.suppressContentLogging &&
     context.organizationId &&
     !isToolIdentityExcluded(
       {

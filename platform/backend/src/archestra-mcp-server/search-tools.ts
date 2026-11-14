@@ -277,6 +277,7 @@ const registry = defineArchestraTools([
         delegationChain: context.delegationChain,
         parentLlm: context.parentLlm,
         tokenAuth: context.tokenAuth,
+        suppressContentLogging: context.suppressContentLogging,
       });
 
       let matches: SearchCandidate[];
@@ -473,8 +474,15 @@ async function getSearchableTools(params: {
   delegationChain?: string;
   parentLlm?: ModelSelection;
   tokenAuth?: TargetInstallCaller & { oauthClientId?: string };
+  suppressContentLogging?: boolean;
 }): Promise<SearchCandidate[]> {
-  const { agentId, conversationId, organizationId, userId } = params;
+  const {
+    agentId,
+    conversationId,
+    organizationId,
+    suppressContentLogging,
+    userId,
+  } = params;
   const delegatedRun = isAppaDelegatedRun(agentId, params.delegationChain);
   const agent = await AgentModel.findGatewayAgentById(agentId);
   // Per-agent exclusions (Auto-tool mode): loaded once per search and applied
@@ -527,7 +535,7 @@ async function getSearchableTools(params: {
     injectedOpenappaTools.map((tool) => tool.name),
   );
   const delegationTools =
-    organizationId != null
+    organizationId != null && !suppressContentLogging
       ? await getAgentTools({
           agentId,
           organizationId,
@@ -541,7 +549,8 @@ async function getSearchableTools(params: {
     TOOL_START_AGENT_RUN_SHORT_NAME,
   );
   const includeImplicitStartAgentRun = Boolean(
-    agent &&
+    !suppressContentLogging &&
+      agent &&
       organizationId != null &&
       !isToolIdentityExcluded(
         { catalogId: ARCHESTRA_MCP_CATALOG_ID, name: startAgentRunFullName },
@@ -553,13 +562,14 @@ async function getSearchableTools(params: {
       })),
   );
   const hasTaskStarter =
-    includeImplicitStartAgentRun ||
-    delegationTools.length > 0 ||
-    assignedTools.some(
-      (tool) =>
-        archestraMcpBranding.getToolShortName(tool.name) ===
-        TOOL_START_AGENT_RUN_SHORT_NAME,
-    );
+    !suppressContentLogging &&
+    (includeImplicitStartAgentRun ||
+      delegationTools.length > 0 ||
+      assignedTools.some(
+        (tool) =>
+          archestraMcpBranding.getToolShortName(tool.name) ===
+          TOOL_START_AGENT_RUN_SHORT_NAME,
+      ));
   // Match tools/list's implicit run-handle controls, including gateways with
   // no assigned tools. They are assignment-exempt at dispatch, but still pass
   // RBAC here and actor/proof checks in their handlers. Internal chat already
@@ -605,6 +615,11 @@ async function getSearchableTools(params: {
   const filteredTools = searchSpace.filter(
     (tool) =>
       permittedNames.has(tool.name) &&
+      !(
+        suppressContentLogging &&
+        archestraMcpBranding.getToolShortName(tool.name) ===
+          TOOL_START_AGENT_RUN_SHORT_NAME
+      ) &&
       !isExcludedFromSearchResults({
         toolName: tool.name,
         assignedNames,
@@ -616,7 +631,7 @@ async function getSearchableTools(params: {
   // Agent-designated skills are searchable through their skill__<slug>
   // delegation tools, resolved per calling user like agent delegations.
   const skillDelegationTools =
-    organizationId != null
+    organizationId != null && !suppressContentLogging
       ? await getSkillDelegationTools({ agentId, organizationId, userId })
       : [];
 

@@ -111,6 +111,54 @@ export async function callerUsesImplicitLoadBalancedRunStarter(params: {
 }
 
 /**
+ * Resolve the eligible runtime subagent pool for a foreground load-balanced
+ * router agent (`routerAgent`) when invoked by `callerAgentId` / `actorUserId`.
+ *
+ * Returns `[]` when `routerAgent` does not have `subagentLoadBalancing.enabled`
+ * or resolves zero non-excluded runtime subagents — matching tool advertisement
+ * (`resolveLoadBalancedRouterPools`) so foreground load-balanced agents whose
+ * subagents are solely in-process helpers continue executing in-process.
+ */
+export async function resolveRouterRuntimePoolCandidateIds(params: {
+  routerAgent: Pick<
+    Agent,
+    | "id"
+    | "organizationId"
+    | "environmentId"
+    | "accessAllSubagents"
+    | "subagentLoadBalancing"
+  >;
+  actorUserId?: string | null;
+  callerAgentId?: string | null;
+}): Promise<string[]> {
+  const { routerAgent, actorUserId, callerAgentId } = params;
+  if (
+    normalizeSubagentLoadBalancingConfig(routerAgent.subagentLoadBalancing)
+      ?.enabled !== true
+  ) {
+    return [];
+  }
+  const candidateIds = await resolveCandidateRuntimeSubagentIds({
+    callerAgent: routerAgent,
+    actorUserId,
+  });
+  if (
+    candidateIds.length === 0 ||
+    !callerAgentId ||
+    callerAgentId === routerAgent.id
+  ) {
+    return candidateIds;
+  }
+  const callerExcludedIds =
+    await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(callerAgentId);
+  if (callerExcludedIds.length === 0) {
+    return candidateIds;
+  }
+  const callerExcludedSet = new Set(callerExcludedIds);
+  return candidateIds.filter((id) => !callerExcludedSet.has(id));
+}
+
+/**
  * Orchestration for per-agent Auto-subagent-mode exclusions: the delegation
  * targets removed from an agent's Auto delegation surface. The subagent analog
  * of {@link agentToolExclusionsService}, but far simpler — an exclusion is just

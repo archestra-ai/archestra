@@ -209,6 +209,8 @@ export async function buildAgentSystemPrompt(params: {
   canAskUser?: boolean;
   /** This run is a fork of the agent, which may not fork or delegate to itself. */
   isFork?: boolean;
+  /** Encrypted chat: runtime launches and delegations are disabled, so omit starter/router instructions. */
+  suppressContentLogging?: boolean;
 }): Promise<string | undefined> {
   const {
     agent,
@@ -224,6 +226,7 @@ export async function buildAgentSystemPrompt(params: {
     projectFileNames,
     canAskUser = false,
     isFork = false,
+    suppressContentLogging = false,
   } = params;
 
   const renderedPrompt = await renderAgentPrompt({
@@ -306,11 +309,17 @@ export async function buildAgentSystemPrompt(params: {
     ? buildProjectFilesInstruction(projectFileNames, mcpTools)
     : null;
 
-  const subagentLoadBalancingInstruction = !isFork
-    ? agent.subagentLoadBalancing?.enabled === true
-      ? SUBAGENT_LOAD_BALANCING_INSTRUCTION
-      : buildLoadBalancedRouterDelegationInstruction(mcpTools)
-    : null;
+  const subagentLoadBalancingInstruction =
+    !isFork && !suppressContentLogging
+      ? [
+          agent.subagentLoadBalancing?.enabled === true
+            ? SUBAGENT_LOAD_BALANCING_INSTRUCTION
+            : null,
+          buildLoadBalancedRouterDelegationInstruction(mcpTools),
+        ]
+          .filter(Boolean)
+          .join("\n\n") || null
+      : null;
 
   return (
     [

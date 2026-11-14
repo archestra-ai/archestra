@@ -524,6 +524,8 @@ export function buildAgentDelegationTool(params: {
             subagentToolStream: ctx.subagentToolStream,
             currentToolCallId: options.toolCallId,
             parentLlm: ctx.parentLlm,
+            suppressContentLogging: ctx.suppressContentLogging,
+            encryptedChatAudit: ctx.encryptedChatAudit,
             tokenAuth: buildTokenAuthContext({
               mcpGwToken: ctx.mcpGwToken,
               organizationId: ctx.organizationId,
@@ -629,7 +631,9 @@ async function persistLaunchedRuntimeToolCall(params: {
       toolCall: {
         id: toolCallId,
         name: toolName,
-        arguments: toolArguments || {},
+        arguments: ctx.suppressContentLogging
+          ? { redacted: true }
+          : toolArguments || {},
       },
       toolResult: ctx.suppressContentLogging ? { redacted: true } : response,
       userId: ctx.userId ?? null,

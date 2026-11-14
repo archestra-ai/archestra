@@ -45,6 +45,7 @@ import {
   promptWithContract,
   SPAWN_TARGET_MISMATCH,
 } from "@/services/agent-runtime/runtime-crossing";
+import { resolveRouterRuntimePoolCandidateIds } from "@/services/agent-subagent-exclusions";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { type Agent, ApiError } from "@/types";
@@ -247,24 +248,20 @@ export async function getAgentTools(context: {
   const visibleTools = callerLoadBalancingEnabled
     ? accessibleTools.filter((t) => !t.targetAgent.hasRuntime)
     : accessibleTools;
-  const routerMetadata = callerLoadBalancingEnabled
-    ? EMPTY_ROUTER_POOL_METADATA
-    : await resolveLoadBalancedRouterPools({
-        callerAgentId: agentId,
-        organizationId,
-        actorUserId: realUserId,
-        actorIsAgentAdmin:
-          realUserId && realUserId === userId
-            ? resolvedIsAgentAdmin
-            : undefined,
-        targets: visibleTools.map((t) => ({
-          id: t.targetAgent.id,
-          name: t.targetAgent.name,
-          toolName: t.tool.name,
-          hasRuntime: t.targetAgent.hasRuntime,
-          hasSubagentLoadBalancing: t.targetAgent.hasSubagentLoadBalancing,
-        })),
-      });
+  const routerMetadata = await resolveLoadBalancedRouterPools({
+    callerAgentId: agentId,
+    organizationId,
+    actorUserId: realUserId,
+    actorIsAgentAdmin:
+      realUserId && realUserId === userId ? resolvedIsAgentAdmin : undefined,
+    targets: visibleTools.map((t) => ({
+      id: t.targetAgent.id,
+      name: t.targetAgent.name,
+      toolName: t.tool.name,
+      hasRuntime: t.targetAgent.hasRuntime,
+      hasSubagentLoadBalancing: t.targetAgent.hasSubagentLoadBalancing,
+    })),
+  });
 
   // Convert DB tools to MCP Tool format
   const localTools = visibleTools.map((t) =>
@@ -291,6 +288,10 @@ export async function handleDelegation(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
+  if (context.suppressContentLogging) {
+    return errorResult("Agent delegation is not available in encrypted chats.");
+  }
+
   const { agentId, organizationId, tokenAuth } = context;
 
   const message = args?.message as string;
@@ -407,12 +408,19 @@ export async function handleDelegation(
   const targetHasRuntime = Boolean(
     targetAgent && resolveAgentRuntime(targetAgent),
   );
-  const targetIsLoadBalancedRouter = Boolean(
+  const targetRouterCandidateIds =
+    !selfFork &&
     targetAgent &&
-      !targetHasRuntime &&
-      normalizeSubagentLoadBalancingConfig(targetAgent.subagentLoadBalancing)
-        ?.enabled === true,
-  );
+    !targetHasRuntime &&
+    normalizeSubagentLoadBalancingConfig(targetAgent.subagentLoadBalancing)
+      ?.enabled === true
+      ? await resolveRouterRuntimePoolCandidateIds({
+          routerAgent: targetAgent,
+          actorUserId: realUserId,
+          callerAgentId: agentId,
+        })
+      : [];
+  const targetIsLoadBalancedRouter = targetRouterCandidateIds.length > 0;
   if (
     !selfFork &&
     targetAgent &&
@@ -728,22 +736,20 @@ async function buildAutoDelegationTools(params: {
     dedupedTargets.push({ name, targetAgent });
   }
 
-  const routerMetadata = callerLoadBalancingEnabled
-    ? EMPTY_ROUTER_POOL_METADATA
-    : await resolveLoadBalancedRouterPools({
-        callerAgentId: agentId,
-        organizationId,
-        actorUserId: userId,
-        actorIsAgentAdmin: isAgentAdmin,
-        callerExcludedIds: excluded,
-        targets: dedupedTargets.map(({ name, targetAgent }) => ({
-          id: targetAgent.id,
-          name: targetAgent.name,
-          toolName: name,
-          hasRuntime: targetAgent.hasRuntime,
-          hasSubagentLoadBalancing: targetAgent.hasSubagentLoadBalancing,
-        })),
-      });
+  const routerMetadata = await resolveLoadBalancedRouterPools({
+    callerAgentId: agentId,
+    organizationId,
+    actorUserId: userId,
+    actorIsAgentAdmin: isAgentAdmin,
+    callerExcludedIds: excluded,
+    targets: dedupedTargets.map(({ name, targetAgent }) => ({
+      id: targetAgent.id,
+      name: targetAgent.name,
+      toolName: name,
+      hasRuntime: targetAgent.hasRuntime,
+      hasSubagentLoadBalancing: targetAgent.hasSubagentLoadBalancing,
+    })),
+  });
 
   const tools = dedupedTargets.map(({ name, targetAgent }) =>
     buildDelegationToolDescriptor({

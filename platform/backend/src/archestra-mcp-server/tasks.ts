@@ -95,7 +95,10 @@ import {
   WORKSPACE_TRANSFER_TICKET_TTL_MS,
   workspaceTransferTickets,
 } from "@/services/agent-runtime/workspace-transfers";
-import { resolveCandidateRuntimeSubagentIds } from "@/services/agent-subagent-exclusions";
+import {
+  resolveCandidateRuntimeSubagentIds,
+  resolveRouterRuntimePoolCandidateIds,
+} from "@/services/agent-subagent-exclusions";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -312,7 +315,10 @@ export async function checkCallerSubagentAccess(
   return { allowed: true };
 }
 
-export { resolveCandidateRuntimeSubagentIds };
+export {
+  resolveCandidateRuntimeSubagentIds,
+  resolveRouterRuntimePoolCandidateIds,
+};
 
 /**
  * Start a durable delegated run through the same lifecycle used by the MCP
@@ -328,6 +334,15 @@ export async function startDelegatedTask(params: {
   limits?: AgentRunLimitsRequest;
   context: ArchestraContext;
 }) {
+  if (params.context.suppressContentLogging) {
+    const { result, outcome } = failedLaunch(
+      "not_allowed",
+      errorResult("Agent Runtime runs are not available in encrypted chats."),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
   const callerAgent = params.context.agent?.id
     ? await AgentModel.findById(params.context.agent.id)
     : null;
@@ -453,27 +468,18 @@ export async function startDelegatedTask(params: {
           return result;
         }
       }
-      let routerCandidateIds = await resolveCandidateRuntimeSubagentIds({
-        callerAgent: explicitTargetAgent,
+      const routerCandidateIds = await resolveRouterRuntimePoolCandidateIds({
+        routerAgent: explicitTargetAgent,
         actorUserId: params.context.userId,
+        callerAgentId: callerAgent?.id,
       });
-      if (callerAgent && callerAgent.id !== explicitTargetAgent.id) {
-        const callerExcludedIds =
-          await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
-            callerAgent.id,
-          );
-        if (callerExcludedIds.length > 0) {
-          const callerExcludedSet = new Set(callerExcludedIds);
-          routerCandidateIds = routerCandidateIds.filter(
-            (id) => !callerExcludedSet.has(id),
-          );
-        }
+      if (routerCandidateIds.length > 0) {
+        poolAgent = explicitTargetAgent;
+        lbConfig = targetLbConfig;
+        assignedIds = routerCandidateIds;
+        assignedSet = new Set(assignedIds);
+        targetRouterPoolSelected = true;
       }
-      poolAgent = explicitTargetAgent;
-      lbConfig = targetLbConfig;
-      assignedIds = routerCandidateIds;
-      assignedSet = new Set(assignedIds);
-      targetRouterPoolSelected = true;
     }
   }
 
@@ -817,6 +823,12 @@ async function launchDelegatedTask(params: {
   context: ArchestraContext;
 }): Promise<{ result: CallToolResult; outcome?: RuntimeLaunchOutcome }> {
   const { agentId, message, context } = params;
+  if (context.suppressContentLogging) {
+    return failedLaunch(
+      "not_allowed",
+      errorResult("Agent Runtime runs are not available in encrypted chats."),
+    );
+  }
   if (
     context.tokenAuth?.oauthExecution ||
     (context.tokenAuth?.oauthClientId && !context.tokenAuth.isUserToken)
@@ -2087,6 +2099,11 @@ const registry = defineArchestraTools([
         ),
     }),
     handler: async ({ args, context }) => {
+      if (context.suppressContentLogging) {
+        return errorResult(
+          "Agent Runtime runs are not available in encrypted chats.",
+        );
+      }
       try {
         const actor = requireActor(context);
         const run = await requireAccessibleRun({
@@ -2281,6 +2298,11 @@ const registry = defineArchestraTools([
       message: z.string().trim().min(1).max(2_000),
     }),
     handler: async ({ args, context }) => {
+      if (context.suppressContentLogging) {
+        return errorResult(
+          "Agent Runtime runs are not available in encrypted chats.",
+        );
+      }
       try {
         const actor = requireActor(context);
         const task = await requireAccessibleTask({

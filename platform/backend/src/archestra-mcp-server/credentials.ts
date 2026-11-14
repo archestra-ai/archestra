@@ -6,7 +6,7 @@ import {
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
-import { AgentExcludedSubagentModel, AgentModel } from "@/models";
+import { AgentModel } from "@/models";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   declarePersonalRuntimeCredential,
@@ -42,6 +42,7 @@ import {
   checkCallerSubagentAccess,
   requireActor,
   resolveCandidateRuntimeSubagentIds,
+  resolveRouterRuntimePoolCandidateIds,
   resolveTargetAgentId,
 } from "./tasks";
 
@@ -407,23 +408,18 @@ const registry = defineArchestraTools([
                   : subagentAccess.message,
               );
             }
-            candidateAgentIds = await resolveCandidateRuntimeSubagentIds({
-              callerAgent: explicitTargetAgent,
-              actorUserId: actor.id,
-            });
-            if (callerAgent && callerAgent.id !== explicitTargetAgent.id) {
-              const callerExcludedIds =
-                await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
-                  callerAgent.id,
-                );
-              if (callerExcludedIds.length > 0) {
-                const callerExcludedSet = new Set(callerExcludedIds);
-                candidateAgentIds = candidateAgentIds.filter(
-                  (id) => !callerExcludedSet.has(id),
-                );
-              }
+            const routerCandidateIds =
+              await resolveRouterRuntimePoolCandidateIds({
+                routerAgent: explicitTargetAgent,
+                actorUserId: actor.id,
+                callerAgentId: callerAgent?.id,
+              });
+            if (routerCandidateIds.length > 0) {
+              candidateAgentIds = routerCandidateIds;
+              isRouterPoolTarget = true;
+            } else {
+              candidateAgentIds = [explicitAgentId];
             }
-            isRouterPoolTarget = true;
           } else {
             candidateAgentIds = [explicitAgentId];
           }

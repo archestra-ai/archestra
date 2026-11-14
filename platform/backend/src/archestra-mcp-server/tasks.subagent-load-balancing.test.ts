@@ -8,6 +8,7 @@ import {
   TOOL_STEER_AGENT_RUN_FULL_NAME,
   TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
 } from "@archestra/shared";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { context as otelContext, trace } from "@opentelemetry/api";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import {
@@ -17,11 +18,13 @@ import {
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
+import * as a2aExecutor from "@/agents/a2a-executor";
 import {
   buildAgentSystemPrompt,
   SUBAGENT_LOAD_BALANCING_INSTRUCTION,
 } from "@/agents/agent-system-prompt";
 import { CacheKey, cacheManager } from "@/cache-manager";
+import * as chatMcpClient from "@/clients/chat-mcp-client";
 import {
   buildAgentDelegationTool,
   type ChatToolContext,
@@ -3897,6 +3900,69 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     expect(systemPrompt).not.toContain(
       "Load-balanced runtime router subagent(s) available",
     );
+
+    // Invoking `inProcessLbToolRow` must execute `inProcessOnlyLbHelper` as an
+    // ordinary foreground A2A delegation rather than entering `startDelegatedTask`
+    // and failing with "No runtime subagents are assigned to this agent".
+    const executeA2ASpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValueOnce({
+        messageId: "msg-in-process-lb-1",
+        text: "Foreground answer from in-process LB helper",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-in-process-lb-1",
+          role: "assistant",
+          parts: [
+            {
+              type: "text",
+              text: "Foreground answer from in-process LB helper",
+            },
+          ],
+        },
+      });
+    const inProcessDelegationOutput = await builtTools[
+      inProcessLbToolRow.name
+    ].execute?.(
+      { message: "Delegate to foreground LB helper" },
+      { toolCallId: "in-process-lb-call-1", messages: [] },
+    );
+    expect(String(inProcessDelegationOutput)).toContain(
+      "Foreground answer from in-process LB helper",
+    );
+    expect(executeA2ASpy).toHaveBeenCalledTimes(1);
+    expect(executeA2ASpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: inProcessOnlyLbHelper.id,
+        message: "Delegate to foreground LB helper",
+      }),
+    );
+
+    const startRunTool = await ToolModel.findByName(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+    );
+    if (!startRunTool) {
+      throw new Error("Expected seeded start_agent_run tool");
+    }
+    await AgentToolModel.create(callerAgent.id, startRunTool.id);
+
+    const directStartAttempt = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: inProcessOnlyLbHelper.id,
+        message: "Background attempt on in-process-only LB helper",
+      },
+      {
+        agent: { id: callerAgent.id, name: callerAgent.name },
+        agentId: callerAgent.id,
+        userId: actorId,
+        organizationId,
+      },
+    );
+    expect(directStartAttempt.isError).toBe(true);
+    expect(
+      (directStartAttempt.content[0] as { text?: string } | undefined)?.text,
+    ).toContain("has no Agent Runtime, so it cannot run in the background");
   });
 
   test("batches load-balanced router pool resolution across multiple manual and Auto routers without N+1 queries", async ({
@@ -4078,6 +4144,317 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
             | undefined
         )?.[LOAD_BALANCED_RUNTIME_ROUTER_META_KEY],
       ).toBe(true);
+    }
+  });
+
+  test("excludes implicit runtime starters and refuses runtime launches in encrypted chats without writing A2A or ordinary message rows", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const encryptedWorker = await createRuntimeSubagent(
+      makeAgent,
+      "Encrypted Pool Worker",
+      false,
+    );
+    const workerDelegationTool = await ToolModel.findOrCreateDelegationTool(
+      encryptedWorker.id,
+    );
+
+    const encryptedLbAgent = await makeAgent({
+      name: "Encrypted LB Assistant",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      toolExposureMode: "search_and_run_only",
+      accessAllSubagents: false,
+      modelId,
+      llmApiKeyId,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await AgentToolModel.create(encryptedLbAgent.id, workerDelegationTool.id);
+
+    const unencryptedConversation = await makeConversation(
+      encryptedLbAgent.id,
+      {
+        organizationId,
+        userId: actorId,
+      },
+    );
+    const encryptedConversation = await makeConversation(encryptedLbAgent.id, {
+      organizationId,
+      userId: actorId,
+      encryptedChat: true,
+    });
+    const encryptedChatAudit = {
+      dek: Buffer.alloc(32, 9),
+      conversationId: encryptedConversation.id,
+    };
+
+    let fullEncryptedAgentId: string | undefined;
+    try {
+      const seedGatewayListClient = (
+        targetAgent: Awaited<ReturnType<typeof makeAgent>>,
+        scopeKey: string,
+      ) => {
+        const mockClient = {
+          ping: vi.fn().mockResolvedValue({}),
+          listTools: vi.fn().mockImplementation(async () => {
+            const gatewayAgent = await AgentModel.findGatewayAgentById(
+              targetAgent.id,
+            );
+            if (!gatewayAgent) {
+              throw new Error("Expected gateway agent row");
+            }
+            const listed = await buildAgentMcpToolList({
+              agent: gatewayAgent,
+              tokenAuth: {
+                tokenId: "tok-encrypted-test",
+                teamId: null,
+                isOrganizationToken: false,
+                organizationId,
+                userId: actorId,
+              },
+            });
+            return { tools: listed.tools };
+          }),
+          callTool: vi.fn(),
+          close: vi.fn(),
+        } as unknown as Client;
+        chatMcpClient.__test.setCachedClient(
+          chatMcpClient.__test.getCacheKey(targetAgent.id, actorId, scopeKey),
+          mockClient,
+        );
+      };
+
+      // Unencrypted control: implicit `start_agent_run` IS present
+      seedGatewayListClient(encryptedLbAgent, unencryptedConversation.id);
+      const unencryptedTools = await chatMcpClient.getChatMcpTools({
+        agentName: encryptedLbAgent.name,
+        agentId: encryptedLbAgent.id,
+        userId: actorId,
+        organizationId,
+        conversationId: unencryptedConversation.id,
+        sessionId: unencryptedConversation.id,
+        suppressContentLogging: false,
+        encryptedChatAudit: null,
+      });
+      expect(Object.keys(unencryptedTools)).toContain(
+        TOOL_START_AGENT_RUN_FULL_NAME,
+      );
+
+      // Encrypted `search_and_run_only` chat: `start_agent_run`, `steer_agent_run`, and `agent__*` are excluded
+      seedGatewayListClient(encryptedLbAgent, encryptedConversation.id);
+      const encryptedCompactTools = await chatMcpClient.getChatMcpTools({
+        agentName: encryptedLbAgent.name,
+        agentId: encryptedLbAgent.id,
+        userId: actorId,
+        organizationId,
+        conversationId: encryptedConversation.id,
+        sessionId: encryptedConversation.id,
+        suppressContentLogging: true,
+        encryptedChatAudit,
+      });
+      expect(Object.keys(encryptedCompactTools)).not.toContain(
+        TOOL_START_AGENT_RUN_FULL_NAME,
+      );
+      expect(Object.keys(encryptedCompactTools)).not.toContain(
+        TOOL_STEER_AGENT_RUN_FULL_NAME,
+      );
+      expect(
+        Object.keys(encryptedCompactTools).some((name) =>
+          name.startsWith("agent__"),
+        ),
+      ).toBe(false);
+
+      // Encrypted `full` exposure chat: also excludes implicit and explicitly assigned `start_agent_run`
+      const fullEncryptedAgent = await makeAgent({
+        name: "Encrypted Full LB Assistant",
+        organizationId,
+        authorId: actorId,
+        agentType: "agent",
+        toolExposureMode: "full",
+        accessAllSubagents: false,
+        modelId,
+        llmApiKeyId,
+        subagentLoadBalancing: {
+          enabled: true,
+          algorithm: "round_robin",
+          retries: 0,
+          fallbackEnabled: true,
+        },
+      });
+      fullEncryptedAgentId = fullEncryptedAgent.id;
+      await AgentToolModel.create(
+        fullEncryptedAgent.id,
+        workerDelegationTool.id,
+      );
+      const startRunDbTool = await ToolModel.findByName(
+        TOOL_START_AGENT_RUN_FULL_NAME,
+      );
+      if (startRunDbTool) {
+        await AgentToolModel.create(fullEncryptedAgent.id, startRunDbTool.id);
+      }
+      const fullEncryptedConversation = await makeConversation(
+        fullEncryptedAgent.id,
+        {
+          organizationId,
+          userId: actorId,
+          encryptedChat: true,
+        },
+      );
+      seedGatewayListClient(fullEncryptedAgent, fullEncryptedConversation.id);
+      const encryptedFullTools = await chatMcpClient.getChatMcpTools({
+        agentName: fullEncryptedAgent.name,
+        agentId: fullEncryptedAgent.id,
+        userId: actorId,
+        organizationId,
+        conversationId: fullEncryptedConversation.id,
+        sessionId: fullEncryptedConversation.id,
+        suppressContentLogging: true,
+        encryptedChatAudit: {
+          dek: Buffer.alloc(32, 8),
+          conversationId: fullEncryptedConversation.id,
+        },
+      });
+      expect(Object.keys(encryptedFullTools)).not.toContain(
+        TOOL_START_AGENT_RUN_FULL_NAME,
+      );
+      expect(
+        Object.keys(encryptedFullTools).some((name) =>
+          name.startsWith("agent__"),
+        ),
+      ).toBe(false);
+
+      const encryptedPrompt = await buildAgentSystemPrompt({
+        agent: encryptedLbAgent,
+        mcpTools: encryptedCompactTools,
+        organizationId,
+        userId: actorId,
+        agentId: encryptedLbAgent.id,
+        suppressContentLogging: true,
+      });
+      expect(encryptedPrompt ?? "").not.toContain(
+        SUBAGENT_LOAD_BALANCING_INSTRUCTION,
+      );
+
+      // `search_tools` in encrypted chat must not discover `start_agent_run` or `agent__*`
+      const encryptedContext: ArchestraContext = {
+        agent: { id: encryptedLbAgent.id, name: encryptedLbAgent.name },
+        agentId: encryptedLbAgent.id,
+        userId: actorId,
+        organizationId,
+        conversationId: encryptedConversation.id,
+        sessionId: encryptedConversation.id,
+        suppressContentLogging: true,
+        encryptedChatAudit,
+      };
+      const searchRes = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "start agent run runtime" },
+        encryptedContext,
+      );
+      expect(searchRes.isError).toBeFalsy();
+      const discoveredNames = (
+        (
+          searchRes.structuredContent as
+            | { tools?: Array<{ toolName: string }> }
+            | undefined
+        )?.tools ?? []
+      ).map((t) => t.toolName);
+      expect(discoveredNames).not.toContain(TOOL_START_AGENT_RUN_FULL_NAME);
+      expect(discoveredNames.some((n) => n.startsWith("agent__"))).toBe(false);
+
+      // Attempting direct or `run_tool` launches (both implicit and explicitly assigned) must refuse
+      // before creating any A2A tasks, A2A messages, or Agent Runtime runs.
+      const launchSpy = vi.spyOn(backend, "launch");
+      const sensitiveSecret = "encrypted-chat-sensitive-secret-do-not-persist";
+
+      const implicitDirectAttempt = await executeArchestraTool(
+        TOOL_START_AGENT_RUN_FULL_NAME,
+        { message: sensitiveSecret },
+        encryptedContext,
+      );
+      expect(implicitDirectAttempt.isError).toBe(true);
+
+      const implicitRunToolAttempt = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        {
+          tool_name: TOOL_START_AGENT_RUN_FULL_NAME,
+          tool_args: { message: sensitiveSecret },
+        },
+        encryptedContext,
+      );
+      expect(implicitRunToolAttempt.isError).toBe(true);
+
+      const assignedEncryptedContext: ArchestraContext = {
+        agent: { id: fullEncryptedAgent.id, name: fullEncryptedAgent.name },
+        agentId: fullEncryptedAgent.id,
+        userId: actorId,
+        organizationId,
+        conversationId: fullEncryptedConversation.id,
+        sessionId: fullEncryptedConversation.id,
+        suppressContentLogging: true,
+        encryptedChatAudit: {
+          dek: Buffer.alloc(32, 8),
+          conversationId: fullEncryptedConversation.id,
+        },
+      };
+      const assignedDirectAttempt = await executeArchestraTool(
+        TOOL_START_AGENT_RUN_FULL_NAME,
+        { message: sensitiveSecret },
+        assignedEncryptedContext,
+      );
+      expect(assignedDirectAttempt.isError).toBe(true);
+      expect(
+        (assignedDirectAttempt.content[0] as { text?: string } | undefined)
+          ?.text,
+      ).toContain("not available in encrypted chats");
+
+      const assignedRunToolAttempt = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        {
+          tool_name: TOOL_START_AGENT_RUN_FULL_NAME,
+          tool_args: { message: sensitiveSecret },
+        },
+        assignedEncryptedContext,
+      );
+      expect(assignedRunToolAttempt.isError).toBe(true);
+
+      const delegationAttempt = await executeArchestraTool(
+        workerDelegationTool.name,
+        { message: sensitiveSecret },
+        assignedEncryptedContext,
+      );
+      expect(delegationAttempt.isError).toBe(true);
+      expect(
+        (delegationAttempt.content[0] as { text?: string } | undefined)?.text,
+      ).toContain("not available in encrypted chats");
+
+      expect(launchSpy).not.toHaveBeenCalled();
+
+      const tasksRows = await db.select().from(schema.a2aTasksTable);
+      expect(tasksRows).toHaveLength(0);
+      const a2aMessageRows = await db.select().from(schema.a2aMessagesTable);
+      expect(a2aMessageRows).toHaveLength(0);
+      const agentRunRows = await db.select().from(schema.agentRunsTable);
+      expect(agentRunRows).toHaveLength(0);
+      const ordinaryChatMessageRows = await db
+        .select()
+        .from(schema.messagesTable);
+      expect(ordinaryChatMessageRows).toHaveLength(0);
+      const mcpToolCallRows = await db.select().from(schema.mcpToolCallsTable);
+      expect(JSON.stringify(mcpToolCallRows)).not.toContain(sensitiveSecret);
+    } finally {
+      chatMcpClient.clearChatMcpClient(encryptedLbAgent.id);
+      if (fullEncryptedAgentId) {
+        chatMcpClient.clearChatMcpClient(fullEncryptedAgentId);
+      }
+      await chatMcpClient.__test.clearToolCache();
     }
   });
 });

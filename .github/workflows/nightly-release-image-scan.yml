@@ -109,6 +109,7 @@ jobs:
     steps:
       # The webhook lives in GCP Secret Manager. A dedicated service account
       # reads only the alerting secrets, so no repository secret holds it.
+      # This one posts to #alerts; ci-alerts-slack-webhook-url posts to #approvals.
       - name: Authenticate to read the alerting webhook
         uses: archestra-ai/.github/actions/google-auth@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
         with:
@@ -120,7 +121,7 @@ jobs:
         uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3.0.0
         with:
           secrets: |-
-            slack_webhook_url:friendly-path-465518-r6/ci-alerts-slack-webhook-url
+            slack_webhook_url:friendly-path-465518-r6/ci-release-image-scan-slack-webhook-url
 
       - name: Post failures to alerting
         env:

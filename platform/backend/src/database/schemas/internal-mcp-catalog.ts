@@ -39,6 +39,16 @@ const internalMcpCatalogTable = softDeletablePgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
+    /**
+     * The prefix this item's tools carry, when it is not the slugified name:
+     * a shorter one, cut at a word boundary, when the name leaves a tool no
+     * room under the 64-character tool-name limit, with a `-2`, `-3` suffix
+     * when another item already carries that cut; and for an app, its own
+     * prefix, so two apps of one name never share tool names. NULL means
+     * the slugified name. Written only by the tool-name allocation
+     * (`services/mcp-tool-names.ts`), never from input.
+     */
+    toolPrefix: text("tool_prefix"),
     version: text("version"),
     description: text("description"),
     instructions: text("instructions"),

@@ -1,10 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
+  catalogToolPrefix,
   getGithubWebOrigin,
   gitHostFromUrl,
   isBuiltInCatalogId,
   parseFullToolName,
-  slugifyMcpServerName,
   TimeInMs,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -3888,19 +3888,19 @@ type ToolPrefixes = Awaited<ReturnType<typeof catalogToolPrefixes>>;
 
 /**
  * Why a server has no rules file, or `null` when it has one. The file is
- * named by the server's own slug, which must be a safe file name, and every
+ * named by the server's own tool prefix, which must be a safe file name, and every
  * one of its tools carries that prefix, so no server reaches another's file,
  * or the built-in tools, through its name. Other servers whose tools carry
  * the same prefix share the file.
  */
 export function rulesFileRefusal(params: {
-  catalog: { id: string; name: string };
+  catalog: { id: string; name: string; toolPrefix?: string | null };
   /** The server's own tool names. */
   tools: readonly string[];
   prefixes: ToolPrefixes;
 }): string | null {
   const { catalog, tools, prefixes } = params;
-  const prefix = slugifyMcpServerName(catalog.name);
+  const prefix = catalogToolPrefix(catalog);
   if (!SAFE_PREFIX.test(prefix) || prefix.includes("__"))
     return `${catalog.name} has no rules file: its tool prefix, ${prefix}, is not a safe file name or holds "__".`;
   const stray = [

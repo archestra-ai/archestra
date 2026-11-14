@@ -33,6 +33,24 @@ describe("buildToolIconMap", () => {
     });
   });
 
+  it("resolves a tool by its server's allocated prefix when the name was too long", () => {
+    const map = buildToolIconMap({
+      agentTools: [],
+      catalogItems: [
+        {
+          id: "cat-long",
+          name: "Spark Smartsheet Jira Description Review Server",
+          toolPrefix: "spark_smartsheet_jira_description",
+          icon: "📋",
+        },
+      ],
+    });
+
+    expect(
+      map.get("spark_smartsheet_jira_description__validate-description-review"),
+    ).toEqual({ icon: "📋", catalogId: "cat-long" });
+  });
+
   it("returns nothing for a tool with no matching catalog", () => {
     const map = buildToolIconMap({ agentTools: [], catalogItems });
 

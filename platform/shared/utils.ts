@@ -25,6 +25,18 @@ export function slugifyMcpServerName(name: string): string {
 }
 
 /**
+ * The prefix an MCP catalog item's tools carry before the separator: the one
+ * the backend allocated when the item's name was too long to fit its tools
+ * (or to tell two apps apart), else the item's slugified name.
+ */
+export function catalogToolPrefix(catalog: {
+  name: string;
+  toolPrefix?: string | null;
+}): string {
+  return catalog.toolPrefix ?? slugifyMcpServerName(catalog.name);
+}
+
+/**
  * Slugify a name to create a URL-safe identifier
  * Used for generating tool names from prompt/agent names
  */

@@ -104,6 +104,7 @@ import { reportAbnormalPreviousTermination } from "@/observability/previous-term
 import { rumExporter } from "@/observability/rum/exporter.ee";
 import { createCachedOpenApiRouteHandler } from "@/openapi/cached-openapi-route";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   declareOpenappaInstalls,
   openappaReadiness,
@@ -128,6 +129,7 @@ import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
 import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
 import { mcpImageUpdateChecker } from "@/services/mcp-image-update-checker";
+import { reconcileCatalogToolPrefixes } from "@/services/mcp-tool-names";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { initializeManagedPlaywrightRuntime } from "@/services/playwright-runtime";
 import { ensureScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
@@ -184,7 +186,10 @@ import {
   beginLlmProxyDrain,
   drainLlmProxyRequests,
 } from "./server/llm-proxy-drain";
-import { drainBackgroundWork } from "./utils/background-work";
+import {
+  drainBackgroundWork,
+  trackBackgroundWork,
+} from "./utils/background-work";
 
 async function flushShutdownTelemetry(): Promise<void> {
   if (!isMainModule) return;
@@ -953,6 +958,21 @@ const startWebServer = async () => {
     // SPDX-SnippetEnd
 
     await seedRequiredStartingData();
+
+    // Move tools whose names were cut and hashed to fit the 64-character
+    // limit (and apps' launch tools) to their catalog item's allocated
+    // prefix, before OpenAPPA reads tool prefixes below.
+    const renamedToolCatalogIds = await reconcileCatalogToolPrefixes().catch(
+      (error) => {
+        logger.error({ error }, "Failed to reconcile catalog tool prefixes");
+        return [];
+      },
+    );
+    for (const catalogId of renamedToolCatalogIds) {
+      trackBackgroundWork(
+        openappaBatteriesService.onCatalogToolsChanged(catalogId),
+      );
+    }
 
     // Carry the legacy OpenAPPA battery installs into the policy text, before
     // the runtime opens and before the periodic recompile is registered below:

@@ -82,6 +82,7 @@ import {
   assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
+import { applyAgentRuntimeLock } from "@/services/agent-runtime/agent-runtime-lock";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
@@ -793,6 +794,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           403,
           "Cannot create an agent in another organization",
         );
+      }
+      if (body.runtime !== undefined) {
+        body.runtime = await applyAgentRuntimeLock({
+          organizationId,
+          userId: user.id,
+          runtime: body.runtime,
+        });
       }
       await requireAgentRuntimePermission({
         agentType,
@@ -2098,6 +2106,16 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(404, "Agent not found");
         }
         throw error;
+      }
+      // Only a body that sets the runtime carries one: assigning `undefined`
+      // would leave a `runtime` key with nothing to save.
+      if (body.runtime !== undefined) {
+        body.runtime = await applyAgentRuntimeLock({
+          organizationId,
+          userId: user.id,
+          runtime: body.runtime,
+          previous: existingAgent.runtime,
+        });
       }
       await requireAgentRuntimePermission({
         agentType: existingAgent.agentType,

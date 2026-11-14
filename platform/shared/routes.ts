@@ -1,5 +1,6 @@
 export const RouteId = {
   ListAgentRuntimeTemplates: "listAgentRuntimeTemplates",
+  ListBuiltInAgentRuntimeSettings: "listBuiltInAgentRuntimeSettings",
   GetAgentRuntimeTemplate: "getAgentRuntimeTemplate",
   GetRuntimeTemplateSettings: "getRuntimeTemplateSettings",
   SaveRuntimeTemplateSettings: "saveRuntimeTemplateSettings",
@@ -206,6 +207,7 @@ export const RouteId = {
   DeleteMcpServer: "deleteMcpServer",
   BulkDeleteMcpServers: "bulkDeleteMcpServers",
   RestoreMcpServer: "restoreMcpServer",
+  UpdateMcpServerDesktopArguments: "updateMcpServerDesktopArguments",
   ReauthenticateMcpServer: "reauthenticateMcpServer",
   ReinstallMcpServer: "reinstallMcpServer",
   HardResetMcpServer: "hardResetMcpServer",
@@ -688,25 +690,6 @@ export const RouteId = {
   RotateOauthClientSecret: "rotateOauthClientSecret",
   DeleteOauthClient: "deleteOauthClient",
   BulkDeleteOauthClients: "bulkDeleteOauthClients",
-
-  // LLM OAuth Client Routes
-  GetLlmOauthClients: "getLlmOauthClients",
-  GetLlmOauthClientLabelValues: "llmOauthClientLabelValues",
-  GetLlmOauthClientLabelKeys: "llmOauthClientLabelKeys",
-  CreateLlmOauthClient: "createLlmOauthClient",
-  UpdateLlmOauthClient: "updateLlmOauthClient",
-  RotateLlmOauthClientSecret: "rotateLlmOauthClientSecret",
-  DeleteLlmOauthClient: "deleteLlmOauthClient",
-  BulkDeleteLlmOauthClients: "bulkDeleteLlmOauthClients",
-
-  // MCP OAuth Client Routes
-  GetMcpOauthClients: "getMcpOauthClients",
-  GetMcpOauthClientLabelValues: "mcpOauthClientLabelValues",
-  GetMcpOauthClientLabelKeys: "mcpOauthClientLabelKeys",
-  CreateMcpOauthClient: "createMcpOauthClient",
-  UpdateMcpOauthClient: "updateMcpOauthClient",
-  RotateMcpOauthClientSecret: "rotateMcpOauthClientSecret",
-  DeleteMcpOauthClient: "deleteMcpOauthClient",
 
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",

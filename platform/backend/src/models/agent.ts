@@ -79,6 +79,7 @@ import {
   AgentActivationSkillModeSchema,
   type AgentListItem,
   type AgentOption,
+  type AgentRuntime,
   type AgentScope,
   type AgentScopeFilter,
   type AgentToolRef,
@@ -4299,6 +4300,51 @@ class AgentModel {
     return updated.length > 0;
   }
 
+  /**
+   * The organization's agents that have a runtime, with the model their runs
+   * use. Inside a transaction the rows stay locked until it ends.
+   */
+  static async findWithRuntime(params: {
+    organizationId: string;
+    tx?: Transaction;
+  }) {
+    const query = (params.tx ?? db)
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        runtime: schema.agentsTable.runtime,
+        llmApiKeyId: schema.agentsTable.llmApiKeyId,
+        modelId: schema.agentsTable.modelId,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          isNotNull(schema.agentsTable.runtime),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .$dynamic();
+    // In a transaction that rewrites them, hold the rows until it commits so
+    // a concurrent agent edit is not overwritten by this read.
+    const rows = await (params.tx ? query.for("update") : query);
+    return rows.flatMap(({ runtime, ...row }) =>
+      runtime ? [{ ...row, runtime }] : [],
+    );
+  }
+
+  /** Replace an agent's runtime configuration and nothing else. */
+  static async setRuntime(params: {
+    id: string;
+    runtime: AgentRuntime;
+    tx: Transaction;
+  }): Promise<void> {
+    await params.tx
+      .update(schema.agentsTable)
+      .set({ runtime: params.runtime, updatedAt: new Date() })
+      .where(eq(schema.agentsTable.id, params.id));
+  }
+
   /** Change only ownership, and refuse a stale authorization snapshot. */
   static async transferOwnership(params: {
     id: string;
@@ -5462,6 +5508,13 @@ class AgentModel {
           modelId: sourceAgent.modelId,
           identityProviderId: null,
           passthroughHeaders: null,
+          // The runtime holds only configuration and credential declarations;
+          // the clone route checks the caller may configure it and read the
+          // credentials it names. Shared values stay in the source's secret
+          // bag (`runtimeSecretId`, not copied), so the copy needs its own.
+          runtime: sourceAgent.runtime
+            ? structuredClone(sourceAgent.runtime)
+            : null,
         },
         cloneScope === "personal" ? userId : undefined,
         // Copy the source's assignments verbatim below; don't let create's

@@ -509,6 +509,10 @@ the injection.
 - name: ARCHESTRA_ORCHESTRATOR_KUBECONFIG
   value: {{ printf "%s/config" .Values.archestra.orchestrator.kubernetes.kubeconfig.mountPath | quote }}
 {{- end }}
+{{- if not .Values.archestra.orchestrator.enabled }}
+- name: ARCHESTRA_ORCHESTRATOR_ENABLED
+  value: "false"
+{{- end }}
 - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
   value: {{ .Values.archestra.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster | quote }}
 {{- if .Values.archestra.orchestrator.kubernetes.clusterDomain }}

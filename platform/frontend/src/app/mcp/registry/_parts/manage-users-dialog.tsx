@@ -18,6 +18,7 @@ import {
   Check,
   ChevronsUpDown,
   Laptop,
+  Pencil,
   Plus,
   RefreshCw,
   Trash,
@@ -74,7 +75,7 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useDesktopComputer } from "@/lib/desktop-device.query";
-import { DESKTOP_MCP_COPY } from "@/lib/mcp/desktop-mcp";
+import { DESKTOP_MCP_COPY, desktopMcpCommandOf } from "@/lib/mcp/desktop-mcp";
 import { useUpdateInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
@@ -90,11 +91,13 @@ import {
   getDeploymentLabel,
   STATE_PRIORITY,
 } from "./deployment-status";
+import { DesktopMcpArgumentsDialog } from "./desktop-mcp-arguments-dialog";
 import {
   desktopRowState,
   hasDesktopTarget,
   ownDesktopComputerLine,
 } from "./desktop-mcp-install";
+import { DesktopMcpInstallDialog } from "./desktop-mcp-install-dialog";
 import { getLocalInstallationCopy } from "./local-installation-copy";
 import { usesInstallations } from "./mcp-server-type";
 import { personalConnectionsCopy } from "./personal-connections-copy";
@@ -293,6 +296,12 @@ export function ManageUsersContent({
   };
 
   const deleteMcpServerMutation = useDeleteMcpServer();
+  // The viewer's own desktop MCP installation whose arguments are edited,
+  // then the one the Connect dialog follows after a save.
+  const [argumentsTarget, setArgumentsTarget] = useState<ServerEntry | null>(
+    null,
+  );
+  const [followServerId, setFollowServerId] = useState<string | null>(null);
   const [uninstallTarget, setUninstallTarget] = useState<
     (typeof allServers)[number] | null
   >(null);
@@ -417,6 +426,13 @@ export function ManageUsersContent({
   // section says so instead of offering an Add that the backend refuses.
   const desktopNotSetUp =
     isDesktopMcp && !hasDesktopTarget(catalogItem?.desktopConfig);
+  // The viewer changes the arguments they added to the command, for their
+  // own installation. An item with no command takes none.
+  const desktopCommand = isDesktopMcp
+    ? desktopMcpCommandOf(catalogItem?.desktopConfig)
+    : null;
+  const editDesktopArguments =
+    desktopCommand === null ? null : setArgumentsTarget;
   const hasInstallations = usesInstallations(catalogItem?.serverType);
   const installationCopy = getLocalInstallationCopy(
     catalogItem?.multitenant === true,
@@ -468,7 +484,13 @@ export function ManageUsersContent({
     isDeleting: deleteMcpServerMutation.isPending,
     onOpenPodLogs,
     showInfrastructure: !isMemberView,
-    desktop: isDesktopMcp ? { viewerDeviceName, viewerHasComputer } : null,
+    desktop: isDesktopMcp
+      ? {
+          viewerDeviceName,
+          viewerHasComputer,
+          onEditArguments: editDesktopArguments,
+        }
+      : null,
   };
 
   return (
@@ -560,6 +582,11 @@ export function ManageUsersContent({
                 setUninstallTarget(split.myPersonalServer);
               }
             }}
+            onEditArguments={
+              editDesktopArguments && split.myPersonalServer
+                ? () => setArgumentsTarget(split.myPersonalServer ?? null)
+                : undefined
+            }
             isAdding={isInstalling}
             isRemoving={deleteMcpServerMutation.isPending}
           />
@@ -663,6 +690,35 @@ export function ManageUsersContent({
         }
       />
 
+      {argumentsTarget && catalogItem && desktopCommand !== null ? (
+        <DesktopMcpArgumentsDialog
+          key={argumentsTarget.id}
+          name={catalogItem.name}
+          command={desktopCommand}
+          server={argumentsTarget}
+          onClose={() => setArgumentsTarget(null)}
+          onSaved={() => {
+            // The device starts the server again: the Connect dialog
+            // follows it until its tools are read.
+            setFollowServerId(argumentsTarget.id);
+            setArgumentsTarget(null);
+          }}
+        />
+      ) : null}
+
+      {followServerId && catalogItem ? (
+        <DesktopMcpInstallDialog
+          isOpen
+          onClose={() => setFollowServerId(null)}
+          // Follows the installation the arguments were saved for; it adds
+          // none.
+          onAdd={async () => null}
+          catalogItem={catalogItem}
+          isAdding={false}
+          followServerId={followServerId}
+        />
+      ) : null}
+
       {!hideHeader && (
         <DialogStickyFooter>
           <Button variant="outline" onClick={onClose}>
@@ -702,6 +758,11 @@ interface RowRenderProps {
     viewerDeviceName: string | null;
     /** Whether the viewer has a computer; undefined while not known. */
     viewerHasComputer: boolean | "checking" | undefined;
+    /**
+     * Opens the arguments of the viewer's own installation; null for an
+     * item with no command, which takes none.
+     */
+    onEditArguments: ((s: ServerEntry) => void) | null;
   } | null;
 }
 
@@ -946,6 +1007,15 @@ function ConnectionTableRow({
       onClick: () => handleReauthenticate(server),
       disabled: !canReauthenticate(server),
       disabledTooltip: getReauthTooltip(server),
+    });
+  }
+  // Only the user who connected it sets what runs on their device.
+  const editArguments = isYou ? desktop?.onEditArguments : null;
+  if (editArguments) {
+    actions.push({
+      icon: <Pencil className="size-4" />,
+      label: "Edit arguments",
+      onClick: () => editArguments(server),
     });
   }
   actions.push({
@@ -1314,6 +1384,7 @@ function OwnDesktopComputerRow({
   line,
   onAdd,
   onRemove,
+  onEditArguments,
   isAdding,
   isRemoving,
 }: {
@@ -1321,6 +1392,8 @@ function OwnDesktopComputerRow({
   /** Undefined when the viewer may not add it. */
   onAdd?: () => void;
   onRemove: () => void;
+  /** Undefined for an item with no command: it takes no arguments. */
+  onEditArguments?: () => void;
   isAdding: boolean;
   isRemoving: boolean;
 }) {
@@ -1353,17 +1426,30 @@ function OwnDesktopComputerRow({
         </Button>
       ) : null}
       {line.action === "remove" ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground hover:text-foreground"
-          disabled={isRemoving}
-          onClick={onRemove}
-          data-testid={`${E2eTestId.RevokeCredentialButton}-personal`}
-        >
-          <Trash className="h-4 w-4" />
-          <span>{DESKTOP_MCP_COPY.remove}</span>
-        </Button>
+        <div className="flex flex-wrap items-center gap-1">
+          {onEditArguments ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={onEditArguments}
+            >
+              <Pencil className="h-4 w-4" />
+              <span>Edit arguments</span>
+            </Button>
+          ) : null}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground"
+            disabled={isRemoving}
+            onClick={onRemove}
+            data-testid={`${E2eTestId.RevokeCredentialButton}-personal`}
+          >
+            <Trash className="h-4 w-4" />
+            <span>{DESKTOP_MCP_COPY.remove}</span>
+          </Button>
+        </div>
       ) : null}
     </div>
   );

@@ -27,6 +27,7 @@ for (const width of [320, 375]) {
           body: {
             batteries: [],
             unusedAliases: [],
+            repositoryFiles: [],
             rootRevision: 3,
             lastError: null,
             composition: {

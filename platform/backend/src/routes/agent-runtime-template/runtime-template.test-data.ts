@@ -57,6 +57,7 @@ export function makeTemplate(
     icon: null,
     hidden: false,
     position: 1,
+    locked: false,
     runtime: {
       ...buildCustomAgentRuntime({ image: "registry.example.com/agent:v1" }),
       privileged: false,

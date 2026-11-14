@@ -7,6 +7,8 @@ import {
   getTableColumns,
   gte,
   ilike,
+  inArray,
+  isNull,
   lt,
   lte,
   or,
@@ -236,45 +238,103 @@ class AuditLogModel {
     resourceId?: string;
     limit: number;
   }): Promise<
-    Array<{ resourceType: string; resourceId: string; name: string }>
+    Array<{
+      resourceType: string;
+      resourceId: string;
+      name: string;
+      detail: string | null;
+    }>
   > {
     if (opts.resourceTypes.length === 0) return [];
+    const types = sql.join(
+      opts.resourceTypes.map((type) => sql`(${type}::text)`),
+      sql`, `,
+    );
+    const table = schema.auditLogsTable;
+    // A skip scan: Postgres cannot jump between distinct keys of an index on
+    // its own, so a plain DISTINCT ON reads every event of these types. The
+    // recursive walk seeks once per resource instead (each step an index-only
+    // probe on audit_logs_org_resource_latest_idx), so the cost follows the
+    // number of resources, not the number of events.
+    // One known resource, or a caller scoped to its own events (enumerated
+    // from the actor index, bounded by what they did), skip the walk.
+    const resources =
+      opts.resourceId || opts.actorId
+        ? sql`
+        SELECT DISTINCT resource_type, resource_id
+        FROM ${table}
+        WHERE organization_id = ${opts.organizationId}
+          AND resource_type IN (SELECT resource_type FROM types)
+          AND resource_id IS NOT NULL
+          ${opts.resourceId ? sql`AND resource_id = ${opts.resourceId}` : sql``}
+          ${opts.actorId ? sql`AND actor_id = ${opts.actorId}` : sql``}`
+        : sql`
+        SELECT resource_type, resource_id FROM walk`;
     const result = await db.execute<{
       resource_type: string;
       resource_id: string;
       resource_name: string;
     }>(sql`
-      WITH latest AS (
-        SELECT DISTINCT ON (resource_type, resource_id)
-          resource_type, resource_id, resource_name
-        FROM ${schema.auditLogsTable}
+      WITH RECURSIVE types(resource_type) AS (VALUES ${types}),
+      walk(resource_type, resource_id) AS (
+        SELECT types.resource_type, first.resource_id
+        FROM types
+        CROSS JOIN LATERAL (
+          SELECT resource_id FROM ${table}
+          WHERE organization_id = ${opts.organizationId}
+            AND resource_type = types.resource_type
+            AND resource_id IS NOT NULL
+          ORDER BY resource_id
+          LIMIT 1
+        ) first
+        UNION ALL
+        SELECT walk.resource_type, next.resource_id
+        FROM walk
+        CROSS JOIN LATERAL (
+          SELECT resource_id FROM ${table}
+          WHERE organization_id = ${opts.organizationId}
+            AND resource_type = walk.resource_type
+            AND resource_id IS NOT NULL
+            AND resource_id > walk.resource_id
+          ORDER BY resource_id
+          LIMIT 1
+        ) next
+      ),
+      resources AS (${resources})
+      SELECT resources.resource_type, resources.resource_id, latest.resource_name
+      FROM resources
+      CROSS JOIN LATERAL (
+        SELECT resource_name FROM ${table}
         WHERE organization_id = ${opts.organizationId}
-          AND resource_type IN (${sql.join(
-            opts.resourceTypes.map((type) => sql`${type}`),
-            sql`, `,
-          )})
-          AND resource_id IS NOT NULL
+          AND resource_type = resources.resource_type
+          AND resource_id = resources.resource_id
           AND resource_name IS NOT NULL
-          ${opts.resourceId ? sql`AND resource_id = ${opts.resourceId}` : sql``}
           ${opts.actorId ? sql`AND actor_id = ${opts.actorId}` : sql``}
-        -- NULLS LAST matches the index, so the scan needs no sort.
-        ORDER BY resource_type, resource_id,
-          created_at DESC NULLS LAST, event_sequence DESC NULLS LAST
-      )
-      SELECT resource_type, resource_id, resource_name
-      FROM latest
+        -- NULLS LAST matches the index, so the probe needs no sort.
+        ORDER BY created_at DESC NULLS LAST, event_sequence DESC NULLS LAST
+        LIMIT 1
+      ) latest
       ${
         opts.search
-          ? sql`WHERE resource_name ILIKE ${`%${escapeLikePattern(opts.search)}%`}`
+          ? sql`WHERE latest.resource_name ILIKE ${`%${escapeLikePattern(opts.search)}%`}`
           : sql``
       }
-      ORDER BY resource_name, resource_type, resource_id
+      ORDER BY latest.resource_name, resources.resource_type, resources.resource_id
       LIMIT ${opts.limit}
     `);
-    return result.rows.map((row) => ({
+    const options = result.rows.map((row) => ({
       resourceType: row.resource_type,
       resourceId: row.resource_id,
       name: row.resource_name,
+    }));
+    const details = await AuditLogModel.findResourceDetails({
+      organizationId: opts.organizationId,
+      resources: options,
+    });
+    return options.map((option) => ({
+      ...option,
+      detail:
+        details.get(`${option.resourceType}:${option.resourceId}`) ?? null,
     }));
   }
 
@@ -359,8 +419,17 @@ class AuditLogModel {
       conditions.push(eq(schema.auditLogsTable.actorType, opts.actorType));
     }
     if (opts.resourceType) {
+      // A comma-separated list matches any of the types: the event filter
+      // offers types that share a page as one entry (a device and its
+      // sign-ins).
+      const resourceTypes = opts.resourceType
+        .split(",")
+        .map((type) => type.trim())
+        .filter(Boolean);
       conditions.push(
-        eq(schema.auditLogsTable.resourceType, opts.resourceType),
+        resourceTypes.length === 1
+          ? eq(schema.auditLogsTable.resourceType, resourceTypes[0])
+          : inArray(schema.auditLogsTable.resourceType, resourceTypes),
       );
     }
     if (opts.resourceId) {
@@ -392,6 +461,190 @@ class AuditLogModel {
           desc(schema.auditLogsTable.eventSequence),
         ];
   }
+  /**
+   * A second line for each listed resource, read from the resource itself:
+   * its owner, then its description. A resource whose row is gone gets none;
+   * a soft-deleted one keeps its line, which still tells it apart. The owner
+   * comes first because per-member objects share a name ("My Assistant" is
+   * seeded once per member).
+   */
+  private static async findResourceDetails(opts: {
+    organizationId: string;
+    resources: { resourceType: string; resourceId: string }[];
+  }): Promise<Map<string, string>> {
+    const idsOf = (type: string, uuidOnly = true) =>
+      opts.resources
+        .filter(
+          (r) =>
+            r.resourceType === type &&
+            (!uuidOnly || UUID_RE.test(r.resourceId)),
+        )
+        .map((r) => r.resourceId);
+    const owner = schema.usersTable;
+    const org = opts.organizationId;
+    const describe = (row: {
+      ownerName?: string | null;
+      description: string | null;
+    }) =>
+      [row.ownerName?.trim(), row.description?.trim()]
+        .filter(Boolean)
+        .join(" · ") || null;
+
+    const [agents, skills, mcpServers, apps, environments, roles, teams] =
+      await Promise.all([
+        AuditLogModel.detailRows(idsOf("agent"), (ids) =>
+          db
+            .select({
+              id: schema.agentsTable.id,
+              ownerName: owner.name,
+              description: schema.agentsTable.description,
+            })
+            .from(schema.agentsTable)
+            .leftJoin(owner, eq(owner.id, schema.agentsTable.authorId))
+            .where(
+              and(
+                eq(schema.agentsTable.organizationId, org),
+                inArray(schema.agentsTable.id, ids),
+              ),
+            ),
+        ),
+        AuditLogModel.detailRows(idsOf("skill"), (ids) =>
+          db
+            .select({
+              id: schema.skillsTable.id,
+              ownerName: owner.name,
+              description: schema.skillsTable.description,
+            })
+            .from(schema.skillsTable)
+            .leftJoin(owner, eq(owner.id, schema.skillsTable.authorId))
+            .where(
+              and(
+                eq(schema.skillsTable.organizationId, org),
+                inArray(schema.skillsTable.id, ids),
+              ),
+            ),
+        ),
+        AuditLogModel.detailRows(idsOf("mcpServer"), (ids) =>
+          db
+            .select({
+              id: schema.mcpServersTable.id,
+              ownerName: owner.name,
+              description: schema.internalMcpCatalogTable.description,
+            })
+            .from(schema.mcpServersTable)
+            .innerJoin(
+              schema.internalMcpCatalogTable,
+              eq(
+                schema.internalMcpCatalogTable.id,
+                schema.mcpServersTable.catalogId,
+              ),
+            )
+            .leftJoin(owner, eq(owner.id, schema.mcpServersTable.ownerId))
+            .where(
+              and(
+                // A catalog entry without an organization serves every one.
+                or(
+                  isNull(schema.internalMcpCatalogTable.organizationId),
+                  eq(schema.internalMcpCatalogTable.organizationId, org),
+                ),
+                inArray(schema.mcpServersTable.id, ids),
+              ),
+            ),
+        ),
+        AuditLogModel.detailRows(idsOf("app"), (ids) =>
+          db
+            .select({
+              id: schema.appsTable.id,
+              ownerName: owner.name,
+              description: schema.appsTable.description,
+            })
+            .from(schema.appsTable)
+            .leftJoin(owner, eq(owner.id, schema.appsTable.authorId))
+            .where(
+              and(
+                eq(schema.appsTable.organizationId, org),
+                inArray(schema.appsTable.id, ids),
+              ),
+            ),
+        ),
+        AuditLogModel.detailRows(idsOf("environment"), (ids) =>
+          db
+            .select({
+              id: schema.environmentsTable.id,
+              description: schema.environmentsTable.description,
+            })
+            .from(schema.environmentsTable)
+            .where(
+              and(
+                eq(schema.environmentsTable.organizationId, org),
+                inArray(schema.environmentsTable.id, ids),
+              ),
+            ),
+        ),
+        AuditLogModel.detailRows(idsOf("role", false), (ids) =>
+          db
+            .select({
+              id: schema.organizationRolesTable.id,
+              description: schema.organizationRolesTable.description,
+            })
+            .from(schema.organizationRolesTable)
+            .where(
+              and(
+                eq(schema.organizationRolesTable.organizationId, org),
+                inArray(schema.organizationRolesTable.id, ids),
+              ),
+            ),
+        ),
+        AuditLogModel.detailRows(idsOf("team", false), (ids) =>
+          db
+            .select({
+              id: schema.teamsTable.id,
+              description: schema.teamsTable.description,
+            })
+            .from(schema.teamsTable)
+            .where(
+              and(
+                eq(schema.teamsTable.organizationId, org),
+                inArray(schema.teamsTable.id, ids),
+              ),
+            ),
+        ),
+      ]);
+
+    const details = new Map<string, string>();
+    const add = (
+      type: string,
+      rows: {
+        id: string;
+        ownerName?: string | null;
+        description: string | null;
+      }[],
+    ) => {
+      for (const row of rows) {
+        const detail = describe(row);
+        if (detail) details.set(`${type}:${row.id}`, detail);
+      }
+    };
+    add("agent", agents);
+    add("skill", skills);
+    add("mcpServer", mcpServers);
+    add("app", apps);
+    add("environment", environments);
+    add("role", roles);
+    add("team", teams);
+    return details;
+  }
+
+  /** Runs a per-type detail query only when there are ids to look up. */
+  private static async detailRows<T>(
+    ids: string[],
+    query: (ids: string[]) => Promise<T[]>,
+  ): Promise<T[]> {
+    return ids.length > 0 ? query(ids) : [];
+  }
 }
 
 export default AuditLogModel;
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

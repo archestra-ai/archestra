@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "What each built-in role can do, and every permission a custom role can hold"
 order: 2
-lastUpdated: 2026-11-11
+lastUpdated: 2026-11-13
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -146,8 +146,8 @@ A [custom role](/docs/admin/access-control#custom-roles) can hold any of these p
 | <span id="llmProxy:update"></span>`llmProxy:update` | Modify LLM Proxy configuration |
 | <span id="llmVirtualKey:read"></span>`llmVirtualKey:read` | Open LLM virtual keys |
 | <span id="llmVirtualKey:create"></span>`llmVirtualKey:create` | Create LLM virtual keys |
-| <span id="log:read"></span>`log:read` | View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells |
-| <span id="log:admin"></span>`log:admin` | View every LLM, MCP, and Guardrails consult log in your organization (also requires Read) |
+| <span id="log:read"></span>`log:read` | View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells |
+| <span id="log:admin"></span>`log:admin` | View every LLM, MCP, and Guardrails consult log and yell in your organization (also requires Read) |
 | <span id="mcpGateway:read"></span>`mcpGateway:read` | Open MCP Gateways |
 | <span id="mcpGateway:create"></span>`mcpGateway:create` | Create new MCP gateways |
 | <span id="mcpGateway:delete"></span>`mcpGateway:delete` | Open the trash of deleted MCP gateways |

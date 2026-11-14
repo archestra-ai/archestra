@@ -1635,14 +1635,17 @@ export function parseCommaSeparatedList(value: string): string[] {
 export const getAnalyticsConfig = () => {
   return {
     // Analytics (PostHog product analytics, instance heartbeats, and error
-    // reports to Archestra's Sentry) defaults to on only in production builds.
-    // Local dev and test runs (bare `pnpm dev`, vitest — where NODE_ENV isn't
-    // "production") stay silent unless ARCHESTRA_ANALYTICS is explicitly set,
+    // reports to Archestra's Sentry) defaults to on only in production builds
+    // without an activated enterprise license. Local dev and test runs (bare
+    // `pnpm dev`, vitest — where NODE_ENV isn't "production") and enterprise
+    // deployments stay silent unless ARCHESTRA_ANALYTICS is explicitly set,
     // which always wins in both directions ("disabled" → off, any other value
     // → on). Evaluated at call time so tests can exercise both environments.
     enabled: isAnalyticsEnabled({
       analytics: process.env.ARCHESTRA_ANALYTICS,
       nodeEnv: process.env.NODE_ENV,
+      enterpriseLicenseActivated:
+        process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
     }),
     posthog: {
       key:
@@ -2148,12 +2151,14 @@ export const isCodeRuntimeEnabled = ({
   codeRuntimeEnabledEnv,
   kubeconfig,
   loadKubeconfigFromCurrentCluster,
+  orchestratorEnabledEnv,
 }: {
   runnerHost: string | undefined;
   runnerHostEnv: string | undefined;
   codeRuntimeEnabledEnv: string | undefined;
   kubeconfig: string | undefined;
   loadKubeconfigFromCurrentCluster: string | undefined;
+  orchestratorEnabledEnv?: string | undefined;
 }): boolean => {
   if (codeRuntimeEnabledEnv === "false") return false;
   if (runnerHost !== undefined) return true;
@@ -2164,8 +2169,9 @@ export const isCodeRuntimeEnabled = ({
   const runnerHostRejected = (runnerHostEnv?.trim().length ?? 0) > 0;
   if (runnerHostRejected) return false;
   const k8sConfigured =
-    loadKubeconfigFromCurrentCluster === "true" ||
-    (kubeconfig?.trim().length ?? 0) > 0;
+    orchestratorEnabledEnv !== "false" &&
+    (loadKubeconfigFromCurrentCluster === "true" ||
+      (kubeconfig?.trim().length ?? 0) > 0);
   return codeRuntimeEnabledEnv === "true" && k8sConfigured;
 };
 
@@ -2450,6 +2456,7 @@ const skillsSandboxEnabled = isCodeRuntimeEnabled({
   kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
   loadKubeconfigFromCurrentCluster:
     process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER,
+  orchestratorEnabledEnv: process.env.ARCHESTRA_ORCHESTRATOR_ENABLED,
 });
 // the Dagger runtime fronts the sandbox; enabling the sandbox lights it up.
 // runnerHost is the optional process-default/BYO engine — unset in the
@@ -2990,6 +2997,17 @@ const config = {
     subscriptionAutodetect:
       process.env.ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT !== "false",
   },
+  // The automatic keys of keyless providers (Vertex AI, Entra ID, IAM). Kept
+  // out of `llm` for the same reason as `llmCost`.
+  llmSystemKeys: {
+    // On (default): this deployment deletes a provider's system key once the
+    // provider is no longer enabled in its environment. Off: it never deletes
+    // one. For deployments sharing a database, where a provider enabled in
+    // only one of them would otherwise lose its key, virtual key mappings and
+    // model pool members whenever another one starts.
+    autoDeleteEnabled:
+      process.env.ARCHESTRA_LLM_SYSTEM_KEYS_AUTO_DELETE_ENABLED !== "false",
+  },
   llm: {
     openai: {
       baseUrl:
@@ -3468,6 +3486,14 @@ const config = {
    */
   codegenMode: process.env.CODEGEN === "true",
   orchestrator: {
+    /**
+     * `ARCHESTRA_ORCHESTRATOR_ENABLED=false` turns the Kubernetes orchestrator
+     * off: no kubeconfig is loaded (not even the in-cluster service account)
+     * and nothing in the cluster is created, changed or deleted. For an
+     * install that shares its database with another install that owns the
+     * workloads.
+     */
+    enabled: process.env.ARCHESTRA_ORCHESTRATOR_ENABLED !== "false",
     mcpServerBaseImage,
     mcpServerResources,
     /**

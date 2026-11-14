@@ -66,6 +66,29 @@ export const SHOTS: Shot[] = [
     },
   },
   {
+    asset: "automated_screenshots/mcp-servers-desktop_device",
+    route: () => "/account/devices",
+    viewport: { width: 1440, height: 520 },
+  },
+  {
+    asset: "automated_screenshots/mcp-servers-desktop_add",
+    route: () => "/mcp/registry/new",
+    viewport: { width: 1440, height: 1000 },
+    prepare: async (page) => {
+      await page.getByText("Start from scratch").click();
+      await page.getByPlaceholder("e.g., GitHub MCP Server").fill("MATLAB");
+      await page
+        .getByPlaceholder("Describe what this MCP server does...")
+        .fill("Runs MATLAB code and opens figures on your device");
+      await page.getByText("Desktop", { exact: true }).click();
+      await page
+        .getByPlaceholder("/Users/$USER/bins/mcp")
+        .fill(
+          "$HOME/matlab-mcp/matlab-mcp-server --initial-working-folder=$HOME/matlab-mcp/project",
+        );
+    },
+  },
+  {
     asset: "automated_screenshots/mcp-servers-installing_install",
     route: () => "/mcp/registry",
     prepare: async (page) => {
@@ -506,7 +529,7 @@ export const SHOTS: Shot[] = [
   },
   {
     asset: "automated_screenshots/agents-runtime-setup_runtime-tiers",
-    route: () => "/settings/agents",
+    route: () => "/settings/agents/runtimes",
     beforeNavigate: showRuntimeTierSettings,
     prepare: async (page) => {
       const block = page.locator("#runtime-tiers");
@@ -518,7 +541,7 @@ export const SHOTS: Shot[] = [
   },
   {
     asset: "automated_screenshots/agents-runtime-setup_tier-memory",
-    route: () => "/settings/agents",
+    route: () => "/settings/agents/runtimes",
     beforeNavigate: showRuntimeTierSettings,
     prepare: async (page) => {
       await page

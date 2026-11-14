@@ -13,6 +13,7 @@ import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { packageContentHash } from "@/openappa/declarations";
+import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
 import { secretManager } from "@/secrets-manager";
 import { createGitlabToken } from "@/services/git-credentials";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
@@ -20,6 +21,7 @@ import {
   checkDueAppaGithubSyncs,
   configureAppaGithubSync,
   createAppaGithubRepository,
+  getAppaGithubAppGrants,
   getAppaGithubSync,
   getAppaSelfService,
   getRepositoryProtection,
@@ -36,6 +38,7 @@ import {
   getServerRules,
   getServerRulesChangeStatus,
   previewServerRulesChange,
+  proposeSelfServiceInclude,
   proposeServerRulesChange,
   selfServiceIncludeState,
 } from "./openappa-server-rules";
@@ -46,6 +49,12 @@ const server = useMswServer();
 // checked, every replica sees.
 setupTestCacheManager();
 const REPO = "https://api.github.com/repos/example/policies";
+/** The template's files beside the policy, as a fresh copy holds them. */
+const TEMPLATE_FILES = Object.fromEntries(
+  OPENAPPA_TEMPLATE.files
+    .filter((file) => file.path !== "appa.toml")
+    .map((file) => [file.path, file.content]),
+);
 const FIRST = "1".repeat(40);
 const SECOND = "2".repeat(40);
 const TREE = "3".repeat(40);
@@ -95,9 +104,15 @@ function serveRepository(state: {
     "mcp/github.toml",
     "mcp/README.toml",
     "teams/support.toml",
+    ...Object.keys(TEMPLATE_FILES),
   ];
-  const at = (request: Request) =>
-    state.files[new URL(request.url).searchParams.get("ref") ?? ""];
+  // Every commit holds the template's current files beside the policy, so
+  // no sync proposes an update to them here.
+  const at = (request: Request) => {
+    const files =
+      state.files[new URL(request.url).searchParams.get("ref") ?? ""];
+    return files ? { ...TEMPLATE_FILES, ...files } : undefined;
+  };
   server.use(
     http.get(`${REPO}/commits/:ref`, () =>
       HttpResponse.json({ sha: state.head }),
@@ -1213,6 +1228,9 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     path: "mcp/payments_api.toml",
     before: "",
     after: REFUNDS,
+    // Without auto-merge, the user approves the pull request first.
+    autoMerge: false,
+    instruction: expect.stringContaining("ask the user"),
   });
   // The first server file brings every server's in, so no later one needs
   // its own line in appa.toml.
@@ -1328,8 +1346,17 @@ test("a server's editors propose its rules as a pull request; readers and outsid
       ),
     ),
   );
-  // With auto-merge on, the pull request merges by itself once its check passes.
+  // With auto-merge on, the pull request merges by itself once its check
+  // passes: the preview asks for no approval, and the change is proposed.
   await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
+  expect(
+    await previewServerRulesChange({ ...change, userId: pat.id }),
+  ).toMatchObject({
+    autoMerge: true,
+    instruction: expect.stringContaining(
+      "Do not ask the user to approve it first",
+    ),
+  });
   expect(
     await proposeServerRulesChange({
       ...change,
@@ -1396,9 +1423,16 @@ test("a server's editors propose its rules as a pull request; readers and outsid
       }),
     ),
     http.get(`${REPO}/commits/${head8}/check-runs`, async ({ request }) => {
-      expect(new URL(request.url).searchParams.get("check_name")).toBe(
-        config.openappa.policyCheckName,
-      );
+      const named = new URL(request.url).searchParams.get("check_name");
+      // Every check on the head, as the merge reads them: this one alone here.
+      if (named === null)
+        return HttpResponse.json({
+          check_runs: runs.map((run) => ({
+            name: config.openappa.policyCheckName,
+            ...run,
+          })),
+        });
+      expect(named).toBe(config.openappa.policyCheckName);
       reads += 1;
       if (slowAfterFirst && reads > 1)
         await new Promise((resolve) => setTimeout(resolve, 3_000));
@@ -1937,7 +1971,7 @@ test("Archestra reads the branch's rules and writes none: a missing rule comes w
   );
 });
 
-test("self-service is opt-in: off, no check is posted and server rules are not read; on reads the branch rules at once; the environment variable locks the setting; off again with the rule still in place names it and posts the check as skipped; a move or a stop waits for its removal", async ({
+test("self-service is opt-in: off, server rules are not read while the check is still posted; on reads the branch rules at once; the environment variable locks the setting; off again with the rule still in place names it; a move or a stop waits for its removal", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -1998,15 +2032,15 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
     }),
   );
 
-  // Off from the start: the sync reads no branch rules, since a rule left
-  // behind takes self-service having been on; the minute's check reads no
-  // pull request, the registry shows no action, and the Keeper's tools
-  // refuse.
+  // Off: the sync keeps no ruleset, the registry shows no action, and the
+  // Keeper's tools refuse. The minute's check still reads the pull requests:
+  // every App source gets the policy check, self-service or not.
   await syncAppaGithubPolicy(org.id);
   expect(await getRepositoryProtection(org.id)).toBeNull();
   expect(calls).toEqual([]);
   await checkDueAppaGithubSyncs();
-  expect(calls).toEqual([]);
+  expect(calls).toEqual(["GET pulls"]);
+  calls.length = 0;
   expect(await getAppaSelfService(org.id)).toEqual({ enabled: false });
   expect((await getAppaGithubSync(org.id)).selfService).toEqual({
     enabled: false,
@@ -2026,13 +2060,28 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
   });
 
   // On: the branch rules are read at once, the ruleset to import is offered,
-  // and the checks start.
+  // and the checks start. A pull is queued too, so the servers' files apply
+  // now rather than at the next scheduled check.
   calls.length = 0;
+  const syncTasks = async () =>
+    (
+      await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.taskType, "openappa_github_sync"))
+    ).filter(
+      (task) =>
+        (task.payload as { organizationId?: string }).organizationId === org.id,
+    );
+  await db
+    .delete(schema.tasksTable)
+    .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
   const on = await updateAppaGithubSync({
     organizationId: org.id,
     action: "self_service",
     enabled: true,
   });
+  expect(await syncTasks()).toHaveLength(1);
   expect(on.selfService).toEqual({
     enabled: true,
     setting: true,
@@ -2090,9 +2139,9 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
       message: expect.stringContaining("ARCHESTRA_OPENAPPA_SELF_SERVICE"),
     });
     // Off by the variable, with the rule still in place: Archestra cannot
-    // take it off, so the next sync records it, the settings name it, and
-    // the minute's round posts the check as skipped on every open pull
-    // request, once each, so none waits on a check nobody judges any more.
+    // take it off, so the next sync records it and the settings name it.
+    // The check is posted on every pull request, self-service or not, so
+    // the verdict that stands is not posted again.
     calls.length = 0;
     await syncAppaGithubPolicy(org.id);
     expect(calls).toEqual(["GET rules main"]);
@@ -2102,20 +2151,8 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
       leftoverRule: { checkName: CHECK, url: rulesetUrl },
     });
     await checkDueAppaGithubSyncs();
-    expect(runs).toHaveLength(2);
-    expect(runs[1]).toEqual({
-      name: CHECK,
-      head_sha: SECOND,
-      status: "completed",
-      conclusion: "skipped",
-      output: {
-        title: "MCP Guardrails Self-Service is off",
-        summary: expect.stringContaining(rulesetUrl),
-      },
-    });
-    await checkDueAppaGithubSyncs();
-    expect(runs).toHaveLength(2);
-    // The rule removed: nothing left to name, and nothing more is posted.
+    expect(runs).toHaveLength(1);
+    // The rule removed: nothing left to name.
     rules = [];
     calls.length = 0;
     await syncAppaGithubPolicy(org.id);
@@ -2123,14 +2160,13 @@ test("self-service is opt-in: off, no check is posted and server rules are not r
       (await getAppaGithubSync(org.id)).selfService.leftoverRule,
     ).toBeUndefined();
     await checkDueAppaGithubSyncs();
-    expect(calls).toEqual(["GET rules main"]);
+    expect(calls).toEqual(["GET rules main", "GET pulls"]);
     config.openappa.selfService = "enabled";
     await OpenAppaGithubSyncModel.setSelfService(org.id, false);
-    // On again: the verdict skipped stood over is posted afresh, unchanged
-    // as it is, so the skipped result does not pass for it.
+    // On again: the verdict stands as it is.
     await checkDueAppaGithubSyncs();
-    expect(runs).toHaveLength(3);
-    expect(runs[2]).toMatchObject({ head_sha: SECOND, conclusion: verdict });
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({ head_sha: SECOND, conclusion: verdict });
     expect((await getAppaGithubSync(org.id)).selfService).toMatchObject({
       enabled: true,
       setting: false,
@@ -2752,8 +2788,30 @@ async function serveAutoMergeRepository(params: {
   requester: string;
   /** A second self-served pull request whose check passes too. */
   another?: boolean;
+  /**
+   * List each pull request with a test-merge commit, as GitHub does, and
+   * make a new one after every merge it is asked for, as GitHub does after a
+   * refused merge. The new commit holds the pull request's files.
+   */
+  testMerges?: boolean;
+  /** The repository files update Archestra's sync opens, as pull request 6. */
+  filesUpdate?: boolean;
+  /** A setup pull request an earlier version opened, as pull request 7. */
+  setupPull?: boolean;
+  /**
+   * A setup pull request this version opened, naming who connected, with
+   * the include added onto its branch, as pull request 7.
+   */
+  setupPullWithInclude?: boolean;
+  /** The include pull request a sync opened, with no requester, as pull request 4. */
+  includeFromSync?: boolean;
+  /** Permissions the installation does not grant. */
+  refuse?: string[];
 }) {
-  await connectApp({ organizationId: params.organizationId });
+  await connectApp({
+    organizationId: params.organizationId,
+    ...(params.refuse ? { refuse: params.refuse } : {}),
+  });
   const root = `include = ["mcp/*.toml"]\n${RULES}`;
   const results = Object.fromEntries(
     [1, 2, 3, 4, 5].map((number) => [number, String(number + 4).repeat(40)]),
@@ -2830,9 +2888,70 @@ async function serveAutoMergeRepository(params: {
       ref: "archestra/openappa-self-service",
       user: bot,
       files: ["appa.toml"],
-      commits: [signed(results[4] as string)],
+      commits: [
+        params.includeFromSync
+          ? {
+              sha: results[4],
+              commit: {
+                message: "Include each MCP server's Guardrails rules file",
+                verification: { verified: true, reason: "valid" },
+              },
+              author: bot,
+              committer: { login: "web-flow", type: "User" },
+            }
+          : signed(results[4] as string),
+      ],
     },
   };
+  if (params.filesUpdate) {
+    // No requester: sync opens it on its own, with the template's files.
+    results[6] = "ab".repeat(20);
+    repo.files[results[6]] = repo.files[FIRST] ?? {};
+    pulls[6] = {
+      ref: "archestra/openappa-template",
+      user: bot,
+      files: ["README.md", "traces/README.md"],
+      commits: [
+        {
+          sha: results[6],
+          commit: {
+            message: "Update the OpenAPPA policy repository files",
+            verification: { verified: true, reason: "valid" },
+          },
+          author: bot,
+          committer: { login: "web-flow", type: "User" },
+        },
+      ],
+    };
+  }
+  if (params.setupPull || params.setupPullWithInclude) {
+    results[7] = "cd".repeat(20);
+    repo.files[results[7]] = repo.files[FIRST] ?? {};
+    const appCommit = (sha: string, message: string) => ({
+      sha,
+      commit: { message, verification: { verified: true, reason: "valid" } },
+      author: bot,
+      committer: { login: "web-flow", type: "User" },
+    });
+    pulls[7] = {
+      ref: "archestra/openappa-setup-0a32964f-f7bb-4102-96d3-4caa3b0bf3d4",
+      user: bot,
+      files: ["appa.toml"],
+      commits: params.setupPullWithInclude
+        ? [
+            appCommit(
+              "ef".repeat(20),
+              `Seed current OpenAPPA policy\n\nRequested-by: ${params.requester}`,
+            ),
+            appCommit(
+              results[7],
+              `Include each MCP server's Guardrails rules file\n\nRequested-by: ${params.requester}`,
+            ),
+          ]
+        : // Opened by an earlier version, before setup named who asked for it.
+          [appCommit(results[7], "Seed current OpenAPPA policy")],
+    };
+  }
   if (params.another)
     pulls[5] = {
       ref: "archestra/openappa-server-payments_api-5e6f7a8b",
@@ -2844,7 +2963,33 @@ async function serveAutoMergeRepository(params: {
   const merges: Array<{ number: number; sha: string; merge_method: string }> =
     [];
   const deleted: string[] = [];
-  const merge = { status: 200 };
+  const merge: { status: number; message?: string } = { status: 200 };
+  /** Checks besides this deployment's on a head, as GitHub lists them. */
+  const otherChecks: Record<
+    string,
+    Array<{ name: string; status: string; conclusion: string | null }>
+  > = {};
+  /** GitHub's merge state for a pull request; clean unless set. */
+  const mergeableStates: Record<number, string> = {};
+  /** When a pull request opened; an hour ago unless set. */
+  const openedAt: Record<number, number> = {};
+  /** Whether a pull request is a draft; none is unless set. */
+  const drafts: Record<number, boolean> = {};
+  /** When this deployment's check completed on a head; now unless set. */
+  const checkCompletedAt: Record<string, number> = {};
+  /** How many check runs GitHub counts on a head, where it differs from those listed. */
+  const checkTotals: Record<string, number> = {};
+  /** Each pull request's test-merge commit, while `testMerges` is on. */
+  const testMerge: Record<number, string> = {};
+  const nextTestMerge = (number: number) => {
+    const sha = createHash("sha1")
+      .update(`${number}:${Object.keys(repo.files).length}`)
+      .digest("hex");
+    repo.files[sha] = repo.files[results[number] as string] ?? {};
+    testMerge[number] = sha;
+  };
+  if (params.testMerges)
+    for (const number of Object.keys(pulls)) nextTestMerge(Number(number));
   /** What one pull request's merge answers, where it differs from the rest. */
   const mergeStatuses: Record<number, number> = {};
   /** How each pull request answers when read on its own. */
@@ -2861,6 +3006,12 @@ async function serveAutoMergeRepository(params: {
           ref: pulls[Number(params.number)]?.ref,
         },
         changed_files: pulls[Number(params.number)]?.files.length ?? 0,
+        mergeable_state: mergeableStates[Number(params.number)] ?? "clean",
+        draft: drafts[Number(params.number)] ?? false,
+        base: { ref: "main" },
+        created_at: new Date(
+          openedAt[Number(params.number)] ?? Date.now() - 3_600_000,
+        ).toISOString(),
         ...(pullStates[Number(params.number)] ?? {
           state: "open",
           merged: false,
@@ -2884,7 +3035,10 @@ async function serveAutoMergeRepository(params: {
         Object.entries(pulls).map(([number, pull]) => ({
           number: Number(number),
           head: { sha: results[Number(number)], ref: pull.ref },
-          merge_commit_sha: null,
+          merge_commit_sha: testMerge[Number(number)] ?? null,
+          created_at: new Date(
+            openedAt[Number(number)] ?? Date.now() - 3_600_000,
+          ).toISOString(),
           user: pull.user,
         })),
       ),
@@ -2905,16 +3059,41 @@ async function serveAutoMergeRepository(params: {
       runs.push((await request.json()) as (typeof runs)[number]);
       return HttpResponse.json({ id: 1 }, { status: 201 });
     }),
+    // Every check on a head, a page at a time: this deployment's, and the
+    // repository's own.
+    http.get(`${REPO}/commits/:sha/check-runs`, ({ params, request }) => {
+      const all = [
+        ...runs
+          .filter((run) => run.head_sha === params.sha)
+          .map((run) => ({
+            name: CHECK,
+            status: "completed",
+            conclusion: run.conclusion,
+            completed_at: new Date(
+              checkCompletedAt[params.sha as string] ?? Date.now(),
+            ).toISOString(),
+          })),
+        ...(otherChecks[params.sha as string] ?? []),
+      ];
+      const query = new URL(request.url).searchParams;
+      const perPage = Number(query.get("per_page") ?? 30);
+      const page = Number(query.get("page") ?? 1);
+      return HttpResponse.json({
+        total_count: checkTotals[params.sha as string] ?? all.length,
+        check_runs: all.slice((page - 1) * perPage, page * perPage),
+      });
+    }),
     http.put(`${REPO}/pulls/:number/merge`, async ({ params, request }) => {
       merges.push({
         number: Number(params.number),
         ...((await request.json()) as { sha: string; merge_method: string }),
       });
       const status = mergeStatuses[Number(params.number)] ?? merge.status;
+      if (params.testMerges) nextTestMerge(Number(params.number));
       return status === 200
         ? HttpResponse.json({ merged: true, sha: "f".repeat(40) })
         : HttpResponse.json(
-            { message: "Repository rule violations found" },
+            { message: merge.message ?? "Repository rule violations found" },
             { status },
           );
     }),
@@ -2929,6 +3108,12 @@ async function serveAutoMergeRepository(params: {
     merges,
     deleted,
     merge,
+    otherChecks,
+    mergeableStates,
+    openedAt,
+    drafts,
+    checkTotals,
+    checkCompletedAt,
     mergeStatuses,
     repo,
     pullStates,
@@ -3255,6 +3440,580 @@ test("a self-served pull request GitHub refuses to merge is logged and left for 
   ).toHaveLength(3);
 });
 
+test("a merge GitHub refuses because the ruleset takes the check from another App stays refused across GitHub's new test-merge commits: the App stops asking, the Keeper is told the fix at once, and fixing the ruleset merges it right away", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { runs, merges, merge } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+    testMerges: true,
+  });
+  await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
+  const catalog = await InternalMcpCatalogModel.create(
+    {
+      name: "payments_api",
+      serverType: "remote",
+      serverUrl: "https://payments.example.com/mcp",
+      scope: "org",
+    },
+    { organizationId: org.id },
+  );
+  await ToolModel.createToolIfNotExists({
+    name: "payments_api__refund_payment",
+    description: "refund",
+    parameters: {},
+    catalogId: catalog.id,
+  });
+  // The ruleset requires the check from another App at first.
+  let integration = 999;
+  server.use(
+    http.get(`${REPO}/commits/:sha/check-runs`, ({ params }) =>
+      HttpResponse.json({
+        check_runs: runs
+          .filter((run) => run.head_sha === params.sha)
+          .map((run) => ({
+            status: "completed",
+            conclusion: run.conclusion,
+            completed_at: new Date(Date.now()).toISOString(),
+          })),
+      }),
+    ),
+    http.get(`${REPO}/rules/branches/main`, () =>
+      HttpResponse.json([
+        {
+          type: "required_status_checks",
+          parameters: {
+            strict_required_status_checks_policy: false,
+            required_status_checks: [
+              { context: CHECK, integration_id: integration },
+            ],
+          },
+          ruleset_id: 5,
+          ruleset_source_type: "Repository",
+          ruleset_source: "example/policies",
+        },
+      ]),
+    ),
+  );
+  const status = () =>
+    getServerRulesChangeStatus({
+      organizationId: org.id,
+      userId: admin.id,
+      catalogId: catalog.id,
+      number: 1,
+    });
+  merge.status = 405;
+  merge.message = `Repository rule violations found\n\nRequired status check "${CHECK}" was not set by the expected GitHub App.`;
+
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(1);
+  // Nothing but the ruleset's fix lets it merge: the Keeper is told so at
+  // once, with the fix, and stops following it.
+  expect(await status()).toMatchObject({
+    phase: "merge_refused",
+    done: true,
+    mergeRefused: {
+      ruleset: true,
+      reason: expect.stringContaining("Settings → Guardrails → Finish setup"),
+    },
+    instruction: expect.stringContaining("administrator"),
+  });
+  // GitHub made a new test-merge commit after the refusal: the refusal holds
+  // all the same, and the App does not ask again every minute.
+  await checkDueAppaGithubSyncs();
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(1);
+  expect(await status()).toMatchObject({ phase: "merge_refused" });
+
+  // The administrator fixes the ruleset on GitHub: once the minute's read of
+  // the branch rules expires, the next round finds it and merges, without
+  // waiting fifteen minutes or anyone checking again.
+  integration = 123;
+  merge.status = 200;
+  const now = Date.now();
+  const later = vi.spyOn(Date, "now").mockReturnValue(now + 61_000);
+  try {
+    await checkDueAppaGithubSyncs();
+  } finally {
+    later.mockRestore();
+  }
+  expect(merges).toHaveLength(2);
+  expect(await queuedSyncs()).toHaveLength(1);
+});
+
+test("a protection read that finds the ruleset fixed, such as Sync now or Check again, merges what it held at once", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { merges, merge } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+    testMerges: true,
+  });
+  await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
+  let integration = 999;
+  server.use(
+    http.get(`${REPO}/rules/branches/main`, () =>
+      HttpResponse.json([
+        {
+          type: "required_status_checks",
+          parameters: {
+            strict_required_status_checks_policy: false,
+            required_status_checks: [
+              { context: CHECK, integration_id: integration },
+            ],
+          },
+          ruleset_id: 5,
+          ruleset_source_type: "Repository",
+          ruleset_source: "example/policies",
+        },
+      ]),
+    ),
+  );
+  merge.status = 405;
+  merge.message = `Repository rule violations found\n\nRequired status check "${CHECK}" was not set by the expected GitHub App.`;
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(1);
+  // Checked again right after the fix: merged at once.
+  integration = 123;
+  merge.status = 200;
+  expect(
+    (await getRepositoryProtection(org.id, { fresh: true }))?.branchRules,
+  ).toMatchObject({ state: "active" });
+  await vi.waitFor(() => expect(merges).toHaveLength(2));
+  await vi.waitFor(async () => expect(await queuedSyncs()).toHaveLength(1));
+});
+
+test("under auto-merge a self-served pull request merges only once every check on it passed: one opened moments ago waits for its checks to register, a running check holds it, a failed one stops it and the Keeper says which, and GitHub's merge state stands for commit statuses", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const {
+    results,
+    merges,
+    otherChecks,
+    mergeableStates,
+    openedAt,
+    checkCompletedAt,
+  } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+  });
+  await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
+  const catalog = await InternalMcpCatalogModel.create(
+    {
+      name: "payments_api",
+      serverType: "remote",
+      serverUrl: "https://payments.example.com/mcp",
+      scope: "org",
+    },
+    { organizationId: org.id },
+  );
+  await ToolModel.createToolIfNotExists({
+    name: "payments_api__refund_payment",
+    description: "refund",
+    parameters: {},
+    catalogId: catalog.id,
+  });
+  const status = () =>
+    getServerRulesChangeStatus({
+      organizationId: org.id,
+      userId: admin.id,
+      catalogId: catalog.id,
+      number: 1,
+    });
+  const head = results[1] as string;
+
+  // Opened moments ago: its own checks may not have registered yet.
+  openedAt[1] = Date.now();
+  await checkDueAppaGithubSyncs();
+  expect(merges).toEqual([]);
+  expect(await status()).toMatchObject({
+    phase: "merge_pending",
+    done: false,
+    waitingFor: [],
+    instruction: expect.stringContaining("once its other checks pass too"),
+  });
+  delete openedAt[1];
+
+  // The repository's own workflow runs: the merge waits for it.
+  otherChecks[head] = [
+    { name: "Validate policy", status: "in_progress", conclusion: null },
+  ];
+  await checkDueAppaGithubSyncs();
+  expect(merges).toEqual([]);
+  expect(await status()).toMatchObject({
+    phase: "merge_pending",
+    waitingFor: ["Validate policy"],
+    instruction: expect.stringContaining("Validate policy still running"),
+  });
+
+  // It failed: no merge, and the Keeper is told which check and to stop.
+  otherChecks[head] = [
+    { name: "Validate policy", status: "completed", conclusion: "failure" },
+  ];
+  await checkDueAppaGithubSyncs();
+  expect(merges).toEqual([]);
+  expect(await status()).toMatchObject({
+    phase: "merge_refused",
+    done: true,
+    mergeRefused: {
+      checks: true,
+      reason: expect.stringContaining("Validate policy failed"),
+    },
+  });
+
+  // Every check run passes, but GitHub counts a commit status that does not.
+  otherChecks[head] = [
+    { name: "Validate policy", status: "completed", conclusion: "success" },
+  ];
+  mergeableStates[1] = "unstable";
+  await checkDueAppaGithubSyncs();
+  expect(merges).toEqual([]);
+  expect(await status()).toMatchObject({
+    phase: "merge_pending",
+    done: false,
+    waitingFor: ["a commit status"],
+  });
+  // Still failing a quarter of an hour after the check passed: the Keeper
+  // is told what holds the merge and stops following it, while the App
+  // keeps waiting for the status to pass.
+  checkCompletedAt[head] = Date.now() - 16 * 60_000;
+  expect(await status()).toMatchObject({
+    phase: "merge_refused",
+    done: true,
+    mergeRefused: {
+      held: true,
+      reason: expect.stringContaining(
+        "a commit status has not passed in the fifteen minutes",
+      ),
+    },
+    instruction: expect.stringContaining("what holds it and who resolves it"),
+  });
+  await checkDueAppaGithubSyncs();
+  expect(merges).toEqual([]);
+  delete checkCompletedAt[head];
+
+  // All of it passes: merged.
+  mergeableStates[1] = "clean";
+  await checkDueAppaGithubSyncs();
+  expect(merges).toEqual([{ number: 1, sha: head, merge_method: "squash" }]);
+});
+
+test("under auto-merge a self-served pull request that conflicts, is a draft, or carries more checks than the App reads is held for a person without a merge call, and a check that failed past the first page of check runs stops it", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, merges, otherChecks, mergeableStates, drafts, checkTotals } =
+    await serveAutoMergeRepository({
+      organizationId: org.id,
+      requester: admin.email,
+    });
+  await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
+  const catalog = await InternalMcpCatalogModel.create(
+    {
+      name: "payments_api",
+      serverType: "remote",
+      serverUrl: "https://payments.example.com/mcp",
+      scope: "org",
+    },
+    { organizationId: org.id },
+  );
+  await ToolModel.createToolIfNotExists({
+    name: "payments_api__refund_payment",
+    description: "refund",
+    parameters: {},
+    catalogId: catalog.id,
+  });
+  const status = () =>
+    getServerRulesChangeStatus({
+      organizationId: org.id,
+      userId: admin.id,
+      catalogId: catalog.id,
+      number: 1,
+    });
+  const head = results[1] as string;
+
+  // 150 checks: the one that failed is on the second page.
+  otherChecks[head] = Array.from({ length: 150 }, (_, index) =>
+    index === 140
+      ? { name: "Validate policy", status: "completed", conclusion: "failure" }
+      : { name: `matrix ${index}`, status: "completed", conclusion: "success" },
+  );
+  await checkDueAppaGithubSyncs();
+  expect(merges).toEqual([]);
+  expect(await status()).toMatchObject({
+    phase: "merge_refused",
+    mergeRefused: {
+      checks: true,
+      reason: expect.stringContaining("Validate policy failed"),
+    },
+  });
+  otherChecks[head] = [];
+
+  // A conflict: no merge call, and the Keeper says what holds it.
+  mergeableStates[1] = "dirty";
+  await checkDueAppaGithubSyncs();
+  expect(merges).toEqual([]);
+  expect(await status()).toMatchObject({
+    phase: "merge_refused",
+    done: true,
+    mergeRefused: {
+      held: true,
+      reason: expect.stringContaining("conflicts with the main branch"),
+    },
+    instruction: expect.stringContaining("what holds it and who resolves it"),
+  });
+  mergeableStates[1] = "clean";
+
+  // A draft holds it the same way.
+  drafts[1] = true;
+  await checkDueAppaGithubSyncs();
+  expect(merges).toEqual([]);
+  expect(await status()).toMatchObject({
+    phase: "merge_refused",
+    mergeRefused: { held: true, reason: expect.stringContaining("a draft") },
+  });
+  drafts[1] = false;
+
+  // More checks than the App reads: the unread ones could be failing.
+  checkTotals[head] = 5000;
+  await checkDueAppaGithubSyncs();
+  expect(merges).toEqual([]);
+  expect(await status()).toMatchObject({
+    phase: "merge_refused",
+    mergeRefused: {
+      held: true,
+      reason: expect.stringContaining("GitHub lists 5000 checks"),
+    },
+  });
+  delete checkTotals[head];
+
+  // Nothing holds it any more: merged.
+  await checkDueAppaGithubSyncs();
+  expect(merges).toEqual([{ number: 1, sha: head, merge_method: "squash" }]);
+});
+
+test("the repository files update sync opens changes no file Git sync reads, a README in the validations folder included, so its check is skipped rather than failed for want of a requester", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, runs } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+    filesUpdate: true,
+  });
+  await checkDueAppaGithubSyncs();
+  expect(runs.filter((run) => run.head_sha === results[6])).toEqual([
+    expect.objectContaining({ conclusion: "skipped" }),
+  ]);
+});
+
+test("a first refused merge is pending only for the retry the next minute brings: past it, a check that failed meanwhile is what the Keeper hears", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, merges, merge, otherChecks } =
+    await serveAutoMergeRepository({
+      organizationId: org.id,
+      requester: admin.email,
+    });
+  await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(org.id, true);
+  const catalog = await InternalMcpCatalogModel.create(
+    {
+      name: "payments_api",
+      serverType: "remote",
+      serverUrl: "https://payments.example.com/mcp",
+      scope: "org",
+    },
+    { organizationId: org.id },
+  );
+  await ToolModel.createToolIfNotExists({
+    name: "payments_api__refund_payment",
+    description: "refund",
+    parameters: {},
+    catalogId: catalog.id,
+  });
+  const status = () =>
+    getServerRulesChangeStatus({
+      organizationId: org.id,
+      userId: admin.id,
+      catalogId: catalog.id,
+      number: 1,
+    });
+  const head = results[1] as string;
+  merge.status = 405;
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(1);
+  expect(await status()).toMatchObject({
+    phase: "merge_pending",
+    mergeRefused: {
+      reason: expect.stringContaining("Repository rule violations found"),
+    },
+  });
+  // Another check fails before the retry: the App does not try again.
+  otherChecks[head] = [
+    { name: "Validate policy", status: "completed", conclusion: "failure" },
+  ];
+  await checkDueAppaGithubSyncs();
+  expect(merges).toHaveLength(1);
+  // Past the retry's minute, the Keeper hears which check holds the merge.
+  const later = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 3 * 60_000);
+  try {
+    expect(await status()).toMatchObject({
+      phase: "merge_refused",
+      done: true,
+      mergeRefused: {
+        checks: true,
+        reason: expect.stringContaining("Validate policy failed"),
+      },
+    });
+  } finally {
+    later.mockRestore();
+  }
+});
+
+test("a setup pull request an earlier version opened, before setup named who asked for it, is judged on its policy rather than failed for want of a requester", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, runs } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+    setupPull: true,
+  });
+  await db
+    .update(schema.openappaGithubSyncTable)
+    .set({ setupPullRequestNumber: 7 })
+    .where(eq(schema.openappaGithubSyncTable.organizationId, org.id));
+  await checkDueAppaGithubSyncs();
+  expect(runs.filter((run) => run.head_sha === results[7])).toEqual([
+    expect.objectContaining({ conclusion: "success" }),
+  ]);
+});
+
+test("a setup pull request that took the include onto its branch reads one requester: the check judges it as before", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, runs } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+    setupPullWithInclude: true,
+  });
+  await db
+    .update(schema.openappaGithubSyncTable)
+    .set({ setupPullRequestNumber: 7 })
+    .where(eq(schema.openappaGithubSyncTable.organizationId, org.id));
+  await checkDueAppaGithubSyncs();
+  expect(runs.filter((run) => run.head_sha === results[7])).toEqual([
+    expect.objectContaining({ conclusion: "success" }),
+  ]);
+});
+
+test("the include of the servers' folder a sync opened with no requester is judged on its policy, as setup's own pull request is", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, runs } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+    includeFromSync: true,
+  });
+  await checkDueAppaGithubSyncs();
+  expect(runs.filter((run) => run.head_sha === results[4])).toEqual([
+    expect.objectContaining({ conclusion: "success" }),
+  ]);
+});
+
+test("a grants read lets a refused round of checks go once the App holds what the check needs, while it still lacks Workflows", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { runs } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+    refuse: ["workflows"],
+  });
+  // GitHub refuses the check: the round is held off for a while.
+  let refusing = true;
+  server.use(
+    http.post(`${REPO}/check-runs`, async ({ request }) => {
+      if (refusing)
+        return HttpResponse.json(
+          { message: "Resource not accessible by integration" },
+          { status: 403 },
+        );
+      runs.push((await request.json()) as (typeof runs)[number]);
+      return HttpResponse.json({ id: 1 }, { status: 201 });
+    }),
+  );
+  await checkDueAppaGithubSyncs();
+  refusing = false;
+  await checkDueAppaGithubSyncs();
+  expect(runs).toEqual([]);
+  // Checks is granted again; Workflows is still missing. The wizard's check
+  // again lets the next round post at once.
+  const grants = await getAppaGithubAppGrants(org.id);
+  expect(grants?.permissions).toContainEqual({
+    name: "workflows",
+    granted: false,
+  });
+  await checkDueAppaGithubSyncs();
+  expect(runs.length).toBeGreaterThan(0);
+});
+
 test("a merge GitHub refuses because someone merged or closed the pull request meanwhile completes gracefully, and a merge whose pull could not be queued is followed up the next minute", async ({
   makeOrganization,
   makeUser,
@@ -3564,6 +4323,492 @@ test("a policy in a folder of a repository that holds other work gets the same o
     expect.objectContaining({ head_sha: head, conclusion: "skipped" }),
     expect.objectContaining({ head_sha: head, conclusion: "success" }),
   ]);
+});
+
+test("a pull with self-service on and the policy file lacking the servers' folder proposes its include at once, by the App, naming no requester, and the next pull finds it waiting", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  await connectApp({ organizationId: org.id });
+  const INCLUDED = `include = ["mcp/*.toml"]\n${RULES}`;
+  const PULL_HEAD = "6".repeat(40);
+  serveRepository({
+    head: FIRST,
+    files: {
+      [FIRST]: { "appa.toml": RULES },
+      main: { "appa.toml": RULES },
+      [PULL_HEAD]: { "appa.toml": INCLUDED },
+    },
+  });
+  let openPulls: Array<{
+    number: number;
+    html_url: string;
+    head: { sha: string };
+  }> = [];
+  const trees: Array<{ tree: Array<{ path: string; content: string }> }> = [];
+  const commits: Array<{ message: string }> = [];
+  const pulls: Array<{ title: string; body: string; head: string }> = [];
+  server.use(
+    http.get(`${REPO}/rulesets`, () => HttpResponse.json([])),
+    http.get(`${REPO}/pulls`, ({ request }) =>
+      HttpResponse.json(
+        new URL(request.url).searchParams.get("head") ===
+          "example:archestra/openappa-self-service"
+          ? openPulls
+          : [],
+      ),
+    ),
+    http.get(`${REPO}/git/commits/${FIRST}`, () =>
+      HttpResponse.json({ tree: { sha: TREE } }),
+    ),
+    http.post(`${REPO}/git/trees`, async ({ request }) => {
+      trees.push((await request.json()) as (typeof trees)[number]);
+      return HttpResponse.json({ sha: "4".repeat(40) });
+    }),
+    http.post(`${REPO}/git/commits`, async ({ request }) => {
+      commits.push((await request.json()) as (typeof commits)[number]);
+      return HttpResponse.json({ sha: "5".repeat(40) });
+    }),
+    http.post(`${REPO}/git/refs`, () => HttpResponse.json({})),
+    http.delete(
+      `${REPO}/git/refs/heads/archestra/openappa-self-service`,
+      () => new HttpResponse(null, { status: 422 }),
+    ),
+    http.post(`${REPO}/pulls`, async ({ request }) => {
+      pulls.push((await request.json()) as (typeof pulls)[number]);
+      return HttpResponse.json({
+        number: 9,
+        html_url: "https://github.com/example/policies/pull/9",
+      });
+    }),
+  );
+
+  await syncAppaGithubPolicy(org.id);
+  expect(pulls).toEqual([
+    expect.objectContaining({
+      head: "archestra/openappa-self-service",
+      body: expect.stringContaining("MCP Guardrails Self-Service is on"),
+    }),
+  ]);
+  expect(trees[0]?.tree[0]?.content).toContain('"mcp/*.toml"');
+  // Nobody asked: the commit names no requester.
+  expect(commits[0]?.message).toBe(
+    "Include each MCP server's Guardrails rules file",
+  );
+
+  // The next pull finds it waiting: nothing more opens.
+  openPulls = [
+    {
+      number: 9,
+      html_url: "https://github.com/example/policies/pull/9",
+      head: { sha: PULL_HEAD },
+    },
+  ];
+  await syncAppaGithubPolicy(org.id);
+  expect(pulls).toHaveLength(1);
+  expect(await selfServiceIncludeState(org.id)).toEqual({
+    folder: "mcp",
+    state: "pull_open",
+    pull: { number: 9, url: "https://github.com/example/policies/pull/9" },
+  });
+});
+
+/**
+ * A repository whose policy file lacks the servers' folder, with the include
+ * pull requests GitHub keeps: numbers opened, those closed without merging.
+ */
+function serveIncludePulls(params: {
+  /**
+   * Include pull requests GitHub keeps from before, all closed: for this
+   * folder's entry unless their body says otherwise.
+   */
+  earlier?: Array<{ number: number; merged: boolean; body?: string }>;
+}) {
+  // While set, GitHub cannot list the pull requests of every state.
+  const history = { failing: false };
+  serveRepository({
+    head: FIRST,
+    files: { [FIRST]: { "appa.toml": RULES }, main: { "appa.toml": RULES } },
+  });
+  const earlier = params.earlier ?? [];
+  const pulls: number[] = earlier.map((pull) => pull.number);
+  const closed = new Set<number>(pulls);
+  const merged = new Set<number>(
+    earlier.filter((pull) => pull.merged).map((pull) => pull.number),
+  );
+  const bodies = new Map<number, string>(
+    earlier.map((pull) => [
+      pull.number,
+      pull.body ??
+        "Adds `mcp/*.toml` to `appa.toml`'s include list, so the rules file each MCP server keeps in `mcp/` applies once merged and pulled by Git sync.",
+    ]),
+  );
+  const opened: Array<{ head: string }> = [];
+  server.use(
+    http.get(`${REPO}/rulesets`, () => HttpResponse.json([])),
+    // Open ones by default; every state, oldest first, when asked: the
+    // order GitHub lists them in decides nothing.
+    http.get(`${REPO}/pulls`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      const all = query.get("state") === "all";
+      if (all) {
+        expect(query.get("head")).toBe(
+          "example:archestra/openappa-self-service",
+        );
+        if (history.failing)
+          return HttpResponse.json(
+            { message: "Server Error" },
+            { status: 502 },
+          );
+      }
+      return HttpResponse.json(
+        [...pulls]
+          .filter((number) => all || !closed.has(number))
+          .map((number) => ({
+            number,
+            html_url: `https://github.com/example/policies/pull/${number}`,
+            state: closed.has(number) ? "closed" : "open",
+            merged_at: merged.has(number) ? "2026-11-01T00:00:00Z" : null,
+            body: bodies.get(number) ?? null,
+          })),
+      );
+    }),
+    http.get(`${REPO}/git/commits/${FIRST}`, () =>
+      HttpResponse.json({ tree: { sha: TREE } }),
+    ),
+    http.post(`${REPO}/git/trees`, () =>
+      HttpResponse.json({ sha: "4".repeat(40) }),
+    ),
+    http.post(`${REPO}/git/commits`, () =>
+      HttpResponse.json({ sha: "5".repeat(40) }),
+    ),
+    http.post(`${REPO}/git/refs`, () => HttpResponse.json({})),
+    http.delete(
+      `${REPO}/git/refs/heads/archestra/openappa-self-service`,
+      () => new HttpResponse(null, { status: 422 }),
+    ),
+    http.post(`${REPO}/pulls`, async ({ request }) => {
+      const pull = (await request.json()) as { head: string; body: string };
+      opened.push(pull);
+      const number = 8 + opened.length;
+      pulls.push(number);
+      bodies.set(number, pull.body);
+      return HttpResponse.json({
+        number,
+        html_url: `https://github.com/example/policies/pull/${number}`,
+      });
+    }),
+  );
+  return { opened, closed, history };
+}
+
+test("an include pull request someone closed without merging is not opened again by a pull: a person asking still opens a fresh one", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ name: "Alex" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  await connectApp({ organizationId: org.id });
+  const { opened, closed } = serveIncludePulls({});
+
+  await syncAppaGithubPolicy(org.id);
+  expect(opened).toHaveLength(1);
+  // Someone closes it without merging: the next pulls leave it closed.
+  closed.add(9);
+  await syncAppaGithubPolicy(org.id);
+  await syncAppaGithubPolicy(org.id);
+  expect(opened).toHaveLength(1);
+  // A person asking, from Finish setup, still opens a fresh one.
+  expect(
+    await ensureSelfServiceInclude({
+      organizationId: org.id,
+      userId: admin.id,
+    }),
+  ).toEqual({ number: 10, url: "https://github.com/example/policies/pull/10" });
+  expect(opened).toHaveLength(2);
+});
+
+test("a pull that cannot read the include pull requests leaves the include for the next pull", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  await connectApp({ organizationId: org.id });
+  const { opened, history } = serveIncludePulls({});
+  // The open ones read fine; every state does not: nothing opens.
+  history.failing = true;
+  await syncAppaGithubPolicy(org.id);
+  expect(opened).toEqual([]);
+  // GitHub answers again: none was declined, so the next pull opens it.
+  history.failing = false;
+  await syncAppaGithubPolicy(org.id);
+  expect(opened).toHaveLength(1);
+});
+
+test("an include pull request closed without merging before this version counts as declined too", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  await connectApp({ organizationId: org.id });
+  // GitHub keeps it: an earlier version opened #7, and someone closed it.
+  const { opened } = serveIncludePulls({
+    earlier: [{ number: 7, merged: false }],
+  });
+  await syncAppaGithubPolicy(org.id);
+  expect(opened).toEqual([]);
+});
+
+test("a decline is of one folder's include: one for an earlier folder, or one Archestra closed itself when the folder moved, holds back nothing", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  for (const body of [
+    // Someone declined the include of the folder used before.
+    "Adds `servers/*.toml` to `appa.toml`'s include list, so the rules file each MCP server keeps in `servers/` applies once merged and pulled by Git sync.",
+    // Archestra closed it when the folder moved, then could not open the
+    // new one.
+    "Closed by Archestra: the self-service folder is now `mcp/`, and a new pull request includes it.",
+  ]) {
+    const org = await makeOrganization();
+    await connectApp({ organizationId: org.id });
+    const { opened } = serveIncludePulls({
+      earlier: [{ number: 7, merged: false, body }],
+    });
+    await syncAppaGithubPolicy(org.id);
+    expect(opened, body).toHaveLength(1);
+  }
+});
+
+test("the newest include pull request decides: one merged after an older one was declined lets a pull propose the include again", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  await connectApp({ organizationId: org.id });
+  // #7 was declined, #8 merged later, and the include left the policy file
+  // since: GitHub lists the oldest first here.
+  const { opened } = serveIncludePulls({
+    earlier: [
+      { number: 7, merged: false },
+      { number: 8, merged: true },
+    ],
+  });
+  await syncAppaGithubPolicy(org.id);
+  expect(opened).toHaveLength(1);
+});
+
+test("a pull and a person asking for the include at once open one pull request: whoever comes second finds it waiting", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ name: "Alex" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  await connectApp({ organizationId: org.id });
+  const PULL_HEAD = "6".repeat(40);
+  serveRepository({
+    head: FIRST,
+    files: {
+      [FIRST]: { "appa.toml": RULES },
+      main: { "appa.toml": RULES },
+      [PULL_HEAD]: { "appa.toml": `include = ["mcp/*.toml"]\n${RULES}` },
+    },
+  });
+  const openPulls: Array<{
+    number: number;
+    html_url: string;
+    head: { sha: string };
+  }> = [];
+  const pulls: unknown[] = [];
+  server.use(
+    http.get(`${REPO}/rulesets`, () => HttpResponse.json([])),
+    http.get(`${REPO}/pulls`, ({ request }) =>
+      HttpResponse.json(
+        new URL(request.url).searchParams.get("head") ===
+          "example:archestra/openappa-self-service"
+          ? openPulls
+          : [],
+      ),
+    ),
+    http.get(`${REPO}/git/commits/${FIRST}`, () =>
+      HttpResponse.json({ tree: { sha: TREE } }),
+    ),
+    http.post(`${REPO}/git/trees`, () =>
+      HttpResponse.json({ sha: "4".repeat(40) }),
+    ),
+    http.post(`${REPO}/git/commits`, () =>
+      HttpResponse.json({ sha: "5".repeat(40) }),
+    ),
+    http.post(`${REPO}/git/refs`, () => HttpResponse.json({})),
+    http.delete(
+      `${REPO}/git/refs/heads/archestra/openappa-self-service`,
+      () => new HttpResponse(null, { status: 422 }),
+    ),
+    http.post(`${REPO}/pulls`, async ({ request }) => {
+      pulls.push(await request.json());
+      openPulls.push({
+        number: 9,
+        html_url: "https://github.com/example/policies/pull/9",
+        head: { sha: PULL_HEAD },
+      });
+      return HttpResponse.json({
+        number: 9,
+        html_url: "https://github.com/example/policies/pull/9",
+      });
+    }),
+  );
+  // The source's first pull, with self-service off so it opens nothing.
+  await db
+    .update(schema.openappaGithubSyncTable)
+    .set({ selfService: false })
+    .where(eq(schema.openappaGithubSyncTable.organizationId, org.id));
+  await syncAppaGithubPolicy(org.id);
+  await db
+    .update(schema.openappaGithubSyncTable)
+    .set({ selfService: true })
+    .where(eq(schema.openappaGithubSyncTable.organizationId, org.id));
+
+  const [proposed, asked] = await Promise.all([
+    proposeSelfServiceInclude(org.id),
+    ensureSelfServiceInclude({ organizationId: org.id, userId: admin.id }),
+  ]);
+  expect(pulls).toHaveLength(1);
+  expect([proposed, asked].filter(Boolean)).toEqual([
+    { number: 9, url: "https://github.com/example/policies/pull/9" },
+  ]);
+});
+
+test("turning self-service on while the setup pull request waits: the next pull puts the include on that pull request's branch, so one pull request brings both", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ name: "Alex" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  await connectApp({ organizationId: org.id, selfService: false });
+  const SETUP_HEAD = "8".repeat(40);
+  const files: Record<string, Record<string, string>> = {
+    [SETUP_HEAD]: { "appa.toml": RULES },
+  };
+  serveRepository({ head: FIRST, files });
+  // The connect proposed the current policy in a setup pull request that
+  // waits, without the include: self-service was off then.
+  await db
+    .update(schema.openappaGithubSyncTable)
+    .set({ setupPullRequestNumber: 3, sourceCommit: null })
+    .where(eq(schema.openappaGithubSyncTable.organizationId, org.id));
+  const trees: Array<{
+    base_tree: string;
+    tree: Array<{ path: string; content: string }>;
+  }> = [];
+  const commits: Array<{ message: string; parents: string[] }> = [];
+  const moves: Array<{ branch: string; body: Record<string, unknown> }> = [];
+  const notes: Array<Record<string, unknown>> = [];
+  const opened: unknown[] = [];
+  // GitHub moves the pull request's head with its branch.
+  let setupHead = SETUP_HEAD;
+  server.use(
+    http.get(`${REPO}/rulesets`, () => HttpResponse.json([])),
+    http.get(`${REPO}/pulls/3`, () =>
+      HttpResponse.json({
+        number: 3,
+        state: "open",
+        html_url: "https://github.com/example/policies/pull/3",
+        body: "This pull request puts your current OpenAPPA policy in place.",
+        head: { sha: setupHead, ref: "archestra/openappa-setup-1234" },
+      }),
+    ),
+    http.patch(`${REPO}/pulls/3`, async ({ request }) => {
+      notes.push((await request.json()) as Record<string, unknown>);
+      return HttpResponse.json({});
+    }),
+    // The setup commit names who connected, as this version writes it.
+    http.get(`${REPO}/git/commits/${SETUP_HEAD}`, () =>
+      HttpResponse.json({
+        tree: { sha: TREE },
+        message: `Seed current OpenAPPA policy\n\nRequested-by: ${admin.email}`,
+      }),
+    ),
+    http.post(`${REPO}/git/trees`, async ({ request }) => {
+      trees.push((await request.json()) as (typeof trees)[number]);
+      return HttpResponse.json({ sha: "4".repeat(40) });
+    }),
+    http.post(`${REPO}/git/commits`, async ({ request }) => {
+      commits.push((await request.json()) as (typeof commits)[number]);
+      return HttpResponse.json({ sha: "5".repeat(40) });
+    }),
+    http.patch(
+      `${REPO}/git/refs/heads/archestra/:branch`,
+      async ({ params, request }) => {
+        const body = (await request.json()) as { sha: string };
+        moves.push({ branch: String(params.branch), body });
+        setupHead = body.sha;
+        files[setupHead] = {
+          "appa.toml": trees.at(-1)?.tree[0]?.content ?? "",
+        };
+        return HttpResponse.json({});
+      },
+    ),
+    http.post(`${REPO}/pulls`, async ({ request }) => {
+      opened.push(await request.json());
+      return HttpResponse.json({ number: 9, html_url: "x" });
+    }),
+  );
+  await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service",
+    enabled: true,
+  });
+  // The pull the switch queued: nobody opens the wizard.
+  await syncAppaGithubPolicy(org.id);
+  // One commit on the setup branch, from its head, adding the include and
+  // starting the folder; no second pull request.
+  expect(trees[0]?.base_tree).toBe(TREE);
+  expect(trees[0]?.tree.map((file) => file.path)).toEqual([
+    "appa.toml",
+    "mcp/README.md",
+  ]);
+  expect(trees[0]?.tree[0]?.content).toContain('"mcp/*.toml"');
+  // It names the requester the setup commit names, so the check reads one
+  // requester for the whole pull request.
+  expect(commits).toEqual([
+    {
+      message: `Include each MCP server's Guardrails rules file\n\nRequested-by: ${admin.email.toLowerCase()}`,
+      tree: "4".repeat(40),
+      parents: [SETUP_HEAD],
+    },
+  ]);
+  // A fast-forward, never forced over what someone pushed meanwhile.
+  expect(moves).toEqual([
+    { branch: "openappa-setup-1234", body: { sha: "5".repeat(40) } },
+  ]);
+  expect(notes[0]?.body).toEqual(
+    expect.stringContaining("It also adds `mcp/*.toml`"),
+  );
+  expect(opened).toEqual([]);
+  // The setup pull request now carries the include: it stands for it, and
+  // a person asking for the include finds it there.
+  expect(await selfServiceIncludeState(org.id)).toEqual({
+    folder: "mcp",
+    state: "pull_open",
+    pull: { number: 3, url: "https://github.com/example/policies/pull/3" },
+  });
+  expect(
+    await ensureSelfServiceInclude({
+      organizationId: org.id,
+      userId: admin.id,
+    }),
+  ).toBeNull();
+  expect(commits).toHaveLength(1);
 });
 
 test("the self-service folder is chosen when turning on: the servers' files live there, one pull request in the administrator's name includes it, an include already in place or on its way needs none, a stale one is closed, and the folder cannot move while on", async ({

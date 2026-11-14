@@ -6,7 +6,7 @@ import {
   getDocsUrl,
   type gitWebUrls,
 } from "@archestra/shared";
-import { AlertTriangle, ExternalLink, GitBranch } from "lucide-react";
+import { AlertTriangle, GitBranch } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -17,6 +17,7 @@ import {
   GitSourceCard,
   GitSourceError,
   GitSourceNotice,
+  GitSourceSchedule,
 } from "@/components/git/git-source-card";
 import { OpenAppaGithubAppRequirements } from "@/components/openappa-github-app-requirements";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -51,6 +52,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github-credential";
 import {
   useAppaGithubSync,
+  useAppaGithubSyncing,
   useAppaRepositoryProtection,
   useConfigureAppaGithubSync,
   useUpdateAppaGithubSync,
@@ -58,24 +60,31 @@ import {
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { appaGitHost } from "./appa-git-host";
-import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
+import {
+  FinishSetupHost,
+  FinishSetupNotice,
+  useFinishSetupPieces,
+} from "./finish-setup-dialog";
+import {
+  DEFAULT_SYNC_INTERVAL,
+  GithubSyncSetupDialog,
+  SYNC_INTERVAL_LABELS,
+  SyncScheduleSelect,
+} from "./github-sync-setup-dialog";
 import { SelfServiceSetupDialog } from "./self-service-setup-dialog";
 
 type Source = NonNullable<
   archestraApiTypes.GetAppaGithubSyncResponses["200"]["source"]
 >;
-const intervals = {
-  "15m": "Every 15 minutes",
-  "1h": "Every hour",
-  "1d": "Once a day",
-};
 
 export function AppaGithubSyncPanel() {
   const query = useAppaGithubSync();
   const update = useUpdateAppaGithubSync();
+  const syncing = useAppaGithubSyncing();
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
   });
+  const pieces = useFinishSetupPieces();
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -175,7 +184,12 @@ export function AppaGithubSyncPanel() {
                 details={
                   <>
                     <GitSourceBranch branch={source.ref} />
-                    <span className="font-mono">{source.path}</span>
+                    {/* The repository link opens the policy file: only a
+                        file kept elsewhere than appa.toml at the root is
+                        named here. */}
+                    {source.path !== "appa.toml" ? (
+                      <span className="font-mono">{source.path}</span>
+                    ) : null}
                     {source.sourceCommit ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -193,17 +207,20 @@ export function AppaGithubSyncPanel() {
                     ) : (
                       <span>{lastChecked}</span>
                     )}
+                    {source.interval ? (
+                      <GitSourceSchedule
+                        schedule={SYNC_INTERVAL_LABELS[source.interval]}
+                      />
+                    ) : null}
                   </>
                 }
                 sync={
                   connected && canManage
                     ? {
                         onClick: () => update.mutate({ action: "sync" }),
-                        pending:
-                          update.isPending &&
-                          update.variables?.action === "sync",
+                        pending: syncing,
                         tooltip: source.interval
-                          ? `Checks ${intervals[source.interval].toLowerCase()}. ${lastChecked}.`
+                          ? `Checks ${SYNC_INTERVAL_LABELS[source.interval].toLowerCase()}. ${lastChecked}.`
                           : `${lastChecked}.`,
                       }
                     : undefined
@@ -240,36 +257,38 @@ export function AppaGithubSyncPanel() {
                   ) : undefined
                 }
               >
-                {connected && source.setupPullRequestNumber && (
+                {connected && pieces ? (
                   <GitSourceNotice>
-                    <InlineNotice variant="info">
-                      <GitBranch aria-hidden />
-                      <span className="font-medium">
-                        Merge your initial policy
-                      </span>
-                      <InlineNoticeText className="flex-1">
-                        Your current policy stays active until it merges.
-                      </InlineNoticeText>
-                      <a
-                        href={urls?.changeRequest(
-                          source.setupPullRequestNumber,
-                        )}
-                        target="_blank"
-                        rel="noreferrer"
-                        data-slot="inline-notice-action"
-                        className="ml-auto inline-flex shrink-0 items-center gap-0.5 font-medium underline-offset-4 hover:underline"
-                      >
-                        <span>Review and merge {git.changeRequestShort}</span>
-                        <ExternalLink className="size-3" aria-hidden />
-                      </a>
-                    </InlineNotice>
+                    <FinishSetupNotice pieces={pieces} />
                   </GitSourceNotice>
-                )}
+                ) : null}
                 {source.lastSyncError ? (
                   <GitSourceError
                     title="Could not sync policy"
                     message={source.lastSyncError}
                   />
+                ) : null}
+                {connected &&
+                (query.data.templateFiles?.state === "unavailable" ||
+                  // An access token has no App to grant it Workflows: what
+                  // it lacks shows here, not as a Finish setup step.
+                  (!source.githubAppConfigId &&
+                    (query.data.templateFiles?.state === "needs_permission" ||
+                      !!query.data.templateFiles?.withheld?.length))) ? (
+                  <GitSourceNotice>
+                    <InlineNotice variant="warning">
+                      <AlertTriangle aria-hidden />
+                      <span className="font-medium">
+                        {query.data.templateFiles.state === "unavailable"
+                          ? "Repository files could not be checked"
+                          : "Repository files could not be updated"}
+                      </span>
+                      <InlineNoticeText className="flex-1">
+                        {query.data.templateFiles.detail ??
+                          "Try again at the next sync."}
+                      </InlineNoticeText>
+                    </InlineNotice>
+                  </GitSourceNotice>
                 ) : null}
                 {connected && !source.setupPullRequestNumber && (
                   <SelfServiceRow
@@ -300,7 +319,7 @@ export function AppaGithubSyncPanel() {
               repo: source.repo,
               ref: source.ref,
               path: source.path,
-              interval: source.interval ?? "1h",
+              interval: source.interval ?? DEFAULT_SYNC_INTERVAL,
               validationDirectory,
               webUrl: githubWebUrl,
               selfService: source.selfService,
@@ -325,6 +344,8 @@ export function AppaGithubSyncPanel() {
           setDisconnecting(false);
         }}
       />
+      {/* The card stays when its notice goes, so the wizard lives here. */}
+      <FinishSetupHost />
     </>
   );
 }
@@ -406,8 +427,8 @@ function SelfServiceRow({
           <p className="text-xs text-muted-foreground">
             A branch {hostLink(selfService.leftoverRule.url, "ruleset")} still
             requires the {selfService.leftoverRule.checkName} check. {appName}{" "}
-            posts it as skipped on every pull request until you remove the rule,
-            or turn self-service on again.
+            keeps posting it, so pull requests merge once it passes. Remove the
+            rule before you move or stop Git sync.
           </p>
         ) : null}
         {selfService.enabled ? (
@@ -420,7 +441,6 @@ function SelfServiceRow({
                 policyFolderOf(source.path ?? "appa.toml", folder),
               ) ?? null
             }
-            onFinishSetup={canManage ? () => setSetup(true) : undefined}
           />
         ) : null}
         {selfService.enabled && selfService.autoMerge?.enabled ? (
@@ -473,21 +493,16 @@ function RepositoryProtection({
   policyPath,
   branchUrl,
   folderUrl,
-  onFinishSetup,
 }: {
   policyPath: string;
   /** The synced branch on the host, for the ruleset sentence. */
   branchUrl: string | null;
   /** The servers' folder on the host, for the include sentence. */
   folderUrl: (folder: string) => string | null;
-  /** Opens the self-service setup again, for a part that is still missing. */
-  onFinishSetup?: () => void;
 }) {
   const { data } = useAppaRepositoryProtection(true);
   if (!data) return null;
   const policyFile = policyPath.slice(policyPath.lastIndexOf("/") + 1);
-  const unfinished =
-    data.branchRules.state !== "active" || data.include.state === "missing";
   return (
     <>
       <p className="text-xs text-muted-foreground">
@@ -498,18 +513,8 @@ function RepositoryProtection({
           app: data.app,
         })}
       </p>
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         {includeSentence(data.include, policyFile, folderUrl)}
-        {unfinished && onFinishSetup ? (
-          <Button
-            size="xs"
-            type="button"
-            variant="outline"
-            onClick={onFinishSetup}
-          >
-            Finish setup
-          </Button>
-        ) : null}
       </p>
     </>
   );
@@ -625,12 +630,7 @@ function protectionSentence({
         </>
       );
     case "missing":
-      return (
-        <>
-          No branch ruleset requires the {checkName} check yet. Import it with
-          Finish setup.
-        </>
-      );
+      return <>No branch ruleset requires the {checkName} check yet.</>;
     case "needs_permission":
       return (
         <>
@@ -678,6 +678,7 @@ export function OpenAppaSourceForm({
       repo: source?.repo ?? "",
       ref: source?.ref ?? "",
       path: source?.path ?? "appa.toml",
+      interval: source?.interval ?? DEFAULT_SYNC_INTERVAL,
       credential: source?.githubPatId
         ? `pat:${source.githubPatId}`
         : source?.githubAppConfigId
@@ -693,9 +694,9 @@ export function OpenAppaSourceForm({
         repo: values.repo.trim(),
         ref: values.ref.trim() || null,
         path: values.path.trim(),
-        // Validations stay in the source's folder (traces by default), and the
-        // sync interval is changed on the panel, so neither is asked here.
-        interval: source?.interval ?? "1h",
+        // Validations stay in the source's folder (traces by default), so
+        // they are not asked here.
+        interval: values.interval,
         githubPatId: values.credential.startsWith("pat:")
           ? values.credential.slice(4)
           : null,
@@ -767,6 +768,16 @@ export function OpenAppaSourceForm({
               {...form.register("path", { required: true })}
             />
           </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="appa-interval">Sync schedule</Label>
+          <SyncScheduleSelect
+            id="appa-interval"
+            value={form.watch("interval")}
+            onValueChange={(value) =>
+              form.setValue("interval", value, { shouldDirty: true })
+            }
+          />
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">

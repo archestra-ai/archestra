@@ -475,6 +475,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "mcpServer.hardReset",
     fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
   },
+  // The arguments a user adds to the command of their own desktop MCP
+  // server. The snapshot holds how many there are and their hash, not the
+  // arguments. A request with the stored arguments updates nothing.
+  "/api/mcp_server/:id/desktop-arguments": {
+    resourceType: "mcpServer",
+    action: "mcpServer.updated",
+    fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
+    onlyWhenChanged: true,
+  },
   // Restore is a POST carrying :id — register directly so the POST walk-up
   // isn't dropped (which would mis-log it as unknown.created). findByIdForAudit
   // does NOT filter soft-deleted rows, so `before` captures the deleted install
@@ -1163,23 +1172,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       ManagedOauthClientModel.findByIdForAudit(id, orgId),
   },
-  "/api/llm-oauth-clients": {
-    resourceType: "oauthClient",
-    fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
-  },
-  "/api/llm-oauth-clients/:id": {
-    resourceType: "oauthClient",
-    fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
-  },
-
-  "/api/mcp-oauth-clients": {
-    resourceType: "oauthClient",
-    fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
-  },
-  "/api/mcp-oauth-clients/:id": {
-    resourceType: "oauthClient",
-    fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
-  },
 
   // LLM model catalog (admin) — sync has distinct semantics from a generic update.
   "/api/llm-models/sync": {
@@ -1541,16 +1533,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   },
 
   // OAuth client secret rotation — security-critical.
-  "/api/llm-oauth-clients/:id/rotate-secret": {
-    resourceType: "oauthClient",
-    action: "oauthClient.rotated",
-    fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
-  },
-  "/api/mcp-oauth-clients/:id/rotate-secret": {
-    resourceType: "oauthClient",
-    action: "oauthClient.rotated",
-    fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
-  },
 
   // ===== Bulk routes =====
   //
@@ -1640,11 +1622,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     actionByMethod: { DELETE: "virtualApiKey.bulk_deleted" },
   },
   "/api/oauth-clients/bulk": {
-    resourceType: "oauthClient",
-    resourceIdSource: "organizationContext",
-    actionByMethod: { DELETE: "oauthClient.bulk_deleted" },
-  },
-  "/api/llm-oauth-clients/bulk": {
     resourceType: "oauthClient",
     resourceIdSource: "organizationContext",
     actionByMethod: { DELETE: "oauthClient.bulk_deleted" },

@@ -6,6 +6,7 @@ import type { Organization } from "@/types";
 import type {
   RuntimeTemplateEditorSettings,
   RuntimeTemplateSettings,
+  RuntimeTemplateSettingsInput,
 } from "@/types/agent-runtime-template";
 import { RuntimeTemplateSettingsSchema } from "@/types/agent-runtime-template";
 import OrganizationModel from "./organization";
@@ -37,9 +38,16 @@ class AgentRuntimeTemplateModel {
 
   static async saveSettings(params: {
     organizationId: string;
-    settings: RuntimeTemplateSettings;
+    settings: RuntimeTemplateSettingsInput;
     popularAgentOverrides: PopularAgentOverrides | null;
+    /** Runs in the saving transaction, after the new settings are written. */
+    afterWrite?: (params: {
+      tx: Transaction;
+      settings: RuntimeTemplateSettings;
+      previous: RuntimeTemplateSettings;
+    }) => Promise<void>;
   }): Promise<RuntimeTemplateEditorSettings> {
+    const input = RuntimeTemplateSettingsSchema.parse(params.settings);
     const saved = await withDbTransaction(async (tx) => {
       const [row] = await tx
         .select({ id: schema.organizationsTable.id })
@@ -51,20 +59,18 @@ class AgentRuntimeTemplateModel {
         params.organizationId,
         tx,
       );
-      if (current.revision !== params.settings.revision)
+      if (current.revision !== input.revision)
         throw new ApiError(
           409,
           "Runtime templates changed. Reload the settings before saving again.",
         );
-      const settings = {
-        revision: params.settings.revision + 1,
-        templates: params.settings.templates,
-      };
+      const settings = { ...input, revision: input.revision + 1 };
       await AgentRuntimeTemplateModel.writeStoredSettings(
         params.organizationId,
         settings,
         tx,
       );
+      await params.afterWrite?.({ tx, settings, previous: current });
       await tx
         .update(schema.organizationsTable)
         .set({
@@ -140,6 +146,7 @@ class AgentRuntimeTemplateModel {
     return {
       revision: settings.revision,
       popularAgentOverrides: settings.popularAgentOverrides,
+      builtIns: settings.builtIns,
       templates: settings.templates.map(({ runtime, ...template }) => ({
         ...template,
         icon: template.icon ? "(set)" : null,
@@ -165,8 +172,11 @@ class AgentRuntimeTemplateModel {
     const settings = await withDbTransaction((tx) =>
       AgentRuntimeTemplateModel.readStoredSettings(params.organizationId, tx),
     );
-    return settings.templates.filter(
-      ({ runtime }) =>
+    return [
+      ...settings.templates.map(({ runtime }) => runtime),
+      ...Object.values(settings.builtIns).map((builtIn) => builtIn.settings),
+    ].filter(
+      (runtime) =>
         (runtime.tier && sameAgentRuntimeTierName(runtime.tier, params.name)) ||
         (runtime.maxTier &&
           sameAgentRuntimeTierName(runtime.maxTier, params.name)),
@@ -188,26 +198,40 @@ class AgentRuntimeTemplateModel {
       params.tx,
     );
     let changed = false;
-    const templates = settings.templates.map((template) => {
-      const runtime = { ...template.runtime };
+    const renamed = <
+      T extends { tier?: string | null; maxTier?: string | null },
+    >(
+      runtime: T,
+    ): T => {
+      const next = { ...runtime };
       for (const field of ["tier", "maxTier"] as const) {
-        const name = runtime[field];
+        const name = next[field];
         const rename = name
           ? params.renames.find(({ from }) =>
               sameAgentRuntimeTierName(name, from),
             )
           : undefined;
         if (rename) {
-          runtime[field] = rename.to;
+          next[field] = rename.to;
           changed = true;
         }
       }
-      return { ...template, runtime };
-    });
+      return next;
+    };
+    const templates = settings.templates.map((template) => ({
+      ...template,
+      runtime: renamed(template.runtime),
+    }));
+    const builtIns = Object.fromEntries(
+      Object.entries(settings.builtIns).map(([id, builtIn]) => [
+        id,
+        { ...builtIn, settings: renamed(builtIn.settings) },
+      ]),
+    );
     if (changed) {
       await AgentRuntimeTemplateModel.writeStoredSettings(
         params.organizationId,
-        { ...settings, templates },
+        { ...settings, templates, builtIns },
         params.tx,
       );
     }
@@ -227,7 +251,7 @@ class AgentRuntimeTemplateModel {
     );
     return row
       ? RuntimeTemplateSettingsSchema.parse(row.secret)
-      : { revision: 0, templates: [] };
+      : { revision: 0, templates: [], builtIns: {} };
   }
 
   private static async writeStoredSettings(

@@ -1,34 +1,54 @@
 {
   "schema": 1,
-  "sourceSha": "b868f50268e642207249540844857c1604f10cf8",
-  "baseSha": "65767ddd4bc383febf608fce9e08edae9fe9b03e",
-  "runId": 43236238945,
+  "sourceSha": "ede7d510351c7121f2b088bf2f01de11fe529d32",
+  "baseSha": "d61c2f4244afb3f54e576886cd6e953a67b99dd5",
+  "runId": 43550751766,
   "attempt": 1,
-  "platformTree": "9352f1e6016fac55ec75f9a279f25ce1a047c396",
+  "platformTree": "ab59df40ef9d0eb6b73ad74d66b1c7d3a805dbf0",
   "files": [
     {
       "path": "docs/openapi.json",
-      "blob": "64d7ae33284f2efc9259053748e50714952a5289"
+      "blob": "2ad7a9d2c7cb7c61bd8609215428063b47d8c823"
     },
     {
-      "path": "docs/assets/automated_screenshots/llm-proxy_limits.webp",
-      "blob": "694d106dde168d92d92bc066953f437cf55a1283"
+      "path": "docs/assets/automated_screenshots/agents-runtime-setup_tier-memory.dark.webp",
+      "blob": "b2a193db0a060b1418a71178354690f9c37e2b61"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/agents-triggers-and-channels-email_setup.dark.webp",
+      "blob": "f066fa1c7472ec7bfb68c5af1e47abc2a3a5287d"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/agents-triggers-and-channels-email_setup.webp",
+      "blob": "25fb1281b034d242ff388cfdf36c6050f9046798"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/agents-triggers-and-channels-ms-teams_setup.dark.webp",
+      "blob": "a2ad12778383fd9749867fa89fdfce3b4048e47f"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/agents-triggers-and-channels-ms-teams_setup.webp",
+      "blob": "0d4d7a0e3a00569deef2bf6a1a21aec8f318a50e"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/knowledge_connectors.dark.webp",
+      "blob": "cd1041a6904cbb1cb1e70033e79d83920c024f56"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/knowledge_connectors.webp",
+      "blob": "a045b6ba3b61c7cdcc74adde7ed7df3d541d6395"
     },
     {
       "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.dark.webp",
-      "blob": "843d1aac70c3547ec19c6da3944c8644437940a7"
+      "blob": "f4b37c6c12c399198b05c80a234aa6e29974b0e6"
     },
     {
       "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.webp",
-      "blob": "00b98a89bd1a572ba97eff47ac245c91f02edae0"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-connection_connect-with-ai.webp",
-      "blob": "7e42a16de015763761625b9dd81514c40424fc00"
+      "blob": "36477ec17d317e4be4e9906994c431b8b14f3248"
     },
     {
       "path": "docs/pages/admin/performance-benchmarks.md",
-      "blob": "d4fe36ec18cb3ab2eb658ae06f5cb7987a1c3dbf"
+      "blob": "0c6d43ddfac59009f4dfb361b9205a97f1fd3650"
     }
   ]
 }

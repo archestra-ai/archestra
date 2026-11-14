@@ -89,8 +89,8 @@ vi.mock("@/lib/teams/team.query");
 
 vi.mock("@/lib/organization.query");
 
-vi.mock("@/lib/llm-oauth-clients.query", () => ({
-  useLlmOauthClients: () => ({
+vi.mock("@/lib/oauth-clients.query", () => ({
+  useOauthClients: () => ({
     data: { data: [{ id: "client-1", name: "CI runner", clientId: "oc_1" }] },
   }),
 }));

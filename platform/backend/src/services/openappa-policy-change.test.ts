@@ -1,6 +1,7 @@
 import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { HttpResponse, http } from "msw";
 import config from "@/config";
+import db, { schema } from "@/database";
 import {
   GithubAppConfigModel,
   RuntimeCredentialConnectionModel,
@@ -536,3 +537,104 @@ for (const credential of ["app", "pat"] as const) {
     ).toMatchObject({ state: "open", mergeable: true });
   });
 }
+
+test("a merged policy PR that Git sync has not applied queues a sync; a failed sync since the merge, and then the applied merge, are what the status says", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, org.id, { role: "admin" });
+  await configureValidationSource({
+    organizationId: org.id,
+    directory: "traces",
+    appWriter: true,
+  });
+  const merge = "c".repeat(40);
+  server.use(
+    http.get("https://api.github.com/repos/example/policies/pulls/17", () =>
+      HttpResponse.json({
+        number: 17,
+        html_url: "https://github.com/example/policies/pull/17",
+        state: "closed",
+        merged: true,
+        merged_at: "2026-11-13T18:03:39Z",
+        merge_commit_sha: merge,
+        mergeable: null,
+        head: { ref: "archestra/openappa-change" },
+      }),
+    ),
+    // The commit accepted before the merge lies behind it; any later one
+    // holds it.
+    http.get(
+      ({ request }) =>
+        request.url.startsWith(
+          "https://api.github.com/repos/example/policies/compare/",
+        ),
+      ({ request }) => {
+        const [base, head] = new URL(request.url).pathname
+          .slice("/repos/example/policies/compare/".length)
+          .split("...");
+        expect(base).toBe(merge);
+        return HttpResponse.json({
+          status: head === baseSha ? "behind" : "ahead",
+        });
+      },
+    ),
+  );
+  const status = () =>
+    getOpenAppaPolicyChangeStatus({
+      organizationId: org.id,
+      userId: user.id,
+      number: 17,
+    });
+  const queued = async () =>
+    (await db.select().from(schema.tasksTable)).filter(
+      (task) =>
+        task.taskType === "openappa_github_sync" &&
+        (task.payload as { organizationId?: string }).organizationId === org.id,
+    );
+
+  // Merged, and the accepted commit is still the one before the merge: a
+  // pull is queued rather than left to the schedule.
+  expect(await status()).toMatchObject({
+    state: "merged",
+    applied: false,
+    syncQueued: true,
+  });
+  expect(await queued()).toHaveLength(1);
+  // Asked again before it ran: still one pull queued.
+  await status();
+  expect(await queued()).toHaveLength(1);
+
+  // A pull since the merge failed: that failure is the answer.
+  const source = await OpenAppaGithubSyncModel.find(org.id);
+  if (!source) throw new Error("Expected the source");
+  await OpenAppaGithubSyncModel.finish({
+    organizationId: org.id,
+    revision: source.revision,
+    outcome: { error: "GitHub returned HTTP 502" },
+  });
+  expect(await status()).toMatchObject({
+    applied: false,
+    syncFailed: { reason: "GitHub returned HTTP 502" },
+  });
+
+  // Pulled since: the accepted commit holds the merge.
+  const failed = await OpenAppaGithubSyncModel.find(org.id);
+  if (!failed) throw new Error("Expected the source");
+  await OpenAppaGithubSyncModel.finish({
+    organizationId: org.id,
+    revision: failed.revision,
+    outcome: {
+      content: changed,
+      contentHash: createHash("sha256").update(changed).digest("hex"),
+      sourceCommit: "d".repeat(40),
+    },
+  });
+  const applied = await status();
+  expect(applied).toMatchObject({ state: "merged", applied: true });
+  expect(applied).not.toHaveProperty("syncQueued");
+});

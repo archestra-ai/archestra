@@ -12,9 +12,9 @@ lastUpdated: 2026-11-13
 |------|-------------|--------------------------|
 | [`list_peer_messages`](#list_peer_messages) | List held messages as JSON: {"messages":[{"message_id":"id","expires_at":"ISO-8601"}]}. | None |
 | [`read_peer_message`](#read_peer_message) | Return a held message as text, or refusal feedback with remedy offers. | None |
-| [`get_openappa_yell`](#get_openappa_yell) | Read a saved OpenAPPA report from the current organization, including its originating user or service account. | [`log:read`](/docs/reference/permissions#log:read) |
+| [`get_openappa_yell`](#get_openappa_yell) | Read a saved OpenAPPA report from one of your own sessions (any session in the organization with log:admin), including its originating user or service account. | [`log:read`](/docs/reference/permissions#log:read) |
 | [`resolve_openappa_yell`](#resolve_openappa_yell) | Mark an OpenAPPA yell resolved, or reopen it with resolved=false. | [`log:read`](/docs/reference/permissions#log:read) |
-| [`list_openappa_yells`](#list_openappa_yells) | List the organization's saved OpenAPPA yells, newest first, with each one's id, session, tool call, kind (agent, or approval_waived / block_waived for a call the Break the glass settings let throug... | [`log:read`](/docs/reference/permissions#log:read) |
+| [`list_openappa_yells`](#list_openappa_yells) | List the saved OpenAPPA yells you may read, newest first: your own sessions' yells, or the whole organization's with log:admin. | [`log:read`](/docs/reference/permissions#log:read) |
 | [`list_openappa_consults`](#list_openappa_consults) | List the external consults OpenAPPA recorded for one session, newest first: every annotator, context provider, authority, sanitizer and audience source it asked, with the outcome, the HTTP status, ... | [`log:read`](/docs/reference/permissions#log:read) |
 | [`create_guardrails_repository`](#create_guardrails_repository) | Create a private policy repository from the OpenAPPA configuration template, seed it with the current policy and battery declarations, and start Git sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
 | [`connect_guardrails_repository`](#connect_guardrails_repository) | Make a policy file in an existing GitHub repository or GitLab project the organization's OpenAPPA policy source, pull it now, and keep it in sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
@@ -31,7 +31,7 @@ lastUpdated: 2026-11-13
 | [`run_openappa_policy_tests`](#run_openappa_policy_tests) | Replay saved validations against the current policy and record the result in validation run history. | [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update) |
 | [`preview_guardrails_validation_change`](#preview_guardrails_validation_change) | Validate a proposed change to the .appa validation files and replay it. | [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) |
 | [`update_guardrails_validation`](#update_guardrails_validation) | Save a change to the .appa validation files. | [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update) |
-| [`get_guardrails_policy_change_status`](#get_guardrails_policy_change_status) | Check the review state of an OpenAPPA policy pull request and whether Git sync has processed the merged policy. | [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) |
+| [`get_guardrails_policy_change_status`](#get_guardrails_policy_change_status) | Check the review state of an OpenAPPA policy pull request, and once it merges whether Git sync applied it (`applied`), with an `instruction` for what to tell the user. | [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) |
 | [`get_remedy_plans`](#get_remedy_plans) | Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. | None |
 | [`execute_remedy_plan`](#execute_remedy_plan) | Apply a remedy plan that the organization's guardrails policy offers for a blocked call. | None |
 | [`get_guardrails_server_rules`](#get_guardrails_server_rules) | Read one MCP server's own Guardrails rules: its file in the Git sync policy repository's self-service folder (`path`, e.g. | None |
@@ -128,7 +128,7 @@ Required RBAC permission: [`organizationSettings:update`](/docs/reference/permis
 | `name` | `string` | Yes |  |
 | `githubAppConfigId` | `string` | No |  |
 | `gitlabTokenId` | `string` | No |  |
-| `interval` | `"15m" \| "1h" \| "1d"` | No |  |
+| `interval` | `"5m" \| "15m" \| "1h" \| "1d"` | No |  |
 
 
 ### connect_guardrails_repository
@@ -144,7 +144,7 @@ Required RBAC permission: [`organizationSettings:update`](/docs/reference/permis
 | `ref` | `string \| null` | No | Branch, tag, or commit to follow. Omit to follow the default branch. |
 | `githubAppConfigId` | `string` | No | An organization GitHub App, for a GitHub repository. |
 | `gitlabTokenId` | `string` | No | A GitLab access token, for a GitLab project. |
-| `interval` | `"15m" \| "1h" \| "1d"` | No |  |
+| `interval` | `"5m" \| "15m" \| "1h" \| "1d"` | No |  |
 
 
 ### sync_guardrails_repository

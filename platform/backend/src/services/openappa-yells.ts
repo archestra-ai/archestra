@@ -1,4 +1,5 @@
 import type { CreatedBy } from "@archestra/shared";
+import { userHasPermission } from "@/auth";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import AppModel from "@/models/app";
@@ -11,11 +12,42 @@ import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { ApiError } from "@/types";
 import type { OpenAppaYellQuery } from "@/types/openappa-yell";
 
+/**
+ * The yells a viewer may read and resolve: with `log:admin`, every yell in the
+ * organization; otherwise only the yells of the viewer's own sessions, as for
+ * the other logs.
+ */
+export async function openAppaYellScope(params: {
+  organizationId: string;
+  userId: string;
+}) {
+  const canSeeAllLogs = await userHasPermission(
+    params.userId,
+    params.organizationId,
+    "log",
+    "admin",
+  );
+  return {
+    organizationId: params.organizationId,
+    callerId: canSeeAllLogs ? undefined : `user:${params.userId}`,
+  };
+}
+
 export async function listOpenAppaYells(
   params: OpenAppaYellQuery & { organizationId: string; userId: string },
 ) {
-  const result = await OpenAppaYellModel.list(params);
+  const result = await OpenAppaYellModel.list({
+    ...params,
+    ...(await openAppaYellScope(params)),
+  });
   return { ...result, data: await present(result.data, params) };
+}
+
+export async function summarizeOpenAppaYells(params: {
+  organizationId: string;
+  userId: string;
+}) {
+  return OpenAppaYellModel.summary(await openAppaYellScope(params));
 }
 
 export async function resolveOpenAppaYell(params: {
@@ -24,7 +56,10 @@ export async function resolveOpenAppaYell(params: {
   id: string;
   resolved: boolean;
 }) {
-  const row = await OpenAppaYellModel.setResolved(params);
+  const row = await OpenAppaYellModel.setResolved({
+    ...params,
+    ...(await openAppaYellScope(params)),
+  });
   if (!row) throw new ApiError(404, "Yell not found");
   return (await present([row], params))[0];
 }
@@ -37,7 +72,7 @@ export async function getOpenAppaYell(params: {
   conversationId?: string;
 }) {
   const row = await OpenAppaYellModel.find({
-    organizationId: params.organizationId,
+    ...(await openAppaYellScope(params)),
     id: params.id,
   });
   if (!row) throw new ApiError(404, "Yell not found");
@@ -62,7 +97,7 @@ export async function downloadOpenAppaYell(params: {
   id: string;
 }) {
   const archive = await OpenAppaYellModel.findArchive({
-    organizationId: params.organizationId,
+    ...(await openAppaYellScope(params)),
     id: params.id,
   });
   if (!archive)

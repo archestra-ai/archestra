@@ -74,5 +74,5 @@ export const LOCAL_MCP_DISABLED_MESSAGE = (
 export const LOGS_LAYOUT_CONFIG = {
   title: "Logs",
   description:
-    "Monitor LLM proxy requests, MCP tool calls, and administrative activity across your organization.",
+    "Trace requests, tool calls, guardrail decisions and changes across your organization.",
 };

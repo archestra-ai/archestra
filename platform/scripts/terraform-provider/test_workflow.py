@@ -135,6 +135,56 @@ process.stdout.write(String(vm.runInNewContext(condition, {github:{ref}, needs:{
             self.assertFalse((checkout/'injected').exists())
 
 
+    def test_failures_alert_and_successes_stay_quiet(self):
+        source = (ROOT / '.github/workflows/update-terraform-provider.yml').read_text()
+        job = source.split('  notify:\n', 1)[1]
+        self.assertIn('needs: [prepare, publish]', job)
+        self.assertNotIn('secrets.', job)
+        condition = re.search(r'^    if: >-\n((?:      .+\n)+)', job, re.M)[1].replace('\n', ' ')
+        condition = condition.replace('always()', 'true')
+        for ref, prepare, publish, expected in (
+            ('refs/heads/main', 'failure', 'skipped', 'true'),
+            ('refs/heads/main', 'success', 'failure', 'true'),
+            ('refs/heads/main', 'success', 'success', 'false'),
+            # A release that is not published yet skips publication quietly.
+            ('refs/heads/main', 'success', 'skipped', 'false'),
+            ('refs/heads/feature', 'failure', 'skipped', 'false'),
+        ):
+            actual = subprocess.check_output(['node', '-e', '''
+const vm = require('node:vm');
+const [condition, ref, prepare, publish] = process.argv.slice(1);
+process.stdout.write(String(vm.runInNewContext(condition, {github:{repository:'archestra-ai/archestra', ref},
+  needs:{prepare:{result:prepare}, publish:{result:publish}}})));
+''', condition, ref, prepare, publish], text=True)
+            self.assertEqual(actual, expected, (ref, prepare, publish))
+
+        script = step_script('update-terraform-provider.yml', 'Post the failure to alerting')
+        with tempfile.TemporaryDirectory() as work:
+            root = Path(work)
+            (root/'curl').write_text('#!/bin/sh\ncat > "$POSTED"\n')
+            (root/'curl').chmod(0o755)
+            env = os.environ | {'PATH': f"{root}:{os.environ['PATH']}", 'POSTED': str(root/'posted'),
+                                'SLACK_WEBHOOK_URL': 'https://hooks.example.invalid/x',
+                                'RUN_URL': 'https://github.com/run/1'}
+            for prepare, publish, expected in (
+                ('failure', 'skipped', 'could not generate the provider update'),
+                ('success', 'failure', 'provider tests fail'),
+            ):
+                subprocess.run(['bash', '-c', script], check=True, capture_output=True,
+                               env=env | {'PREPARE_RESULT': prepare, 'PUBLISH_RESULT': publish})
+                text = json.loads((root/'posted').read_text())['text']
+                self.assertIn(expected, text)
+                self.assertIn('<https://github.com/run/1|View workflow run>', text)
+            self.assertIn('head%3Aautomation%2Fplatform-api|repair pull request>', text)
+            (root/'posted').unlink()
+            result = subprocess.run(['bash', '-c', script], capture_output=True, text=True,
+                                    env=env | {'SLACK_WEBHOOK_URL': '', 'PREPARE_RESULT': 'failure',
+                                               'PUBLISH_RESULT': 'skipped'})
+            self.assertEqual(result.returncode, 0)
+            self.assertIn('webhook secret is empty', result.stdout)
+            self.assertFalse((root/'posted').exists())
+
+
 def step_script(workflow, name):
     source = (ROOT / '.github/workflows' / workflow).read_text()
     step = source.split(f'      - name: {name}\n', 1)[1].split('\n      - name:', 1)[0]

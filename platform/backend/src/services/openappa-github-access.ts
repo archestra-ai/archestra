@@ -51,7 +51,10 @@ import { mapWithConcurrency } from "@/utils/concurrency";
  * App token carries, by GitHub's permission names.
  */
 export type GithubJobPermissions = Partial<
-  Record<"contents" | "pull_requests" | "checks" | "metadata", "read" | "write">
+  Record<
+    "contents" | "pull_requests" | "checks" | "metadata" | "workflows",
+    "read" | "write"
+  >
 >;
 
 /**
@@ -77,6 +80,7 @@ function describePermissions(permissions: GithubJobPermissions): string {
     pull_requests: "Pull requests",
     checks: "Checks",
     metadata: "Metadata",
+    workflows: "Workflows",
   };
   return Object.entries(permissions)
     .map(
@@ -783,16 +787,6 @@ export async function rememberSetupCommit(
       "OpenAPPA could not keep the setup request's commit",
     );
   }
-}
-
-/** The commit a setup request was opened with, as kept; null once forgotten. */
-export async function keptSetupCommit(
-  params: SetupRequest,
-): Promise<string | null> {
-  const kept = await cacheManager
-    .get<string>(setupCommitKey(params))
-    .catch(() => undefined);
-  return typeof kept === "string" && /^[a-f0-9]{40}$/.test(kept) ? kept : null;
 }
 
 /** A setup request: one organization's, on one host, by repository and number. */

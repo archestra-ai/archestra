@@ -9,6 +9,7 @@ import {
   summarizeAgentRuntimeTier,
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
+import { LockKeyhole } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
@@ -24,6 +25,11 @@ import {
   SettingsSectionGroup,
 } from "@/components/settings-section";
 import { FieldDescription } from "@/components/ui/field-description";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import {
   InputGroup,
@@ -113,9 +119,12 @@ export function isClaudeCodeRuntimeConfig(
 export function AgentRuntimeFields({
   value,
   onChange,
+  locked = false,
 }: {
   value: AgentRuntimeConfig | null;
   onChange: (value: AgentRuntimeConfig | null) => void;
+  /** Its Agent Runtime sets the container and limits: shown read-only. */
+  locked?: boolean;
 }) {
   const enabledId = useId();
   const credentialsHref = useCredentialsPageHref();
@@ -160,20 +169,22 @@ export function AgentRuntimeFields({
               title="Container"
               description="The image and client each run starts. It inherits this agent's network egress policy and image pull settings."
             >
-              <AgentRuntimeImageFields value={config} onChange={onChange} />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <AgentRuntimeProtocolField
-                  value={config}
-                  onChange={onChange}
-                  constrainToHarness
-                  compact
-                />
-                <AgentRuntimeSteeringField
-                  value={config}
-                  onChange={onChange}
-                  compact
-                />
-              </div>
+              <fieldset disabled={locked} className="space-y-4">
+                <AgentRuntimeImageFields value={config} onChange={onChange} />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <AgentRuntimeProtocolField
+                    value={config}
+                    onChange={onChange}
+                    constrainToHarness
+                    compact
+                  />
+                  <AgentRuntimeSteeringField
+                    value={config}
+                    onChange={onChange}
+                    compact
+                  />
+                </div>
+              </fieldset>
             </SettingsSection>
             <SettingsSection
               title="Environment"
@@ -202,8 +213,9 @@ export function AgentRuntimeFields({
               title="Limits"
               description="Run lifetime, spend and container size. Blank fields use installation defaults."
             >
-              <AgentRuntimeRunLimits value={config} onChange={onChange} />
-              <AgentRuntimeTierFields value={config} onChange={onChange} />
+              <fieldset disabled={locked}>
+                <AgentRuntimeLimitFields value={config} onChange={onChange} />
+              </fieldset>
             </SettingsSection>
             <SettingsSection
               title="Access"
@@ -215,6 +227,24 @@ export function AgentRuntimeFields({
         )}
       </SettingsSectionGroup>
     </div>
+  );
+}
+
+/** Says which locked Agent Runtime sets the settings shown read-only. */
+export function LockedRuntimeNotice({ name }: { name: string }) {
+  return (
+    <InlineNotice variant="info">
+      <LockKeyhole className="size-4 shrink-0" />
+      <InlineNoticeBody>
+        <span className="font-medium">Set by the {name} runtime</span>
+        <InlineNoticeText>
+          Its launch command, protocol, follow-up delivery, limits, tiers and
+          Claude account apply to every agent that uses it. Administrators
+          change them in Settings, under Agents. Environment, credentials and
+          ports stay this agent's own.
+        </InlineNoticeText>
+      </InlineNoticeBody>
+    </InlineNotice>
   );
 }
 
@@ -545,8 +575,8 @@ export function AgentRuntimeSteeringField({
   );
 }
 
-/** Limits, tiers and access, for surfaces with no section of their own. */
-export function AgentRuntimeRunControls({
+/** Limits and tiers: what an Agent Runtime's settings set for its runs. */
+export function AgentRuntimeLimitFields({
   value,
   onChange,
 }: RuntimeSectionProps) {
@@ -554,7 +584,6 @@ export function AgentRuntimeRunControls({
     <div className="space-y-5">
       <AgentRuntimeRunLimits value={value} onChange={onChange} />
       <AgentRuntimeTierFields value={value} onChange={onChange} />
-      <AgentRuntimeAccessFields value={value} onChange={onChange} />
     </div>
   );
 }
@@ -690,7 +719,10 @@ function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
 }
 
 /** The ports people can open on a run, and host access. */
-function AgentRuntimeAccessFields({ value, onChange }: RuntimeSectionProps) {
+export function AgentRuntimeAccessFields({
+  value,
+  onChange,
+}: RuntimeSectionProps) {
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...value, ...patch });
   return (

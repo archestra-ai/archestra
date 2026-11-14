@@ -109,6 +109,7 @@ describe("getAnalyticsConfig", () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     delete process.env.ARCHESTRA_ANALYTICS;
+    delete process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED;
     delete process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY;
     delete process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST;
   });
@@ -142,6 +143,21 @@ describe("getAnalyticsConfig", () => {
     expect(getAnalyticsConfig().enabled).toBe(true);
   });
 
+  test("defaults to disabled in production with an enterprise license", () => {
+    process.env.NODE_ENV = "production";
+    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED = "true";
+
+    expect(getAnalyticsConfig().enabled).toBe(false);
+  });
+
+  test("explicit ARCHESTRA_ANALYTICS=enabled wins with an enterprise license", () => {
+    process.env.NODE_ENV = "production";
+    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED = "true";
+    process.env.ARCHESTRA_ANALYTICS = "enabled";
+
+    expect(getAnalyticsConfig().enabled).toBe(true);
+  });
+
   test("explicit ARCHESTRA_ANALYTICS=disabled wins in production", () => {
     process.env.NODE_ENV = "production";
     process.env.ARCHESTRA_ANALYTICS = "disabled";
@@ -168,6 +184,7 @@ describe("getAnalyticsConfig", () => {
 describe("getSentryConfig", () => {
   beforeEach(() => {
     vi.stubEnv("ARCHESTRA_ANALYTICS", undefined);
+    vi.stubEnv("ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED", undefined);
     vi.stubEnv("ARCHESTRA_SENTRY_BACKEND_DSN", undefined);
     vi.stubEnv("ARCHESTRA_SENTRY_ENVIRONMENT", undefined);
     vi.stubEnv("NODE_ENV", "production");
@@ -2487,6 +2504,17 @@ describe("isCodeRuntimeEnabled", () => {
     loadKubeconfigFromCurrentCluster: undefined,
   };
 
+  test("disabled when the orchestrator is turned off, even with the flag and k8s configured", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "true",
+        loadKubeconfigFromCurrentCluster: "true",
+        orchestratorEnabledEnv: "false",
+      }),
+    ).toBe(false);
+  });
+
   test("enabled when an explicit runner host is configured, even without k8s", () => {
     expect(
       isCodeRuntimeEnabled({
@@ -3821,6 +3849,7 @@ describe("OpenAPPA feature configuration", () => {
     "true",
     " true ",
   ])("requires explicit opt-in for external reports independently of analytics (%s)", (forwarding) => {
+    vi.stubEnv("ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED", undefined);
     for (const analytics of ["disabled", "enabled", undefined]) {
       vi.stubEnv("ARCHESTRA_ANALYTICS", analytics);
       for (const environment of ["production", "development"]) {

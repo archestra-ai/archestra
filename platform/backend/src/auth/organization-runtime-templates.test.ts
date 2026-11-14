@@ -28,6 +28,7 @@ test("organization deletion removes only its runtime templates and cannot resurr
     icon: null,
     hidden: false,
     position: 0,
+    locked: false,
     runtime: {
       ...buildCustomAgentRuntime({
         image: "registry.example.com/workspace:v1",
@@ -77,6 +78,7 @@ test("organization deletion removes only its runtime templates and cannot resurr
   expect(await AgentRuntimeTemplateModel.getSettings(organization.id)).toEqual({
     revision: 0,
     templates: [],
+    builtIns: {},
     popularAgentOverrides: null,
   });
 });

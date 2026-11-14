@@ -120,6 +120,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Values: `true`, `false`
   - See [Pricing Model](/docs/get-started/pricing-model) for what it unlocks.
   - Instances with fewer than 30 users get most enterprise features without it. Content encryption, data retention, Vault, and Real User Monitoring always need it.
+  - Turns [`ARCHESTRA_ANALYTICS`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS) off unless that variable is set.
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Activates the enterprise Knowledge Base features, such as team-scoped connectors.
   - Default: `false`
@@ -144,7 +145,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - The OTLP log exporter always receives structured records.
 
 - **`ARCHESTRA_ANALYTICS`** - Sends usage analytics and telemetry to Archestra. Guardrails diagnostic forwarding has a separate [opt-in](#ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED).
-  - Default: on in production builds, including the released Docker images; off in development
+  - Default: on in production builds, including the released Docker images. Off in development, and off when [`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`](/docs/admin/deployment/configuration#ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED) is `true`.
   - Values: `disabled` turns it off. Any other value turns it on.
 
 - **`ARCHESTRA_ANALYTICS_POSTHOG_KEY`** - PostHog project key for analytics.
@@ -319,6 +320,13 @@ To change any of these secrets, follow [Secret Rotation](/docs/admin/deployment/
 ## LLM Providers
 
 These variables set each provider's deployment-wide endpoint and authentication. A base URL saved on a key in **Settings → LLM → Model providers** overrides the variable for that key. See [Supported LLM Providers](/docs/llm-proxy/providers) for setup.
+
+- **`ARCHESTRA_LLM_SYSTEM_KEYS_AUTO_DELETE_ENABLED`** - Deletes the automatic provider key of a keyless provider once that provider is no longer enabled in this deployment's environment, along with the key's virtual key mappings and model pool members. Keyless providers are Gemini on Vertex AI, Azure with Entra ID, keyless Anthropic and Bedrock with IAM.
+  - Default: `true`
+  - Values: `true`, `false`
+  - Set it to `false` on every deployment that shares one database with another. Otherwise a deployment deletes the keys of providers that only the other one enables.
+  - A deployment that does not enable a provider still lists that provider's key. Requests it sends with the key fail, and **Refresh models** reports the key as failed there. Send that provider's traffic to a deployment that enables it.
+  - While it is `false`, the key of a provider you turn off everywhere stays listed and fails when used. Set it to `true` for one restart to remove it.
 
 ### OpenAI
 
@@ -812,6 +820,10 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Set it when your deployment uses a catalog mirror.
 
 ## MCP Server Orchestrator
+
+- **`ARCHESTRA_ORCHESTRATOR_ENABLED`** - Set to `false` to turn the Kubernetes orchestrator off. Archestra then loads no Kubernetes credentials, including the in-cluster service account, and creates, changes or deletes nothing in the cluster.
+  - Default: `true`. The Helm chart sets it from `archestra.orchestrator.enabled`.
+  - Use it for an install that shares its database with another install that runs the MCP servers. Self-hosted MCP servers, Agent Runtime and the code sandbox it provisions are unavailable on that install.
 
 - **`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`** - Uses the in-cluster service account to reach Kubernetes.
   - Default: `false`. The Helm chart sets `true`.

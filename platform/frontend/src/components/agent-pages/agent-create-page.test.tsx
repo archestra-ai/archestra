@@ -21,6 +21,8 @@ vi.mock("@/lib/agent-runtime-templates.query", () => ({
     refetch: vi.fn(),
   }),
   useResolveRuntimeTemplate: () => ({ isPending: false, mutate: vi.fn() }),
+  useBuiltInRuntimeDefaults: () => () => undefined,
+  useLockedRuntimeName: () => null,
 }));
 vi.mock("next/navigation");
 vi.mock("@/lib/organization.query");
@@ -490,6 +492,9 @@ describe("AgentCreatePage", () => {
           isPending: false,
         }) as unknown as ReturnType<typeof useHasPermissions>,
     );
+    vi.mocked(useK8sCapabilities).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useK8sCapabilities>);
     const user = userEvent.setup();
     renderAgentCreatePage();
     await user.click(

@@ -35,6 +35,41 @@ export const DesktopMcpCommandSchema = z
   .min(1)
   .max(DESKTOP_MCP_COMMAND_MAX_LENGTH);
 
+/** How many arguments a user can add to the command of a catalog item. */
+const DESKTOP_MCP_ARGUMENTS_MAX_COUNT = 64;
+
+/**
+ * The most characters all arguments of one installation have together. With
+ * the command of the catalog item it stays far under the 32,767 characters
+ * that Windows allows for one command line.
+ */
+const DESKTOP_MCP_ARGUMENTS_MAX_TOTAL_LENGTH =
+  4 * DESKTOP_MCP_COMMAND_MAX_LENGTH;
+
+/**
+ * The arguments that a user adds to the command of a desktop MCP catalog
+ * item for their own installation. The device puts them after the arguments
+ * of the command, each as one argument: no shell splits or joins them.
+ * `$USER` and `$HOME` are replaced on the device, as in the command.
+ */
+export const DesktopMcpArgumentsSchema = z
+  .array(
+    z
+      .string()
+      .min(1, "An argument cannot be empty.")
+      .max(DESKTOP_MCP_COMMAND_MAX_LENGTH)
+      .refine(isOneLine, "An argument cannot have a line break or a NUL."),
+  )
+  .max(DESKTOP_MCP_ARGUMENTS_MAX_COUNT)
+  .refine(
+    (values) =>
+      values.reduce((total, value) => total + value.length, 0) <=
+      DESKTOP_MCP_ARGUMENTS_MAX_TOTAL_LENGTH,
+    `The arguments can have at most ${DESKTOP_MCP_ARGUMENTS_MAX_TOTAL_LENGTH} characters together.`,
+  );
+
+export type DesktopMcpArguments = z.infer<typeof DesktopMcpArgumentsSchema>;
+
 /** The URL of an HTTP MCP server that the user runs on the device. */
 export const DesktopMcpUrlSchema = z
   .string()
@@ -107,6 +142,11 @@ export const SelectDesktopMcpRequestSchema = createSelectSchema(
 export type DesktopMcpRequest = z.infer<typeof SelectDesktopMcpRequestSchema>;
 
 // === Internal helpers
+
+/** No line break and no NUL: neither can be in one argument of a program. */
+function isOneLine(value: string): boolean {
+  return !/[\0\r\n]/.test(value);
+}
 
 function isHttpUrl(value: string): boolean {
   try {

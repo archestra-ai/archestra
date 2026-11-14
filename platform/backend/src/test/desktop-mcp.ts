@@ -16,29 +16,50 @@ export interface TestDevice {
   device: DesktopDevice;
   deviceKey: string;
   tunnelId: string;
-  /** The bearer header the tunnel client of this device sends. */
-  headers: { authorization: string };
+  /**
+   * The headers the tunnel client of this device sends: the bearer header,
+   * and the version of its program when the device has one.
+   */
+  headers: { authorization: string; "x-tunnel-client-version"?: string };
 }
 
-/** Registers a device for a user, as an approved sign-in does. */
+/**
+ * Registers a device for a user, as an approved sign-in does. With
+ * `programVersion`, the device has reported that version of its program
+ * already, and sends it with each request, as a tunnel client does: a poll
+ * with no version stores that the device reported none.
+ */
 export async function connectTestDevice(params: {
   organizationId: string;
   userId: string;
   name?: string;
+  programVersion?: string;
 }): Promise<TestDevice> {
   const deviceKey = `${DESKTOP_DEVICE_KEY_PREFIX}${randomBytes(32).toString("base64url")}`;
-  const device = await DesktopDeviceModel.replaceForUser({
+  const created = await DesktopDeviceModel.replaceForUser({
     organizationId: params.organizationId,
     userId: params.userId,
     name: params.name ?? "MBP-0142",
     platform: "macos",
     keyHash: desktopTunnelService.hashDeviceKey(deviceKey),
   });
+  const { programVersion } = params;
+  if (programVersion) {
+    await DesktopDeviceModel.recordPoll(created.id, {
+      clientVersion: programVersion,
+      clientTarget: null,
+      clientSha256: null,
+    });
+  }
+  const device = (await DesktopDeviceModel.findById(created.id)) ?? created;
   return {
     device,
     deviceKey,
     tunnelId: desktopTunnelService.tunnelIdForDevice(device.id),
-    headers: { authorization: `Bearer ${deviceKey}` },
+    headers: {
+      authorization: `Bearer ${deviceKey}`,
+      ...(programVersion ? { "x-tunnel-client-version": programVersion } : {}),
+    },
   };
 }
 

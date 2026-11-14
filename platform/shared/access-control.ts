@@ -410,7 +410,7 @@ export const permissionDescriptions: Record<string, string> = {
     "Edit project descriptions, instructions, sharing, and schedules",
   "project:delete": "Delete projects and schedules",
   "log:read":
-    "View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells",
+    "View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells",
 
   // Administration
   "member:read": "View organization members and their roles",
@@ -440,7 +440,7 @@ export const permissionDescriptions: Record<string, string> = {
   "auditLog:admin":
     "View every audit event in your organization (also requires Read)",
   "log:admin":
-    "View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)",
+    "View every LLM, MCP, and Guardrails consult log and yell in your organization (also requires Read)",
   "accessPolicies:read": "View access policies for all resource types",
   "accessPolicies:update":
     "Edit access policies and grant access across all resource types",
@@ -545,6 +545,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // The tiers' names and sizes: the agent form shows them to anyone who may edit an agent.
   [RouteId.GetAgentRuntimeTiers]: {},
   [RouteId.ListAgentRuntimeTemplates]: {},
+  [RouteId.ListBuiltInAgentRuntimeSettings]: {},
   [RouteId.GetAgentRuntimeTemplate]: {}, // Scoped create/update check in the handler.
   [RouteId.GetRuntimeTemplateSettings]: { organizationSettings: ["update"] },
   [RouteId.SaveRuntimeTemplateSettings]: { organizationSettings: ["update"] },
@@ -900,6 +901,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RestoreMcpServer]: {
     mcpServerInstallation: ["delete"],
   },
+  [RouteId.UpdateMcpServerDesktopArguments]: {
+    // The arguments belong to an installation the caller made, so the route
+    // is gated like installation (:create). The handler then admits only the
+    // owner of the installation: nobody sets what runs on another user's
+    // device.
+    mcpServerInstallation: ["create"],
+  },
   [RouteId.ReauthenticateMcpServer]: {
     // Re-authentication re-supplies credentials for a connection the caller can
     // already install, so it is gated like installation (:create), not :update.
@@ -1246,25 +1254,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RotateOauthClientSecret]: {},
   [RouteId.DeleteOauthClient]: {},
   [RouteId.BulkDeleteOauthClients]: {},
-  [RouteId.GetLlmOauthClients]: {},
-  [RouteId.GetLlmOauthClientLabelKeys]: { oauthClient: ["read"] },
-  [RouteId.GetLlmOauthClientLabelValues]: { oauthClient: ["read"] },
-  [RouteId.CreateLlmOauthClient]: {
-    oauthClient: ["create"],
-  },
-  [RouteId.UpdateLlmOauthClient]: {},
-  [RouteId.RotateLlmOauthClientSecret]: {},
-  [RouteId.DeleteLlmOauthClient]: {},
-  [RouteId.BulkDeleteLlmOauthClients]: {},
-  [RouteId.GetMcpOauthClients]: {},
-  [RouteId.GetMcpOauthClientLabelKeys]: { oauthClient: ["read"] },
-  [RouteId.GetMcpOauthClientLabelValues]: { oauthClient: ["read"] },
-  [RouteId.CreateMcpOauthClient]: {
-    oauthClient: ["create"],
-  },
-  [RouteId.UpdateMcpOauthClient]: {},
-  [RouteId.RotateMcpOauthClientSecret]: {},
-  [RouteId.DeleteMcpOauthClient]: {},
   [RouteId.GetModelsWithApiKeys]: {},
   [RouteId.GetLlmModelIdsByKey]: {},
   [RouteId.GetLlmModelOptions]: {},
@@ -1924,8 +1913,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // Loopback-only `builtin = "archestra"` annotator; authenticated by the same
   // per-process bridge bearer inside the route.
   [RouteId.AnnotateOpenappaToolWithArchestra]: {},
-  // Log readers see and resolve all yells and read their own consults;
-  // log:admin widens consult visibility to the whole organization.
+  // Log readers see and resolve their own yells and read their own consults;
+  // log:admin widens both to the whole organization.
   [RouteId.GetOpenAppaYells]: { log: ["read"] },
   [RouteId.GetOpenAppaYellsSummary]: { log: ["read"] },
   [RouteId.DownloadOpenAppaYell]: { log: ["read"] },
@@ -2286,6 +2275,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/mcp": { organizationSettings: ["read"] },
   "/settings/skills": { organizationSettings: ["read"] },
   "/settings/agents": { organizationSettings: ["read"] },
+  "/settings/agents/runtimes": { organizationSettings: ["read"] },
   "/settings/messaging-channels": { organizationSettings: ["read"] },
   "/settings/messaging-channels/slack": { organizationSettings: ["read"] },
   "/settings/messaging-channels/ms-teams": { organizationSettings: ["read"] },

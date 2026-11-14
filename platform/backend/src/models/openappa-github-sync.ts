@@ -196,12 +196,29 @@ class OpenAppaGithubSyncModel {
       .where(
         and(
           isNotNull(table.interval),
-          sql`(${table.lastSyncedAt} IS NULL OR ${table.lastSyncedAt} <= NOW() - CASE WHEN ${table.setupPullRequestNumber} IS NOT NULL THEN INTERVAL '1 minute' WHEN ${table.interval} = '15m' THEN INTERVAL '15 minutes' WHEN ${table.interval} = '1h' THEN INTERVAL '1 hour' ELSE INTERVAL '1 day' END)`,
+          sql`(${table.lastSyncedAt} IS NULL OR ${table.lastSyncedAt} <= NOW() - CASE WHEN ${table.setupPullRequestNumber} IS NOT NULL THEN INTERVAL '1 minute' WHEN ${table.interval} = '5m' THEN INTERVAL '5 minutes' WHEN ${table.interval} = '15m' THEN INTERVAL '15 minutes' WHEN ${table.interval} = '1h' THEN INTERVAL '1 hour' ELSE INTERVAL '1 day' END)`,
         ),
       );
   }
-  /** Every source a pull has accepted a commit from: those with pull requests to check. */
-  static async findConnected() {
+  /** The organizations whose policy syncs from a repository now. */
+  static async findSyncing() {
+    return db
+      .select({ organizationId: table.organizationId })
+      .from(table)
+      .where(
+        and(
+          isNotNull(table.interval),
+          isNotNull(table.repo),
+          isNotNull(table.path),
+        ),
+      );
+  }
+  /**
+   * Every source read through a GitHub App that syncs: those whose pull
+   * requests get the policy check, the setup pull request included, so a
+   * commit accepted yet is not required.
+   */
+  static async findGithubAppSources() {
     return db
       .select()
       .from(table)
@@ -209,21 +226,8 @@ class OpenAppaGithubSyncModel {
         and(
           isNotNull(table.interval),
           isNotNull(table.repo),
-          isNotNull(table.sourceCommit),
-        ),
-      );
-  }
-  /** Sources whose setup pull request has not merged: no commit accepted yet. */
-  static async findAwaitingSetup() {
-    return db
-      .select()
-      .from(table)
-      .where(
-        and(
-          isNotNull(table.interval),
-          isNotNull(table.repo),
-          isNotNull(table.setupPullRequestNumber),
-          isNull(table.sourceCommit),
+          isNotNull(table.path),
+          isNotNull(table.githubAppConfigId),
         ),
       );
   }

@@ -28,6 +28,12 @@ import type {
 } from "@/types/openappa-yell";
 import { normalizeByteaField } from "@/utils/normalize-bytea";
 
+/**
+ * The yells a read may reach: the organization's, narrowed to one caller's
+ * (such as `user:<id>`) when `callerId` is set.
+ */
+type YellScope = { organizationId: string; callerId?: string };
+
 export default class OpenAppaYellModel {
   static async findByIdForAudit(id: string, organizationId: string) {
     const row = await OpenAppaYellModel.find({ id, organizationId });
@@ -130,7 +136,7 @@ export default class OpenAppaYellModel {
       );
   }
 
-  static async findArchive(params: { id: string; organizationId: string }) {
+  static async findArchive(params: YellScope & { id: string }) {
     const [row] = await db
       .select({ archive: table.archive })
       .from(table)
@@ -138,6 +144,7 @@ export default class OpenAppaYellModel {
         and(
           eq(table.id, params.id),
           eq(table.organizationId, params.organizationId),
+          callerCondition(params),
         ),
       );
     return row ? normalizeByteaField(row, "archive").archive : null;
@@ -162,7 +169,7 @@ export default class OpenAppaYellModel {
       );
   }
 
-  static async find(params: { id: string; organizationId: string }) {
+  static async find(params: YellScope & { id: string }) {
     const [row] = await db
       .select(metadataColumns())
       .from(table)
@@ -170,12 +177,13 @@ export default class OpenAppaYellModel {
         and(
           eq(table.id, params.id),
           eq(table.organizationId, params.organizationId),
+          callerCondition(params),
         ),
       );
     return row ?? null;
   }
 
-  static async summary(params: { organizationId: string }) {
+  static async summary(params: YellScope) {
     const [row] = await db
       .select({
         unresolved: count(),
@@ -188,6 +196,7 @@ export default class OpenAppaYellModel {
       .where(
         and(
           eq(table.organizationId, params.organizationId),
+          callerCondition(params),
           isNull(table.resolvedAt),
         ),
       );
@@ -198,7 +207,7 @@ export default class OpenAppaYellModel {
   }
 
   static async list(
-    params: OpenAppaYellQuery & { organizationId: string; sessionId?: string },
+    params: OpenAppaYellQuery & YellScope & { sessionId?: string },
   ) {
     const position = decodeCursor(params.cursor);
     const validCursor =
@@ -211,6 +220,7 @@ export default class OpenAppaYellModel {
       .where(
         and(
           eq(table.organizationId, params.organizationId),
+          callerCondition(params),
           params.status === "unresolved"
             ? isNull(table.resolvedAt)
             : params.status === "resolved"
@@ -301,12 +311,13 @@ export default class OpenAppaYellModel {
       );
   }
 
-  static async setResolved(params: {
-    id: string;
-    organizationId: string;
-    userId: string;
-    resolved: boolean;
-  }) {
+  static async setResolved(
+    params: YellScope & {
+      id: string;
+      userId: string;
+      resolved: boolean;
+    },
+  ) {
     const [row] = await db
       .update(table)
       .set({
@@ -317,11 +328,18 @@ export default class OpenAppaYellModel {
         and(
           eq(table.id, params.id),
           eq(table.organizationId, params.organizationId),
+          callerCondition(params),
         ),
       )
       .returning(metadataColumns());
     return row ?? null;
   }
+}
+
+function callerCondition(scope: YellScope) {
+  return scope.callerId === undefined
+    ? undefined
+    : eq(table.callerId, scope.callerId);
 }
 
 function metadataColumns() {

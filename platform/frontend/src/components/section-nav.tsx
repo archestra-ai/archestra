@@ -78,11 +78,14 @@ export function SectionSubnavLink({
   icon,
   label,
   status,
+  badge,
 }: {
   href: string;
   active: boolean;
   icon: ReactNode;
   label: string;
+  /** A short marker after the label, such as a Beta badge. */
+  badge?: ReactNode;
   /** A short state for the page, shown as a dot with its text for readers. */
   status?: { label: string; ok: boolean };
 }) {
@@ -99,6 +102,7 @@ export function SectionSubnavLink({
     >
       {icon}
       <span className="flex-1">{label}</span>
+      {badge}
       {status && (
         <span
           title={status.label}

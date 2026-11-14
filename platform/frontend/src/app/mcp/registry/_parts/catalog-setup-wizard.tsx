@@ -471,10 +471,11 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
           onClose={() => setOpenDialog(null)}
           // The dialog stays open and follows the add until the tools are
           // read.
-          onAdd={(catalogItem) =>
+          onAdd={(catalogItem, desktopArguments) =>
             addDesktopMcpServer({
               install: installMutation.mutateAsync,
               catalogItem,
+              desktopArguments,
             })
           }
           catalogItem={item}

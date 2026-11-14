@@ -44,7 +44,10 @@ import {
   prepareAgentRuntimeBackendDriver,
   resolveAgentRuntimeBackendDriver,
 } from "@/services/agent-runtime/backends";
-import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
+import {
+  preflightAgentRuntimeCredentials,
+  SharedCredentialAccessDeniedError,
+} from "@/services/agent-runtime/credentials";
 import { ephemeralCredentialGrantManager } from "@/services/agent-runtime/ephemeral-credential-grants";
 import {
   pendingExports,
@@ -119,6 +122,7 @@ import {
 import {
   agentCredentialSetupUrl,
   catchError,
+  credentialsNeededMessage,
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
@@ -224,7 +228,11 @@ export async function checkCallerSubagentAccess(
   targetAgent: Pick<Agent, "id" | "name" | "environmentId">,
 ): Promise<
   | { allowed: true }
-  | { allowed: false; reason: "agent_not_found" | "refused"; message: string }
+  | {
+      allowed: false;
+      reason: "agent_not_found" | "not_allowed";
+      message: string;
+    }
 > {
   if (callerAgentId === targetAgent.id) {
     return { allowed: true };
@@ -245,7 +253,7 @@ export async function checkCallerSubagentAccess(
   if (excludedSubagentIds.includes(targetAgent.id)) {
     return {
       allowed: false,
-      reason: "refused",
+      reason: "not_allowed",
       message: `Agent "${targetAgent.name}" is not an allowed subagent of "${callerAgent.name}".`,
     };
   }
@@ -295,7 +303,7 @@ export async function checkCallerSubagentAccess(
       if (!allowedViaRouter) {
         return {
           allowed: false,
-          reason: "refused",
+          reason: "not_allowed",
           message: `Agent "${targetAgent.name}" is not an allowed subagent of "${callerAgent.name}".`,
         };
       }
@@ -379,7 +387,7 @@ export async function startDelegatedTask(params: {
           !params.context.tokenAuth.isUserToken)
       ) {
         const { result, outcome } = failedLaunch(
-          "refused",
+          "not_allowed",
           errorResult(
             "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
           ),
@@ -392,7 +400,7 @@ export async function startDelegatedTask(params: {
         actor = requireActor(params.context);
       } catch (error) {
         const { result, outcome } = failedLaunch(
-          "refused",
+          "not_allowed",
           error instanceof ApiError
             ? errorResult(error.message)
             : catchError(error, "starting the run"),
@@ -487,7 +495,7 @@ export async function startDelegatedTask(params: {
         actor = requireActor(params.context);
       } catch (error) {
         const { result, outcome } = failedLaunch(
-          "refused",
+          "not_allowed",
           error instanceof ApiError
             ? errorResult(error.message)
             : catchError(error, "starting the run"),
@@ -504,7 +512,7 @@ export async function startDelegatedTask(params: {
       });
       if (!resolved.ok) {
         const { result, outcome } = failedLaunch(
-          "refused",
+          "invalid_request",
           errorResult(resolved.message),
         );
         if (outcome) await recordRuntimeLaunch(params.context, outcome);
@@ -533,9 +541,24 @@ export async function startDelegatedTask(params: {
     return result;
   }
 
+  if (
+    params.context.tokenAuth?.oauthExecution ||
+    (params.context.tokenAuth?.oauthClientId &&
+      !params.context.tokenAuth.isUserToken)
+  ) {
+    const { result, outcome } = failedLaunch(
+      "not_allowed",
+      errorResult(
+        "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
+      ),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
   if (!poolAgent) {
     const { result, outcome } = failedLaunch(
-      "refused",
+      "invalid_request",
       errorResult("agent_id is required."),
     );
     if (outcome) await recordRuntimeLaunch(params.context, outcome);
@@ -544,7 +567,7 @@ export async function startDelegatedTask(params: {
 
   if (assignedIds.length === 0) {
     const { result, outcome } = failedLaunch(
-      "refused",
+      "invalid_request",
       errorResult("No runtime subagents are assigned to this gateway."),
     );
     if (outcome) await recordRuntimeLaunch(params.context, outcome);
@@ -557,7 +580,7 @@ export async function startDelegatedTask(params: {
   );
   if (excludedSet.size > 0 && !fallbackEnabled) {
     const { result, outcome } = failedLaunch(
-      "refused",
+      "invalid_request",
       errorResult(
         "No remaining fallback subagents are available on this gateway.",
       ),
@@ -634,7 +657,7 @@ export async function startDelegatedTask(params: {
     });
   if (candidateIds.length === 0) {
     const { result, outcome } = failedLaunch(
-      "refused",
+      "invalid_request",
       errorResult(
         "No remaining fallback subagents are available on this gateway.",
       ),
@@ -660,7 +683,7 @@ export async function startDelegatedTask(params: {
         scopeKey,
       });
       const { result, outcome } = failedLaunch(
-        "refused",
+        "not_allowed",
         error instanceof ApiError
           ? errorResult(error.message)
           : catchError(error, "starting the run"),
@@ -682,7 +705,7 @@ export async function startDelegatedTask(params: {
         scopeKey,
       });
       const { result, outcome } = failedLaunch(
-        "refused",
+        "invalid_request",
         errorResult(resolved.message),
       );
       if (outcome) await recordRuntimeLaunch(params.context, outcome);
@@ -734,7 +757,8 @@ export async function startDelegatedTask(params: {
     }
     if (
       attempt.outcome?.kind === "failed" &&
-      attempt.outcome.reason === "refused"
+      (attempt.outcome.reason === "refused" ||
+        attempt.outcome.reason === "invalid_request")
     ) {
       if (currentCandidateId === claimedPrimaryAgentId) {
         await subagentLoadBalancer.releaseUnlaunchedClaim({
@@ -791,7 +815,7 @@ async function launchDelegatedTask(params: {
     (context.tokenAuth?.oauthClientId && !context.tokenAuth.isUserToken)
   ) {
     return failedLaunch(
-      "refused",
+      "not_allowed",
       errorResult(
         "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
       ),
@@ -799,7 +823,15 @@ async function launchDelegatedTask(params: {
   }
   let restoreConsumedGrants: (() => Promise<void>) | undefined;
   try {
-    const actor = requireActor(context);
+    let actor: A2AActor;
+    try {
+      actor = requireActor(context);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return failedLaunch("not_allowed", errorResult(error.message));
+      }
+      throw error;
+    }
     const agent = await AgentModel.findById(agentId);
     if (!agent || agent.organizationId !== actor.organizationId) {
       return failedLaunch("agent_not_found", errorResult("Agent not found"));
@@ -836,7 +868,7 @@ async function launchDelegatedTask(params: {
     const runtime = resolveAgentRuntime(agent);
     if (!runtime) {
       return failedLaunch(
-        "refused",
+        context.openappaRuntimeCall?.spawn ? "refused" : "invalid_request",
         errorResult(
           context.openappaRuntimeCall?.spawn
             ? SPAWN_TARGET_MISMATCH
@@ -877,10 +909,17 @@ async function launchDelegatedTask(params: {
       });
     } catch (error) {
       if (error instanceof ApiError)
-        return failedLaunch("refused", errorResult(error.message));
+        return failedLaunch("invalid_request", errorResult(error.message));
       throw error;
     }
-    await prepareAgentRuntimeBackendDriver(runtime.backend);
+    try {
+      await prepareAgentRuntimeBackendDriver(runtime.backend);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return failedLaunch("backend_unavailable", errorResult(error.message));
+      }
+      throw error;
+    }
     const crossing = await runtimeCrossingForStart(context);
     if (typeof crossing === "string") {
       return failedLaunch("refused", errorResult(crossing));
@@ -889,14 +928,39 @@ async function launchDelegatedTask(params: {
     // Refuse before creating a task when the caller can already fix the
     // missing credential. Otherwise the detached task fails after its handle
     // has been returned and the user only discovers the problem by polling.
-    const preflight = await preflightAgentRuntimeCredentials({
-      runtime,
-      organizationId: actor.organizationId,
-      userId: actor.id,
-      ephemeralCredentials: params.ephemeralCredentials,
-    });
+    let preflight: Awaited<ReturnType<typeof preflightAgentRuntimeCredentials>>;
+    try {
+      preflight = await preflightAgentRuntimeCredentials({
+        runtime,
+        organizationId: actor.organizationId,
+        userId: actor.id,
+        ephemeralCredentials: params.ephemeralCredentials,
+      });
+    } catch (error) {
+      if (error instanceof SharedCredentialAccessDeniedError) {
+        return failedLaunch(
+          "credentials_admin_only",
+          errorResult(error.message),
+        );
+      }
+      if (error instanceof ApiError) {
+        return failedLaunch(
+          error.statusCode === 403
+            ? "not_allowed"
+            : error.statusCode === 400
+              ? "credentials_misconfigured"
+              : "failed",
+          errorResult(error.message),
+        );
+      }
+      throw error;
+    }
     if (preflight.missing.length > 0) {
-      return credentialsNeededLaunch(agent.id, preflight.missing);
+      return await credentialsNeededLaunch(
+        context,
+        agent.id,
+        preflight.missing,
+      );
     }
     if (preflight.misconfigured.length > 0) {
       return failedLaunch(
@@ -908,7 +972,25 @@ async function launchDelegatedTask(params: {
         ),
       );
     }
-    await preflightAgentRuntimeModelReadiness({ runtime, agent, actor });
+    try {
+      await preflightAgentRuntimeModelReadiness({ runtime, agent, actor });
+    } catch (error) {
+      const needed = missingCredentialsFrom(error);
+      if (needed) {
+        return await credentialsNeededLaunch(
+          context,
+          needed.agentId,
+          needed.missing,
+        );
+      }
+      if (error instanceof ApiError) {
+        return failedLaunch(
+          error.statusCode >= 500 ? "failed" : "model_unready",
+          errorResult(error.message),
+        );
+      }
+      throw error;
+    }
 
     if (params.credentialGrantIds && params.credentialGrantIds.length > 0) {
       const consumed = await ephemeralCredentialGrantManager.consumeGrants({
@@ -922,7 +1004,7 @@ async function launchDelegatedTask(params: {
         ],
       });
       if (!consumed.ok) {
-        return failedLaunch("refused", errorResult(consumed.message));
+        return failedLaunch("invalid_request", errorResult(consumed.message));
       }
       restoreConsumedGrants = consumed.restore;
     }
@@ -1024,12 +1106,22 @@ async function launchDelegatedTask(params: {
     await restoreConsumedGrants?.();
     const needed = missingCredentialsFrom(error);
     if (needed) {
-      return credentialsNeededLaunch(needed.agentId, needed.missing);
+      return credentialsNeededLaunch(context, needed.agentId, needed.missing);
+    }
+    if (error instanceof SharedCredentialAccessDeniedError) {
+      return failedLaunch("credentials_admin_only", errorResult(error.message));
     }
     const refused = crossingRefusal(error);
     if (refused) return failedLaunch("refused", errorResult(refused));
     if (error instanceof ApiError) {
-      return failedLaunch("refused", errorResult(error.message));
+      return failedLaunch(
+        error.statusCode === 403
+          ? "not_allowed"
+          : error.statusCode >= 500
+            ? "failed"
+            : "invalid_request",
+        errorResult(error.message),
+      );
     }
     return failedLaunch("failed", catchError(error, "starting the run"));
   }
@@ -2089,7 +2181,14 @@ const registry = defineArchestraTools([
       } catch (error) {
         const needed = missingCredentialsFrom(error);
         if (needed) {
-          return credentialsNeededResult(needed.agentId, needed.missing);
+          const posted = await postCredentialsNeededToThread(
+            context,
+            needed.agentId,
+            needed.missing,
+          );
+          return credentialsNeededResult(needed.agentId, needed.missing, {
+            posted,
+          });
         }
         const refused = crossingRefusal(error);
         if (refused) return errorResult(refused);
@@ -2525,23 +2624,67 @@ function tooLarge(bytes: number): string {
  */
 function credentialsNeededResult(
   agentId: string,
-  missing: Array<{ key: string; label: string; description?: string }>,
+  missing: MissingCredentialEntry[],
+  options: { posted?: boolean } = {},
 ) {
   const url = agentCredentialSetupUrl(
     agentId,
     missing.map(({ key }) => key),
   );
-  return errorResult(
-    `This Agent's Agent Runtime needs credentials you have not set up yet:\n${missing
-      .map(
-        (entry) =>
-          `- ${entry.label} (${entry.key})${entry.description ? `: ${entry.description}` : ""}`,
-      )
-      .join(
-        "\n",
-      )}\n\nPut this link in your reply text, never inside a question form, so the user can add them, then start the run again: ${url}`,
-  );
+  const heading = missing.every((entry) => entry.reconnect)
+    ? "This Agent's Agent Runtime needs the user to connect these again (their stored connection no longer works):"
+    : "This Agent's Agent Runtime needs credentials you have not set up yet:";
+  const list = missing
+    .map(
+      (entry) =>
+        `- ${entry.label} (${entry.key})${entry.reconnect ? " [connect again]" : ""}${entry.description ? `: ${entry.description}` : ""}`,
+    )
+    .join("\n");
+  const instruction = options.posted
+    ? `The setup link was already posted in the chat thread: ${url}\nDo not post it again; tell the user to use it, then start the run again.`
+    : `Put this link in your reply text, never inside a question form, so the user can add them, then start the run again: ${url}`;
+  return errorResult(`${heading}\n${list}\n\n${instruction}`);
 }
+
+/**
+ * Posts the setup link straight into the chat thread the caller is answering,
+ * so the person gets it whatever the model does with the tool result. Returns
+ * whether it was posted.
+ */
+async function postCredentialsNeededToThread(
+  context: Pick<
+    ArchestraContext,
+    "chatOpsBindingId" | "chatOpsThreadId" | "chatOpsPinnedAgentId"
+  >,
+  agentId: string,
+  missing: MissingCredentialEntry[],
+): Promise<boolean> {
+  if (!context.chatOpsBindingId || !context.chatOpsThreadId) return false;
+  try {
+    const { chatOpsManager } = await import("@/agents/chatops/chatops-manager");
+    const agent = await AgentModel.findById(agentId);
+    return await chatOpsManager.notifyBindingThread({
+      bindingId: context.chatOpsBindingId,
+      threadId: context.chatOpsThreadId,
+      pinnedAgentId: context.chatOpsPinnedAgentId,
+      agentName: agent?.name,
+      text: credentialsNeededMessage({ agentId, missing }),
+    });
+  } catch (error) {
+    logger.warn(
+      { err: error, agentId },
+      "Failed to post the credential setup link to the chat thread",
+    );
+    return false;
+  }
+}
+
+type MissingCredentialEntry = {
+  key: string;
+  label: string;
+  description?: string;
+  reconnect?: boolean;
+};
 
 function buildRunThread(
   row: Awaited<ReturnType<typeof AgentRunModel.listDashboard>>[number],
@@ -2578,7 +2721,7 @@ function countRuns(runs: Array<{ state: string }>) {
 /** The missing-credential list when the error is that refusal; null otherwise. */
 function missingCredentialsFrom(error: unknown): {
   agentId: string;
-  missing: Array<{ key: string; label: string; description?: string }>;
+  missing: MissingCredentialEntry[];
 } | null {
   if (
     error &&
@@ -2590,7 +2733,7 @@ function missingCredentialsFrom(error: unknown): {
   ) {
     return error as {
       agentId: string;
-      missing: Array<{ key: string; label: string; description?: string }>;
+      missing: MissingCredentialEntry[];
     };
   }
   return null;
@@ -2712,13 +2855,18 @@ function failedLaunch(
   return { result, outcome: { kind: "failed", reason, ...details } };
 }
 
-function credentialsNeededLaunch(
+async function credentialsNeededLaunch(
+  context: Pick<
+    ArchestraContext,
+    "chatOpsBindingId" | "chatOpsThreadId" | "chatOpsPinnedAgentId"
+  >,
   agentId: string,
-  missing: Array<{ key: string; label: string; description?: string }>,
+  missing: MissingCredentialEntry[],
 ) {
+  const posted = await postCredentialsNeededToThread(context, agentId, missing);
   return failedLaunch(
     "credentials_needed",
-    credentialsNeededResult(agentId, missing),
+    credentialsNeededResult(agentId, missing, { posted }),
     {
       setup_url: agentCredentialSetupUrl(
         agentId,

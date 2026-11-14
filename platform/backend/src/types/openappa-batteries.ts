@@ -248,8 +248,11 @@ export type BatterySource = z.infer<typeof BatterySourceSchema>;
 export const BatteryPolicySourceSchema = z.object({
   entry: z.string(),
   name: z.string(),
+  /** A battery's policy, or a file of the policy repository the root includes. */
+  kind: z.enum(["battery", "repository"]),
   content: z.string(),
 });
+export type BatteryPolicySource = z.infer<typeof BatteryPolicySourceSchema>;
 
 /** What a catalog entry was matched on; a name alone is a weak signal. */
 export const BatteryMatchEvidenceSchema = z.enum(["host", "image", "name"]);
@@ -354,6 +357,12 @@ export const PolicyDeclarationsViewSchema = z.object({
     }),
   ),
   unusedAliases: z.array(UnusedAliasViewSchema),
+  /**
+   * The policy repository's files the root includes, as the composition
+   * folds them in at the accepted commit, in include order: the MCP
+   * servers' rules files among them.
+   */
+  repositoryFiles: z.array(z.object({ path: z.string() })),
   rootRevision: z.number(),
   /** The refusal message; read `composition.refusal` for what it refused. */
   lastError: z.string().nullable(),

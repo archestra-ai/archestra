@@ -7,8 +7,8 @@ export function OpenAppaGithubAppRequirements() {
       <TriangleAlert aria-hidden />
       <span className="font-medium">GitHub App access</span>
       <InlineNoticeText>
-        Install the App on the policy repository only, with Contents and Pull
-        requests Read &amp; write.
+        Install the App on the policy repository only, with Contents, Pull
+        requests, Checks and Workflows Read &amp; write.
       </InlineNoticeText>
     </InlineNotice>
   );

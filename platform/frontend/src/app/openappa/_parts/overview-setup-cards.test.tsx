@@ -1,6 +1,12 @@
 import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -15,6 +21,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { appaGithubSyncQueryKey } from "@/lib/openappa-policy-views";
+import { FinishSetupHost } from "./finish-setup-dialog";
 import { OverviewSetupCards } from "./overview-setup-cards";
 
 vi.mock("@/lib/config/config.query");
@@ -130,6 +137,7 @@ function show() {
     ...render(
       <QueryClientProvider client={client}>
         <OverviewSetupCards />
+        <FinishSetupHost />
       </QueryClientProvider>,
     ),
   };
@@ -202,7 +210,7 @@ test("a failed sync shows its error", async () => {
   ).toHaveAttribute("href", "/settings/guardrails");
 });
 
-test("shows the initial merge link on Overview while sync waits for setup", async () => {
+test("shows the Finish setup notice on Overview while sync waits for setup, with the pull request on the configured host", async () => {
   revision = 1;
   enabled = true;
   sync = {
@@ -211,15 +219,24 @@ test("shows the initial merge link on Overview while sync waits for setup", asyn
     provider: "github",
     source: { ...source, setupPullRequestNumber: 7, sourceCommit: null },
   };
+  // The wizard's pull requests step syncs as it opens.
+  server.use(
+    http.patch("http://localhost:9000/api/openappa/github-sync", () =>
+      HttpResponse.json(sync),
+    ),
+  );
   show();
-  expect(await screen.findByText("Merge your initial policy")).toBeVisible();
+  // The one Finish setup notice, as on the Git sync settings.
+  expect(await screen.findByText("Finish the Git sync setup")).toBeVisible();
+  expect(screen.getByText("Merge PR #7.")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
+  const dialog = await screen.findByRole("dialog", {
+    name: "Merge the pull request",
+  });
   expect(
-    screen.getByRole("link", { name: "Review and merge PR" }),
+    within(dialog).getByRole("link", { name: "Initial policy #7" }),
   ).toHaveAttribute(
     "href",
     "https://github.example.com/example/policies/pull/7",
   );
-  expect(
-    screen.getByText(/Your current policy stays active until it merges/),
-  ).toBeVisible();
 });

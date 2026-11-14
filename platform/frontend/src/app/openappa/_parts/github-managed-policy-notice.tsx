@@ -1,16 +1,12 @@
 "use client";
 
-import {
-  AlertTriangle,
-  ExternalLink,
-  GitPullRequestArrow,
-  LockKeyhole,
-} from "lucide-react";
+import { AlertTriangle, ExternalLink, LockKeyhole } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import { appaGitHost } from "./appa-git-host";
+import { FinishSetupNotice, useFinishSetupPieces } from "./finish-setup-dialog";
 
 type AppaGithubSyncStatus = NonNullable<
   ReturnType<typeof useAppaGithubSync>["data"]
@@ -25,35 +21,16 @@ export function GithubManagedPolicyNotice({
   hideHealthy?: boolean;
 } = {}) {
   const { data } = useAppaGithubSync();
+  const pieces = useFinishSetupPieces();
   const git = appaGitHost(data);
   const source = data?.source;
   const failed = Boolean(source?.lastSyncError);
   const validations = validationDirectory !== undefined;
   const href = managedSourceUrl(data, validationDirectory);
 
-  // Setup isn't finished until its pull (merge) request merges: ask for that.
-  if (!failed && source?.repo && source.setupPullRequestNumber)
-    return (
-      <InlineNotice variant="info">
-        <GitPullRequestArrow aria-hidden />
-        <span className="font-medium">Merge your initial policy</span>
-        <InlineNoticeText className="flex-1">
-          Your current policy stays active until it merges.
-        </InlineNoticeText>
-        <a
-          href={git
-            .urls(source.repo)
-            .changeRequest(source.setupPullRequestNumber)}
-          target="_blank"
-          rel="noreferrer"
-          data-slot="inline-notice-action"
-          className="ml-auto inline-flex shrink-0 items-center gap-0.5 font-medium underline-offset-4 hover:underline"
-        >
-          <span>Review and merge {git.changeRequestShort}</span>
-          <ExternalLink className="size-3" aria-hidden />
-        </a>
-      </InlineNotice>
-    );
+  // Setup still waits on something, a pull request to merge among it: the
+  // one Finish setup notice, as on the Git sync settings.
+  if (!failed && pieces) return <FinishSetupNotice pieces={pieces} />;
 
   // A healthy sync asks for nothing, so it is a chip, not a banner.
   if (!failed && !(validations && validationDirectory === "")) {
@@ -162,6 +139,25 @@ export function githubPolicyFileUrl(
   const source = sync?.source;
   if (!sync || !source?.repo || !source.path) return null;
   const path = source.path.split("/").map(encodeURIComponent).join("/");
+  return `${sync.githubWebUrl}/${source.repo}${gitPathSeparator(sync)}/${view}/${encodeURIComponent(source.ref ?? "HEAD")}/${path}`;
+}
+
+/**
+ * A file the root includes, by its include path beside the policy file, on
+ * the repository's host.
+ */
+export function githubRepositoryFileUrl(
+  sync: AppaGithubSyncStatus | null | undefined,
+  includePath: string,
+  view: "blob" | "edit",
+): string | null {
+  const source = sync?.source;
+  if (!sync || !source?.repo || !source.path) return null;
+  const folder = source.path.slice(0, source.path.lastIndexOf("/") + 1);
+  const path = `${folder}${includePath}`
+    .split("/")
+    .map(encodeURIComponent)
+    .join("/");
   return `${sync.githubWebUrl}/${source.repo}${gitPathSeparator(sync)}/${view}/${encodeURIComponent(source.ref ?? "HEAD")}/${path}`;
 }
 

@@ -16,20 +16,22 @@ import type { User } from "@/types";
  * `*`, and sharing with a team, a role or the organization is one more grant.
  * Both kinds follow the same rules; each actor's real membership decides.
  */
+const path = "/api/oauth-clients";
+
 describe.each([
   {
     kind: "MCP",
     resource: "oauthClient",
-    path: "/api/mcp-oauth-clients",
+    scopes: ["mcp"],
     notFound: "OAuth client not found",
   },
   {
     kind: "LLM",
     resource: "oauthClient",
-    path: "/api/llm-oauth-clients",
+    scopes: ["llm:proxy"],
     notFound: "OAuth client not found",
   },
-] as const)("$kind OAuth client grants", ({ resource, path, notFound }) => {
+] as const)("$kind OAuth client grants", ({ resource, scopes, notFound }) => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let currentUser: User;
@@ -43,9 +45,7 @@ describe.each([
         organizationId;
     });
     const { default: routes } = await import(
-      path === "/api/mcp-oauth-clients"
-        ? "./mcp-oauth-clients"
-        : "./llm-oauth-clients"
+      "./oauth-client/oauth-client.routes"
     );
     await app.register(routes);
   });
@@ -58,6 +58,7 @@ describe.each([
   // the permission rules are the same for either grant type.
   const body = (overrides: Record<string, unknown> = {}) => ({
     name: `client-${crypto.randomUUID().slice(0, 8)}`,
+    scopes: [...scopes],
     grantType: "authorization_code",
     redirectUris: ["https://app.example.com/callback"],
     ...overrides,

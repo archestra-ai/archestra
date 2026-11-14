@@ -53,15 +53,27 @@ const HEAD_TREE = "e".repeat(40);
  * branch advanced onto it. `head` holds the files the branch has; a tree
  * that writes the same bytes is the head's tree again, as GitHub's would be.
  */
+/** The template's files beside the policy, as a fresh copy holds them. */
+const TEMPLATE_FILES = Object.fromEntries(
+  OPENAPPA_TEMPLATE.files
+    .filter((file) => file.path !== "appa.toml")
+    .map((file) => [file.path, file.content]),
+);
+
 function fakeGitData(
   repo: string,
   options: {
+    /** The files beside the policy; the template's current ones unless `stale` says otherwise. */
     head: Record<string, string>;
     /** Paths among `head` that are symbolic links (mode 120000). */
     symlinks?: string[];
+    /** Leave the template's files out of the head, as a repository made from an older template lacks or differs in them. */
+    stale?: boolean;
     advance?: () => Response | undefined;
   },
 ) {
+  if (!options.stale)
+    options = { ...options, head: { ...TEMPLATE_FILES, ...options.head } };
   const base = `https://api.github.com/repos/${repo}`;
   const written: Record<string, string>[] = [];
   const removed: string[][] = [];
@@ -903,6 +915,8 @@ describe("APPA GitHub sync", () => {
         "https://api.github.com/repos/example/new-policy/commits/main",
         () => HttpResponse.json({ sha: commit }),
       ),
+      // The template's files beside the policy, current: nothing to add.
+      contentsOf("example/new-policy", git.files),
     );
     const response = await app.inject({
       method: "POST",
@@ -1308,10 +1322,13 @@ describe("APPA GitHub sync", () => {
         "https://api.github.com/repos/example/other-policy/commits/main",
         () => HttpResponse.json({ sha: commit }),
       ),
-      // Before the merge the files exist at the request's commit only.
-      contentsOf("example/other-policy", git.files, () =>
-        pull.merged ? [commit, SETUP_COMMIT] : [SETUP_COMMIT],
-      ),
+      // The branch head and the request's commit; the pending read below
+      // is pinned to the request's commit by the cache, not by what GitHub
+      // serves at the head.
+      contentsOf("example/other-policy", git.files, () => [
+        commit,
+        SETUP_COMMIT,
+      ]),
     );
     const response = await app.inject({
       method: "POST",
@@ -1393,6 +1410,101 @@ describe("APPA GitHub sync", () => {
     expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
       root,
     );
+  });
+
+  test("a repository made from an older template gets the current files beside the policy in its setup pull request, named for who set it up", async () => {
+    const current = (await guardrailsPolicyService.get(organizationId)).content;
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const installationId = randomUUID();
+    const secret = await secretManager().createSecret(
+      { apiToken: privateKey },
+      "test-stale-app",
+    );
+    const githubApp = await GithubAppConfigModel.create({
+      organizationId,
+      name: "Policy App",
+      githubUrl: "https://api.github.com",
+      appId: "123",
+      installationId,
+      secretId: secret.id,
+    });
+    // Its own policy, an older workflow and no Dependabot file or READMEs.
+    const git = fakeGitData("example/other-policy", {
+      stale: true,
+      head: {
+        "appa.toml": policy,
+        ".github/workflows/validate.yml": "# an older workflow\n",
+      },
+    });
+    const commits: Array<{ message: string }> = [];
+    server.use(
+      http.post(
+        `https://api.github.com/app/installations/${installationId}/access_tokens`,
+        () =>
+          HttpResponse.json({
+            token: "test-installation-token",
+            expires_at: new Date(Date.now() + 3600000).toISOString(),
+          }),
+      ),
+      http.get("https://api.github.com/repos/example/other-policy", () =>
+        HttpResponse.json({ default_branch: "main" }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/commits",
+        () => HttpResponse.json([{ sha: commit }]),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/git/ref/heads/main",
+        () => HttpResponse.json({ object: { sha: commit } }),
+      ),
+      http.post(
+        "https://api.github.com/repos/example/other-policy/git/commits",
+        async ({ request }) => {
+          commits.push((await request.json()) as { message: string });
+          return HttpResponse.json({ sha: SETUP_COMMIT });
+        },
+      ),
+      http.post(
+        "https://api.github.com/repos/example/other-policy/git/refs",
+        () => HttpResponse.json({}),
+      ),
+      http.post("https://api.github.com/repos/example/other-policy/pulls", () =>
+        HttpResponse.json({ number: 3 }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/pulls/3",
+        () => HttpResponse.json({ merged: false, state: "open" }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/commits/main",
+        () => HttpResponse.json({ sha: commit }),
+      ),
+      contentsOf("example/other-policy", git.files, () => [SETUP_COMMIT]),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/repository",
+      payload: {
+        owner: "example",
+        name: "other-policy",
+        githubAppConfigId: githubApp.id,
+        interval: "1h",
+        existing: true,
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    // The policy, and every template file the repository lacks or holds
+    // differently, in the one proposal.
+    expect(git.written()).toEqual({ "appa.toml": current, ...TEMPLATE_FILES });
+    // The commit names who set the sync up, so the policy check can judge it.
+    expect(commits.at(-1)?.message).toMatch(/\n\nRequested-by: .+@/);
+    expect(response.json().source).toMatchObject({
+      setupPullRequestNumber: 3,
+    });
   });
 
   test("a repository whose policy file is a symbolic link is refused, with no include glob to list a tree for", async () => {
@@ -1693,8 +1805,12 @@ describe("APPA GitHub sync", () => {
       secretId: secret.id,
     });
     let advances = 0;
+    let workflowTokens = 0;
+    // The first file goes in through the contents API, the rest as a tree.
+    const head: Record<string, string> = {};
     const git = fakeGitData("example/new-policy", {
-      head: {},
+      head,
+      stale: true,
       advance: () =>
         advances++ === 0
           ? HttpResponse.json(
@@ -1709,11 +1825,31 @@ describe("APPA GitHub sync", () => {
     server.use(
       http.post(
         `https://api.github.com/app/installations/${installationId}/access_tokens`,
-        () =>
-          HttpResponse.json({
+        async ({ request }) => {
+          // The installation-wide token asks with no body.
+          const body = await request.text();
+          const asked = (body ? JSON.parse(body) : {}) as {
+            permissions?: Record<string, string>;
+          };
+          // The installation was not granted Workflows: a token for it is refused.
+          if (asked.permissions?.workflows) {
+            workflowTokens++;
+            return HttpResponse.json(
+              {
+                message:
+                  "The permissions requested are not granted to this installation.",
+              },
+              { status: 422 },
+            );
+          }
+          return HttpResponse.json({
             token: "test-installation-token",
             expires_at: new Date(Date.now() + 3600000).toISOString(),
-          }),
+          });
+        },
+      ),
+      http.get("https://api.github.com/repos/example/new-policy/rulesets", () =>
+        HttpResponse.json([]),
       ),
       // No commits yet: GitHub answers 409.
       http.get("https://api.github.com/repos/example/new-policy/commits", () =>
@@ -1724,7 +1860,11 @@ describe("APPA GitHub sync", () => {
       ),
       http.put(
         "https://api.github.com/repos/example/new-policy/contents/README.md",
-        () => HttpResponse.json({ commit: { sha: commit } }),
+        async ({ request }) => {
+          const body = (await request.json()) as { content: string };
+          head["README.md"] = Buffer.from(body.content, "base64").toString();
+          return HttpResponse.json({ commit: { sha: commit } });
+        },
       ),
       http.get("https://api.github.com/repos/example/new-policy", () =>
         HttpResponse.json({ default_branch: "main" }),
@@ -1762,6 +1902,15 @@ describe("APPA GitHub sync", () => {
       sourceCommit: commit,
       setupPullRequestNumber: null,
       lastSyncError: null,
+    });
+    // The first sync finds the workflow missing, asks for the permission a
+    // workflow write takes, and proposes nothing without it: the settings
+    // name the permission instead.
+    expect(workflowTokens).toBe(1);
+    expect(response.json().templateFiles).toMatchObject({
+      state: "needs_permission",
+      paths: [".github/workflows/validate.yml"],
+      detail: expect.stringContaining("Workflows (read and write)"),
     });
   });
 
@@ -1859,7 +2008,7 @@ describe("APPA GitHub sync", () => {
     const opened: unknown[] = [];
     let rules: Array<Record<string, unknown>> = [];
     const runs: Array<Record<string, unknown>> = [];
-    let setupHead = SETUP_COMMIT;
+    const setupHead = SETUP_COMMIT;
     server.use(
       http.get("https://api.github.com/repos/example/other-policy/pulls", () =>
         HttpResponse.json(
@@ -1869,12 +2018,6 @@ describe("APPA GitHub sync", () => {
                 {
                   number: 8,
                   head: { sha: setupHead },
-                  merge_commit_sha: null,
-                },
-                // Someone else's pull request into the branch meanwhile.
-                {
-                  number: 9,
-                  head: { sha: "e".repeat(40) },
                   merge_commit_sha: null,
                 },
               ],
@@ -1994,12 +2137,41 @@ describe("APPA GitHub sync", () => {
     });
     expect(include.statusCode, include.body).toBe(200);
     expect(opened).toHaveLength(1);
-    // No rule yet: the minute's round posts nothing on the setup pull
-    // request. The ruleset imported meanwhile: the check it requires is
-    // posted as skipped, once, on the setup pull request alone, so it can
-    // merge; another pull request waits for the checks to begin.
+    // The minute's round checks the setup pull request like any other: the
+    // policy it carries is judged, with or without a rule that requires
+    // the check, so it can merge once the check passes.
+    server.use(
+      http.get("https://api.github.com/app", () =>
+        HttpResponse.json({ slug: "policy-app", name: "Policy App" }),
+      ),
+      http.get("https://api.github.com/app/installations/:id", () =>
+        HttpResponse.json({ id: 1, account: { login: "example" } }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/pulls/8/files",
+        () => HttpResponse.json([{ filename: "appa.toml" }]),
+      ),
+      // The repository's root, listed for the files the policy includes.
+      http.get(
+        "https://api.github.com/repos/example/other-policy/contents",
+        () =>
+          HttpResponse.json(
+            Object.keys(git.files())
+              .filter((file) => !file.includes("/"))
+              .map((file) => ({
+                type: "file",
+                name: file,
+                path: file,
+                sha: blobSha(git.files()[file] as string),
+              })),
+          ),
+      ),
+    );
     await checkDueAppaGithubSyncs();
-    expect(runs).toEqual([]);
+    const setupRuns = () => runs.filter((run) => run.head_sha === SETUP_COMMIT);
+    expect(setupRuns()).toEqual([
+      expect.objectContaining({ status: "completed", conclusion: "success" }),
+    ]);
     rules = [
       {
         type: "required_status_checks",
@@ -2014,23 +2186,9 @@ describe("APPA GitHub sync", () => {
         ruleset_source: "example/other-policy",
       },
     ];
+    // The verdict stands: nothing is posted again.
     await checkDueAppaGithubSyncs();
-    await checkDueAppaGithubSyncs();
-    expect(runs).toEqual([
-      expect.objectContaining({
-        head_sha: SETUP_COMMIT,
-        conclusion: "skipped",
-        output: expect.objectContaining({
-          title: "Git sync setup in progress",
-        }),
-      }),
-    ]);
-    // A commit pushed onto the setup branch since: not Archestra's commit,
-    // so it gets no skip and waits under the rule.
-    setupHead = "f".repeat(40);
-    await checkDueAppaGithubSyncs();
-    expect(runs).toHaveLength(1);
-    setupHead = SETUP_COMMIT;
+    expect(setupRuns()).toHaveLength(1);
     // Merged and pulled, the include is in place.
     pull = { merged: true, state: "closed" };
     await syncAppaGithubPolicy(organizationId);
@@ -2286,11 +2444,21 @@ describe("APPA GitHub sync", () => {
       githubAppConfigId: githubApp.id,
       selfService: true,
     });
+    await db
+      .delete(schema.tasksTable)
+      .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
     const on = await action({
       action: "self_service_auto_merge",
       enabled: true,
     });
     expect(on.statusCode).toBe(200);
+    // A settings change queues a pull at once.
+    expect(
+      await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.taskType, "openappa_github_sync")),
+    ).toHaveLength(1);
     expect(on.json().selfService.autoMerge).toEqual({
       enabled: true,
       setting: true,
@@ -2345,12 +2513,23 @@ describe("APPA GitHub sync", () => {
     });
   });
 
-  test("schedule changes persist and successful recent syncs are not due", async () => {
+  test("schedule changes persist, queue a pull at once, and successful recent syncs are not due", async () => {
     await configure();
-    expect(
-      (await action({ action: "schedule", interval: "15m" })).json().source
-        .interval,
-    ).toBe("15m");
+    const pulls = () =>
+      db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
+    for (const interval of ["5m", "15m"] as const) {
+      // Saving the source queued one already: start from none.
+      await db
+        .delete(schema.tasksTable)
+        .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
+      expect(
+        (await action({ action: "schedule", interval })).json().source.interval,
+      ).toBe(interval);
+      expect(await pulls()).toHaveLength(1);
+    }
     await syncAppaGithubPolicy(organizationId);
     expect(await OpenAppaGithubSyncModel.findDue()).toEqual([]);
   });

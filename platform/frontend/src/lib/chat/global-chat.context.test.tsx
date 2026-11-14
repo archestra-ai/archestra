@@ -1015,6 +1015,52 @@ describe("ChatProvider retries", () => {
     expect(mocks.clearError).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the live run's pending question after a duplicate active-run submit", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-mcp-elicitation",
+        data: {
+          id: "00000000-0000-4000-8000-000000000002",
+          conversationId: "conversation-1",
+          toolName: "archestra__ask_user",
+          message: "Which region?",
+          mode: "form",
+        },
+      });
+    });
+    expect(latestSessionRef.current?.pendingMcpElicitations).toHaveLength(1);
+
+    // The user types a message while the run waits on the question; the
+    // backend refuses it because that run is still live.
+    act(() => {
+      chatOptions?.onError?.(
+        new Error("This conversation already has an active response."),
+      );
+    });
+
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
+      "This conversation already has a response in progress. Stop it before sending another message.",
+    );
+    // The run is still waiting on that question, so it stays answerable.
+    expect(latestSessionRef.current?.pendingMcpElicitations).toHaveLength(1);
+  });
+
   it("reattaches to the active run when our own auto-recovery retry hits the duplicate-run 409", async () => {
     render(
       <ChatProvider>

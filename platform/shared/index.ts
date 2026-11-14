@@ -1,5 +1,6 @@
 export * from "./agent-catalog-images";
 export * from "./agent-run-transcript";
+export * from "./agent-runtime-lock";
 export * from "./agent-runtime-tiers";
 export * from "./agent-skills";
 export * from "./agents";
@@ -19,6 +20,7 @@ export * from "./citation-quotes";
 export * from "./client-mark";
 export * from "./consts";
 export * from "./created-by";
+export * from "./desktop-mcp";
 export * from "./docs";
 export * from "./e2e-test-ids";
 export * from "./encrypted-chat-content";

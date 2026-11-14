@@ -1,9 +1,9 @@
 "use client";
 
 import {
+  type archestraApiTypes,
   DocsPage,
   type GitProvider,
-  gitChangeRequestNoun,
 } from "@archestra/shared";
 import {
   AlertTriangle,
@@ -85,18 +85,19 @@ import {
   useAppaGithubAppRepositories,
   useAppaGithubRepositoryStatus,
   useAppaGithubSync,
+  useAppaGithubSyncing,
   useConfigureAppaGithubSync,
   useCreateAppaGithubRepository,
   useDiscardAppaGithubApp,
   useInstallAppaGithubApp,
   usePendingAppaGithubApp,
   useStartAppaGithubApp,
+  useUpdateAppaGithubSync,
 } from "@/lib/openappa-github-sync.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
 import { onGithubAppSetup } from "./github-app-channel";
-import { SelfServiceOutcomeStep } from "./self-service-setup-dialog";
-import { OpenAppaSetupPullRequestDialog } from "./setup-pull-request-dialog";
+import { SetupChecklist } from "./self-service-setup-dialog";
 
 /**
  * Sets up Git sync for the policy. The admin first picks GitHub or GitLab.
@@ -160,6 +161,30 @@ export function GithubSyncSetupDialog({
   const discard = useDiscardAppaGithubApp();
   const create = useCreateAppaGithubRepository();
   const configure = useConfigureAppaGithubSync();
+  // The wizard's own steps show what each sync brings: none toasts.
+  const update = useUpdateAppaGithubSync({ quiet: true });
+  const syncing = useAppaGithubSyncing();
+  const saving = configure.isPending || create.isPending;
+  // Done syncs at once, so the card shows what the setup brought about.
+  const done = () => {
+    if (!syncing) update.mutate({ action: "sync" });
+    onOpenChange(false);
+  };
+  // Opened on a source that syncs: a pull now finds what is out of date and
+  // opens the pull requests it needs, so the Finish step lists them.
+  const connected = !!useAppaGithubSync().data?.source?.interval;
+  const openSynced = useRef(false);
+  const { mutate: syncNow } = update;
+  useEffect(() => {
+    if (!editing || !connected || openSynced.current) return;
+    openSynced.current = true;
+    if (!syncing) syncNow({ action: "sync" });
+  }, [editing, connected, syncing, syncNow]);
+  /** Steps leave the Finish step's run behind: opened again, it only reads. */
+  const goTo = (target: Step) => {
+    if (target === "connect" || step === "connect") setOutcome(null);
+    setStep(target);
+  };
 
   const [step, setStep] = useState<Step>(editing ? "repo" : "provider");
   const [origin, setOrigin] = useState<Origin | null>(
@@ -232,15 +257,11 @@ export function GithubSyncSetupDialog({
     editing?.selfServiceDirectory || DEFAULT_SELF_SERVICE_FOLDER,
   );
   const [interval, setSyncInterval] = useState<SyncInterval>(
-    editing?.interval ?? DEFAULT_INTERVAL,
+    editing?.interval ?? DEFAULT_SYNC_INTERVAL,
   );
-  // With self-service on, the connect step stays open on what the save
-  // brought: the include pull request, and the ruleset to import.
+  // The save or connect the Finish step runs first; none when the step
+  // is opened again to read what is in place.
   const [outcome, setOutcome] = useState<(() => Promise<unknown>) | null>(null);
-  const [pullRequest, setPullRequest] = useState<{
-    repo: string;
-    number: number;
-  } | null>(null);
 
   const accounts = useAppaGithubAppAccounts(
     (step === "app" || step === "selfService" || step === "repo") &&
@@ -434,14 +455,13 @@ export function GithubSyncSetupDialog({
 
   function connect() {
     if (!appId || (!repo && !creatingProject)) return;
-    const onError = () => setStep("repo");
     const credential = gitlab
       ? { gitlabTokenId: appId }
       : { githubAppConfigId: appId };
     setStep("connect");
     const withSelfService = !gitlab && selfService;
-    // With self-service on, a setup pull request that carries the current
-    // policy is one more row of the checklist, beside the ruleset to import.
+    // The Finish step runs the save or the connect first; a setup pull request
+    // that carries the current policy is named on its first row.
     const setupPullOf = (data: {
       source?: {
         repo?: string | null;
@@ -473,13 +493,7 @@ export function GithubSyncSetupDialog({
         selfServiceDirectory: serversFolder || DEFAULT_SELF_SERVICE_FOLDER,
         selfServiceAutoMerge: withSelfService && chosenAutoMerge,
       };
-      if (withSelfService)
-        setOutcome(() => () => configure.mutateAsync(body).then(setupPullOf));
-      else
-        configure.mutate(body, {
-          onSuccess: () => onOpenChange(false),
-          onError,
-        });
+      setOutcome(() => () => configure.mutateAsync(body).then(setupPullOf));
       return;
     }
     // GitLab nests groups: the project is the last segment, its group the rest.
@@ -500,25 +514,7 @@ export function GithubSyncSetupDialog({
       ...((!creatingProject || editing) && { replace: !!editing }),
       ...location,
     };
-    const setupPull = (
-      data: Awaited<ReturnType<typeof create.mutateAsync>>,
-    ) => {
-      const number = data?.source?.setupPullRequestNumber;
-      if (number && data.source?.repo) {
-        setPullRequest({ repo: data.source.repo, number });
-        return true;
-      }
-      return false;
-    };
-    if (withSelfService)
-      setOutcome(() => () => create.mutateAsync(body).then(setupPullOf));
-    else
-      create.mutate(body, {
-        onSuccess: (data) => {
-          if (!setupPull(data)) onOpenChange(false);
-        },
-        onError,
-      });
+    setOutcome(() => () => create.mutateAsync(body).then(setupPullOf));
   }
 
   function back() {
@@ -541,14 +537,6 @@ export function GithubSyncSetupDialog({
     // An existing repository has nothing to do on the first step: go back to the choice.
     if (origin === "existing") setOrigin(null);
   }
-
-  if (pullRequest)
-    return (
-      <OpenAppaSetupPullRequestDialog
-        pullRequest={pullRequest}
-        onOpenChange={onOpenChange}
-      />
-    );
 
   const policyDocsUrl = getFrontendDocsUrl(
     DocsPage.PlatformAiToolGuardrailsGitSync,
@@ -636,19 +624,14 @@ export function GithubSyncSetupDialog({
               <span>Back</span>
             </Button>
           ) : null}
-          {step === "connect" && outcome ? (
-            <Button
-              type="button"
-              disabled={configure.isPending || create.isPending}
-              onClick={() => onOpenChange(false)}
-            >
+          {step === "connect" ? (
+            <Button type="button" disabled={saving} onClick={done}>
               <span>Done</span>
             </Button>
           ) : (
             <Button
               type="button"
               variant="outline"
-              disabled={step === "connect"}
               onClick={() => onOpenChange(false)}
             >
               <span>Cancel</span>
@@ -705,20 +688,19 @@ export function GithubSyncSetupDialog({
     >
       <SetupStepper
         steps={wizardSteps.map((entry) => entry.label)}
-        current={
-          step === "connect"
-            ? wizardSteps.length
-            : wizardSteps.findIndex((entry) => entry.id === step)
-        }
-        // Done steps open again; editing a source unlocks every step.
+        current={wizardSteps.findIndex((entry) => entry.id === step)}
+        // Done steps open again; editing a source unlocks every step, the
+        // Finish step included. A connect that just ran ends the setup.
         onSelect={(index) => {
           const target = wizardSteps[index];
-          if (target && step !== "connect") setStep(target.id);
+          if (target && !saving) goTo(target.id);
         }}
         selectable={(index) =>
-          step !== "connect" &&
-          (index < wizardSteps.findIndex((entry) => entry.id === step) ||
-            (!!editing && index < wizardSteps.length))
+          !saving &&
+          (editing
+            ? index < wizardSteps.length
+            : step !== "connect" &&
+              index < wizardSteps.findIndex((entry) => entry.id === step))
         }
       />
 
@@ -915,6 +897,14 @@ export function GithubSyncSetupDialog({
               </div>
             </div>
           ) : null}
+          {selfService && !gitlab ? (
+            // The ruleset names the App, the repository and its branch: it
+            // follows them, on the Finish step.
+            <p className="text-xs text-muted-foreground">
+              The branch ruleset that makes the check required comes on the
+              Finish step, once the GitHub App and the repository are set.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -1070,17 +1060,16 @@ export function GithubSyncSetupDialog({
             {createdApp ? (
               <AppLogoTip settingsUrl={createdApp.settingsUrl} />
             ) : null}
-            {/* Checks is for the policy check self-service posts on pull
-                requests, asked for up front so turning self-service on later
-                changes nothing. Off github.com the App also writes the
-                validation workflow into the new repository. */}
+            {/* Checks posts the policy check on each pull request, asked for
+                up front so turning self-service on later changes nothing;
+                Workflows keeps the repository's validation workflow current. */}
             <AccessSummary
               intro="The App only needs the policy repository, nothing else in the organization:"
               permissions={[
                 "Contents",
                 "Pull requests",
                 "Checks",
-                ...(github?.dotCom ? [] : ["Workflows"]),
+                "Workflows",
               ].map((name) => ({ name, access: "Read & write" }))}
             />
           </div>
@@ -1377,12 +1366,23 @@ export function GithubSyncSetupDialog({
               gitlab={gitlab}
             />
           ) : null}
+          <div className="space-y-2">
+            <Label htmlFor="github-sync-interval">Sync schedule</Label>
+            <FieldDescription>
+              {`How often to check the branch for merged ${gitlab ? "merge requests" : "pull requests"}.`}
+            </FieldDescription>
+            <SyncScheduleSelect
+              id="github-sync-interval"
+              value={interval}
+              onValueChange={setSyncInterval}
+            />
+          </div>
           <Collapsible open={advanced} onOpenChange={setAdvanced}>
             <CollapsibleTrigger className="group flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
               <ChevronRight className="size-3.5 transition-transform group-data-[state=open]:rotate-90" />
               <span>Advanced</span>
               <span className="font-normal text-muted-foreground/70">
-                (branch, policy file, validations, schedule)
+                (branch, policy file, validations)
               </span>
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-3">
@@ -1441,29 +1441,6 @@ export function GithubSyncSetupDialog({
                     onChange={(event) => setValidations(event.target.value)}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="github-sync-interval">Sync schedule</Label>
-                  <FieldDescription>
-                    How often to check for merges.
-                  </FieldDescription>
-                  <Select
-                    value={interval}
-                    onValueChange={(value) =>
-                      setSyncInterval(value as SyncInterval)
-                    }
-                  >
-                    <SelectTrigger id="github-sync-interval" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent position="popper">
-                      {SYNC_INTERVALS.map((entry) => (
-                        <SelectItem key={entry.value} value={entry.value}>
-                          {entry.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
             </CollapsibleContent>
           </Collapsible>
@@ -1483,49 +1460,41 @@ export function GithubSyncSetupDialog({
         </div>
       ) : null}
 
-      {step === "connect" && outcome ? (
-        <SelfServiceOutcomeStep
-          run={outcome}
+      {step === "connect" ? (
+        <SetupChecklist
+          key={outcome ? "run" : "read"}
+          run={outcome ?? undefined}
           labels={{
             pending: editing
               ? "Save Git sync and pull the policy"
-              : "Connect the repository and pull the policy",
+              : gitlab
+                ? "Connect the project and pull the policy"
+                : "Connect the repository and pull the policy",
             done: editing
               ? "Git sync saved and the policy pulled"
-              : "Repository connected and the policy pulled",
-            proposed: editing ? "Git sync saved" : "Repository connected",
+              : gitlab
+                ? "Project connected and the policy pulled"
+                : "Repository connected and the policy pulled",
+            proposed: editing
+              ? "Git sync saved"
+              : gitlab
+                ? "Project connected"
+                : "Repository connected",
             failed: editing
               ? "Could not save Git sync"
-              : "Could not connect the repository",
+              : gitlab
+                ? "Could not connect the project"
+                : "Could not connect the repository",
           }}
-          directory={serversFolder || DEFAULT_SELF_SERVICE_FOLDER}
-          policyFile={location.path?.split("/").pop() ?? "appa.toml"}
+          // What was just saved; opened again, the saved setting.
+          {...(outcome
+            ? {
+                selfService: !gitlab && selfService,
+                directory: serversFolder || DEFAULT_SELF_SERVICE_FOLDER,
+                policyFile: location.path?.split("/").pop() ?? "appa.toml",
+              }
+            : {})}
         />
-      ) : null}
-      {step === "connect" && !outcome ? (
-        <ul
-          className="space-y-3 rounded-lg border bg-card p-4"
-          aria-live="polite"
-        >
-          {[
-            gitlab ? "Check the project" : "Check the repository",
-            "Sync the policy",
-            `Open a setup ${gitChangeRequestNoun(gitlab ? "gitlab" : "github")} if rules require one`,
-          ].map((label, index) => (
-            <li key={label} className="flex items-center gap-3 text-sm">
-              {index === 0 ? (
-                <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
-              ) : (
-                <span className="flex size-4 items-center justify-center">
-                  <span className="size-1.5 rounded-full bg-muted-foreground/40" />
-                </span>
-              )}
-              <span className={cn(index > 0 && "text-muted-foreground")}>
-                {label}
-              </span>
-            </li>
-          ))}
-        </ul>
       ) : null}
     </StandardDialog>
   );
@@ -1861,6 +1830,11 @@ function headerFor(params: {
   dotCom: boolean;
   gitlab: boolean;
 }) {
+  if (params.step === "connect")
+    return {
+      title: "Finish setup",
+      description: "What is in place, and what still waits for you.",
+    };
   if (params.step === "provider")
     return {
       title: "Set up Git sync",
@@ -1873,7 +1847,7 @@ function headerFor(params: {
         description:
           "It needs the api scope on the policy project. A project or group token is best.",
       };
-    if (params.editing && (params.step === "repo" || params.step === "connect"))
+    if (params.editing && params.step === "repo")
       return {
         title: "Edit Git sync",
         description: "Change the project or how it syncs.",
@@ -1884,8 +1858,8 @@ function headerFor(params: {
         description: "Create a private one, or use one you have.",
       };
     return {
-      title: "Connecting the project",
-      description: "This takes a few seconds.",
+      title: "Choose the policy project",
+      description: "Create a private one, or use one you have.",
     };
   }
   if (params.step === "start")
@@ -1922,7 +1896,7 @@ function headerFor(params: {
       description: `${params.appName} uses it to read your policy repository and to open pull requests for policy changes made here. GitHub creates it for you, with no IDs or keys to copy.`,
     };
   }
-  if (params.editing && (params.step === "repo" || params.step === "connect"))
+  if (params.editing && params.step === "repo")
     return {
       title: "Edit Git sync",
       description: "Change the repository or how it syncs.",
@@ -1944,11 +1918,13 @@ const GITHUB_STEPS: { id: Step; label: string }[] = [
   { id: "app", label: "GitHub App" },
   { id: "selfService", label: "Self-service" },
   { id: "repo", label: "Repository" },
+  { id: "connect", label: "Finish" },
 ];
 const GITLAB_STEPS: { id: Step; label: string }[] = [
   { id: "provider", label: "Host" },
   { id: "app", label: "Token" },
   { id: "repo", label: "Project" },
+  { id: "connect", label: "Finish" },
 ];
 const PERSONAL = "__personal__";
 /** GitLab project names: letters, digits, and `_ . -`, starting with one of the first two. */
@@ -1967,13 +1943,46 @@ const USABLE = new Set<RepositoryStatus>([
 ]);
 
 const DEFAULT_VALIDATIONS = "traces";
-type SyncInterval = "15m" | "1h" | "1d";
-const DEFAULT_INTERVAL: SyncInterval = "1h";
-const SYNC_INTERVALS: { value: SyncInterval; label: string }[] = [
-  { value: "15m", label: "Every 15 minutes" },
-  { value: "1h", label: "Every hour" },
-  { value: "1d", label: "Once a day" },
-];
+/** How often a sync checks the branch, as the API names it. */
+type SyncInterval =
+  archestraApiTypes.ConfigureAppaGithubSyncData["body"]["interval"];
+/** A merge on the host applies within minutes, with no webhook. */
+export const DEFAULT_SYNC_INTERVAL: SyncInterval = "15m";
+export const SYNC_INTERVAL_LABELS: Record<SyncInterval, string> = {
+  "5m": "Every 5 minutes",
+  "15m": "Every 15 minutes",
+  "1h": "Every hour",
+  "1d": "Once a day",
+};
+
+/** How often the policy syncs, picked like the limits' reset period. */
+export function SyncScheduleSelect({
+  id,
+  value,
+  onValueChange,
+}: {
+  id: string;
+  value: SyncInterval;
+  onValueChange: (value: SyncInterval) => void;
+}) {
+  return (
+    <Select
+      value={value}
+      onValueChange={(next) => onValueChange(next as SyncInterval)}
+    >
+      <SelectTrigger id={id} className="w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent position="popper">
+        {(Object.keys(SYNC_INTERVAL_LABELS) as SyncInterval[]).map((option) => (
+          <SelectItem key={option} value={option}>
+            {SYNC_INTERVAL_LABELS[option]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 type EditedSource = {
   provider: GitProvider;

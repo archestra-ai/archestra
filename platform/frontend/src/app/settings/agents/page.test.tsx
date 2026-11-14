@@ -200,7 +200,16 @@ import {
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
 import { agentRuntimeTiersSeed } from "@/mocks/data/organization";
+import { AgentRuntimeSettings } from "./_parts/agent-runtime-settings";
 import AgentSettingsPage from "./page";
+
+function renderRuntimesPage() {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <AgentRuntimeSettings />
+    </QueryClientProvider>,
+  );
+}
 
 function renderPage() {
   const queryClient = new QueryClient({
@@ -280,12 +289,10 @@ beforeEach(() => {
 });
 
 describe("AgentSettingsPage", () => {
-  it("shows the configured runtime backend as a managed row only when enabled", () => {
-    const { rerender } = renderPage();
+  it("shows the configured runtime backend as a managed row below the tiers, only when enabled", () => {
+    const { rerender } = renderRuntimesPage();
 
-    expect(
-      screen.getByRole("heading", { name: "Agent Runtime Beta" }),
-    ).toBeVisible();
+    expect(screen.getByText("Runtime templates")).toBeVisible();
 
     expect(
       screen.queryByRole("heading", { name: "Runtime backend" }),
@@ -305,7 +312,7 @@ describe("AgentSettingsPage", () => {
     };
     rerender(
       <QueryClientProvider client={new QueryClient()}>
-        <AgentSettingsPage />
+        <AgentRuntimeSettings />
       </QueryClientProvider>,
     );
 
@@ -323,12 +330,12 @@ describe("AgentSettingsPage", () => {
       screen.queryByText("registry.example.test/agent:latest"),
     ).not.toBeInTheDocument();
 
-    const messagingChannels = screen.getByText("Available messaging channels");
+    const runtimeTiers = screen.getByRole("heading", { name: "Runtime tiers" });
     const runtimeBackend = screen.getByRole("heading", {
       name: "Runtime backend",
     });
     expect(
-      messagingChannels.compareDocumentPosition(runtimeBackend) &
+      runtimeTiers.compareDocumentPosition(runtimeBackend) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
@@ -711,7 +718,7 @@ describe("Runtime tiers", () => {
   it("lists the tiers smallest first with their memory, pools and default; the header links the docs and explains pools, with no search or hint text", async () => {
     enableRuntime();
     const user = userEvent.setup();
-    renderPage();
+    renderRuntimesPage();
 
     expect(block()).toHaveTextContent(
       "Runtime tiers control compute and other resources allocation to agent runtimes.",
@@ -758,7 +765,7 @@ describe("Runtime tiers", () => {
     enableRuntime();
     saveTiers.mockResolvedValue({});
     const user = userEvent.setup();
-    renderPage();
+    renderRuntimesPage();
 
     await user.click(screen.getByRole("button", { name: "Edit L" }));
     const dialog = screen.getByRole("dialog", { name: "Edit tier" });
@@ -826,7 +833,7 @@ describe("Runtime tiers", () => {
     enableRuntime();
     saveTiers.mockResolvedValue({});
     const user = userEvent.setup();
-    renderPage();
+    renderRuntimesPage();
 
     await user.click(screen.getByRole("button", { name: "Edit M" }));
     const dialog = screen.getByRole("dialog", { name: "Edit tier" });
@@ -882,7 +889,7 @@ describe("Runtime tiers", () => {
     try {
       enableRuntime();
       const user = userEvent.setup();
-      renderPage();
+      renderRuntimesPage();
       await user.click(screen.getByRole("button", { name: "Edit L" }));
       const dialog = screen.getByRole("dialog", { name: "Edit tier" });
       const name = within(dialog).getByLabelText("Name");
@@ -903,7 +910,7 @@ describe("Runtime tiers", () => {
     enableRuntime();
     saveTiers.mockResolvedValue({});
     const user = userEvent.setup();
-    renderPage();
+    renderRuntimesPage();
 
     await user.click(
       within(block()).getByRole("button", { name: "Create tier" }),
@@ -947,7 +954,7 @@ describe("Runtime tiers", () => {
   it("deletes a tier after a confirmation, never the default, and shows a refusal in the dialog", async () => {
     enableRuntime();
     const user = userEvent.setup();
-    renderPage();
+    renderRuntimesPage();
 
     expect(screen.getByRole("button", { name: "Delete M" })).toBeDisabled();
     saveTiers.mockRejectedValueOnce(
@@ -981,7 +988,7 @@ describe("Runtime tiers", () => {
       isGlobalAdmin: false,
       isLoading: false,
     });
-    renderPage();
+    renderRuntimesPage();
 
     expect(
       within(block()).queryByRole("button", { name: "Create tier" }),

@@ -75,8 +75,8 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
     await agentRuntimeManager.recoverRun(session);
   }
 
-  async refreshCredentials(session: AgentRunRecord): Promise<void> {
-    await agentRuntimeManager.refreshCredentials(session);
+  async refreshCredentials(session: AgentRunRecord) {
+    return agentRuntimeManager.refreshCredentials(session);
   }
 
   async stopRun(session: AgentRunRecord): Promise<"suspended" | undefined> {

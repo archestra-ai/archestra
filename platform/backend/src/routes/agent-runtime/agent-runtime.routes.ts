@@ -228,6 +228,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: request.organizationId,
         userId: request.user.id,
         reportAdminOnlyCredentials: true,
+        reportOptionalReconnect: true,
       });
       const modelCompatibility =
         await getResolvedAgentRuntimeModelCompatibility({
@@ -251,9 +252,17 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Sign in with your own Claude account in the native runtime.",
           });
       }
+      const optionalKeys = new Set(
+        (runtime.credentials ?? [])
+          .filter((declaration) => !declaration.required)
+          .map((declaration) => declaration.key),
+      );
+      const hasBlockingMissing = preflight.missing.some(
+        (entry) => !(entry.reconnect && optionalKeys.has(entry.key)),
+      );
       return reply.send({
         ready:
-          preflight.missing.length === 0 &&
+          !hasBlockingMissing &&
           preflight.misconfigured.length === 0 &&
           modelCompatibility.compatibility.compatible,
         incompatible: modelCompatibility.compatibility.compatible

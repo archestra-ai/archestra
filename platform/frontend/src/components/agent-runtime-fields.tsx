@@ -257,7 +257,7 @@ type RuntimeSectionProps = {
 
 /** Section descriptions shared by the agent form and the runtime dialog. */
 export const agentRuntimeSectionDescriptions = (appName: string) => ({
-  inference: `The API the coding agent in the container (such as Claude Code or Codex) uses to call models, always through the ${appName} LLM proxy.`,
+  inference: `How the coding agent calls models, always through the ${appName} LLM proxy.`,
   followUps: "How a message you send while the coding agent works reaches it.",
 });
 

@@ -16,6 +16,7 @@ import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
+import type { Tool as AiTool } from "ai";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
@@ -5591,5 +5592,250 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       await OrganizationModel.patch(organizationId, { appName: null });
       archestraMcpBranding.syncFromOrganization(null);
     }
+  });
+
+  test("gates pooled-starter system prompt on callable start_agent_run rather than stale or unassigned mcpTools entries", async ({
+    makeAgent,
+    makeCustomRole,
+    makeLlmProviderApiKey,
+    makeMember,
+    makeSecret,
+    makeUser,
+  }) => {
+    const sharedSecret = await makeSecret({
+      secret: { apiKey: "test-prompt-gate-key" },
+    });
+    const sharedKey = await makeLlmProviderApiKey(
+      organizationId,
+      sharedSecret.id,
+      {
+        provider: "openai",
+        access: "org",
+      },
+    );
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(sharedKey.id, [
+      modelId,
+    ]);
+
+    const workerAlpha = await makeAgent({
+      name: "Prompt Gate Worker Alpha",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId: sharedKey.id,
+      access: "org",
+      runtime: runtimeConfig({ maxTier: "M" }),
+    });
+    const workerBeta = await makeAgent({
+      name: "Prompt Gate Worker Beta",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId: sharedKey.id,
+      access: "org",
+      runtime: runtimeConfig({ maxTier: "M" }),
+    });
+    const alphaTool = await ToolModel.findOrCreateDelegationTool(
+      workerAlpha.id,
+    );
+    const betaTool = await ToolModel.findOrCreateDelegationTool(workerBeta.id);
+
+    // Custom-mode (`accessAllTools: false`) load-balanced agent with two assigned
+    // runtime workers and NO `start_agent_run` row in `agent_tools`.
+    const customLbAgent = await makeAgent({
+      name: "Custom Prompt Gate LB Agent",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      toolExposureMode: "full",
+      accessAllTools: false,
+      accessAllSubagents: false,
+      modelId,
+      llmApiKeyId: sharedKey.id,
+      access: "org",
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await AgentToolModel.create(customLbAgent.id, alphaTool.id);
+    await AgentToolModel.create(customLbAgent.id, betaTool.id);
+
+    const staleToolMap: Record<string, AiTool> = {
+      [TOOL_START_AGENT_RUN_FULL_NAME]: {} as AiTool,
+    };
+
+    // 1. System actor (ChatOps / schedule turn) with `start_agent_run` present in `mcpTools`:
+    //    `start_agent_run` is rejected at execution, so the prompt must emit the delegation
+    //    fallback rather than steering the model to `start_agent_run`.
+    const systemContext: ArchestraContext = {
+      agent: { id: customLbAgent.id, name: customLbAgent.name },
+      agentId: customLbAgent.id,
+      userId: "system",
+      organizationId,
+    };
+    const systemStartDenied = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "System turn cannot call unassigned start_agent_run" },
+      systemContext,
+    );
+    expect(systemStartDenied.isError).toBe(true);
+
+    const systemPrompt = await buildAgentSystemPrompt({
+      agent: customLbAgent,
+      mcpTools: staleToolMap,
+      organizationId,
+      userId: "system",
+      agentId: customLbAgent.id,
+    });
+    expect(systemPrompt ?? "").toContain("Subagent load balancing is enabled");
+    expect(systemPrompt ?? "").not.toContain("start_agent_run");
+    expect(systemPrompt ?? "").toContain(
+      "delegate new runtime tasks immediately in a single delegation call",
+    );
+
+    // 2. Restricted user lacking `agent:read` with stale `start_agent_run` in `mcpTools`:
+    //    `start_agent_run` is rejected, the prompt emits the delegation fallback instruction,
+    //    and `agent__*` delegation launches across the load-balanced runtime pool.
+    const noAgentReadRole = await makeCustomRole(organizationId, {
+      permission: { chat: ["read", "create"] },
+    });
+    const restrictedUser = await makeUser();
+    await makeMember(restrictedUser.id, organizationId, {
+      role: noAgentReadRole.role,
+    });
+    const restrictedContext: ArchestraContext = {
+      agent: { id: customLbAgent.id, name: customLbAgent.name },
+      agentId: customLbAgent.id,
+      userId: restrictedUser.id,
+      organizationId,
+    };
+    const restrictedStartDenied = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Restricted user cannot call start_agent_run" },
+      restrictedContext,
+    );
+    expect(restrictedStartDenied.isError).toBe(true);
+
+    const restrictedPrompt = await buildAgentSystemPrompt({
+      agent: customLbAgent,
+      mcpTools: staleToolMap,
+      organizationId,
+      userId: restrictedUser.id,
+      agentId: customLbAgent.id,
+    });
+    expect(restrictedPrompt ?? "").toContain(
+      "Subagent load balancing is enabled",
+    );
+    expect(restrictedPrompt ?? "").not.toContain("start_agent_run");
+    expect(restrictedPrompt ?? "").toContain(
+      "delegate new runtime tasks immediately in a single delegation call",
+    );
+
+    await mockDetachedTaskStart();
+    const resDel1 = await executeArchestraTool(
+      alphaTool.name,
+      { message: "Restricted delegated runtime task 1" },
+      restrictedContext,
+    );
+    const resDel2 = await executeArchestraTool(
+      alphaTool.name,
+      { message: "Restricted delegated runtime task 2" },
+      restrictedContext,
+    );
+    expect(resDel1.isError).toBeFalsy();
+    expect(resDel2.isError).toBeFalsy();
+    expect(
+      new Set([
+        (resDel1.structuredContent as { run: { agent_id: string } }).run
+          .agent_id,
+        (resDel2.structuredContent as { run: { agent_id: string } }).run
+          .agent_id,
+      ]),
+    ).toEqual(new Set([workerAlpha.id, workerBeta.id]));
+
+    // 3. OAuth application turn (`oauthClientId` set): Agent Runtime is disallowed,
+    //    so neither `start_agent_run` nor runtime delegation instructions are emitted.
+    const oauthPrompt = await buildAgentSystemPrompt({
+      agent: customLbAgent,
+      mcpTools: staleToolMap,
+      organizationId,
+      userId: actorId,
+      oauthClientId: "oauth-app-client",
+      agentId: customLbAgent.id,
+    });
+    expect(oauthPrompt ?? "").not.toContain("start_agent_run");
+    expect(oauthPrompt ?? "").not.toContain(
+      "Subagent load balancing is enabled",
+    );
+
+    // 4. Auto-tools agent excluding `start_agent_run` with a stale `mcpTools` entry:
+    //    still receives the delegation fallback instruction rather than `start_agent_run`.
+    const autoExcludedToolsAgent = await makeAgent({
+      name: "Auto Tools Excluded Starter LB Agent",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      toolExposureMode: "full",
+      accessAllTools: true,
+      accessAllSubagents: false,
+      modelId,
+      llmApiKeyId: sharedKey.id,
+      access: "org",
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await AgentToolModel.create(autoExcludedToolsAgent.id, alphaTool.id);
+    await AgentToolModel.create(autoExcludedToolsAgent.id, betaTool.id);
+    const startRunTool = await ToolModel.findByName(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+    );
+    if (!startRunTool) {
+      throw new Error("Expected seeded start_agent_run tool");
+    }
+    await AgentExcludedToolModel.replaceForAgent(autoExcludedToolsAgent.id, [
+      startRunTool.id,
+    ]);
+    const excludedStalePrompt = await buildAgentSystemPrompt({
+      agent: autoExcludedToolsAgent,
+      mcpTools: staleToolMap,
+      organizationId,
+      userId: actorId,
+      agentId: autoExcludedToolsAgent.id,
+    });
+    expect(excludedStalePrompt ?? "").toContain(
+      "Subagent load balancing is enabled",
+    );
+    expect(excludedStalePrompt ?? "").not.toContain("start_agent_run");
+
+    // 5. Real user with `agent:read` on the custom-mode agent: implicit pooled starter
+    //    IS callable, so `SUBAGENT_LOAD_BALANCING_INSTRUCTION` is emitted and execution succeeds.
+    const permittedUserPrompt = await buildAgentSystemPrompt({
+      agent: customLbAgent,
+      mcpTools: staleToolMap,
+      organizationId,
+      userId: actorId,
+      agentId: customLbAgent.id,
+    });
+    expect(permittedUserPrompt).toContain(SUBAGENT_LOAD_BALANCING_INSTRUCTION);
+    const permittedStart = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Permitted user starts pooled runtime run" },
+      {
+        agent: { id: customLbAgent.id, name: customLbAgent.name },
+        agentId: customLbAgent.id,
+        userId: actorId,
+        organizationId,
+      },
+    );
+    expect(permittedStart.isError).toBeFalsy();
   });
 });

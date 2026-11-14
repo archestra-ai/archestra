@@ -21,7 +21,6 @@ import {
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-  TOOL_START_AGENT_RUN_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import type { Tool } from "ai";
@@ -321,16 +320,15 @@ export async function buildAgentSystemPrompt(params: {
   const callerLoadBalancingPrompt =
     !isFork &&
     !suppressContentLogging &&
+    !oauthClientId &&
     agent.subagentLoadBalancing?.enabled === true
       ? await resolveCallerLoadBalancingInstruction({
           agentId,
           userId,
-          oauthClientId,
-          mcpTools,
         })
       : null;
   const subagentLoadBalancingInstruction =
-    !isFork && !suppressContentLogging
+    !isFork && !suppressContentLogging && !oauthClientId
       ? [
           callerLoadBalancingPrompt,
           buildLoadBalancedRouterDelegationInstruction(mcpTools),
@@ -828,8 +826,6 @@ When the user asks to roll an app back or restore an existing historical version
 async function resolveCallerLoadBalancingInstruction(params: {
   agentId: string;
   userId: string;
-  oauthClientId?: string;
-  mcpTools: Record<string, Tool>;
 }): Promise<string | null> {
   const gatewayAgent = await AgentModel.findGatewayAgentById(params.agentId);
   if (!gatewayAgent) {
@@ -842,17 +838,11 @@ async function resolveCallerLoadBalancingInstruction(params: {
   if (candidateRuntimeSubagentIds.length === 0) {
     return null;
   }
-  const startAgentRunFullName = archestraMcpBranding.getToolName(
-    TOOL_START_AGENT_RUN_SHORT_NAME,
-  );
-  const hasPooledStarter =
-    startAgentRunFullName in params.mcpTools ||
-    (await callerUsesImplicitLoadBalancedRunStarter({
-      agent: gatewayAgent,
-      actorUserId: params.userId,
-      disallowOAuthApp: Boolean(params.oauthClientId),
-      candidateRuntimeSubagentIds,
-    }));
+  const hasPooledStarter = await callerUsesImplicitLoadBalancedRunStarter({
+    agent: gatewayAgent,
+    actorUserId: params.userId,
+    candidateRuntimeSubagentIds,
+  });
   return hasPooledStarter
     ? SUBAGENT_LOAD_BALANCING_INSTRUCTION
     : SUBAGENT_LOAD_BALANCING_DELEGATION_FALLBACK_INSTRUCTION;

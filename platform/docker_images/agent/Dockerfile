@@ -6,7 +6,7 @@ FROM ghcr.io/astral-sh/uv:0.12.3@sha256:2d890623d310b57771ce840f0da5eed5fc6d657d
 
 # One Rust toolchain both builds the review engine and ships in the runtime, so
 # projects with native code (Archestra's addons included) compile in place.
-FROM rust:1.93.0-bookworm AS rust
+FROM rust:1.93.0-bookworm@sha256:d0a4aa3ca2e1088ac0c81690914a0d810f2eee188197034edf366ed010a2b382 AS rust
 
 # Build the review engine once for each native architecture. Skills supply the
 # review procedure and configuration; the runtime needs only this executable.
@@ -38,7 +38,7 @@ RUN curl -fsSL --retry 3 \
  && /out/gh api --help >/dev/null \
  && /out/gh auth git-credential --help >/dev/null
 
-FROM node:24-bookworm-slim AS agent-base
+FROM node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS agent-base
 ARG TARGETARCH
 
 # Require fixed apt, OpenSSL and Cyrus SASL packages and refresh cached apt layers.

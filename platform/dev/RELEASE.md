@@ -16,6 +16,12 @@ Ordinary PRs and merge groups report an explicit no-scan decision. Source/depend
 
 Release builds independently scan the exact immutable per-architecture digests before assigning version tags. This includes all published Platform, MCP, p4, Sandbox Base, and Agent Catalog images on both release tracks. Digest artifacts must come from the same workflow run and source revision and contain the complete expected architecture set. Release builds do not reuse previously tagged images or prior scan results. A failure prevents that image's version tag and blocks GitHub release publication; successful sibling builds and the prerelease chart may already exist, so use the existing same-run recovery procedure. Stable publication still requires separate artifact qualification and environment approval. Untagged build digests are uploaded before scanning so Scout can inspect them.
 
+### Catch Findings Before A Release
+
+An advisory published between the queue scan and publication holds the release, and only a new version gets past it. **Nightly Release Image Scan** (`.github/workflows/nightly-release-image-scan.yml`) rebuilds every image a release would publish from the heads of `main` and each branch in `.github/backport-targets.json`, using that line's own image inventory, and scans it under the release policy on `linux/amd64`. Main's Platform full and slim images come from **Nightly Platform Image Byte Scan** instead. Failures post to the CI alerts Slack channel. Fix them on `main` and backport before cutting a release on that line. The scan gates nothing and is never publication evidence.
+
+Base images in the release Dockerfiles are written as `FROM image:version@sha256:digest` on the `FROM` line itself, never through an `ARG`, so Dependabot can read them. Dependabot proposes patch bumps daily on `main` and each supported release line (minor bumps for Node too), with no cooldown. `.github/scripts/test_base_image_pins.py` keeps the pins and the Dependabot targets in step with `.github/backport-targets.json`; update `.github/dependabot.yml` when a stable cutover changes the backport targets.
+
 ### Roll Out Required Checks
 
 The workflow preserves `Docker Image Scanning (Platform)`, `Docker Image Scanning (MCP Server Base)`, `Docker Image Scanning (p4 Shim)`, and the historical literal `Docker Image Scanning (${{ matrix.name }})` contexts. Each depends on the always-running **Release Image Security** gate. A release scan skipped after a failed prerequisite cannot satisfy these contexts. No repository protection change is required to adopt this compatibility bridge.
@@ -92,6 +98,7 @@ manifest.
 `.github/backport-targets.json` is the explicit list of branches that accept automatic backport requests.
 Add each new stable or candidate branch there, and create its `backport release/X.Y` label.
 Remove retired branches from that list when making them read-only.
+Keep the release-line `docker` entries in `.github/dependabot.yml` on the same branches; `test_base_image_pins.py` fails until they agree, and the nightly release image scan follows the list on its own.
 The workflow always runs trusted automation from the default branch, including manual retries.
 Automatic backports only accept merged PRs from branches in this repository targeting the default branch.
 PRs from forks are ineligible, including through scheduled scans and manual retries.

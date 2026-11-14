@@ -231,7 +231,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-codex
 USER root
-RUN pnpm add --global @openai/codex@0.165.0 \
+RUN pnpm add --global @openai/codex@0.167.0 \
  && codex --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
@@ -272,8 +272,8 @@ USER root
 # required MCP startup guard and refreshes runtime bindings on session resume.
 COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
 RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
-    hermes_version=0.22.5 \
- && hermes_commit=bf0203a794a07aac3ff764972ab9087baa4e4f4e \
+    hermes_version=0.23.0 \
+ && hermes_commit=2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19 \
  && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
  && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
  && case "${TARGETARCH}" in amd64) python_target=linux-x64 ;; arm64) python_target=linux-arm64 ;; *) exit 1 ;; esac \
@@ -362,14 +362,14 @@ ARG TARGETARCH
 ENV GROK_DISABLE_AUTOUPDATER=1
 USER root
 RUN case "$TARGETARCH" in \
-      amd64) grok_arch=x64; checksum=b2ff08ca31abc28407286fb03a8ce2502e810ab62471d7f5c2b8bf9bda5153b1 ;; \
-      arm64) grok_arch=arm64; checksum=12e6d37a622c7dbaceab524a90cd69c5aee4f16975dd1a98635f8af07e55357a ;; \
+      amd64) grok_arch=x64; checksum=93e7d0274631b7741bacd46acb6dd8608a27b7092e601b8723183e81dc98f7fa ;; \
+      arm64) grok_arch=arm64; checksum=df946f1f130c81538abdd414845358dccd6a769e33280d5cbec9e2dd4c2c8b33 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /tmp/grok /opt/grok/bin \
  && cd /tmp/grok \
- && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.70" \
- && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.70.tgz" \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.77" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.77.tgz" \
  && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
  && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
  && chmod 0755 /opt/grok/bin/grok \
@@ -397,8 +397,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /tmp/kimi \
  && cd /tmp/kimi \
- && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.3.3)" kimi-code.tgz \
- && echo "dd5f1bc9cb9c7fd2a03d11f6ed2f037b6bb48a9f38fd1cb7169367ea08b9cfd266a041edf6fc626071d9aa231dc837f99cf9b86eff98286c0a1102f8a18a514f  kimi-code.tgz" | sha512sum -c - \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.5.2)" kimi-code.tgz \
+ && echo "6bb52eba0a90b8f04707664c8aef1ecc0148c09d1d9fac5a9ee4674ea6b6a575eed769e0ee4be2800957cb8ed3c4d2a99f28fcbe068d4ad79d4efe246ea482b8  kimi-code.tgz" | sha512sum -c - \
  && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
  && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
  && cd / && rm -rf /tmp/kimi /root/.npm \
@@ -422,13 +422,13 @@ FROM agent-base AS agent-copilot
 USER root
 ENV COPILOT_AUTO_UPDATE=false
 RUN case "$TARGETARCH" in \
-      amd64) copilot_arch=x64; copilot_checksum=dedae5ca2b104009e5372dc2bd85510d5582fd62bed027c321dedd0f035bc53149f4880cddaa023f283e41b18f0547ae60db38b2382d4ea167e65e727f21d50e ;; \
-      arm64) copilot_arch=arm64; copilot_checksum=2fbff84aad626de51d0fc684fbe72e6c18ebda859f00519ed322a3b98e687b41c3670f101d800fad9841da9efd36483694807cf1112772c7fea96b9554354f8c ;; \
+      amd64) copilot_arch=x64; copilot_checksum=0a13c4b826ff33cf670b4bf26166014c206c48657e562801c0f3c22487c9b607817f18d524d1e116c4f20365c2eefe2e678ed25ad97c2b9af11e9e259c9f4ac9 ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=7e035faaeaf75dd08df29de62e04631a1ebfcc008b9b1347d865af6d194a63593c383245a1864147690b5ff2f05008f40aae6d853039f4b686ece1a95bab6186 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /opt/copilot \
  && cd /tmp \
- && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.105)" copilot.tgz \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.107)" copilot.tgz \
  && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
  && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
  && test -s /opt/copilot/LICENSE.md \

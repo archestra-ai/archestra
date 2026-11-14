@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.31](https://github.com/archestra-ai/archestra/compare/platform-v1.4.30...platform-v1.4.31) (2026-11-14)
+
+
+### Bug Fixes
+
+* **agent-runtime:** run the Playwright driver on the image's Node [1.4] ([#10708](https://github.com/archestra-ai/archestra/issues/10708)) ([c6a9688](https://github.com/archestra-ai/archestra/commit/c6a96884d7241c634edaf3e75893fb34837a55b5))
+
 ## [1.4.30](https://github.com/archestra-ai/archestra/compare/platform-v1.4.29...platform-v1.4.30) (2026-11-14)
 
 

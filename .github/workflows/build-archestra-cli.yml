@@ -231,6 +231,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write # Create and publish the release.
+      id-token: write # Sign the build provenance attestation.
+      attestations: write # Store the attestation.
     outputs:
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
@@ -300,6 +302,14 @@ jobs:
           pattern: archestra-*
           path: dist
           merge-multiple: "true"
+
+      # Lets users check a binary was built here, from this commit:
+      # gh attestation verify archestra-<os>-<arch> --repo archestra-ai/archestra
+      - name: Attest the binaries
+        if: steps.release.outputs.published == 'false'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/archestra-*
 
       - name: Create and publish release
         if: steps.release.outputs.published == 'false'

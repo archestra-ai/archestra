@@ -150,16 +150,19 @@ export async function getAgentTools(context: {
   // agents until connections can be bound to and dialed through that runtime.
   const realUserId = userId && userId !== "system" ? userId : undefined;
   // Hide individual `agent__<runtime_worker>` schemas only when the canonical
-  // `start_agent_run` pooled starter is actually exposed for this caller (load
-  // balancing enabled, `start_agent_run` not excluded in Auto-tools mode, and
-  // >=1 candidate runtime subagent). If `start_agent_run` is excluded, keep
+  // `start_agent_run` pooled starter is actually exposed and RBAC-permitted for
+  // this caller (load balancing enabled, acting user has `agent:read`,
+  // `start_agent_run` not excluded in Auto-tools mode, and >=1 candidate
+  // runtime subagent). If `start_agent_run` is excluded or RBAC-denied, keep
   // `agent__<runtime_worker>` tools visible so the caller retains a way to
   // launch runtime work.
   const hideRuntimeWorkerTools =
     callerGatewayAgent != null &&
+    !context.oauthExecution &&
     (await callerUsesImplicitLoadBalancedRunStarter({
       agent: callerGatewayAgent,
       actorUserId: realUserId,
+      lookups,
     }));
   const attestable = await isGuardrailsV2Active();
   const outboundTargets = environmentId

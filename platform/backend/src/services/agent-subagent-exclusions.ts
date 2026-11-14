@@ -1,9 +1,12 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  isPermissionActionGranted,
   normalizeSubagentLoadBalancingConfig,
   TOOL_START_AGENT_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import type { RequestLookups } from "@/auth/request-lookups";
+import { getPermissionsForUserContext } from "@/auth/utils";
 import {
   AgentExcludedSubagentModel,
   AgentModel,
@@ -92,11 +95,12 @@ export async function callerHasCandidateRuntimeSubagents(params: {
 }
 
 /**
- * Whether `agent` has subagent load balancing enabled, does not exclude
- * `start_agent_run` in Auto-tools mode, and resolves at least one candidate
- * runtime subagent — meaning `start_agent_run` is actually exposed as the
- * canonical pooled starter in place of individual `agent__<runtime_worker>`
- * schemas.
+ * Whether `agent` has subagent load balancing enabled, the acting caller is
+ * permitted to invoke `start_agent_run` (`agent:read` on an acting user), does
+ * not exclude `start_agent_run` in Auto-tools mode, and resolves at least one
+ * candidate runtime subagent — meaning `start_agent_run` is actually exposed
+ * and callable as the canonical pooled starter in place of individual
+ * `agent__<runtime_worker>` schemas.
  */
 export async function callerUsesImplicitLoadBalancedRunStarter(params: {
   agent: Pick<
@@ -110,10 +114,34 @@ export async function callerUsesImplicitLoadBalancedRunStarter(params: {
   >;
   actorUserId?: string | null;
   exclusionSets?: AgentToolExclusionSets;
+  lookups?: RequestLookups;
+  disallowOAuthApp?: boolean;
+  candidateRuntimeSubagentIds?: readonly string[];
 }): Promise<boolean> {
   if (
+    params.disallowOAuthApp ||
+    !params.actorUserId ||
+    params.actorUserId === "system" ||
     normalizeSubagentLoadBalancingConfig(params.agent.subagentLoadBalancing)
       ?.enabled !== true
+  ) {
+    return false;
+  }
+  const permissions = params.lookups
+    ? await params.lookups.permissions({
+        userId: params.actorUserId,
+        organizationId: params.agent.organizationId,
+      })
+    : await getPermissionsForUserContext({
+        userId: params.actorUserId,
+        organizationId: params.agent.organizationId,
+      });
+  if (
+    !isPermissionActionGranted({
+      resource: "agent",
+      grantedActions: permissions.agent ?? [],
+      requiredAction: "read",
+    })
   ) {
     return false;
   }
@@ -133,10 +161,12 @@ export async function callerUsesImplicitLoadBalancedRunStarter(params: {
   ) {
     return false;
   }
-  const candidates = await resolveCandidateRuntimeSubagentIds({
-    callerAgent: params.agent,
-    actorUserId: params.actorUserId,
-  });
+  const candidates =
+    params.candidateRuntimeSubagentIds ??
+    (await resolveCandidateRuntimeSubagentIds({
+      callerAgent: params.agent,
+      actorUserId: params.actorUserId,
+    }));
   return candidates.length > 0;
 }
 

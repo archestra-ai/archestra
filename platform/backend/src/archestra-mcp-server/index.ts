@@ -671,6 +671,11 @@ async function resolveToolAssignment(params: {
         agent: callerAgent,
         actorUserId: context.userId,
         exclusionSets,
+        disallowOAuthApp: Boolean(
+          context.tokenAuth?.oauthExecution ||
+            (context.tokenAuth?.oauthClientId &&
+              !context.tokenAuth.isUserToken),
+        ),
       }))
     ) {
       return null;

@@ -341,8 +341,10 @@ export async function buildAgentMcpToolList(params: {
         | "tokenId"
         | "teamId"
         | "isOrganizationToken"
+        | "isUserToken"
         | "isExternalIdp"
         | "oauthClientId"
+        | "oauthExecution"
       >
     >;
   lookups?: RequestLookups;
@@ -475,6 +477,11 @@ export async function buildAgentMcpToolList(params: {
       agent,
       actorUserId: callerUserId,
       exclusionSets,
+      lookups: params.lookups,
+      disallowOAuthApp: Boolean(
+        tokenAuth?.oauthExecution ||
+          (tokenAuth?.oauthClientId && !tokenAuth.isUserToken),
+      ),
     });
   const implicitTaskStarterTools = includeImplicitStartAgentRun
     ? getImplicitStartAgentRunTools()

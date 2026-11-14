@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import {
   extractMcpExecutedAs,
   extractMcpHumanRuling,
+  isAgentTool,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   LOAD_BALANCED_RUNTIME_ROUTER_META_KEY,
@@ -357,11 +358,12 @@ export function buildMcpGatewayTool(params: {
                 mcpTool.name,
                 toolArguments,
               );
-              const isStartAgentRun =
+              const isRuntimeLaunchTarget =
                 archestraMcpBranding.getToolShortName(targetToolName) ===
                   TOOL_START_AGENT_RUN_SHORT_NAME ||
-                targetToolName === TOOL_START_AGENT_RUN_SHORT_NAME;
-              if (isStartAgentRun) {
+                targetToolName === TOOL_START_AGENT_RUN_SHORT_NAME ||
+                isAgentTool(targetToolName);
+              if (isRuntimeLaunchTarget) {
                 await persistLaunchedRuntimeToolCall({
                   ctx,
                   toolName: mcpTool.name,

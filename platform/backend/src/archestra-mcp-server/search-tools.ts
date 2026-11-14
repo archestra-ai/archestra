@@ -10,17 +10,22 @@ import {
   parseFullToolName,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_START_AGENT_RUN_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import safeRegex from "safe-regex2";
 import { z } from "zod";
-import type { TargetInstallCaller } from "@/clients/mcp-client";
+import type {
+  TargetInstallCaller,
+  TokenAuthContext,
+} from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -473,7 +478,7 @@ async function getSearchableTools(params: {
   conversationId?: string;
   delegationChain?: string;
   parentLlm?: ModelSelection;
-  tokenAuth?: TargetInstallCaller & { oauthClientId?: string };
+  tokenAuth?: TokenAuthContext;
   suppressContentLogging?: boolean;
 }): Promise<SearchCandidate[]> {
   const {
@@ -553,6 +558,10 @@ async function getSearchableTools(params: {
         agent,
         actorUserId: userId,
         exclusionSets,
+        disallowOAuthApp: Boolean(
+          params.tokenAuth?.oauthExecution ||
+            (params.tokenAuth?.oauthClientId && !params.tokenAuth.isUserToken),
+        ),
       })),
   );
   const hasTaskStarter =
@@ -564,6 +573,12 @@ async function getSearchableTools(params: {
           archestraMcpBranding.getToolShortName(tool.name) ===
           TOOL_START_AGENT_RUN_SHORT_NAME,
       ));
+  const isEncryptedBlockedRuntimeToolShortName = (
+    shortName: string | null | undefined,
+  ): boolean =>
+    shortName === TOOL_START_AGENT_RUN_SHORT_NAME ||
+    shortName === TOOL_STEER_AGENT_RUN_SHORT_NAME ||
+    shortName === TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME;
   // Match tools/list's implicit run-handle controls, including gateways with
   // no assigned tools. They are assignment-exempt at dispatch, but still pass
   // RBAC here and actor/proof checks in their handlers. Internal chat already
@@ -574,6 +589,10 @@ async function getSearchableTools(params: {
       ? runtimeMcpTools.flatMap((tool) => {
           const shortName = archestraMcpBranding.getToolShortName(tool.name);
           return shortName &&
+            !(
+              suppressContentLogging &&
+              isEncryptedBlockedRuntimeToolShortName(shortName)
+            ) &&
             (isRunControlArchestraToolShortName(shortName) ||
               (includeImplicitStartAgentRun &&
                 shortName === TOOL_START_AGENT_RUN_SHORT_NAME))
@@ -611,8 +630,9 @@ async function getSearchableTools(params: {
       permittedNames.has(tool.name) &&
       !(
         suppressContentLogging &&
-        archestraMcpBranding.getToolShortName(tool.name) ===
-          TOOL_START_AGENT_RUN_SHORT_NAME
+        isEncryptedBlockedRuntimeToolShortName(
+          archestraMcpBranding.getToolShortName(tool.name),
+        )
       ) &&
       !isExcludedFromSearchResults({
         toolName: tool.name,

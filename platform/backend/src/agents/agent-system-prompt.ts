@@ -1,5 +1,4 @@
 import {
-  ARCHESTRA_MCP_CATALOG_ID,
   type ArchestraToolShortName,
   buildElicitationMandateInstruction,
   buildUserSystemPromptContext,
@@ -27,13 +26,13 @@ import {
 } from "@archestra/shared";
 import type { Tool } from "ai";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { MemberModel, TeamModel, UserModel } from "@/models";
+import { AgentModel, MemberModel, TeamModel, UserModel } from "@/models";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { selectEffectiveNativeSkills } from "@/services/agent-activation-skills";
 import {
-  agentToolExclusionsService,
-  isToolIdentityExcluded,
-} from "@/services/agent-tool-exclusions";
+  callerUsesImplicitLoadBalancedRunStarter,
+  resolveCandidateRuntimeSubagentIds,
+} from "@/services/agent-subagent-exclusions";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { buildKnowledgeSearchInstruction } from "@/services/knowledge-search-instruction";
@@ -319,33 +318,21 @@ export async function buildAgentSystemPrompt(params: {
     ? buildProjectFilesInstruction(projectFileNames, mcpTools)
     : null;
 
-  const startAgentRunExcluded =
+  const callerLoadBalancingPrompt =
     !isFork &&
     !suppressContentLogging &&
     agent.subagentLoadBalancing?.enabled === true
-      ? isToolIdentityExcluded(
-          {
-            catalogId: ARCHESTRA_MCP_CATALOG_ID,
-            name: archestraMcpBranding.getToolName(
-              TOOL_START_AGENT_RUN_SHORT_NAME,
-            ),
-          },
-          await agentToolExclusionsService.getActiveExclusionSets(
-            agentId,
-            agent.accessAllTools !== undefined
-              ? { accessAllTools: agent.accessAllTools }
-              : undefined,
-          ),
-        )
-      : false;
+      ? await resolveCallerLoadBalancingInstruction({
+          agentId,
+          userId,
+          oauthClientId,
+          mcpTools,
+        })
+      : null;
   const subagentLoadBalancingInstruction =
     !isFork && !suppressContentLogging
       ? [
-          agent.subagentLoadBalancing?.enabled === true
-            ? startAgentRunExcluded
-              ? SUBAGENT_LOAD_BALANCING_DELEGATION_FALLBACK_INSTRUCTION
-              : SUBAGENT_LOAD_BALANCING_INSTRUCTION
-            : null,
+          callerLoadBalancingPrompt,
           buildLoadBalancedRouterDelegationInstruction(mcpTools),
         ]
           .filter(Boolean)
@@ -836,6 +823,39 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
 When the user asks to make, build, or create an app or interactive UI, never write the app's code in your chat reply: start by calling \`${runToolName}\` with \`tool_name: "${scaffoldAppName}"\`, and find the follow-up app tools with \`${searchToolsName}\`. Open with the tool call itself — no lead-in sentence first.
 
 When the user asks to roll an app back or restore an existing historical version, call \`${runToolName}\` with \`tool_name: "${listAppsName}"\` to resolve the app id when needed. If the user did not provide an exact version number, call it with \`tool_name: "${listAppVersionsName}"\` to list the available versions without reading their HTML. Then call it with \`tool_name: "${restoreAppVersionName}"\`, passing \`appId\`, the selected \`version\`, and the current \`latestVersion\` as \`baseVersion\`. Never call \`read_app\` or reproduce historical HTML through \`edit_app\` for a rollback.`;
+}
+
+async function resolveCallerLoadBalancingInstruction(params: {
+  agentId: string;
+  userId: string;
+  oauthClientId?: string;
+  mcpTools: Record<string, Tool>;
+}): Promise<string | null> {
+  const gatewayAgent = await AgentModel.findGatewayAgentById(params.agentId);
+  if (!gatewayAgent) {
+    return null;
+  }
+  const candidateRuntimeSubagentIds = await resolveCandidateRuntimeSubagentIds({
+    callerAgent: gatewayAgent,
+    actorUserId: params.userId,
+  });
+  if (candidateRuntimeSubagentIds.length === 0) {
+    return null;
+  }
+  const startAgentRunFullName = archestraMcpBranding.getToolName(
+    TOOL_START_AGENT_RUN_SHORT_NAME,
+  );
+  const hasPooledStarter =
+    startAgentRunFullName in params.mcpTools ||
+    (await callerUsesImplicitLoadBalancedRunStarter({
+      agent: gatewayAgent,
+      actorUserId: params.userId,
+      disallowOAuthApp: Boolean(params.oauthClientId),
+      candidateRuntimeSubagentIds,
+    }));
+  return hasPooledStarter
+    ? SUBAGENT_LOAD_BALANCING_INSTRUCTION
+    : SUBAGENT_LOAD_BALANCING_DELEGATION_FALLBACK_INSTRUCTION;
 }
 
 function buildLoadBalancedRouterDelegationInstruction(

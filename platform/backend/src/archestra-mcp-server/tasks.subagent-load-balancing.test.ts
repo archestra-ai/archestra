@@ -2,6 +2,7 @@ import {
   isLoadBalancedRuntimeRouterTool,
   LOAD_BALANCED_RUNTIME_ROUTER_META_KEY,
   TOOL_GET_AGENT_RUN_FULL_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_START_AGENT_RUN_FULL_NAME,
@@ -27,6 +28,7 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import * as chatMcpClient from "@/clients/chat-mcp-client";
 import {
   buildAgentDelegationTool,
+  buildMcpGatewayTool,
   type ChatToolContext,
 } from "@/clients/chat-tool-builder";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
@@ -4166,6 +4168,7 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       organizationId,
       authorId: actorId,
       agentType: "agent",
+      accessAllTools: false,
       toolExposureMode: "search_and_run_only",
       accessAllSubagents: false,
       modelId,
@@ -4297,8 +4300,20 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       const startRunDbTool = await ToolModel.findByName(
         TOOL_START_AGENT_RUN_FULL_NAME,
       );
-      if (startRunDbTool) {
-        await AgentToolModel.create(fullEncryptedAgent.id, startRunDbTool.id);
+      const steerRunDbTool = await ToolModel.findByName(
+        TOOL_STEER_AGENT_RUN_FULL_NAME,
+      );
+      const postMessageDbTool = await ToolModel.findByName(
+        TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
+      );
+      for (const dbTool of [
+        startRunDbTool,
+        steerRunDbTool,
+        postMessageDbTool,
+      ]) {
+        if (dbTool) {
+          await AgentToolModel.create(fullEncryptedAgent.id, dbTool.id);
+        }
       }
       const fullEncryptedConversation = await makeConversation(
         fullEncryptedAgent.id,
@@ -4325,6 +4340,12 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       expect(Object.keys(encryptedFullTools)).not.toContain(
         TOOL_START_AGENT_RUN_FULL_NAME,
       );
+      expect(Object.keys(encryptedFullTools)).not.toContain(
+        TOOL_STEER_AGENT_RUN_FULL_NAME,
+      );
+      expect(Object.keys(encryptedFullTools)).not.toContain(
+        TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
+      );
       expect(
         Object.keys(encryptedFullTools).some((name) =>
           name.startsWith("agent__"),
@@ -4343,7 +4364,9 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         SUBAGENT_LOAD_BALANCING_INSTRUCTION,
       );
 
-      // `search_tools` in encrypted chat must not discover `start_agent_run` or `agent__*`
+      // `search_tools` in encrypted chat must not discover `start_agent_run`,
+      // `steer_agent_run`, `post_agent_run_message`, or `agent__*` in either
+      // Auto-tools or explicitly assigned configurations.
       const encryptedContext: ArchestraContext = {
         agent: { id: encryptedLbAgent.id, name: encryptedLbAgent.name },
         agentId: encryptedLbAgent.id,
@@ -4354,21 +4377,149 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         suppressContentLogging: true,
         encryptedChatAudit,
       };
-      const searchRes = await executeArchestraTool(
-        TOOL_SEARCH_TOOLS_FULL_NAME,
-        { query: "start agent run runtime" },
-        encryptedContext,
+      for (const query of [
+        "start agent run runtime",
+        "steer agent run message",
+        "post agent run message Slack thread",
+      ]) {
+        const searchRes = await executeArchestraTool(
+          TOOL_SEARCH_TOOLS_FULL_NAME,
+          { query, limit: 20 },
+          encryptedContext,
+        );
+        expect(searchRes.isError).toBeFalsy();
+        const discoveredNames = (
+          (
+            searchRes.structuredContent as
+              | { tools?: Array<{ toolName: string }> }
+              | undefined
+          )?.tools ?? []
+        ).map((t) => t.toolName);
+        expect(discoveredNames).not.toContain(TOOL_START_AGENT_RUN_FULL_NAME);
+        expect(discoveredNames).not.toContain(TOOL_STEER_AGENT_RUN_FULL_NAME);
+        expect(discoveredNames).not.toContain(
+          TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
+        );
+        expect(discoveredNames.some((n) => n.startsWith("agent__"))).toBe(
+          false,
+        );
+      }
+
+      // Auto-tools (`accessAllTools: true`) configuration with `start_agent_run`
+      // assigned and `steer_agent_run` / `post_agent_run_message` dynamically
+      // accessible (exclusions cleared): unencrypted `search_tools` discovers
+      // them, while encrypted `search_tools` (`suppressContentLogging: true`)
+      // excludes all three plus `agent__*`. Also check `mcp_gateway` implicit
+      // runtime controls under `suppressContentLogging: true`.
+      const autoEncryptedAgent = await makeAgent({
+        name: "Encrypted Auto Tools Assistant",
+        organizationId,
+        authorId: actorId,
+        agentType: "agent",
+        accessAllTools: true,
+        toolExposureMode: "search_and_run_only",
+        accessAllSubagents: false,
+        modelId,
+        llmApiKeyId,
+      });
+      await AgentExcludedToolModel.replaceForAgent(autoEncryptedAgent.id, []);
+      if (startRunDbTool) {
+        await AgentToolModel.create(autoEncryptedAgent.id, startRunDbTool.id);
+      }
+      await AgentToolModel.create(
+        autoEncryptedAgent.id,
+        workerDelegationTool.id,
       );
-      expect(searchRes.isError).toBeFalsy();
-      const discoveredNames = (
+
+      const unencryptedAutoSteerSearch = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "steer_agent_run post_agent_run_message", limit: 20 },
+        {
+          agent: { id: autoEncryptedAgent.id, name: autoEncryptedAgent.name },
+          agentId: autoEncryptedAgent.id,
+          userId: actorId,
+          organizationId,
+          suppressContentLogging: false,
+        },
+      );
+      const unencryptedAutoNames = (
         (
-          searchRes.structuredContent as
+          unencryptedAutoSteerSearch.structuredContent as
             | { tools?: Array<{ toolName: string }> }
             | undefined
         )?.tools ?? []
       ).map((t) => t.toolName);
-      expect(discoveredNames).not.toContain(TOOL_START_AGENT_RUN_FULL_NAME);
-      expect(discoveredNames.some((n) => n.startsWith("agent__"))).toBe(false);
+      expect(unencryptedAutoNames).toContain(TOOL_STEER_AGENT_RUN_FULL_NAME);
+      expect(unencryptedAutoNames).toContain(
+        TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
+      );
+
+      for (const query of [
+        "start agent run runtime",
+        "steer_agent_run message",
+        "post_agent_run_message Slack thread",
+      ]) {
+        const autoEncryptedSearch = await executeArchestraTool(
+          TOOL_SEARCH_TOOLS_FULL_NAME,
+          { query, limit: 20 },
+          {
+            agent: { id: autoEncryptedAgent.id, name: autoEncryptedAgent.name },
+            agentId: autoEncryptedAgent.id,
+            userId: actorId,
+            organizationId,
+            suppressContentLogging: true,
+          },
+        );
+        expect(autoEncryptedSearch.isError).toBeFalsy();
+        const autoEncryptedNames = (
+          (
+            autoEncryptedSearch.structuredContent as
+              | { tools?: Array<{ toolName: string }> }
+              | undefined
+          )?.tools ?? []
+        ).map((t) => t.toolName);
+        expect(autoEncryptedNames).not.toContain(
+          TOOL_START_AGENT_RUN_FULL_NAME,
+        );
+        expect(autoEncryptedNames).not.toContain(
+          TOOL_STEER_AGENT_RUN_FULL_NAME,
+        );
+        expect(autoEncryptedNames).not.toContain(
+          TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
+        );
+        expect(autoEncryptedNames.some((n) => n.startsWith("agent__"))).toBe(
+          false,
+        );
+
+        const gatewayEncryptedSearch = await executeArchestraTool(
+          TOOL_SEARCH_TOOLS_FULL_NAME,
+          { query, limit: 20 },
+          {
+            agent: { id: gateway.id, name: gateway.name },
+            agentId: gateway.id,
+            userId: actorId,
+            organizationId,
+            suppressContentLogging: true,
+          },
+        );
+        expect(gatewayEncryptedSearch.isError).toBeFalsy();
+        const gatewayEncryptedNames = (
+          (
+            gatewayEncryptedSearch.structuredContent as
+              | { tools?: Array<{ toolName: string }> }
+              | undefined
+          )?.tools ?? []
+        ).map((t) => t.toolName);
+        expect(gatewayEncryptedNames).not.toContain(
+          TOOL_START_AGENT_RUN_FULL_NAME,
+        );
+        expect(gatewayEncryptedNames).not.toContain(
+          TOOL_STEER_AGENT_RUN_FULL_NAME,
+        );
+        expect(gatewayEncryptedNames).not.toContain(
+          TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
+        );
+      }
 
       // Attempting direct or `run_tool` launches (both implicit and explicitly assigned) must refuse
       // before creating any A2A tasks, A2A messages, or Agent Runtime runs.
@@ -4405,6 +4556,37 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
           conversationId: fullEncryptedConversation.id,
         },
       };
+      for (const query of [
+        "start agent run runtime",
+        "steer agent run message",
+        "post agent run message Slack thread",
+      ]) {
+        const assignedSearchRes = await executeArchestraTool(
+          TOOL_SEARCH_TOOLS_FULL_NAME,
+          { query, limit: 20 },
+          assignedEncryptedContext,
+        );
+        expect(assignedSearchRes.isError).toBeFalsy();
+        const assignedDiscoveredNames = (
+          (
+            assignedSearchRes.structuredContent as
+              | { tools?: Array<{ toolName: string }> }
+              | undefined
+          )?.tools ?? []
+        ).map((t) => t.toolName);
+        expect(assignedDiscoveredNames).not.toContain(
+          TOOL_START_AGENT_RUN_FULL_NAME,
+        );
+        expect(assignedDiscoveredNames).not.toContain(
+          TOOL_STEER_AGENT_RUN_FULL_NAME,
+        );
+        expect(assignedDiscoveredNames).not.toContain(
+          TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
+        );
+        expect(
+          assignedDiscoveredNames.some((n) => n.startsWith("agent__")),
+        ).toBe(false);
+      }
       const assignedDirectAttempt = await executeArchestraTool(
         TOOL_START_AGENT_RUN_FULL_NAME,
         { message: sensitiveSecret },
@@ -4570,5 +4752,421 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     });
     expect(prompt ?? "").toContain("Subagent load balancing is enabled");
     expect(prompt ?? "").not.toContain("start_agent_run");
+  });
+
+  test("preserves runtime worker agent__* tools and load-balanced delegation when caller lacks agent:read RBAC for start_agent_run", async ({
+    makeAgent,
+    makeCustomRole,
+    makeLlmProviderApiKey,
+    makeMember,
+    makeSecret,
+    makeUser,
+  }) => {
+    const customRole = await makeCustomRole(organizationId, {
+      permission: {
+        chat: ["read", "create"],
+      },
+    });
+    const restrictedUser = await makeUser();
+    await makeMember(restrictedUser.id, organizationId, {
+      role: customRole.role,
+    });
+
+    const sharedSecret = await makeSecret({
+      secret: { apiKey: "test-shared-upstream-key" },
+    });
+    const sharedKey = await makeLlmProviderApiKey(
+      organizationId,
+      sharedSecret.id,
+      {
+        provider: "openai",
+        access: { users: [restrictedUser.id], preset: "use" },
+      },
+    );
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(sharedKey.id, [
+      modelId,
+    ]);
+
+    const workerAlpha = await makeAgent({
+      name: "RBAC Worker Alpha",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId: sharedKey.id,
+      access: { users: [restrictedUser.id], preset: "use" },
+      runtime: runtimeConfig({ maxTier: "M" }),
+    });
+    const workerBeta = await makeAgent({
+      name: "RBAC Worker Beta",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId: sharedKey.id,
+      access: { users: [restrictedUser.id], preset: "use" },
+      runtime: runtimeConfig({ maxTier: "M" }),
+    });
+    const alphaTool = await ToolModel.findOrCreateDelegationTool(
+      workerAlpha.id,
+    );
+    const betaTool = await ToolModel.findOrCreateDelegationTool(workerBeta.id);
+
+    const lbAgent = await makeAgent({
+      name: "RBAC LB Assistant",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      toolExposureMode: "full",
+      accessAllSubagents: false,
+      modelId,
+      llmApiKeyId: sharedKey.id,
+      access: { users: [restrictedUser.id], preset: "use" },
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await AgentToolModel.create(lbAgent.id, alphaTool.id);
+    await AgentToolModel.create(lbAgent.id, betaTool.id);
+
+    const gatewayAgent = await AgentModel.findGatewayAgentById(lbAgent.id);
+    if (!gatewayAgent) {
+      throw new Error("Expected gatewayAgent row");
+    }
+
+    // `restrictedUser` lacks `agent:read`, so `start_agent_run` is filtered out,
+    // while `agent__*` worker delegation tools remain visible and callable.
+    const listed = await buildAgentMcpToolList({
+      agent: gatewayAgent,
+      tokenAuth: {
+        tokenId: "tok-rbac-restricted",
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId,
+        userId: restrictedUser.id,
+      },
+    });
+    const listedNames = listed.tools.map((t) => t.name);
+    expect(listedNames).not.toContain(TOOL_START_AGENT_RUN_FULL_NAME);
+    expect(listedNames).toContain(alphaTool.name);
+    expect(listedNames).toContain(betaTool.name);
+
+    const delegationTools = await getAgentTools({
+      agentId: lbAgent.id,
+      organizationId,
+      userId: restrictedUser.id,
+    });
+    expect(delegationTools.map((t) => t.name)).toEqual(
+      expect.arrayContaining([alphaTool.name, betaTool.name]),
+    );
+
+    const restrictedContext: ArchestraContext = {
+      agent: { id: lbAgent.id, name: lbAgent.name },
+      agentId: lbAgent.id,
+      userId: restrictedUser.id,
+      organizationId,
+    };
+    const searchRes = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "RBAC Worker", limit: 20 },
+      restrictedContext,
+    );
+    expect(searchRes.isError).not.toBe(true);
+    const searchNames = (
+      (
+        searchRes.structuredContent as
+          | { tools?: Array<{ toolName: string }> }
+          | undefined
+      )?.tools ?? []
+    ).map((t) => t.toolName);
+    expect(searchNames).toContain(alphaTool.name);
+    expect(searchNames).toContain(betaTool.name);
+    expect(searchNames).not.toContain(TOOL_START_AGENT_RUN_FULL_NAME);
+
+    const directStartDenied = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Should fail RBAC" },
+      restrictedContext,
+    );
+    expect(directStartDenied.isError).toBe(true);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent: lbAgent,
+      mcpTools: {},
+      organizationId,
+      userId: restrictedUser.id,
+      agentId: lbAgent.id,
+    });
+    expect(prompt ?? "").toContain("Subagent load balancing is enabled");
+    expect(prompt ?? "").not.toContain("start_agent_run");
+
+    await mockDetachedTaskStart();
+    const r1 = await executeArchestraTool(
+      alphaTool.name,
+      { message: "Restricted LB task 1" },
+      restrictedContext,
+    );
+    const r2 = await executeArchestraTool(
+      alphaTool.name,
+      { message: "Restricted LB task 2" },
+      restrictedContext,
+    );
+    expect(r1.isError).toBeFalsy();
+    expect(r2.isError).toBeFalsy();
+    const a1 = (r1.structuredContent as { run: { agent_id: string } }).run
+      .agent_id;
+    const a2 = (r2.structuredContent as { run: { agent_id: string } }).run
+      .agent_id;
+    expect(new Set([a1, a2])).toEqual(new Set([workerAlpha.id, workerBeta.id]));
+  });
+
+  test("persists McpToolCallModel row and reconstructs push move when run_tool invokes a load-balanced router delegation", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const workerAlpha = await createRuntimeSubagent(
+      makeAgent,
+      "RunTool Router Worker Alpha",
+      false,
+    );
+    const workerBeta = await createRuntimeSubagent(
+      makeAgent,
+      "RunTool Router Worker Beta",
+      false,
+    );
+    const alphaTool = await ToolModel.findOrCreateDelegationTool(
+      workerAlpha.id,
+    );
+    const betaTool = await ToolModel.findOrCreateDelegationTool(workerBeta.id);
+
+    const routerAgent = await makeAgent({
+      name: "RunTool Foreground Router",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: false,
+      modelId,
+      llmApiKeyId,
+      runtime: null,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await AgentToolModel.create(routerAgent.id, alphaTool.id);
+    await AgentToolModel.create(routerAgent.id, betaTool.id);
+    const routerToolRow = await ToolModel.findOrCreateDelegationTool(
+      routerAgent.id,
+    );
+
+    const compactCaller = await makeAgent({
+      name: "Compact RunTool Caller",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      toolExposureMode: "search_and_run_only",
+      accessAllSubagents: false,
+      modelId,
+      llmApiKeyId,
+    });
+    await AgentToolModel.create(compactCaller.id, routerToolRow.id);
+
+    const launchedWorkloads: string[] = [];
+    vi.spyOn(backend, "launch").mockImplementation(async (spec) => {
+      launchedWorkloads.push(spec.frozenName);
+    });
+    vi.spyOn(backend, "stageInputs").mockResolvedValue();
+    vi.spyOn(backend, "waitUntilRunning").mockResolvedValue();
+    vi.spyOn(backend, "streamOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end();
+      },
+    );
+    vi.spyOn(backend, "snapshotOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end("===ARCHESTRA-FINAL-ANSWER===\nDone");
+      },
+    );
+    vi.spyOn(backend, "waitForCompletion").mockResolvedValue({
+      outcome: "succeeded",
+    });
+    vi.spyOn(backend, "steer").mockResolvedValue();
+    vi.spyOn(backend, "teardown").mockResolvedValue();
+    vi.spyOn(backend, "releaseRun").mockResolvedValue();
+    vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
+
+    const callerConversation = await makeConversation(compactCaller.id, {
+      organizationId,
+      userId: actorId,
+    });
+    const chatCtx: ChatToolContext = {
+      agentId: compactCaller.id,
+      agentName: compactCaller.name,
+      userId: actorId,
+      organizationId,
+      conversationId: callerConversation.id,
+      sessionId: callerConversation.id,
+      mcpGwToken: {
+        tokenValue: null,
+        tokenId: "tok-run-tool-router",
+        teamId: null,
+        isOrganizationToken: false,
+        isUserToken: true,
+      },
+      repeatTracker: new ToolCallRepeatTracker(),
+      modelAcceptsImageToolResults: true,
+    };
+    const wrappedRunTool = buildMcpGatewayTool({
+      mcpTool: {
+        name: TOOL_RUN_TOOL_FULL_NAME,
+        description: "Dispatch discovered tool",
+        inputSchema: {
+          type: "object",
+          properties: {
+            tool_name: { type: "string" },
+            tool_args: { type: "object" },
+          },
+          required: ["tool_name"],
+        },
+      },
+      ctx: chatCtx,
+    });
+
+    const rawResult = await wrappedRunTool.execute?.(
+      {
+        tool_name: routerToolRow.name,
+        tool_args: { message: "Dispatch router via run_tool" },
+      },
+      { toolCallId: "run-tool-router-call-1", messages: [] },
+    );
+    const resultText =
+      typeof rawResult === "string"
+        ? rawResult
+        : String((rawResult as { content?: unknown })?.content ?? "");
+    const parsedLaunch = JSON.parse(resultText) as {
+      run: { run_id: string; agent_id: string };
+    };
+    expect([workerAlpha.id, workerBeta.id]).toContain(
+      parsedLaunch.run.agent_id,
+    );
+    expect(chatCtx.launchedRunIds).toEqual(new Set([parsedLaunch.run.run_id]));
+    await vi.waitFor(() => {
+      expect(launchedWorkloads).toHaveLength(1);
+    });
+
+    const handoffs = await getSessionHandoffs({
+      organizationId,
+      sessionId: callerConversation.id,
+      ownUserId: actorId,
+    });
+    expect(handoffs.handedTo.map((r) => r.runId)).toContain(
+      parsedLaunch.run.run_id,
+    );
+    expect(handoffs.moves).toContainEqual(
+      expect.objectContaining({
+        kind: "push",
+        runId: parsedLaunch.run.run_id,
+      }),
+    );
+  });
+
+  test("omits runtime-pool start_agent_run prompt instruction when load-balanced agent has zero eligible runtime candidates", async ({
+    makeAgent,
+  }) => {
+    const inProcessHelper = await makeAgent({
+      name: "Zero Pool In-Process Helper",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId,
+      runtime: null,
+    });
+    const inProcessHelperTool = await ToolModel.findOrCreateDelegationTool(
+      inProcessHelper.id,
+    );
+
+    const zeroRuntimeLbAgent = await makeAgent({
+      name: "Zero Pool LB Agent",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: false,
+      modelId,
+      llmApiKeyId,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await AgentToolModel.create(zeroRuntimeLbAgent.id, inProcessHelperTool.id);
+
+    const zeroPoolPrompt = await buildAgentSystemPrompt({
+      agent: zeroRuntimeLbAgent,
+      mcpTools: {},
+      organizationId,
+      userId: actorId,
+      agentId: zeroRuntimeLbAgent.id,
+    });
+    expect(zeroPoolPrompt ?? "").not.toContain(
+      SUBAGENT_LOAD_BALANCING_INSTRUCTION,
+    );
+    expect(zeroPoolPrompt ?? "").not.toContain("start_agent_run");
+    expect(zeroPoolPrompt ?? "").not.toContain(
+      "Subagent load balancing is enabled",
+    );
+
+    // Also verify Auto-subagents mode when all runtime workers are excluded:
+    const excludedWorker = await createRuntimeSubagent(
+      makeAgent,
+      "All Excluded Runtime Worker",
+      false,
+    );
+    const autoExcludedLbAgent = await makeAgent({
+      name: "Auto Excluded All Workers LB Agent",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: true,
+      modelId,
+      llmApiKeyId,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    // Exclude every runtime subagent in the organization so 0 runtime candidates remain
+    const allOrgAgents = await db.select().from(schema.agentsTable);
+    await AgentExcludedSubagentModel.replaceForAgent(
+      autoExcludedLbAgent.id,
+      allOrgAgents
+        .filter((row) => row.id !== autoExcludedLbAgent.id)
+        .map((row) => row.id),
+    );
+    expect(excludedWorker.id).toBeTruthy();
+
+    const autoExcludedPrompt = await buildAgentSystemPrompt({
+      agent: autoExcludedLbAgent,
+      mcpTools: {},
+      organizationId,
+      userId: actorId,
+      agentId: autoExcludedLbAgent.id,
+    });
+    expect(autoExcludedPrompt ?? "").not.toContain(
+      SUBAGENT_LOAD_BALANCING_INSTRUCTION,
+    );
+    expect(autoExcludedPrompt ?? "").not.toContain("start_agent_run");
+    expect(autoExcludedPrompt ?? "").not.toContain(
+      "Subagent load balancing is enabled",
+    );
   });
 });

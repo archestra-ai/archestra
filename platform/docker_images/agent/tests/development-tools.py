@@ -67,6 +67,17 @@ class DevelopmentToolsTest(unittest.TestCase):
         self.assertEqual(driver_node.resolve(), Path("/usr/local/bin/node").resolve())
         # The CLI starts the driver, so this runs it on the image's Node.
         self.assertTrue(run("playwright", "--version").startswith("Version "))
+        # A session speaks the driver protocol and launches the image's Chromium.
+        self.assertEqual(run(
+            "/opt/agent-tools/bin/python", "-c",
+            "from playwright.sync_api import sync_playwright\n"
+            "with sync_playwright() as p:\n"
+            "    browser = p.chromium.launch()\n"
+            "    page = browser.new_page()\n"
+            "    page.set_content('<p>ok</p>')\n"
+            "    print(page.text_content('p'))\n"
+            "    browser.close()",
+        ).strip(), "ok")
 
     def test_launchers_describe_the_machine_after_the_agent_prompt(self):
         prompt = run("archestra-agent-instructions",

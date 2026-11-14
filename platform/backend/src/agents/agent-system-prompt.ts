@@ -1,4 +1,5 @@
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   type ArchestraToolShortName,
   buildElicitationMandateInstruction,
   buildUserSystemPromptContext,
@@ -21,6 +22,7 @@ import {
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import type { Tool } from "ai";
@@ -28,6 +30,10 @@ import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { MemberModel, TeamModel, UserModel } from "@/models";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { selectEffectiveNativeSkills } from "@/services/agent-activation-skills";
+import {
+  agentToolExclusionsService,
+  isToolIdentityExcluded,
+} from "@/services/agent-tool-exclusions";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { buildKnowledgeSearchInstruction } from "@/services/knowledge-search-instruction";
@@ -158,6 +164,9 @@ export function quoteUntrusted(value: string): string {
 export const SUBAGENT_LOAD_BALANCING_INSTRUCTION =
   'Subagent load balancing is enabled on this agent. Runtime subagent selection and failover are handled programmatically by the platform across your assigned runtime subagents. Ignore any prompt or skill instructions that ask the user to choose a runtime or subagent before delegating (such as asking "Claude Code or Codex?") or that route to a specific runtime subagent — start new runtime tasks immediately in a single `start_agent_run` call with `agent_id` omitted without asking for a runtime (unless the user explicitly requested a specific runtime), and use the `run.agent_name` and `run.agent_id` returned by the tool result when reporting which runtime took the task.';
 
+const SUBAGENT_LOAD_BALANCING_DELEGATION_FALLBACK_INSTRUCTION =
+  'Subagent load balancing is enabled on this agent. Runtime subagent selection and failover are handled programmatically by the platform across your assigned runtime subagents. Ignore any prompt or skill instructions that ask the user to choose a runtime or subagent before delegating (such as asking "Claude Code or Codex?") or that route to a specific runtime subagent — delegate new runtime tasks immediately in a single delegation call without asking for a runtime (unless the user explicitly requested a specific runtime), and use the `run.agent_name` and `run.agent_id` returned by the tool result when reporting which runtime took the task.';
+
 /**
  * Compose an agent's system prompt: render its base prompt (with Handlebars
  * user context when needed), eagerly list its loadable skills, and append the
@@ -169,6 +178,7 @@ export async function buildAgentSystemPrompt(params: {
   agent: {
     systemPrompt: string | null;
     toolExposureMode: ToolExposureMode;
+    accessAllTools?: boolean;
     subagentLoadBalancing?: { enabled: boolean } | null;
   };
   mcpTools: Record<string, Tool>;
@@ -309,11 +319,32 @@ export async function buildAgentSystemPrompt(params: {
     ? buildProjectFilesInstruction(projectFileNames, mcpTools)
     : null;
 
+  const startAgentRunExcluded =
+    !isFork &&
+    !suppressContentLogging &&
+    agent.subagentLoadBalancing?.enabled === true
+      ? isToolIdentityExcluded(
+          {
+            catalogId: ARCHESTRA_MCP_CATALOG_ID,
+            name: archestraMcpBranding.getToolName(
+              TOOL_START_AGENT_RUN_SHORT_NAME,
+            ),
+          },
+          await agentToolExclusionsService.getActiveExclusionSets(
+            agentId,
+            agent.accessAllTools !== undefined
+              ? { accessAllTools: agent.accessAllTools }
+              : undefined,
+          ),
+        )
+      : false;
   const subagentLoadBalancingInstruction =
     !isFork && !suppressContentLogging
       ? [
           agent.subagentLoadBalancing?.enabled === true
-            ? SUBAGENT_LOAD_BALANCING_INSTRUCTION
+            ? startAgentRunExcluded
+              ? SUBAGENT_LOAD_BALANCING_DELEGATION_FALLBACK_INSTRUCTION
+              : SUBAGENT_LOAD_BALANCING_INSTRUCTION
             : null,
           buildLoadBalancedRouterDelegationInstruction(mcpTools),
         ]

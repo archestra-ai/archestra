@@ -1,9 +1,19 @@
-import { normalizeSubagentLoadBalancingConfig } from "@archestra/shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  normalizeSubagentLoadBalancingConfig,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
+} from "@archestra/shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   AgentExcludedSubagentModel,
   AgentModel,
   AgentVersionModel,
 } from "@/models";
+import {
+  type AgentToolExclusionSets,
+  agentToolExclusionsService,
+  isToolIdentityExcluded,
+} from "@/services/agent-tool-exclusions";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import type { Agent, AgentSubagentExclusions } from "@/types";
 import { isUuid } from "@/utils/uuid";
@@ -82,9 +92,11 @@ export async function callerHasCandidateRuntimeSubagents(params: {
 }
 
 /**
- * Whether `agent` has subagent load balancing enabled and at least one candidate
- * runtime subagent, so `start_agent_run` is implicitly exposed as the canonical
- * pooled starter (instead of individual `agent__<runtime_worker>` schemas).
+ * Whether `agent` has subagent load balancing enabled, does not exclude
+ * `start_agent_run` in Auto-tools mode, and resolves at least one candidate
+ * runtime subagent — meaning `start_agent_run` is actually exposed as the
+ * canonical pooled starter in place of individual `agent__<runtime_worker>`
+ * schemas.
  */
 export async function callerUsesImplicitLoadBalancedRunStarter(params: {
   agent: Pick<
@@ -92,14 +104,32 @@ export async function callerUsesImplicitLoadBalancedRunStarter(params: {
     | "id"
     | "organizationId"
     | "environmentId"
+    | "accessAllTools"
     | "accessAllSubagents"
     | "subagentLoadBalancing"
   >;
   actorUserId?: string | null;
+  exclusionSets?: AgentToolExclusionSets;
 }): Promise<boolean> {
   if (
     normalizeSubagentLoadBalancingConfig(params.agent.subagentLoadBalancing)
       ?.enabled !== true
+  ) {
+    return false;
+  }
+  const exclusionSets =
+    params.exclusionSets ??
+    (await agentToolExclusionsService.getActiveExclusionSets(params.agent.id, {
+      accessAllTools: params.agent.accessAllTools,
+    }));
+  if (
+    isToolIdentityExcluded(
+      {
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        name: archestraMcpBranding.getToolName(TOOL_START_AGENT_RUN_SHORT_NAME),
+      },
+      exclusionSets,
+    )
   ) {
     return false;
   }

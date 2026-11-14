@@ -45,7 +45,10 @@ import {
   promptWithContract,
   SPAWN_TARGET_MISMATCH,
 } from "@/services/agent-runtime/runtime-crossing";
-import { resolveRouterRuntimePoolCandidateIds } from "@/services/agent-subagent-exclusions";
+import {
+  callerUsesImplicitLoadBalancedRunStarter,
+  resolveRouterRuntimePoolCandidateIds,
+} from "@/services/agent-subagent-exclusions";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { type Agent, ApiError } from "@/types";
@@ -139,15 +142,6 @@ export async function getAgentTools(context: {
   const environmentId = callerGatewayAgent
     ? callerGatewayAgent.environmentId
     : await AgentModel.findEnvironmentId(agentId);
-  // When subagent load balancing is enabled on the calling agent, pooled Agent
-  // Runtime workers are invoked via `start_agent_run` (with `agent_id` omitted)
-  // rather than exposing individual `agent__<runtime_worker>` schemas that
-  // cause models to pick the first worker name alphabetically.
-  const callerLoadBalancingEnabled =
-    normalizeSubagentLoadBalancingConfig(
-      callerGatewayAgent?.subagentLoadBalancing,
-    )?.enabled === true;
-
   // External A2A targets are always explicit, including when local subagents
   // use Auto mode. Assigning an external credential is an egress decision and
   // must never be widened by a dynamic local-agent setting.
@@ -155,6 +149,18 @@ export async function getAgentTools(context: {
   // per-environment network-policy runtime. Fail closed for environment-bound
   // agents until connections can be bound to and dialed through that runtime.
   const realUserId = userId && userId !== "system" ? userId : undefined;
+  // Hide individual `agent__<runtime_worker>` schemas only when the canonical
+  // `start_agent_run` pooled starter is actually exposed for this caller (load
+  // balancing enabled, `start_agent_run` not excluded in Auto-tools mode, and
+  // >=1 candidate runtime subagent). If `start_agent_run` is excluded, keep
+  // `agent__<runtime_worker>` tools visible so the caller retains a way to
+  // launch runtime work.
+  const hideRuntimeWorkerTools =
+    callerGatewayAgent != null &&
+    (await callerUsesImplicitLoadBalancedRunStarter({
+      agent: callerGatewayAgent,
+      actorUserId: realUserId,
+    }));
   const attestable = await isGuardrailsV2Active();
   const outboundTargets = environmentId
     ? []
@@ -189,7 +195,7 @@ export async function getAgentTools(context: {
       userId: realUserId,
       environmentId,
       attestable,
-      callerLoadBalancingEnabled,
+      hideRuntimeWorkerTools,
     });
     return finishDelegationTools(
       context,
@@ -245,7 +251,7 @@ export async function getAgentTools(context: {
     "Fetched agent delegation tools from database",
   );
 
-  const visibleTools = callerLoadBalancingEnabled
+  const visibleTools = hideRuntimeWorkerTools
     ? accessibleTools.filter((t) => !t.targetAgent.hasRuntime)
     : accessibleTools;
   const routerMetadata = await resolveLoadBalancedRouterPools({
@@ -681,7 +687,7 @@ async function buildAutoDelegationTools(params: {
   userId: string;
   environmentId: string | null;
   attestable: boolean;
-  callerLoadBalancingEnabled: boolean;
+  hideRuntimeWorkerTools: boolean;
 }): Promise<Tool[]> {
   const {
     agentId,
@@ -689,7 +695,7 @@ async function buildAutoDelegationTools(params: {
     userId,
     environmentId,
     attestable,
-    callerLoadBalancingEnabled,
+    hideRuntimeWorkerTools,
   } = params;
 
   const isAgentAdmin = await ResourcePermissions.allows({
@@ -730,7 +736,7 @@ async function buildAutoDelegationTools(params: {
       continue;
     }
     seenNames.add(name);
-    if (callerLoadBalancingEnabled && targetAgent.hasRuntime) {
+    if (hideRuntimeWorkerTools && targetAgent.hasRuntime) {
       continue;
     }
     dedupedTargets.push({ name, targetAgent });

@@ -662,14 +662,7 @@ async function resolveToolAssignment(params: {
   if (
     shortName === TOOL_START_AGENT_RUN_SHORT_NAME &&
     !context.suppressContentLogging &&
-    context.organizationId &&
-    !isToolIdentityExcluded(
-      {
-        catalogId: ARCHESTRA_MCP_CATALOG_ID,
-        name: archestraMcpBranding.getToolName(shortName),
-      },
-      exclusionSets,
-    )
+    context.organizationId
   ) {
     const callerAgent = await AgentModel.findGatewayAgentById(context.agentId);
     if (
@@ -677,6 +670,7 @@ async function resolveToolAssignment(params: {
       (await callerUsesImplicitLoadBalancedRunStarter({
         agent: callerAgent,
         actorUserId: context.userId,
+        exclusionSets,
       }))
     ) {
       return null;

@@ -545,20 +545,14 @@ async function getSearchableTools(params: {
           delegationChain: params.delegationChain,
         })
       : [];
-  const startAgentRunFullName = archestraMcpBranding.getToolName(
-    TOOL_START_AGENT_RUN_SHORT_NAME,
-  );
   const includeImplicitStartAgentRun = Boolean(
     !suppressContentLogging &&
       agent &&
       organizationId != null &&
-      !isToolIdentityExcluded(
-        { catalogId: ARCHESTRA_MCP_CATALOG_ID, name: startAgentRunFullName },
-        exclusionSets,
-      ) &&
       (await callerUsesImplicitLoadBalancedRunStarter({
         agent,
         actorUserId: userId,
+        exclusionSets,
       })),
   );
   const hasTaskStarter =

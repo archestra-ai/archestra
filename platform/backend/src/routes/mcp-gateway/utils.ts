@@ -470,18 +470,12 @@ export async function buildAgentMcpToolList(params: {
         }),
       ])
     : [[], []];
-  const startAgentRunFullName = archestraMcpBranding.getToolName(
-    TOOL_START_AGENT_RUN_SHORT_NAME,
-  );
   const includeImplicitStartAgentRun =
-    !isToolIdentityExcluded(
-      { catalogId: ARCHESTRA_MCP_CATALOG_ID, name: startAgentRunFullName },
-      exclusionSets,
-    ) &&
-    (await callerUsesImplicitLoadBalancedRunStarter({
+    await callerUsesImplicitLoadBalancedRunStarter({
       agent,
       actorUserId: callerUserId,
-    }));
+      exclusionSets,
+    });
   const implicitTaskStarterTools = includeImplicitStartAgentRun
     ? getImplicitStartAgentRunTools()
     : [];

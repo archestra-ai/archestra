@@ -37,6 +37,7 @@ import {
   A2AContextModel,
   A2ATaskModel,
   AgentExcludedSubagentModel,
+  AgentExcludedToolModel,
   AgentModel,
   AgentRunModel,
   AgentToolModel,
@@ -4456,5 +4457,118 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       }
       await chatMcpClient.__test.clearToolCache();
     }
+  });
+
+  test("keeps runtime worker agent__* tools advertised when start_agent_run is excluded in Auto-tools mode", async ({
+    makeAgent,
+  }) => {
+    const workerAlpha = await createRuntimeSubagent(
+      makeAgent,
+      "Excluded Starter Alpha",
+      false,
+    );
+    const workerBeta = await createRuntimeSubagent(
+      makeAgent,
+      "Excluded Starter Beta",
+      false,
+    );
+    const alphaTool = await ToolModel.findOrCreateDelegationTool(
+      workerAlpha.id,
+    );
+    const betaTool = await ToolModel.findOrCreateDelegationTool(workerBeta.id);
+
+    const autoToolsLbAgent = await makeAgent({
+      organizationId,
+      name: "Auto Tools LB Excluded Starter",
+      agentType: "agent",
+      accessAllTools: true,
+      accessAllSubagents: false,
+      toolExposureMode: "search_and_run_only",
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await AgentToolModel.create(autoToolsLbAgent.id, alphaTool.id);
+    await AgentToolModel.create(autoToolsLbAgent.id, betaTool.id);
+
+    const startRunTool = await ToolModel.findByName(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+    );
+    if (!startRunTool) {
+      throw new Error("Expected seeded start_agent_run tool");
+    }
+    await AgentExcludedToolModel.replaceForAgent(autoToolsLbAgent.id, [
+      startRunTool.id,
+    ]);
+
+    const gatewayAgent = await AgentModel.findGatewayAgentById(
+      autoToolsLbAgent.id,
+    );
+    if (!gatewayAgent) {
+      throw new Error("Expected gatewayAgent row");
+    }
+
+    const listed = await buildAgentMcpToolList({
+      agent: gatewayAgent,
+      tokenAuth: {
+        tokenId: "tok-excluded-starter",
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId,
+        userId: actorId,
+      },
+    });
+    const listedNames = listed.tools.map((t) => t.name);
+    expect(listedNames).not.toContain(TOOL_START_AGENT_RUN_FULL_NAME);
+
+    // Because `start_agent_run` is excluded in Auto-tools mode, `getAgentTools`
+    // and `search_tools` keep the assigned `agent__*` worker tools visible so the
+    // caller retains an advertised runtime launch surface.
+    const delegationTools = await getAgentTools({
+      agentId: autoToolsLbAgent.id,
+      organizationId,
+      userId: actorId,
+    });
+    const delegationNames = delegationTools.map((t) => t.name);
+    expect(delegationNames).toContain(alphaTool.name);
+    expect(delegationNames).toContain(betaTool.name);
+
+    const context: ArchestraContext = {
+      agent: { id: autoToolsLbAgent.id, name: autoToolsLbAgent.name },
+      agentId: autoToolsLbAgent.id,
+      userId: actorId,
+      organizationId,
+    };
+    const searchRes = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "Excluded Starter", limit: 20 },
+      context,
+    );
+    expect(searchRes.isError).not.toBe(true);
+    const searchText =
+      (searchRes.content[0] as { text?: string } | undefined)?.text ?? "";
+    expect(searchText).toContain(alphaTool.name);
+    expect(searchText).toContain(betaTool.name);
+    expect(searchText).not.toContain(TOOL_START_AGENT_RUN_FULL_NAME);
+
+    const excludedStartAttempt = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Should be blocked by tool exclusion" },
+      context,
+    );
+    expect(excludedStartAttempt.isError).toBe(true);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent: autoToolsLbAgent,
+      mcpTools: {},
+      organizationId,
+      userId: actorId,
+      agentId: autoToolsLbAgent.id,
+    });
+    expect(prompt ?? "").toContain("Subagent load balancing is enabled");
+    expect(prompt ?? "").not.toContain("start_agent_run");
   });
 });

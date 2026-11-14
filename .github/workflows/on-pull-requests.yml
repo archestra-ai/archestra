@@ -493,7 +493,7 @@ jobs:
       # download against its pinned manifest and picks the right platform
       # (Linux runners and the mac mini).
       - name: Install cargo-deny
-        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
         with:
           tool: cargo-deny@0.20.2
 
@@ -657,7 +657,7 @@ jobs:
       # credentials unpersisted and scope the read-only job token to this
       # pinned action via Git's runtime configuration.
       - name: Check new Cargo dependency release ages
-        uses: archestra-ai/.github/actions/cargo-release-age@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
+        uses: archestra-ai/.github/actions/cargo-release-age@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
         env:
           GH_TOKEN: ${{ github.token }}
           GIT_CONFIG_COUNT: "2"
@@ -762,7 +762,7 @@ jobs:
 
       - name: Check new Cargo dependency release ages
         if: runner.os == 'Linux' && steps.base-lockfile.outputs.present == 'true'
-        uses: archestra-ai/.github/actions/cargo-release-age@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
+        uses: archestra-ai/.github/actions/cargo-release-age@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
         env:
           GH_TOKEN: ${{ github.token }}
           GIT_CONFIG_COUNT: "2"
@@ -1288,7 +1288,7 @@ jobs:
       # variable (it has actions_variables:write).
       - name: Generate token for the kill switch
         id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
+        uses: archestra-ai/.github/actions/github-app-token@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}

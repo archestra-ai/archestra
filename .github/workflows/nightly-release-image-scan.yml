@@ -104,7 +104,7 @@ jobs:
       # The webhook lives in GCP Secret Manager. A dedicated service account
       # reads only the alerting secrets, so no repository secret holds it.
       - name: Authenticate to read the alerting webhook
-        uses: archestra-ai/.github/actions/google-auth@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
+        uses: archestra-ai/.github/actions/google-auth@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
         with:
           service_account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
           workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

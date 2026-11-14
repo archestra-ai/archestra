@@ -58,7 +58,7 @@ jobs:
 
       - name: Generate a publisher token
         id: publisher-token
-        uses: archestra-ai/.github/actions/github-app-token@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
+        uses: archestra-ai/.github/actions/github-app-token@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
         with:
           owner: archestra-ai
           repositories: release-publisher
@@ -122,7 +122,7 @@ jobs:
       - name: Generate a publisher token
         id: publisher-token
         if: ${{ steps.request.outputs.publish == 'true' }}
-        uses: archestra-ai/.github/actions/github-app-token@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
+        uses: archestra-ai/.github/actions/github-app-token@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
         with:
           owner: archestra-ai
           repositories: release-publisher

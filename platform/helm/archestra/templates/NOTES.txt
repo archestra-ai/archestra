@@ -61,3 +61,13 @@ Registry migration notice:
   Update these overrides to use this release's images, or your internal mirror.
   Existing versions remain available at their original addresses.
 {{- end }}
+
+{{- /* Remove after 1.5.0, when the Artifact Registry chart stops getting versions. */}}
+{{- if semverCompare "<1.5.1-0" .Chart.Version }}
+
+Chart registry notice:
+  This chart is published at oci://ghcr.io/archestra-ai/helm-charts/archestra-platform.
+  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform
+  gets no versions after 1.5.0. If you install, upgrade, or sync (Argo CD, Flux, Terraform)
+  from that address, switch to the GHCR address. Versions already there stay available.
+{{- end }}

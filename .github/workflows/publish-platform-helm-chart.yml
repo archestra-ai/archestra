@@ -26,7 +26,8 @@ concurrency:
 
 jobs:
   # Packages the chart for the release run. The archestra-ai/release-publisher
-  # publisher pushes it to Artifact Registry once the release attests it.
+  # publisher pushes it to GHCR (and, until 1.5.0, Artifact Registry) once the
+  # release attests it.
   publish-platform-helm-chart:
     name: Publish platform Helm chart
     runs-on: ubuntu-latest

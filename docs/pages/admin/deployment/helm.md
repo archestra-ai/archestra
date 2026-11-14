@@ -2,7 +2,7 @@
 title: Helm
 description: Install, verify, scale, and upgrade Archestra on Kubernetes
 order: 1
-lastUpdated: 2026-11-09
+lastUpdated: 2026-11-14
 ---
 
 Install Archestra's web and worker pods, database, and workload permissions with the Helm chart. You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Check [Production](/docs/admin/deployment/production) before exposing a shared instance.
@@ -30,7 +30,7 @@ Keep deployment-specific settings in `values.yaml` so upgrades use the same conf
    ```bash
    export ARCHESTRA_VERSION="1.5.0-rc.33" # x-release-please-version
    helm show values \
-     oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+     oci://ghcr.io/archestra-ai/helm-charts/archestra-platform \
      --version "$ARCHESTRA_VERSION" > values.yaml
    ```
 
@@ -39,7 +39,7 @@ Keep deployment-specific settings in `values.yaml` so upgrades use the same conf
 
    ```bash
    helm upgrade archestra-platform \
-     oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+     oci://ghcr.io/archestra-ai/helm-charts/archestra-platform \
      --version "$ARCHESTRA_VERSION" \
      --install --namespace archestra --create-namespace \
      --values values.yaml --wait
@@ -127,5 +127,7 @@ During shutdown, readiness returns 503 and new work is rejected. Admitted LLM an
 Reconnect notification streams to a live replica. An interrupted tool call can already have performed its side effect: retry only when the tool supports idempotency or after reconciling its result. The drain setting does not extend provider, MCP upstream or client timeouts; raise those separately when needed.
 
 For Docker, set the same [shutdown environment variables](/docs/admin/deployment/configuration#shutdown) and allow at least `max(drain, worker timeout) + cleanup + 40` seconds in `docker stop --time` or Compose's `stop_grace_period`.
+
+Install and upgrade the chart from `oci://ghcr.io/archestra-ai/helm-charts/archestra-platform`. The earlier address, `oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform`, gets no versions after 1.5.0. If your upgrade command, Argo CD application, Flux `HelmRelease`, or Terraform `helm_release` still names it, change it to the GHCR address; versions already published there stay available.
 
 New companion and agent runtime images are published at `ghcr.io/archestra-ai`. The main platform image remains at `archestra/platform` on Docker Hub. If you mirror images internally, import the release’s companion images from GHCR and preserve your Helm registry overrides. Existing releases remain at their original addresses.

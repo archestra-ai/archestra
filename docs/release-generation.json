@@ -1,62 +1,54 @@
 {
   "schema": 1,
-  "sourceSha": "f9bc210898d97880f80e3b3a989c8687639f3ee1",
-  "baseSha": "02e7d659d18abce5c5888b5300bfbcdfd4d45d1c",
-  "runId": 43447312961,
+  "sourceSha": "ede7d510351c7121f2b088bf2f01de11fe529d32",
+  "baseSha": "d61c2f4244afb3f54e576886cd6e953a67b99dd5",
+  "runId": 43550751766,
   "attempt": 1,
-  "platformTree": "c58ae4fdf932b03137dd7491f42094bb3de72f54",
+  "platformTree": "ab59df40ef9d0eb6b73ad74d66b1c7d3a805dbf0",
   "files": [
     {
       "path": "docs/openapi.json",
-      "blob": "645b1197f19281ab27369cadb6d565a8ec945c69"
+      "blob": "2ad7a9d2c7cb7c61bd8609215428063b47d8c823"
     },
     {
-      "path": "docs/assets/automated_screenshots/mcp-servers-adding_remote.dark.webp",
-      "blob": "e0a06a085e60d31e31b902e752c850e1cc18b420"
+      "path": "docs/assets/automated_screenshots/agents-runtime-setup_tier-memory.dark.webp",
+      "blob": "b2a193db0a060b1418a71178354690f9c37e2b61"
     },
     {
-      "path": "docs/assets/automated_screenshots/mcp-servers-adding_remote.webp",
-      "blob": "d1a3661da41e73a17c255b5b6c6a587fae5252d9"
+      "path": "docs/assets/automated_screenshots/agents-triggers-and-channels-email_setup.dark.webp",
+      "blob": "f066fa1c7472ec7bfb68c5af1e47abc2a3a5287d"
     },
     {
-      "path": "docs/assets/automated_screenshots/mcp-servers-desktop_add.dark.webp",
-      "blob": "4c155b394e2607da9c01c16aa6ced7747aaf3342"
+      "path": "docs/assets/automated_screenshots/agents-triggers-and-channels-email_setup.webp",
+      "blob": "25fb1281b034d242ff388cfdf36c6050f9046798"
     },
     {
-      "path": "docs/assets/automated_screenshots/mcp-servers-desktop_add.webp",
-      "blob": "ba751a80fbdae96222e672b262f9a385f5882a13"
+      "path": "docs/assets/automated_screenshots/agents-triggers-and-channels-ms-teams_setup.dark.webp",
+      "blob": "a2ad12778383fd9749867fa89fdfce3b4048e47f"
     },
     {
-      "path": "docs/assets/automated_screenshots/mcp-servers-desktop_device.dark.webp",
-      "blob": "54dd3eb68776e7574ac0e6154871aa0e8624117d"
+      "path": "docs/assets/automated_screenshots/agents-triggers-and-channels-ms-teams_setup.webp",
+      "blob": "0d4d7a0e3a00569deef2bf6a1a21aec8f318a50e"
     },
     {
-      "path": "docs/assets/automated_screenshots/mcp-servers-desktop_device.webp",
-      "blob": "8f78677afe40685853abb3bb06f7c1519e814d96"
+      "path": "docs/assets/automated_screenshots/knowledge_connectors.dark.webp",
+      "blob": "cd1041a6904cbb1cb1e70033e79d83920c024f56"
     },
     {
-      "path": "docs/assets/automated_screenshots/platform-agent-skills-sharing_connection-setup.webp",
-      "blob": "7bedc062f0d1a6dca3f278f3001984a4f3c86879"
+      "path": "docs/assets/automated_screenshots/knowledge_connectors.webp",
+      "blob": "a045b6ba3b61c7cdcc74adde7ed7df3d541d6395"
     },
     {
-      "path": "docs/assets/automated_screenshots/platform-openappa_policy.dark.webp",
-      "blob": "9bd4483c9e29d661d33da5a977de196e28b0d5d9"
+      "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.dark.webp",
+      "blob": "f4b37c6c12c399198b05c80a234aa6e29974b0e6"
     },
     {
-      "path": "docs/assets/automated_screenshots/platform-openappa_policy.webp",
-      "blob": "b8786509c19e12df5d8014943408869357ba7856"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-openappa_yells.dark.webp",
-      "blob": "992c679edf8bbd245208ed3b7e662bb5d6a4bd60"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-openappa_yells.webp",
-      "blob": "cf6deb79b542b06522387a1f4d2de6f074c1c66e"
+      "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.webp",
+      "blob": "36477ec17d317e4be4e9906994c431b8b14f3248"
     },
     {
       "path": "docs/pages/admin/performance-benchmarks.md",
-      "blob": "5b1fb42fa4850fd322808de349f895aa0e4311e2"
+      "blob": "0c6d43ddfac59009f4dfb361b9205a97f1fd3650"
     }
   ]
 }

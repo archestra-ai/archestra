@@ -23,6 +23,7 @@ import {
   AgentRuntimeLimitFields,
   AgentRuntimeProtocolField,
   AgentRuntimeSteeringField,
+  agentRuntimeSectionDescriptions,
   defaultAgentRuntime,
   isClaudeCodeRuntimeConfig,
   RuntimeSettingsNotice,
@@ -303,7 +304,7 @@ export function AgentRuntimePicker({
                 id={`${id}-inference`}
                 value="inference"
                 title="Inference API"
-                description="The API the harness uses to call models."
+                description={agentRuntimeSectionDescriptions(appName).inference}
                 summary={protocol}
               >
                 <fieldset disabled={!!readOnlyBy}>
@@ -320,7 +321,7 @@ export function AgentRuntimePicker({
               id={`${id}-steering`}
               value="steering"
               title="Follow-up messages"
-              description="What happens to a message you send while it works."
+              description={agentRuntimeSectionDescriptions(appName).followUps}
               summary={steering}
             >
               <fieldset disabled={!!readOnlyBy}>

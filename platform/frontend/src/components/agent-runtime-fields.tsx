@@ -255,6 +255,12 @@ type RuntimeSectionProps = {
   onChange: (value: AgentRuntimeConfig) => void;
 };
 
+/** Section descriptions shared by the agent form and the runtime dialog. */
+export const agentRuntimeSectionDescriptions = (appName: string) => ({
+  inference: `The API the coding agent in the container (such as Claude Code or Codex) uses to call models, always through the ${appName} LLM proxy.`,
+  followUps: "How a message you send while the coding agent works reaches it.",
+});
+
 export const AGENT_RUNTIME_PROTOCOL_LABELS = {
   openai_responses: "OpenAI Responses",
   openai_chat: "OpenAI Chat Completions",
@@ -482,7 +488,7 @@ export function AgentRuntimeProtocolField({
       >
         Inference API
       </Label>
-      {!compact && (
+      {!compact && !hideLabel && (
         <FieldDescription>
           Choose the API protocol the container&apos;s Agent client expects.
           Every option stays behind the {appName} LLM proxy.
@@ -512,7 +518,11 @@ export function AgentRuntimeProtocolField({
         </SelectTrigger>
         <SelectContent>
           {allowedProtocols.map((protocol) => (
-            <SelectItem key={protocol} value={protocol}>
+            <SelectItem
+              key={protocol}
+              value={protocol}
+              description={PROTOCOL_DESCRIPTIONS[protocol]}
+            >
               {AGENT_RUNTIME_PROTOCOL_LABELS[protocol]}
             </SelectItem>
           ))}
@@ -521,8 +531,8 @@ export function AgentRuntimeProtocolField({
       {compact && (
         <FieldDescription>
           {allowedProtocols.length === 1 && constrainToHarness
-            ? "Fixed by the client in this image."
-            : `What the client speaks to the ${appName} LLM proxy.`}
+            ? "Fixed by the coding agent in this image."
+            : `What the coding agent speaks to the ${appName} LLM proxy.`}
         </FieldDescription>
       )}
     </div>
@@ -546,12 +556,6 @@ export function AgentRuntimeSteeringField({
       >
         Steering
       </Label>
-      {!compact && (
-        <FieldDescription>
-          Turn boundary delivers follow-up instructions between Agent turns.
-          Terminal input types directly into an interactive CLI.
-        </FieldDescription>
-      )}
       <Select
         value={config.steerMode}
         onValueChange={(steerMode: "pipe" | "tmux_keys") =>
@@ -562,14 +566,24 @@ export function AgentRuntimeSteeringField({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="pipe">Turn boundary</SelectItem>
-          <SelectItem value="tmux_keys">Terminal input</SelectItem>
+          <SelectItem
+            value="pipe"
+            description="Delivers follow-up instructions between Agent turns."
+          >
+            Turn boundary
+          </SelectItem>
+          <SelectItem
+            value="tmux_keys"
+            description="Types follow-ups directly into an interactive CLI."
+          >
+            Terminal input
+          </SelectItem>
         </SelectContent>
       </Select>
       {compact && (
         <FieldDescription>
           {config.steerMode === "tmux_keys"
-            ? "Follow-ups are typed into the client's terminal."
+            ? "Follow-ups are typed into the coding agent's terminal."
             : "Follow-ups are delivered between turns."}
         </FieldDescription>
       )}
@@ -960,3 +974,9 @@ function installationDefaultPlaceholder(
 ): string {
   return value === undefined ? "Loading default…" : `${value} (default)`;
 }
+
+const PROTOCOL_DESCRIPTIONS = {
+  openai_responses: "/v1/responses, used by Codex and OpenCode.",
+  openai_chat: "/v1/chat/completions, used by most OpenAI-compatible clients.",
+  anthropic: "/v1/messages, used by Claude Code.",
+};

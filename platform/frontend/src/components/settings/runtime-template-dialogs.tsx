@@ -25,6 +25,7 @@ import {
   AgentRuntimeLimitFields,
   AgentRuntimeProtocolField,
   AgentRuntimeSteeringField,
+  agentRuntimeSectionDescriptions,
   defaultAgentRuntime,
 } from "@/components/agent-runtime-fields";
 import { IdentityFields } from "@/components/identity-fields";
@@ -60,6 +61,7 @@ import {
   useAgentsBehindRuntime,
   useApplyAgentRuntimeToAgents,
 } from "@/lib/agent-runtime-templates.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils/tailwind";
 
 type SaveBody = archestraApiTypes.SaveRuntimeTemplateSettingsData["body"];
@@ -93,6 +95,7 @@ export function CustomRuntimeDialog({
   onClose: () => void;
   onSave: (template: TemplateDraft) => void;
 }) {
+  const appName = useAppName();
   const [section, setSection] = useState<Section>("general");
   const form = useForm<TemplateDraft>({
     defaultValues: template ?? {
@@ -269,7 +272,7 @@ export function CustomRuntimeDialog({
           </SettingsSection>
           <SettingsSection
             title="Inference API"
-            description="How the client calls models."
+            description={agentRuntimeSectionDescriptions(appName).inference}
           >
             <AgentRuntimeProtocolField
               value={runtime}
@@ -279,7 +282,7 @@ export function CustomRuntimeDialog({
           </SettingsSection>
           <SettingsSection
             title="Follow-up messages"
-            description="How messages sent while it works reach the client."
+            description={agentRuntimeSectionDescriptions(appName).followUps}
           >
             <AgentRuntimeSteeringField
               value={runtime}

@@ -525,6 +525,7 @@ describe("run tools", () => {
         ttlHours: null,
         maxCostUsd: null,
         idleTimeoutMinutes: null,
+        resources: null,
       },
     });
     const bindingId = crypto.randomUUID();
@@ -532,7 +533,7 @@ describe("run tools", () => {
       .spyOn(chatOpsManager, "notifyBindingThread")
       .mockResolvedValue(true);
     const result = await executeArchestraTool(
-      TOOL_START_AGENT_RUN_FULL_NAME,
+      TOOL_START_RUN_FULL_NAME,
       { agent_id: target.id, message: "Review the example repository" },
       { ...context, chatOpsBindingId: bindingId, chatOpsThreadId: "thread-1" },
     );

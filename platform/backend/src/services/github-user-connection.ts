@@ -165,12 +165,6 @@ class GitHubUserConnectionManager {
         client_secret: app.clientSecret,
         grant_type: "refresh_token",
         refresh_token: token.refreshToken,
-      }).catch((error: unknown) => {
-        // A refused refresh means the grant is gone (revoked, or the App's
-        // user tokens changed); only a new sign-in brings it back.
-        if (error instanceof ApiError && error.statusCode === 400)
-          throw new GitHubReconnectRequiredError(error.message);
-        throw error;
       });
       await assertOwned();
       await RuntimeCredentialConnectionModel.upsert({

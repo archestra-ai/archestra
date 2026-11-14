@@ -434,6 +434,7 @@ test("a connection made with a replaced GitHub App withholds the stale token wit
       environment: null,
       ttlHours: null,
       idleTimeoutMinutes: null,
+      resources: null,
     };
     const optionalAgent = await makeAgent({
       organizationId,

@@ -14,7 +14,7 @@ import { A2AManager, type A2ASystemParams } from "@/agents/a2a/a2a-manager";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { agentCredentialSetupUrl } from "@/archestra-mcp-server/helpers";
+import { credentialsNeededMessage } from "@/archestra-mcp-server/helpers";
 import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -3007,14 +3007,15 @@ export class ChatOpsManager {
     }
 
     // The Agent's runtime needs per-user credentials the sender has not set
-    // up — link straight to the form instead of a generic apology.
+    // up, or must connect again: link straight to the form instead of a
+    // generic apology.
     if (error instanceof AgentRuntimeCredentialsRequiredError) {
       await provider.sendReply({
         originalMessage: message,
-        text: `This agent runs in its own runtime, which needs credentials you have not set up yet: ${error.missing.map((entry) => entry.label).join(", ")}. Add them, then send your message again: ${agentCredentialSetupUrl(
-          error.agentId,
-          error.missing.map((entry) => entry.key),
-        )}`,
+        text: credentialsNeededMessage({
+          agentId: error.agentId,
+          missing: error.missing,
+        }),
         footer: footer(),
         conversationReference: message.metadata?.conversationReference,
       });

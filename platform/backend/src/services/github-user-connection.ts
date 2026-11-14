@@ -14,6 +14,12 @@ import McpDeploymentLeaseModel, {
 import { isByosEnabled } from "@/secrets-manager";
 import { ApiError, GITHUB_COM_API_URL, GitHubUserIdSchema } from "@/types";
 
+/**
+ * The person's stored GitHub connection exists but can no longer be used: the
+ * organization swapped its GitHub App, or GitHub refused the refresh. Only
+ * connecting again fixes it, so callers that can reach the person turn this
+ * into a reconnect link instead of a generic failure.
+ */
 export class GitHubReconnectRequiredError extends ApiError {
   constructor(message: string) {
     super(400, message);

@@ -90354,6 +90354,9 @@
                           },
                           "adminOnly": {
                             "type": "boolean"
+                          },
+                          "reconnect": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -90384,6 +90387,9 @@
                             "type": "boolean"
                           },
                           "adminOnly": {
+                            "type": "boolean"
+                          },
+                          "reconnect": {
                             "type": "boolean"
                           }
                         },

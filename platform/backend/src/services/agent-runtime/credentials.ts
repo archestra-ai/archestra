@@ -120,11 +120,18 @@ export async function resolveAgentRuntimeCredentials(params: {
       const credential = declaration.credentialId
         ? await resolvePersonalCredential(batch, {
             organizationId: params.organizationId,
+            scope: "personal",
             userId: params.userId,
             credentialId: declaration.credentialId,
             minimumValidityMs: 50 * 60_000,
           })
         : null;
+      if (credential === RECONNECT) {
+        if (declaration.required) {
+          missing.push({ ...toMissing(declaration), reconnect: true });
+        }
+        continue;
+      }
       const value = declaration.credentialId
         ? credential?.value
         : resolved.values[declaration.key];
@@ -164,6 +171,12 @@ export async function preflightAgentRuntimeCredentials(params: {
    * refuses.
    */
   reportAdminOnlyCredentials?: boolean;
+  /**
+   * Report stale personal connections (`reconnect: true`) even when the
+   * declaration is optional, so read-only setup checks can offer to reconnect
+   * without blocking launch preflight.
+   */
+  reportOptionalReconnect?: boolean;
 }): Promise<{
   configured: string[];
   missing: MissingAgentRuntimeCredential[];
@@ -249,16 +262,22 @@ export async function preflightAgentRuntimeCredentials(params: {
       keys: legacyDeclarations.map((declaration) => declaration.key),
     });
     for (const declaration of perUser) {
+      const credential = declaration.credentialId
+        ? await resolvePersonalCredential(batch, {
+            organizationId: params.organizationId,
+            scope: "personal",
+            userId: params.userId,
+            credentialId: declaration.credentialId,
+          })
+        : null;
+      if (credential === RECONNECT) {
+        if (declaration.required || params.reportOptionalReconnect) {
+          missing.push({ ...toMissing(declaration), reconnect: true });
+        }
+        continue;
+      }
       const connected = declaration.credentialId
-        ? Boolean(
-            (
-              await resolvePersonalCredential(batch, {
-                organizationId: params.organizationId,
-                userId: params.userId,
-                credentialId: declaration.credentialId,
-              })
-            )?.value,
-          )
+        ? Boolean(credential?.value)
         : present.has(declaration.key);
       if (connected) {
         configured.push(declaration.key);
@@ -535,23 +554,6 @@ export async function deleteAgentRuntimeCredential(params: {
 
 // ===================== internals =====================
 
-async function resolvePersonalCredential(
-  batch: CredentialResolutionBatch,
-  params: {
-    organizationId: string;
-    userId: string;
-    credentialId: string;
-    minimumValidityMs?: number;
-  },
-) {
-  try {
-    return await batch.resolve({ ...params, scope: "personal" });
-  } catch (error) {
-    if (error instanceof GitHubReconnectRequiredError) return null;
-    throw error;
-  }
-}
-
 function splitDeclarations(
   declarations: AgentRuntimeCredentialDeclaration[] | null | undefined,
 ): {
@@ -665,6 +667,26 @@ async function readSharedBag(
   }
   return secret.secret ?? {};
 }
+
+/**
+ * A personal value, or `RECONNECT` when the person's stored connection exists
+ * but no longer works. Other failures still propagate.
+ */
+async function resolvePersonalCredential(
+  batch: CredentialResolutionBatch,
+  params: Parameters<CredentialResolutionBatch["resolve"]>[0],
+): Promise<
+  Awaited<ReturnType<CredentialResolutionBatch["resolve"]>> | typeof RECONNECT
+> {
+  try {
+    return await batch.resolve(params);
+  } catch (error) {
+    if (error instanceof GitHubReconnectRequiredError) return RECONNECT;
+    throw error;
+  }
+}
+
+const RECONNECT = Symbol("reconnect");
 
 function toMissing(
   declaration: AgentRuntimeCredentialDeclaration,

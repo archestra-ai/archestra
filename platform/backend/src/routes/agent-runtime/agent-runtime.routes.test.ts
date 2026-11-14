@@ -2246,7 +2246,7 @@ describe("Agent Runtime routes", () => {
     const retained = vi
       .spyOn(agentRuntimeManager, "hasRetainedTerminal")
       .mockResolvedValue(true);
-    vi.spyOn(agentRuntimeManager, "refreshCredentials").mockResolvedValue();
+    vi.spyOn(agentRuntimeManager, "refreshCredentials").mockResolvedValue([]);
     const listed = async () =>
       (await app.inject({ method: "GET", url: "/api/agent-runs" }))
         .json()

@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.4.30](https://github.com/archestra-ai/archestra/compare/platform-v1.4.29...platform-v1.4.30) (2026-11-14)
+
+
+### Features
+
+* **agents:** set and lock Agent Runtime settings (backport release/1.4) ([#10700](https://github.com/archestra-ai/archestra/issues/10700)) ([2ab6806](https://github.com/archestra-ai/archestra/commit/2ab6806a78860370f26a3b8c3b8bbb272e8da989))
+* **analytics:** turn analytics off by default when the enterprise license is active [1.4] ([#10689](https://github.com/archestra-ai/archestra/issues/10689)) ([013ed47](https://github.com/archestra-ai/archestra/commit/013ed470d49c97b934ef7bd6bfeb72b3dd8ef32e))
+* **audit-log:** rework the Audit tab's filters and event view [1.4] ([#10691](https://github.com/archestra-ai/archestra/issues/10691)) ([53b70f7](https://github.com/archestra-ai/archestra/commit/53b70f75a633e0e8fd2ecd5a72884c8f8781d673))
+* **credentials:** upload a GitHub App private key as a .pem file instead of pasting it (backport release/1.4) ([#10674](https://github.com/archestra-ai/archestra/issues/10674)) ([e2f0ac1](https://github.com/archestra-ai/archestra/commit/e2f0ac162849790fb509df78da8890146146d58e))
+* **guardrails:** admins import the self-service ruleset; the GitHub App needs no Administration [1.4] ([#10660](https://github.com/archestra-ai/archestra/issues/10660)) ([ea32b70](https://github.com/archestra-ai/archestra/commit/ea32b70c1ddf1e94423cedbb864773a4dadd1f51))
+* **guardrails:** auto-merge self-served Guardrails rules pull requests once their check passes [1.4] ([#10661](https://github.com/archestra-ai/archestra/issues/10661)) ([6ce801d](https://github.com/archestra-ai/archestra/commit/6ce801d8cc0b26546f0236dd48ebe27e25fa24d2))
+* **guardrails:** Git sync schedule up front, sync after every change, Finish setup fixes [1.4] ([#10702](https://github.com/archestra-ai/archestra/issues/10702)) ([941b6d0](https://github.com/archestra-ai/archestra/commit/941b6d032a2223dcfbd6092f5c841735f3abc2e1))
+* **guardrails:** keep policy repository files current, finish Git sync setup from one notice [1.4] ([#10683](https://github.com/archestra-ai/archestra/issues/10683)) ([9ceb139](https://github.com/archestra-ai/archestra/commit/9ceb1390adbfdeeb4d61b82c80bd14e8cf099e48))
+* **llm:** add a setting to stop deleting keyless provider system keys (backport release/1.4) ([#10693](https://github.com/archestra-ai/archestra/issues/10693)) ([c84ab92](https://github.com/archestra-ai/archestra/commit/c84ab9201b48e3dda7bb350c6ecb4b267b70c7bf))
+* **orchestrator:** add a setting that turns the Kubernetes orchestrator off (backport release/1.4) ([#10694](https://github.com/archestra-ai/archestra/issues/10694)) ([991b074](https://github.com/archestra-ai/archestra/commit/991b074892c1f3a6917714c70bb1c59d7f68cabd))
+
+
+### Bug Fixes
+
+* **agent-runtime:** keep tmux alive and the agent's own failure when a full-s (backport release/1.4) ([#10692](https://github.com/archestra-ai/archestra/issues/10692)) ([55ff5dd](https://github.com/archestra-ai/archestra/commit/55ff5dd9c1bde7c981785ea99a8db513f210a0a1))
+* **agent-runtime:** preserve launch failure reasons and refresh errors [1.4] ([#10687](https://github.com/archestra-ai/archestra/issues/10687)) ([043788e](https://github.com/archestra-ai/archestra/commit/043788eca9ff26d2e2ada37d6a9a6f76c0fc2108))
+* **agents:** hide blank Triggers step, show Edit on newly created agents (backport release/1.4) ([#10666](https://github.com/archestra-ai/archestra/issues/10666)) ([fe17e67](https://github.com/archestra-ai/archestra/commit/fe17e67fa6afadd4ae613f0f5a4a7e5603ad234c))
+* **agents:** keep an agent's runtime when cloning it (backport release/1.4) ([#10698](https://github.com/archestra-ai/archestra/issues/10698)) ([17ad10b](https://github.com/archestra-ai/archestra/commit/17ad10bef73f755270931ca134894528874dee71))
+* **azure:** explain Claude-on-Foundry api_not_supported on Chat Completions (backport [#10655](https://github.com/archestra-ai/archestra/issues/10655)) ([#10657](https://github.com/archestra-ai/archestra/issues/10657)) ([756b58c](https://github.com/archestra-ai/archestra/commit/756b58c34f72a73e4dec1ae21d795c5c9033aec3))
+* **guardrails:** let MCP servers that share a tool prefix share one rules file [1.4] ([#10647](https://github.com/archestra-ai/archestra/issues/10647)) ([90979e7](https://github.com/archestra-ai/archestra/commit/90979e799567b2c3168db05dfab14b8b082adb39))
+* **guardrails:** send the setup wizard's Guardrails step to the server's own rules file [1.4] ([#10650](https://github.com/archestra-ai/archestra/issues/10650)) ([6185b3a](https://github.com/archestra-ai/archestra/commit/6185b3a46a3ab1ebff0be77fb891845b7f46cda3))
+* **guardrails:** show log readers only their own yells (backport release/1.4) ([#10690](https://github.com/archestra-ai/archestra/issues/10690)) ([3e18386](https://github.com/archestra-ai/archestra/commit/3e1838698907e4c74bfb2101e37fa01801cfa5a9))
+
 ## [1.4.29](https://github.com/archestra-ai/archestra/compare/platform-v1.4.28...platform-v1.4.29) (2026-11-12)
 
 

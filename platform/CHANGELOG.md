@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.31](https://github.com/archestra-ai/archestra/compare/platform-v1.4.30...platform-v1.4.31) (2026-11-14)
+
+
+### Bug Fixes
+
+* **agent-runtime:** run the Playwright driver on the image's Node [1.4] ([#10708](https://github.com/archestra-ai/archestra/issues/10708)) ([c6a9688](https://github.com/archestra-ai/archestra/commit/c6a96884d7241c634edaf3e75893fb34837a55b5))
+* **mcp-server:** keep the MCP server base image on Alpine 3.23 (backport release/1.4) ([#10737](https://github.com/archestra-ai/archestra/issues/10737)) ([8cbf337](https://github.com/archestra-ai/archestra/commit/8cbf3378392c7fffe12245e6aaa419eee1557cd6))
+
+
+### Dependencies
+
+* bump node from 24.22.1-bookworm-slim to 24.22.2-bookworm-slim in /platform/docker_images/sandbox_base in the sandbox-base-images group across 1 directory ([#10726](https://github.com/archestra-ai/archestra/issues/10726)) ([20e252a](https://github.com/archestra-ai/archestra/commit/20e252a962610f24b6d678eba65003055b0c49b6))
+* bump the base-images group across 4 directories with 6 updates ([#10727](https://github.com/archestra-ai/archestra/issues/10727)) ([9b1dc67](https://github.com/archestra-ai/archestra/commit/9b1dc67407c61376a1577823309d6d4121ad9f2b))
+
 ## [1.4.30](https://github.com/archestra-ai/archestra/compare/platform-v1.4.29...platform-v1.4.30) (2026-11-14)
 
 

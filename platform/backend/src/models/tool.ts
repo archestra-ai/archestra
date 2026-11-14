@@ -3574,6 +3574,7 @@ class ToolModel {
         environmentId: string | null;
         builtInAgentConfig: Agent["builtInAgentConfig"];
         hasRuntime: boolean;
+        hasSubagentLoadBalancing: boolean;
       };
     }>
   > {
@@ -3588,6 +3589,7 @@ class ToolModel {
           environmentId: schema.agentsTable.environmentId,
           builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
           hasRuntime: sql<boolean>`${schema.agentsTable.runtime} IS NOT NULL`,
+          hasSubagentLoadBalancing: sql<boolean>`(${schema.agentsTable.subagentLoadBalancing}->>'enabled')::boolean IS TRUE`,
         },
       })
       .from(schema.agentToolsTable)

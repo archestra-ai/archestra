@@ -1,5 +1,6 @@
 import {
   ARCHESTRA_TOOL_PREFIX,
+  isAgentTool,
   TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_START_AGENT_RUN_SHORT_NAME,
@@ -86,6 +87,7 @@ async function movesOf(params: {
     // A client on a search-and-run gateway reaches the run tools through
     // run_tool; which tool it ran is only readable once the row is.
     toolNames: [...Object.keys(MOVE_TOOLS), TOOL_RUN_TOOL_FULL_NAME],
+    includeAgentDelegations: true,
     userId: params.ownUserId,
     // No call before the first run's start can move its work.
     since: new Date(firstStart - START_CALL_SLACK_MS),
@@ -129,7 +131,9 @@ function movesFromCalls(params: {
     if (call.isError) continue;
     const dispatched = dispatchedCall(call);
     if (!dispatched) continue;
-    const kind = MOVE_TOOLS[dispatched.toolName];
+    const kind = isAgentTool(dispatched.toolName)
+      ? "push"
+      : MOVE_TOOLS[dispatched.toolName];
     if (!kind) continue;
     const runId = runIdOf({
       call: { ...dispatched, toolResult: call.toolResult },
@@ -200,9 +204,10 @@ function dispatchedCall(call: Call): DispatchedCall | null {
   const target = args?.tool_name;
   if (typeof target !== "string") return null;
   return {
-    toolName: target.startsWith(ARCHESTRA_TOOL_PREFIX)
-      ? target
-      : `${ARCHESTRA_TOOL_PREFIX}${target}`,
+    toolName:
+      isAgentTool(target) || target.startsWith(ARCHESTRA_TOOL_PREFIX)
+        ? target
+        : `${ARCHESTRA_TOOL_PREFIX}${target}`,
     args: isRecord(args?.tool_args) ? args.tool_args : null,
   };
 }

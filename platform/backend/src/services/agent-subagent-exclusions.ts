@@ -1,3 +1,4 @@
+import { normalizeSubagentLoadBalancingConfig } from "@archestra/shared";
 import {
   AgentExcludedSubagentModel,
   AgentModel,
@@ -75,6 +76,35 @@ export async function callerHasCandidateRuntimeSubagents(params: {
   }
   const candidates = await resolveCandidateRuntimeSubagentIds({
     callerAgent,
+    actorUserId: params.actorUserId,
+  });
+  return candidates.length > 0;
+}
+
+/**
+ * Whether `agent` has subagent load balancing enabled and at least one candidate
+ * runtime subagent, so `start_agent_run` is implicitly exposed as the canonical
+ * pooled starter (instead of individual `agent__<runtime_worker>` schemas).
+ */
+export async function callerUsesImplicitLoadBalancedRunStarter(params: {
+  agent: Pick<
+    Agent,
+    | "id"
+    | "organizationId"
+    | "environmentId"
+    | "accessAllSubagents"
+    | "subagentLoadBalancing"
+  >;
+  actorUserId?: string | null;
+}): Promise<boolean> {
+  if (
+    normalizeSubagentLoadBalancingConfig(params.agent.subagentLoadBalancing)
+      ?.enabled !== true
+  ) {
+    return false;
+  }
+  const candidates = await resolveCandidateRuntimeSubagentIds({
+    callerAgent: params.agent,
     actorUserId: params.actorUserId,
   });
   return candidates.length > 0;

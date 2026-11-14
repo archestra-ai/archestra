@@ -513,6 +513,7 @@ class McpToolCallModel {
     organizationId: string;
     sessionId: string;
     toolNames: string[];
+    includeAgentDelegations?: boolean;
     userId?: string;
     since?: Date;
     limit: number;
@@ -526,8 +527,18 @@ class McpToolCallModel {
       createdAt: Date;
     }[]
   > {
-    if (params.toolNames.length === 0) return [];
+    if (params.toolNames.length === 0 && !params.includeAgentDelegations)
+      return [];
     const table = schema.mcpToolCallsTable;
+    const toolNameFilter =
+      params.includeAgentDelegations && params.toolNames.length > 0
+        ? or(
+            inArray(MCP_TOOL_CALL_TOOL_NAME, params.toolNames),
+            sql`${MCP_TOOL_CALL_TOOL_NAME} LIKE 'agent__%'`,
+          )
+        : params.includeAgentDelegations
+          ? sql`${MCP_TOOL_CALL_TOOL_NAME} LIKE 'agent__%'`
+          : inArray(MCP_TOOL_CALL_TOOL_NAME, params.toolNames);
     const rows = await db
       .select({
         id: table.id,
@@ -543,7 +554,7 @@ class McpToolCallModel {
         and(
           eq(table.sessionId, params.sessionId),
           eq(table.mcpServerName, ARCHESTRA_MCP_SERVER_NAME),
-          inArray(MCP_TOOL_CALL_TOOL_NAME, params.toolNames),
+          toolNameFilter,
           ...(params.userId ? [eq(table.userId, params.userId)] : []),
           ...(params.since ? [gte(table.createdAt, params.since)] : []),
           mcpToolCallBelongsToOrganization(params.organizationId),

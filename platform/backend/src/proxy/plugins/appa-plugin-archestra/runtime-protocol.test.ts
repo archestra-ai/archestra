@@ -951,6 +951,181 @@ describe("protected runtime protocol", () => {
     await plugin.onBeforeModel({ ...root, request: body });
     expect(drain).toHaveBeenCalledOnce();
   });
+
+  test("classifies a runtime launch on an ephemeral child trajectory as detached while keeping root and runtime-pod launches pending", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const plugin = new AppaPluginArchestra([]);
+    vi.spyOn(service, "loadChildReturns").mockResolvedValue([]);
+
+    // 1. Ephemeral child trajectory (parent_id set, no runtimeSessionId) settles its
+    //    runtime launch as "detached" so endChild does not fail with ChildDispatchOpen,
+    //    while preserving the verified launch JSON over any runtime placeholder.
+    const childSession = {
+      organization_id: org.id,
+      caller_id: "user:owner",
+      session_id: "user:owner|root-chat/subagent:call-subagent-1",
+      parent_id: "user:owner|root-chat",
+    };
+    const childCtx = request(org.id);
+    const childTrusted = childCtx.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    childTrusted.session = childSession;
+    await db.insert(schema.openappaSessionsTable).values({
+      organizationId: org.id,
+      callerId: childSession.caller_id,
+      sessionId: childSession.session_id,
+      actor: openappaActor(childSession.session_id),
+      root: openappaActor(childSession.parent_id),
+      parentId: childSession.parent_id,
+      startDecision: { decision: "ack" },
+    });
+    await db.insert(schema.openappaOperationsTable).values({
+      organizationId: org.id,
+      callerId: childSession.caller_id,
+      sessionId: childSession.session_id,
+      operationId: "call:sub-launch-1",
+      root: openappaActor(childSession.parent_id),
+      status: "complete",
+      input: {
+        semantic: {
+          event: "tool_call",
+          tool: "archestra__start_agent_run",
+          spawn: true,
+        },
+      },
+      decision: { decision: "allow_call" },
+    });
+    const launchedRunId = randomUUID();
+    await OpenAppaSpawnCorrelationModel.recordRuntimeLaunch({
+      organizationId: org.id,
+      callerId: childSession.caller_id,
+      sessionId: childSession.session_id,
+      toolCallId: "sub-launch-1",
+      outcome: {
+        kind: "launched",
+        session_id: launchedRunId,
+        state: "submitted",
+      },
+    });
+    const processed = vi
+      .spyOn(service, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {
+          "sub-launch-1": {
+            content: "[appa] Spawn dispatch closed",
+            outputSource: "runtime",
+          },
+        },
+      });
+
+    await plugin.onSessionInit(childCtx);
+    const childReported = {
+      id: "sub-launch-1",
+      name: "archestra__start_agent_run",
+      content: JSON.stringify({ run_id: randomUUID() }),
+      isError: false,
+    };
+    const childOutcome = await plugin.onToolResults({
+      ...childCtx,
+      toolResults: [childReported],
+    });
+    expect(
+      processed.mock.calls[0]?.[0].classifySpawnResult?.(childReported),
+    ).toBe("detached");
+    expect(
+      JSON.parse(String(childOutcome?.toolResultUpdates["sub-launch-1"])),
+    ).toMatchObject({
+      run_id: launchedRunId,
+      state: "submitted",
+      run_url: expect.stringMatching(
+        new RegExp(`/chat/runs/${launchedRunId}$`),
+      ),
+    });
+
+    // 2. Root chat session (no parent_id) keeps its runtime launch "pending".
+    const rootOrg = await makeOrganization();
+    const rootLaunch = await releasedLaunch(rootOrg.id, {
+      kind: "launched",
+      session_id: randomUUID(),
+      state: "submitted",
+    });
+    const rootReported = {
+      id: "runtime-call",
+      name: "archestra__start_agent_run",
+      content: "{}",
+      isError: false,
+    };
+    await rootLaunch.plugin.onToolResults({
+      ...rootLaunch.context,
+      toolResults: [rootReported],
+    });
+    expect(
+      rootLaunch.processed.mock.calls
+        .at(-1)?.[0]
+        .classifySpawnResult?.(rootReported),
+    ).toBe("pending");
+
+    // 3. Long-lived runtime pod session (runtimeSessionId === session.session_id)
+    //    also keeps its own sub-launches "pending".
+    const podCtx = request(org.id, true);
+    const { session: podSession } = podCtx.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    await db.insert(schema.openappaSessionsTable).values({
+      organizationId: org.id,
+      callerId: podSession.caller_id,
+      sessionId: podSession.session_id,
+      actor: openappaActor(podSession.session_id),
+      root: openappaActor(podSession.parent_id ?? podSession.session_id),
+      parentId: podSession.parent_id ?? null,
+      startDecision: { decision: "ack" },
+    });
+    await db.insert(schema.openappaOperationsTable).values({
+      organizationId: org.id,
+      callerId: podSession.caller_id,
+      sessionId: podSession.session_id,
+      operationId: "call:pod-sub-launch",
+      root: openappaActor(podSession.parent_id ?? podSession.session_id),
+      status: "complete",
+      input: {
+        semantic: {
+          event: "tool_call",
+          tool: "archestra__start_agent_run",
+          spawn: true,
+        },
+      },
+      decision: { decision: "allow_call" },
+    });
+    await OpenAppaSpawnCorrelationModel.recordRuntimeLaunch({
+      organizationId: org.id,
+      callerId: podSession.caller_id,
+      sessionId: podSession.session_id,
+      toolCallId: "pod-sub-launch",
+      outcome: {
+        kind: "launched",
+        session_id: randomUUID(),
+        state: "submitted",
+      },
+    });
+    processed.mockResolvedValue({ toolResultUpdates: {} });
+    await plugin.onSessionInit(podCtx);
+    const podReported = {
+      id: "pod-sub-launch",
+      name: "archestra__start_agent_run",
+      content: "{}",
+      isError: false,
+    };
+    await plugin.onToolResults({
+      ...podCtx,
+      toolResults: [podReported],
+    });
+    expect(
+      processed.mock.calls.at(-1)?.[0].classifySpawnResult?.(podReported),
+    ).toBe("pending");
+  });
 });
 
 /**

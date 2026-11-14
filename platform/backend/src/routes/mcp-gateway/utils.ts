@@ -115,6 +115,7 @@ import {
   isAgentRunGatewayToken,
 } from "@/services/agent-runtime/runtime-contract";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
+import { callerUsesImplicitLoadBalancedRunStarter } from "@/services/agent-subagent-exclusions";
 import {
   agentToolExclusionsService,
   isToolIdentityExcluded,
@@ -469,7 +470,23 @@ export async function buildAgentMcpToolList(params: {
         }),
       ])
     : [[], []];
+  const startAgentRunFullName = archestraMcpBranding.getToolName(
+    TOOL_START_AGENT_RUN_SHORT_NAME,
+  );
+  const includeImplicitStartAgentRun =
+    !isToolIdentityExcluded(
+      { catalogId: ARCHESTRA_MCP_CATALOG_ID, name: startAgentRunFullName },
+      exclusionSets,
+    ) &&
+    (await callerUsesImplicitLoadBalancedRunStarter({
+      agent,
+      actorUserId: callerUserId,
+    }));
+  const implicitTaskStarterTools = includeImplicitStartAgentRun
+    ? getImplicitStartAgentRunTools()
+    : [];
   const hasTaskStarter =
+    includeImplicitStartAgentRun ||
     delegationTools.length > 0 ||
     mcpTools.some(
       (tool) =>
@@ -515,6 +532,7 @@ export async function buildAgentMcpToolList(params: {
         (tool) => !tool.delegateToAgentId && !tool.delegateToA2aConnectionId,
       ),
       ...implicitMetaTools.map(asBuiltInTool),
+      ...implicitTaskStarterTools.map(asBuiltInTool),
       ...implicitTaskControlTools.map(asBuiltInTool),
       ...implicitOpenAppaTools.map(asBuiltInTool),
       ...implicitPolicyTools.map(asBuiltInTool),
@@ -2706,7 +2724,9 @@ function filterExposedTools(params: {
           (openappaEnabled() &&
             isOpenappaTool(shortName) &&
             (internalChat || ALWAYS_LOADED_SHORT_NAMES.has(shortName ?? ""))) ||
-          (internalChat && isTaskControlTool(tool.name)) ||
+          (internalChat &&
+            (isTaskControlTool(tool.name) ||
+              shortName === TOOL_START_AGENT_RUN_SHORT_NAME)) ||
           (isAlwaysExposedTool(tool.name) &&
             (internalChat || shortName === TOOL_ASK_USER_SHORT_NAME)) ||
           (advertiseUiResourceTools &&
@@ -2789,6 +2809,14 @@ function getImplicitArchestraMetaTools() {
 
 function getImplicitTaskControlTools() {
   return getArchestraMcpTools().filter((tool) => isTaskControlTool(tool.name));
+}
+
+function getImplicitStartAgentRunTools() {
+  return getArchestraMcpTools().filter(
+    (tool) =>
+      archestraMcpBranding.getToolShortName(tool.name) ===
+      TOOL_START_AGENT_RUN_SHORT_NAME,
+  );
 }
 
 function getImplicitAskUserTools() {

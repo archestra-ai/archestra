@@ -565,10 +565,15 @@ export async function startDelegatedTask(params: {
     return result;
   }
 
+  const poolSurfaceLabel =
+    poolAgent.agentType === "agent" ? "agent" : "gateway";
+
   if (assignedIds.length === 0) {
     const { result, outcome } = failedLaunch(
       "invalid_request",
-      errorResult("No runtime subagents are assigned to this gateway."),
+      errorResult(
+        `No runtime subagents are assigned to this ${poolSurfaceLabel}.`,
+      ),
     );
     if (outcome) await recordRuntimeLaunch(params.context, outcome);
     return result;
@@ -582,7 +587,7 @@ export async function startDelegatedTask(params: {
     const { result, outcome } = failedLaunch(
       "invalid_request",
       errorResult(
-        "No remaining fallback subagents are available on this gateway.",
+        `No remaining fallback subagents are available on this ${poolSurfaceLabel}.`,
       ),
     );
     if (outcome) await recordRuntimeLaunch(params.context, outcome);
@@ -659,7 +664,7 @@ export async function startDelegatedTask(params: {
     const { result, outcome } = failedLaunch(
       "invalid_request",
       errorResult(
-        "No remaining fallback subagents are available on this gateway.",
+        `No remaining fallback subagents are available on this ${poolSurfaceLabel}.`,
       ),
     );
     if (outcome) await recordRuntimeLaunch(params.context, outcome);
@@ -795,7 +800,9 @@ export async function startDelegatedTask(params: {
   }
   return (
     lastAttempt?.result ??
-    errorResult("No runtime subagents are assigned to this gateway.")
+    errorResult(
+      `No runtime subagents are assigned to this ${poolSurfaceLabel}.`,
+    )
   );
 }
 
@@ -1640,9 +1647,9 @@ const registry = defineArchestraTools([
     shortName: TOOL_START_AGENT_RUN_SHORT_NAME,
     title: "Start Agent Run",
     description:
-      "Start a background run on an Agent that has Agent Runtime. It returns at once with run_id and run_url: a handle, not the answer. " +
+      "Start a background run on an Agent that has Agent Runtime (or on a load-balanced router agent across its assigned Agent Runtime pool). It returns at once with run_id and run_url: a handle, not the answer. " +
       `Use it for work that has no run yet, including unfinished local work handed over to ${DEFAULT_APP_NAME}. For a follow-up on an existing run, use steer_agent_run with its run_id; never start a replacement run. ` +
-      "Agents without Agent Runtime are refused; delegate to them with their agent tool instead. " +
+      "Agents without Agent Runtime or subagent load balancing are refused; delegate to them with their agent tool instead. " +
       "For repository handoffs, first load the Remote Agents Handoff skill using load_skill. Include the repository URL, exact base commit, local changes, and return-patch baseline; local paths are not accessible remotely. " +
       "Include context, goals, decisions and remaining work in message. Optional attachments are staged before execution (repository patches or documents). " +
       "For files sent after startup through transfer_workspace_file, instruct the Agent to prepare and stop before task work. Transfer the files, then continue with steer_agent_run. " +
@@ -1652,7 +1659,7 @@ const registry = defineArchestraTools([
         .string()
         .optional()
         .describe(
-          "The agent to do the work (UUID or agent__<slug> tool name). Omit when calling through an MCP gateway to select an assigned runtime subagent using the gateway's load-balancing policy, or pass a load-balanced router agent to select from its assigned runtime subagents.",
+          "The agent to do the work (UUID or agent__<slug> tool name). Omit when calling from a load-balanced agent or MCP gateway to select an assigned runtime subagent using its load-balancing policy, or pass a load-balanced router agent to select from its assigned runtime subagents.",
         ),
       exclude_agent_ids: z
         .array(z.string().uuid())

@@ -3524,6 +3524,7 @@ class AgentModel {
   }): Promise<
     (Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig"> & {
       hasRuntime: boolean;
+      hasSubagentLoadBalancing: boolean;
     })[]
   > {
     const { userId, isAdmin, organizationId, excludeAgentId, environmentId } =
@@ -3555,6 +3556,7 @@ class AgentModel {
               ? sql<Agent["builtInAgentConfig"]>`NULL`
               : schema.agentsTable.builtInAgentConfig,
           hasRuntime: sql<boolean>`${schema.agentsTable.runtime} IS NOT NULL`,
+          hasSubagentLoadBalancing: sql<boolean>`(${schema.agentsTable.subagentLoadBalancing}->>'enabled')::boolean IS TRUE`,
         })
         .from(schema.agentsTable)
         .where(and(...baseConditions))
@@ -3580,6 +3582,7 @@ class AgentModel {
             ? sql<Agent["builtInAgentConfig"]>`NULL`
             : schema.agentsTable.builtInAgentConfig,
         hasRuntime: sql<boolean>`${schema.agentsTable.runtime} IS NOT NULL`,
+        hasSubagentLoadBalancing: sql<boolean>`(${schema.agentsTable.subagentLoadBalancing}->>'enabled')::boolean IS TRUE`,
       })
       .from(schema.agentsTable)
       .where(

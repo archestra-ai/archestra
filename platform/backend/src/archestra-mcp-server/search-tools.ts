@@ -36,6 +36,7 @@ import {
 } from "@/openappa/service";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
 import { isAgentRunGatewayToken } from "@/services/agent-runtime/runtime-contract";
+import { callerUsesImplicitLoadBalancedRunStarter } from "@/services/agent-subagent-exclusions";
 import {
   type AgentToolExclusionSets,
   agentToolExclusionsService,
@@ -536,7 +537,23 @@ async function getSearchableTools(params: {
           delegationChain: params.delegationChain,
         })
       : [];
+  const startAgentRunFullName = archestraMcpBranding.getToolName(
+    TOOL_START_AGENT_RUN_SHORT_NAME,
+  );
+  const includeImplicitStartAgentRun = Boolean(
+    agent &&
+      organizationId != null &&
+      !isToolIdentityExcluded(
+        { catalogId: ARCHESTRA_MCP_CATALOG_ID, name: startAgentRunFullName },
+        exclusionSets,
+      ) &&
+      (await callerUsesImplicitLoadBalancedRunStarter({
+        agent,
+        actorUserId: userId,
+      })),
+  );
   const hasTaskStarter =
+    includeImplicitStartAgentRun ||
     delegationTools.length > 0 ||
     assignedTools.some(
       (tool) =>
@@ -552,7 +569,10 @@ async function getSearchableTools(params: {
     (isAnyAgentRuntimeBackendDriverEnabled() || hasTaskStarter)
       ? runtimeMcpTools.flatMap((tool) => {
           const shortName = archestraMcpBranding.getToolShortName(tool.name);
-          return shortName && isRunControlArchestraToolShortName(shortName)
+          return shortName &&
+            (isRunControlArchestraToolShortName(shortName) ||
+              (includeImplicitStartAgentRun &&
+                shortName === TOOL_START_AGENT_RUN_SHORT_NAME))
             ? [
                 {
                   name: archestraMcpBranding.getToolName(shortName),

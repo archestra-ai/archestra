@@ -496,33 +496,6 @@ export function buildAgentDelegationTool(params: {
 }): Tool {
   const { agentTool, ctx } = params;
   const normalizedSchema = normalizeJsonSchema(agentTool.inputSchema);
-  const archestraContext: ArchestraContext = {
-    agent: { id: ctx.agentId, name: ctx.agentName },
-    agentId: ctx.agentId,
-    organizationId: ctx.organizationId,
-    userId:
-      ctx.mcpGwToken?.oauthClientId && !ctx.mcpGwToken.serviceAccountId
-        ? undefined
-        : ctx.userId,
-    conversationId: ctx.conversationId,
-    isolationKey: ctx.scopeKey,
-    chatOpsBindingId: ctx.chatOpsBindingId,
-    chatOpsThreadId: ctx.chatOpsThreadId,
-    chatOpsPinnedAgentId: ctx.chatOpsPinnedAgentId,
-    sessionId: ctx.sessionId,
-    scheduleTriggerRunId: ctx.scheduleTriggerRunId,
-    runId: ctx.runId,
-    agentRuntimeTier: ctx.agentRuntimeTier,
-    delegationChain: ctx.delegationChain,
-    openappaSubagent: ctx.appaSubagent,
-    abortSignal: ctx.abortSignal,
-    tokenAuth: buildTokenAuthContext({
-      mcpGwToken: ctx.mcpGwToken,
-      organizationId: ctx.organizationId,
-      userId: ctx.userId,
-      runId: ctx.runId,
-    }),
-  };
 
   return {
     description: agentTool.description || `Agent tool: ${agentTool.name}`,
@@ -550,14 +523,46 @@ export function buildAgentDelegationTool(params: {
             return repeatNudge;
           }
 
-          const response = await executeArchestraTool(agentTool.name, args, {
-            ...archestraContext,
+          const archestraContext: ArchestraContext = {
+            agent: { id: ctx.agentId, name: ctx.agentName },
+            agentId: ctx.agentId,
+            organizationId: ctx.organizationId,
+            userId:
+              ctx.mcpGwToken?.oauthClientId && !ctx.mcpGwToken.serviceAccountId
+                ? undefined
+                : ctx.userId,
+            conversationId: ctx.conversationId,
+            isolationKey: ctx.scopeKey,
+            chatOpsBindingId: ctx.chatOpsBindingId,
+            chatOpsThreadId: ctx.chatOpsThreadId,
+            chatOpsPinnedAgentId: ctx.chatOpsPinnedAgentId,
+            sessionId: ctx.sessionId,
+            scheduleTriggerRunId: ctx.scheduleTriggerRunId,
+            runId: ctx.runId,
+            agentRuntimeTier: ctx.agentRuntimeTier,
+            delegationChain: ctx.delegationChain,
+            openappaSubagent: ctx.appaSubagent,
+            abortSignal: ctx.abortSignal,
             // Surface the child's tool calls on the caller's conversation,
             // attributed to this delegation call (options.toolCallId).
             subagentToolStream: ctx.subagentToolStream,
             currentToolCallId: options.toolCallId,
             parentLlm: ctx.parentLlm,
-          });
+            tokenAuth: buildTokenAuthContext({
+              mcpGwToken: ctx.mcpGwToken,
+              organizationId: ctx.organizationId,
+              userId: ctx.userId,
+              llmSessionId: ctx.sessionId,
+              llmToolCallId: options.toolCallId,
+              runId: ctx.runId,
+            }),
+          };
+
+          const response = await executeArchestraTool(
+            agentTool.name,
+            args,
+            archestraContext,
+          );
 
           span.setAttribute(
             ATTR_MCP_IS_ERROR_RESULT,
@@ -570,6 +575,48 @@ export function buildAgentDelegationTool(params: {
             startTime,
             isError: response.isError ?? false,
           });
+
+          if (!response.isError && !ctx.runId) {
+            const launchedRunId = (
+              response.structuredContent as
+                | { run?: { run_id?: unknown } }
+                | undefined
+            )?.run?.run_id;
+            if (typeof launchedRunId === "string" && launchedRunId.length > 0) {
+              ctx.runId = launchedRunId;
+              const sessionId = ctx.conversationId ?? ctx.sessionId ?? null;
+              if (sessionId) {
+                try {
+                  await McpToolCallModel.create({
+                    agentId: ctx.agentId,
+                    mcpServerName: archestraMcpBranding.serverName,
+                    method: "tools/call",
+                    durationMs: Math.max(0, Date.now() - startTime),
+                    toolCall: {
+                      id: options.toolCallId,
+                      name: agentTool.name,
+                      arguments: args || {},
+                    },
+                    toolResult: ctx.suppressContentLogging
+                      ? { redacted: true }
+                      : response,
+                    userId: ctx.userId ?? null,
+                    runId: launchedRunId,
+                    sessionId,
+                    llmToolCallId: options.toolCallId ?? null,
+                    authMethod: null,
+                    oauthClientId: ctx.mcpGwToken?.oauthClientId ?? null,
+                    source: "chat",
+                  });
+                } catch (dbError) {
+                  logger.info(
+                    { err: dbError },
+                    "Failed to persist archestra delegation run launch tool call",
+                  );
+                }
+              }
+            }
+          }
 
           const content = response.content
             .map((item) =>

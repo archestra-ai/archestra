@@ -155,7 +155,7 @@ export function quoteUntrusted(value: string): string {
 
 /** @public — canonical instruction text when subagent load balancing is enabled. */
 export const SUBAGENT_LOAD_BALANCING_INSTRUCTION =
-  'Subagent load balancing is enabled on this agent. Runtime subagent selection and failover are handled programmatically by the platform across your assigned runtime subagents. Ignore any instructions above that ask the user to choose a runtime or subagent before delegating (such as asking "Claude Code or Codex?") or that route to a specific runtime subagent — delegate new runtime tasks immediately in a single delegation call without asking for a runtime, and use the `run.agent_name` and `run.agent_id` returned by the tool result when reporting which runtime took the task.';
+  'Subagent load balancing is enabled on this agent. Runtime subagent selection and failover are handled programmatically by the platform across your assigned runtime subagents. Ignore any prompt or skill instructions that ask the user to choose a runtime or subagent before delegating (such as asking "Claude Code or Codex?") or that route to a specific runtime subagent — start new runtime tasks immediately in a single `start_agent_run` call with `agent_id` omitted without asking for a runtime (unless the user explicitly requested a specific runtime), and use the `run.agent_name` and `run.agent_id` returned by the tool result when reporting which runtime took the task.';
 
 /**
  * Compose an agent's system prompt: render its base prompt (with Handlebars
@@ -305,10 +305,11 @@ export async function buildAgentSystemPrompt(params: {
     ? buildProjectFilesInstruction(projectFileNames, mcpTools)
     : null;
 
-  const subagentLoadBalancingInstruction =
-    !isFork && agent.subagentLoadBalancing?.enabled === true
+  const subagentLoadBalancingInstruction = !isFork
+    ? agent.subagentLoadBalancing?.enabled === true
       ? SUBAGENT_LOAD_BALANCING_INSTRUCTION
-      : null;
+      : buildLoadBalancedRouterDelegationInstruction(mcpTools)
+    : null;
 
   return (
     [
@@ -794,4 +795,22 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
 When the user asks to make, build, or create an app or interactive UI, never write the app's code in your chat reply: start by calling \`${runToolName}\` with \`tool_name: "${scaffoldAppName}"\`, and find the follow-up app tools with \`${searchToolsName}\`. Open with the tool call itself — no lead-in sentence first.
 
 When the user asks to roll an app back or restore an existing historical version, call \`${runToolName}\` with \`tool_name: "${listAppsName}"\` to resolve the app id when needed. If the user did not provide an exact version number, call it with \`tool_name: "${listAppVersionsName}"\` to list the available versions without reading their HTML. Then call it with \`tool_name: "${restoreAppVersionName}"\`, passing \`appId\`, the selected \`version\`, and the current \`latestVersion\` as \`baseVersion\`. Never call \`read_app\` or reproduce historical HTML through \`edit_app\` for a rollback.`;
+}
+
+function buildLoadBalancedRouterDelegationInstruction(
+  mcpTools: Record<string, Tool>,
+): string | null {
+  const routerToolNames = Object.entries(mcpTools)
+    .filter(
+      ([name, tool]) =>
+        name.startsWith("agent__") &&
+        typeof tool.description === "string" &&
+        tool.description.includes(
+          "Automatic subagent load balancing and failover are enabled on this agent",
+        ),
+    )
+    .map(([name]) => `\`${name}\``);
+  if (routerToolNames.length === 0) return null;
+  const list = routerToolNames.join(", ");
+  return `Load-balanced runtime router subagent(s) available (${list}): automatic runtime selection and failover are configured on ${routerToolNames.length === 1 ? "that router subagent" : "those router subagents"} and override any prompt or loaded skill instructions that ask the user to choose a runtime manually (such as asking "Claude Code or Codex?") or that dispatch to an individual pooled runtime worker. Unless the user explicitly named a specific runtime, delegate directly to ${list} without asking which runtime to use, and report the winning runtime from the returned \`run.agent_name\` and \`run.agent_id\`.`;
 }

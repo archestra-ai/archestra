@@ -1,6 +1,7 @@
 import {
   AGENT_TOOL_PREFIX,
   type ModelSelection,
+  normalizeSubagentLoadBalancingConfig,
   SELF_FORK_TOOL_NAME,
   SubagentModelTierSchema,
   slugify,
@@ -43,6 +44,7 @@ import {
   promptWithContract,
   SPAWN_TARGET_MISMATCH,
 } from "@/services/agent-runtime/runtime-crossing";
+import { resolveCandidateRuntimeSubagentIds } from "@/services/agent-subagent-exclusions";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { type Agent, ApiError } from "@/types";
@@ -130,9 +132,20 @@ export async function getAgentTools(context: {
   // Delegation never crosses environment boundaries (null is the Default
   // environment), mirroring tool isolation: in both modes only same-environment
   // targets are advertised.
-  const environmentId = lookups
-    ? await lookups.agentEnvironmentId(agentId)
+  const callerGatewayAgent = lookups
+    ? await lookups.gatewayAgent(agentId)
+    : await AgentModel.findGatewayAgentById(agentId);
+  const environmentId = callerGatewayAgent
+    ? callerGatewayAgent.environmentId
     : await AgentModel.findEnvironmentId(agentId);
+  // When subagent load balancing is enabled on the calling agent, pooled Agent
+  // Runtime workers are invoked via `start_agent_run` (with `agent_id` omitted)
+  // rather than exposing individual `agent__<runtime_worker>` schemas that
+  // cause models to pick the first worker name alphabetically.
+  const callerLoadBalancingEnabled =
+    normalizeSubagentLoadBalancingConfig(
+      callerGatewayAgent?.subagentLoadBalancing,
+    )?.enabled === true;
 
   // External A2A targets are always explicit, including when local subagents
   // use Auto mode. Assigning an external credential is an egress decision and
@@ -165,8 +178,8 @@ export async function getAgentTools(context: {
   // fail-closed gate mirrors the Auto-tool `dynamicAccessContext` gate.
   if (
     realUserId &&
-    (lookups
-      ? await lookups.agentAccessAllSubagents(agentId)
+    (callerGatewayAgent
+      ? callerGatewayAgent.accessAllSubagents
       : await AgentModel.getAccessAllSubagents(agentId))
   ) {
     const localTools = await buildAutoDelegationTools({
@@ -175,6 +188,7 @@ export async function getAgentTools(context: {
       userId: realUserId,
       environmentId,
       attestable,
+      callerLoadBalancingEnabled,
     });
     return finishDelegationTools(
       context,
@@ -228,13 +242,35 @@ export async function getAgentTools(context: {
     "Fetched agent delegation tools from database",
   );
 
+  const visibleTools = callerLoadBalancingEnabled
+    ? accessibleTools.filter((t) => !t.targetAgent.hasRuntime)
+    : accessibleTools;
+  const routerMetadata = callerLoadBalancingEnabled
+    ? EMPTY_ROUTER_POOL_METADATA
+    : await resolveLoadBalancedRouterPools({
+        callerAgentId: agentId,
+        organizationId,
+        actorUserId: realUserId,
+        targets: visibleTools.map((t) => ({
+          id: t.targetAgent.id,
+          name: t.targetAgent.name,
+          toolName: t.tool.name,
+          hasRuntime: t.targetAgent.hasRuntime,
+          hasSubagentLoadBalancing: t.targetAgent.hasSubagentLoadBalancing,
+        })),
+      });
+
   // Convert DB tools to MCP Tool format
-  const localTools = accessibleTools.map((t) =>
+  const localTools = visibleTools.map((t) =>
     buildDelegationToolDescriptor({
       name: t.tool.name,
       targetAgent: t.targetAgent,
       inputSchema: t.tool.parameters as Tool["inputSchema"],
       attestable,
+      routerPoolNames: routerMetadata.poolNamesByRouterId.get(t.targetAgent.id),
+      managingRouters: routerMetadata.managingRoutersByWorkerId.get(
+        t.targetAgent.id,
+      ),
     }),
   );
   return finishDelegationTools(
@@ -355,20 +391,37 @@ export async function handleDelegation(
 
   // Agent Runtime is a capability of the target Agent, not a separate
   // invocation syntax. The ordinary agent__* delegation tool therefore turns
-  // into a detached durable task whenever that target has a runtime. A
-  // direct conversation with the same Agent never enters this path and stays
-  // in the foreground loop.
+  // into a detached durable task whenever that target has a runtime or is a
+  // foreground load-balanced router over runtime subagents (binding the
+  // winning runtime child directly to the caller's session). A direct
+  // conversation with the same Agent never enters this path and stays in the
+  // foreground loop.
   // A fork is a copy of the running caller, so it always runs in this process.
   const targetAgent = await AgentModel.findById(target.id);
-  if (!selfFork && targetAgent && resolveAgentRuntime(targetAgent)) {
+  const targetHasRuntime = Boolean(
+    targetAgent && resolveAgentRuntime(targetAgent),
+  );
+  const targetIsLoadBalancedRouter = Boolean(
+    targetAgent &&
+      !targetHasRuntime &&
+      normalizeSubagentLoadBalancingConfig(targetAgent.subagentLoadBalancing)
+        ?.enabled === true,
+  );
+  if (
+    !selfFork &&
+    targetAgent &&
+    (targetHasRuntime || targetIsLoadBalancedRouter)
+  ) {
     const callerAgent = await AgentModel.findById(agentId);
     const loadBalancingEnabled =
-      callerAgent?.subagentLoadBalancing?.enabled === true;
+      normalizeSubagentLoadBalancingConfig(callerAgent?.subagentLoadBalancing)
+        ?.enabled === true;
     logger.info(
       {
         agentId,
         targetAgentId: target.id,
         targetAgentName: target.name,
+        targetIsLoadBalancedRouter,
         loadBalancingEnabled,
         organizationId,
         userId: userId || "system",
@@ -376,7 +429,9 @@ export async function handleDelegation(
       "Starting background task from agent delegation",
     );
     return startDelegatedTask({
-      ...(loadBalancingEnabled ? {} : { agentId: target.id }),
+      ...(loadBalancingEnabled && !targetIsLoadBalancedRouter
+        ? {}
+        : { agentId: target.id }),
       message,
       context: context.agent
         ? context
@@ -612,8 +667,16 @@ async function buildAutoDelegationTools(params: {
   userId: string;
   environmentId: string | null;
   attestable: boolean;
+  callerLoadBalancingEnabled: boolean;
 }): Promise<Tool[]> {
-  const { agentId, organizationId, userId, environmentId, attestable } = params;
+  const {
+    agentId,
+    organizationId,
+    userId,
+    environmentId,
+    attestable,
+    callerLoadBalancingEnabled,
+  } = params;
 
   const isAgentAdmin = await ResourcePermissions.allows({
     userId: userId,
@@ -636,7 +699,10 @@ async function buildAutoDelegationTools(params: {
 
   const excluded = new Set(excludedIds);
   const seenNames = new Set<string>();
-  const tools: Tool[] = [];
+  const dedupedTargets: Array<{
+    name: string;
+    targetAgent: (typeof targets)[number];
+  }> = [];
 
   for (const targetAgent of sortDelegationTargets(targets)) {
     if (excluded.has(targetAgent.id)) {
@@ -650,15 +716,40 @@ async function buildAutoDelegationTools(params: {
       continue;
     }
     seenNames.add(name);
-    tools.push(
-      buildDelegationToolDescriptor({
-        name,
-        targetAgent,
-        inputSchema: DELEGATION_INPUT_JSON_SCHEMA,
-        attestable,
-      }),
-    );
+    if (callerLoadBalancingEnabled && targetAgent.hasRuntime) {
+      continue;
+    }
+    dedupedTargets.push({ name, targetAgent });
   }
+
+  const routerMetadata = callerLoadBalancingEnabled
+    ? EMPTY_ROUTER_POOL_METADATA
+    : await resolveLoadBalancedRouterPools({
+        callerAgentId: agentId,
+        organizationId,
+        actorUserId: userId,
+        callerExcludedIds: excluded,
+        targets: dedupedTargets.map(({ name, targetAgent }) => ({
+          id: targetAgent.id,
+          name: targetAgent.name,
+          toolName: name,
+          hasRuntime: targetAgent.hasRuntime,
+          hasSubagentLoadBalancing: targetAgent.hasSubagentLoadBalancing,
+        })),
+      });
+
+  const tools = dedupedTargets.map(({ name, targetAgent }) =>
+    buildDelegationToolDescriptor({
+      name,
+      targetAgent,
+      inputSchema: DELEGATION_INPUT_JSON_SCHEMA,
+      attestable,
+      routerPoolNames: routerMetadata.poolNamesByRouterId.get(targetAgent.id),
+      managingRouters: routerMetadata.managingRoutersByWorkerId.get(
+        targetAgent.id,
+      ),
+    }),
+  );
 
   logger.debug(
     {
@@ -799,6 +890,111 @@ function noDelegationConfiguredError(targetAgentSlug: string): CallToolResult {
   );
 }
 
+type RouterPoolReference = {
+  routerName: string;
+  routerToolName: string;
+};
+
+type RouterPoolMetadata = {
+  poolNamesByRouterId: ReadonlyMap<string, string[]>;
+  managingRoutersByWorkerId: ReadonlyMap<string, RouterPoolReference[]>;
+};
+
+const EMPTY_ROUTER_POOL_METADATA: RouterPoolMetadata = {
+  poolNamesByRouterId: new Map(),
+  managingRoutersByWorkerId: new Map(),
+};
+
+async function resolveLoadBalancedRouterPools(params: {
+  callerAgentId: string;
+  organizationId: string;
+  actorUserId?: string;
+  callerExcludedIds?: ReadonlySet<string>;
+  targets: ReadonlyArray<{
+    id: string;
+    name: string;
+    toolName: string;
+    hasRuntime: boolean;
+    hasSubagentLoadBalancing: boolean;
+  }>;
+}): Promise<RouterPoolMetadata> {
+  const routerTargets = params.targets.filter(
+    (target) => !target.hasRuntime && target.hasSubagentLoadBalancing,
+  );
+  if (routerTargets.length === 0) {
+    return EMPTY_ROUTER_POOL_METADATA;
+  }
+
+  const callerExcludedSet =
+    params.callerExcludedIds ??
+    new Set(
+      await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
+        params.callerAgentId,
+      ),
+    );
+  const nameByAgentId = new Map(
+    params.targets.map((target) => [target.id, target.name] as const),
+  );
+  const candidateIdsByRouter = await Promise.all(
+    routerTargets.map(async (router) => {
+      const routerAgent = await AgentModel.findGatewayAgentById(router.id);
+      if (
+        !routerAgent ||
+        routerAgent.organizationId !== params.organizationId
+      ) {
+        return { router, candidateIds: [] as string[] };
+      }
+      const candidateIds = (
+        await resolveCandidateRuntimeSubagentIds({
+          callerAgent: routerAgent,
+          actorUserId: params.actorUserId,
+        })
+      ).filter((id) => !callerExcludedSet.has(id));
+      return { router, candidateIds };
+    }),
+  );
+
+  const missingIds = [
+    ...new Set(
+      candidateIdsByRouter.flatMap(({ candidateIds }) =>
+        candidateIds.filter((id) => !nameByAgentId.has(id)),
+      ),
+    ),
+  ];
+  if (missingIds.length > 0) {
+    const basicRows = await AgentModel.findBasicByOrganizationIdAndIds({
+      organizationId: params.organizationId,
+      agentIds: missingIds,
+    });
+    for (const row of basicRows) {
+      nameByAgentId.set(row.id, row.name);
+    }
+  }
+
+  const poolNamesByRouterId = new Map<string, string[]>();
+  const managingRoutersByWorkerId = new Map<string, RouterPoolReference[]>();
+
+  for (const { router, candidateIds } of candidateIdsByRouter) {
+    if (candidateIds.length === 0) continue;
+    const poolNames = candidateIds
+      .map((id) => nameByAgentId.get(id))
+      .filter((name): name is string => Boolean(name));
+    if (poolNames.length === 0) continue;
+    poolNamesByRouterId.set(router.id, poolNames);
+    const ref: RouterPoolReference = {
+      routerName: router.name,
+      routerToolName: router.toolName,
+    };
+    for (const workerId of candidateIds) {
+      const existing = managingRoutersByWorkerId.get(workerId) ?? [];
+      existing.push(ref);
+      managingRoutersByWorkerId.set(workerId, existing);
+    }
+  }
+
+  return { poolNamesByRouterId, managingRoutersByWorkerId };
+}
+
 function buildDelegationToolDescriptor(params: {
   name: string;
   targetAgent: {
@@ -807,28 +1003,67 @@ function buildDelegationToolDescriptor(params: {
     description?: string | null;
     builtInAgentConfig?: Agent["builtInAgentConfig"];
     hasRuntime?: boolean;
+    hasSubagentLoadBalancing?: boolean;
   };
   inputSchema: Tool["inputSchema"];
   externalA2a?: boolean;
   toolId?: string;
   /** Guardrails v2 runs the target as a child that can attest its return. */
   attestable?: boolean;
+  /** Names of pooled runtime subagents when `targetAgent` is a load-balanced router. */
+  routerPoolNames?: readonly string[];
+  /** Accessible load-balanced routers whose pool includes this runtime worker. */
+  managingRouters?: readonly RouterPoolReference[];
 }): Tool {
-  const { name, targetAgent, inputSchema, externalA2a, toolId } = params;
+  const {
+    name,
+    targetAgent,
+    inputSchema,
+    externalA2a,
+    toolId,
+    routerPoolNames,
+    managingRouters,
+  } = params;
   const attestable =
     params.attestable === true &&
     !externalA2a &&
     !targetAgent.builtInAgentConfig;
+  const isLoadBalancedRuntimeRouter =
+    !externalA2a &&
+    !targetAgent.hasRuntime &&
+    Boolean(routerPoolNames && routerPoolNames.length > 0);
+  const runsInRuntime =
+    !externalA2a && (targetAgent.hasRuntime || isLoadBalancedRuntimeRouter);
+  const managingRouterHint =
+    !externalA2a &&
+    targetAgent.hasRuntime &&
+    managingRouters &&
+    managingRouters.length > 0
+      ? `Part of the load-balanced runtime pool of ${managingRouters.map((r) => `${r.routerName} (${r.routerToolName})`).join(", ")}. Prefer delegating to ${managingRouters[0].routerToolName} for automatic runtime selection and failover unless the user explicitly requested ${targetAgent.name}.`
+      : null;
+  const routerPoolNotice =
+    isLoadBalancedRuntimeRouter && routerPoolNames
+      ? `Automatic subagent load balancing and failover are enabled on this agent across its runtime pool (${routerPoolNames.join(", ")}), overriding any manual runtime selection: delegate directly to this agent without asking the user which runtime to use unless the user explicitly requested a specific runtime.`
+      : null;
+  const rawTargetDescription = targetAgent.description
+    ? targetAgent.description.substring(0, 400)
+    : null;
+  const formattedTargetDescription =
+    rawTargetDescription && (routerPoolNotice || managingRouterHint)
+      ? /[.!?]\s*$/.test(rawTargetDescription)
+        ? rawTargetDescription.trimEnd()
+        : `${rawTargetDescription.trimEnd()}.`
+      : rawTargetDescription;
   const description = [
     `Delegate task to ${externalA2a ? "external A2A " : ""}agent: ${targetAgent.name}.`,
-    ...(targetAgent.hasRuntime && !externalA2a
+    ...(runsInRuntime
       ? [
           "Runs in the background in Agent Runtime and returns a run link, not the answer.",
         ]
       : []),
-    ...(targetAgent.description
-      ? [targetAgent.description.substring(0, 400)]
-      : []),
+    ...(formattedTargetDescription ? [formattedTargetDescription] : []),
+    ...(routerPoolNotice ? [routerPoolNotice] : []),
+    ...(managingRouterHint ? [managingRouterHint] : []),
   ].join(" ");
 
   return {

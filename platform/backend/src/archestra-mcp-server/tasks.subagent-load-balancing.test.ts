@@ -1,6 +1,9 @@
 import {
   TOOL_GET_AGENT_RUN_FULL_NAME,
+  TOOL_RUN_TOOL_FULL_NAME,
+  TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_START_AGENT_RUN_FULL_NAME,
+  TOOL_STEER_AGENT_RUN_FULL_NAME,
   TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
 } from "@archestra/shared";
 import { context as otelContext, trace } from "@opentelemetry/api";
@@ -17,7 +20,13 @@ import {
   SUBAGENT_LOAD_BALANCING_INSTRUCTION,
 } from "@/agents/agent-system-prompt";
 import { CacheKey, cacheManager } from "@/cache-manager";
+import {
+  buildAgentDelegationTool,
+  type ChatToolContext,
+} from "@/clients/chat-tool-builder";
+import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
+import db, { schema } from "@/database";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import {
   A2AContextModel,
@@ -34,7 +43,13 @@ import {
   ToolModel,
 } from "@/models";
 import ClaudeCodeAccountModel from "@/models/claude-code-account";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import { startActiveChatSpan } from "@/observability/tracing";
+import { openappaActor } from "@/openappa/actor";
+import { signRuntimeToolProof } from "@/openappa/runtime-tool-claims";
+import * as openappaService from "@/openappa/service";
+import { buildAgentMcpToolList } from "@/routes/mcp-gateway/utils";
 import { secretManager } from "@/secrets-manager";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
@@ -55,6 +70,7 @@ import {
 import { subagentLoadBalancer } from "@/services/agent-runtime/subagent-load-balancer";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { modelSyncService } from "@/services/model-sync";
+import { getSessionHandoffs } from "@/services/session-handoffs";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
@@ -62,6 +78,7 @@ import { type Agent, type AgentRuntime, SelectAgentSchema } from "@/types";
 import { AgentConfigSnapshotSchema } from "@/types/agent-version";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { type ArchestraContext, executeArchestraTool } from ".";
+import { getAgentTools } from "./delegation";
 
 setupTestCacheManager();
 
@@ -75,8 +92,13 @@ useMswServer(
   ),
 );
 
+const originalOpenappaEnabled = config.openappa.enabled;
+const originalOfferSigningSecret = config.openappa.offerSigningSecret;
+
 afterEach(async () => {
   await drainBackgroundWork();
+  config.openappa.enabled = originalOpenappaEnabled;
+  config.openappa.offerSigningSecret = originalOfferSigningSecret;
   vi.restoreAllMocks();
 });
 
@@ -2895,5 +2917,653 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     expect(sendSpy.mock.calls[0]?.[0]).toMatchObject({
       agentId: openCandidate.id,
     });
+  });
+
+  test("delegates from a foreground orchestrator to a load-balanced router subagent via agent__* without an intermediate subagent turn, binds the runtime run to the caller session, and permits get_agent_run / steer_agent_run", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeMember,
+    makeSecret,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const proofSecret = "foreground-router-delegation-test-secret";
+    config.openappa.enabled = true;
+    config.openappa.offerSigningSecret = proofSecret;
+    await GuardrailsDeploymentModel.setEnabled(true);
+
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId, { role: "member" });
+    const otherPersonalSecret = await makeSecret({
+      secret: { apiKey: "xai-subscription:other-user-only" },
+    });
+    const otherPersonalKey = await makeLlmProviderApiKey(
+      organizationId,
+      otherPersonalSecret.id,
+      {
+        provider: "xai",
+        name: "Other Personal Key",
+        userId: otherUser.id,
+      },
+    );
+    const otherModel = await ModelModel.create({
+      externalId: `xai/unready-model-${organizationId.slice(0, 8)}`,
+      provider: "xai",
+      modelId: "unready-model",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+      otherPersonalKey.id,
+      [otherModel.id],
+    );
+
+    const routerAgent = await makeAgent({
+      name: "Coding Env Router",
+      description:
+        "Routes an explicitly delegated coding task to a user-selected isolated Agent runtime",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId,
+      runtime: null,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    const workerAlpha = await makeAgent({
+      name: "Runtime Worker Alpha",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId,
+      runtime: runtimeConfig({ maxTier: "M" }),
+    });
+    const workerBeta = await makeAgent({
+      name: "Runtime Worker Beta",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId,
+      runtime: runtimeConfig({ maxTier: "M" }),
+    });
+    const unreadyWorker = await makeAgent({
+      name: "Unready Runtime Worker",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId: otherModel.id,
+      llmApiKeyId: otherPersonalKey.id,
+      runtime: runtimeConfig({ maxTier: "M" }),
+    });
+
+    for (const worker of [workerAlpha, workerBeta, unreadyWorker]) {
+      const workerTool = await ToolModel.findOrCreateDelegationTool(worker.id);
+      await AgentToolModel.create(routerAgent.id, workerTool.id);
+    }
+    const routerToolRow = await ToolModel.findOrCreateDelegationTool(
+      routerAgent.id,
+    );
+
+    const foregroundOrchestrator = await makeAgent({
+      name: "Foreground Orchestrator",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: true,
+      modelId,
+      llmApiKeyId,
+    });
+    await seedAndAssignArchestraTools(foregroundOrchestrator.id);
+
+    // 1. Verify delegation tool descriptions and system prompt override manual selection
+    const callerDelegationTools = await getAgentTools({
+      agentId: foregroundOrchestrator.id,
+      organizationId,
+      userId: actorId,
+    });
+    const advertisedRouterTool = callerDelegationTools.find(
+      (tool) => tool.name === routerToolRow.name,
+    );
+    expect(advertisedRouterTool).toBeDefined();
+    expect(advertisedRouterTool?.description).toContain(
+      "Runs in the background in Agent Runtime and returns a run link, not the answer.",
+    );
+    expect(advertisedRouterTool?.description).toContain(
+      "Routes an explicitly delegated coding task to a user-selected isolated Agent runtime. Automatic subagent load balancing and failover are enabled on this agent",
+    );
+    expect(advertisedRouterTool?.description).toContain("Runtime Worker Alpha");
+    expect(advertisedRouterTool?.description).toContain("Runtime Worker Beta");
+    expect(advertisedRouterTool?.description).toContain(
+      "Unready Runtime Worker",
+    );
+
+    const advertisedAlphaTool = callerDelegationTools.find((tool) =>
+      tool.name.includes("runtime_worker_alpha"),
+    );
+    expect(advertisedAlphaTool?.description).toContain(
+      `Part of the load-balanced runtime pool of Coding Env Router (${routerToolRow.name}).`,
+    );
+
+    const callerSystemPrompt = await buildAgentSystemPrompt({
+      agent: foregroundOrchestrator,
+      mcpTools: Object.fromEntries(
+        callerDelegationTools.map((tool) => [
+          tool.name,
+          {
+            description: tool.description,
+            inputSchema: {} as never,
+          },
+        ]),
+      ),
+      organizationId,
+      userId: actorId,
+      agentId: foregroundOrchestrator.id,
+    });
+    expect(callerSystemPrompt).toContain(
+      `Load-balanced runtime router subagent(s) available (\`${routerToolRow.name}\`)`,
+    );
+    expect(callerSystemPrompt).toContain(
+      "override any prompt or loaded skill instructions that ask the user to choose a runtime manually",
+    );
+
+    // 2. Stub Kubernetes pod lifecycle and OpenAPPA's native Rust engine hook while
+    //    letting real buildAgentDelegationTool, verifyRuntimeToolProof, startDelegatedTask,
+    //    runTaskInAgentRuntime, OpenAppaSessionModel, classifyRuntimeCaller, and
+    //    getSessionHandoffs run end-to-end against PGlite.
+    const launchedWorkloads: string[] = [];
+    vi.spyOn(backend, "launch").mockImplementation(async (spec) => {
+      launchedWorkloads.push(spec.frozenName);
+    });
+    vi.spyOn(backend, "stageInputs").mockResolvedValue();
+    vi.spyOn(backend, "waitUntilRunning").mockResolvedValue();
+    vi.spyOn(backend, "streamOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end();
+      },
+    );
+    vi.spyOn(backend, "snapshotOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end("===ARCHESTRA-FINAL-ANSWER===\nWorkspace ready");
+      },
+    );
+    let resolveCompletion:
+      | ((value: { outcome: "succeeded" }) => void)
+      | undefined;
+    vi.spyOn(backend, "waitForCompletion").mockImplementation(
+      () =>
+        new Promise<{ outcome: "succeeded" }>((resolve) => {
+          resolveCompletion = resolve;
+        }),
+    );
+    vi.spyOn(backend, "steer").mockResolvedValue();
+    vi.spyOn(backend, "teardown").mockResolvedValue();
+    vi.spyOn(backend, "releaseRun").mockResolvedValue();
+    vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
+
+    vi.spyOn(openappaService, "startRuntimeChild").mockImplementation(
+      async ({ session }) => {
+        await db.insert(schema.openappaSessionsTable).values({
+          organizationId: session.organization_id,
+          callerId: session.caller_id,
+          sessionId: session.session_id,
+          actor: openappaActor(session.session_id),
+          root: openappaActor(session.parent_id ?? session.session_id),
+          parentId: session.parent_id ?? null,
+          startDecision: { decision: "ack" },
+        });
+        return {};
+      },
+    );
+    vi.spyOn(openappaService, "addressRuntimeChild").mockResolvedValue();
+    vi.spyOn(openappaService, "loadChildReturns").mockResolvedValue([]);
+
+    const parentSession = {
+      organization_id: organizationId,
+      caller_id: `user:${actorId}`,
+      session_id: `user:${actorId}|chat-conv-1`,
+    };
+    await db.insert(schema.openappaSessionsTable).values({
+      organizationId,
+      callerId: parentSession.caller_id,
+      sessionId: parentSession.session_id,
+      actor: openappaActor(parentSession.session_id),
+      root: openappaActor(parentSession.session_id),
+      parentId: null,
+      startDecision: { decision: "ack" },
+    });
+    const recordReleasedCall = async (
+      callId: string,
+      tool: string,
+      spawn: boolean,
+      session = parentSession,
+    ) => {
+      await db.insert(schema.openappaOperationsTable).values({
+        organizationId,
+        callerId: session.caller_id,
+        sessionId: session.session_id,
+        operationId: `call:${callId}`,
+        root: openappaActor(session.session_id),
+        status: "complete",
+        input: {
+          semantic: {
+            event: "tool_call",
+            tool,
+            spawn,
+          },
+        },
+        decision: { decision: "allow_call" },
+      });
+    };
+
+    const spawnCallId = "call-router-1";
+    await recordReleasedCall(spawnCallId, routerToolRow.name, true);
+
+    const spawnArgs = { message: "Prepare the repository workspace" };
+    const spawnProof = signRuntimeToolProof({
+      session: parentSession,
+      toolCallId: spawnCallId,
+      action: routerToolRow.name,
+      arguments: spawnArgs,
+      spawn: true,
+      secret: proofSecret,
+    });
+    expect(spawnProof).toBeDefined();
+
+    const chatCtx: ChatToolContext = {
+      agentId: foregroundOrchestrator.id,
+      agentName: foregroundOrchestrator.name,
+      userId: actorId,
+      organizationId,
+      conversationId: "chat-conv-1",
+      sessionId: "chat-conv-1",
+      mcpGwToken: {
+        tokenValue: null,
+        tokenId: "tok-1",
+        teamId: null,
+        isOrganizationToken: false,
+        isUserToken: true,
+      },
+      repeatTracker: new ToolCallRepeatTracker(),
+      modelAcceptsImageToolResults: true,
+    };
+    if (!advertisedRouterTool) {
+      throw new Error("Expected advertised router delegation tool");
+    }
+    const aiRouterTool = buildAgentDelegationTool({
+      agentTool: advertisedRouterTool,
+      ctx: chatCtx,
+    });
+    const rawResult = await aiRouterTool.execute?.(
+      { ...spawnArgs, runtime_proof: spawnProof },
+      {
+        toolCallId: spawnCallId,
+        messages: [],
+      },
+    );
+    const parsedLaunch = JSON.parse(String(rawResult)) as {
+      run: { run_id: string; agent_id: string; agent_name: string };
+      run_url: string;
+    };
+    expect([workerAlpha.id, workerBeta.id]).toContain(
+      parsedLaunch.run.agent_id,
+    );
+    expect(chatCtx.runId).toBe(parsedLaunch.run.run_id);
+
+    // Wait briefly for the detached launch to reach waitForCompletion and bind its OpenAPPA child
+    await vi.waitFor(async () => {
+      expect(launchedWorkloads).toHaveLength(1);
+    });
+
+    const workspace = await AgentWorkspaceModel.findById(
+      parsedLaunch.run.run_id,
+    );
+    expect(workspace).not.toBeNull();
+    expect(workspace?.agentId).toBe(parsedLaunch.run.agent_id);
+    expect(launchedWorkloads).toEqual([workspace?.workloadName]);
+    const childSessionRow = await OpenAppaSessionModel.familySession({
+      organizationId,
+      callerId: `user:${actorId}`,
+      sessionId: `user:${actorId}|${workspace?.workloadName}`,
+    });
+    // Bound directly to the foreground caller's session, NEVER to an intermediate router session
+    expect(childSessionRow?.parentId).toBe(parentSession.session_id);
+
+    // Session handoffs record both handedTo and the push move from the agent__* call
+    const handoffs = await getSessionHandoffs({
+      organizationId,
+      sessionId: "chat-conv-1",
+      ownUserId: actorId,
+    });
+    expect(handoffs.handedTo.map((r) => r.runId)).toContain(
+      parsedLaunch.run.run_id,
+    );
+    expect(handoffs.moves).toContainEqual(
+      expect.objectContaining({
+        kind: "push",
+        runId: parsedLaunch.run.run_id,
+      }),
+    );
+
+    // 3. Foreground caller can inspect and steer the launched run without "bound to a different session",
+    //    whereas a different chat session IS refused with "bound to a different session".
+    const readArgs = { run_id: parsedLaunch.run.run_id };
+    await recordReleasedCall(
+      "call-read-1",
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      false,
+    );
+    const readProof = signRuntimeToolProof({
+      session: parentSession,
+      toolCallId: "call-read-1",
+      action: "get_agent_run",
+      arguments: readArgs,
+      spawn: false,
+      secret: proofSecret,
+    });
+    const callerContext: ArchestraContext = {
+      agent: {
+        id: foregroundOrchestrator.id,
+        name: foregroundOrchestrator.name,
+      },
+      agentId: foregroundOrchestrator.id,
+      userId: actorId,
+      organizationId,
+      sessionId: "chat-conv-1",
+    };
+    const getRunResult = await executeArchestraTool(
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { ...readArgs, runtime_proof: readProof },
+      callerContext,
+    );
+    expect(getRunResult.isError).toBeFalsy();
+    expect(getRunResult.structuredContent).toMatchObject({
+      run: {
+        run_id: parsedLaunch.run.run_id,
+        agent_id: parsedLaunch.run.agent_id,
+      },
+    });
+
+    const otherChatSession = {
+      organization_id: organizationId,
+      caller_id: `user:${actorId}`,
+      session_id: `user:${actorId}|other-chat-conv`,
+    };
+    await db.insert(schema.openappaSessionsTable).values({
+      organizationId,
+      callerId: otherChatSession.caller_id,
+      sessionId: otherChatSession.session_id,
+      actor: openappaActor(otherChatSession.session_id),
+      root: openappaActor(otherChatSession.session_id),
+      parentId: null,
+      startDecision: { decision: "ack" },
+    });
+    await recordReleasedCall(
+      "call-other-steer",
+      TOOL_STEER_AGENT_RUN_FULL_NAME,
+      false,
+      otherChatSession,
+    );
+    const otherSteerArgs = {
+      run_id: parsedLaunch.run.run_id,
+      message: "Wrong session attempt",
+    };
+    const otherSteerProof = signRuntimeToolProof({
+      session: otherChatSession,
+      toolCallId: "call-other-steer",
+      action: "steer_agent_run",
+      arguments: otherSteerArgs,
+      spawn: false,
+      secret: proofSecret,
+    });
+    const refusedOtherSessionSteer = await executeArchestraTool(
+      TOOL_STEER_AGENT_RUN_FULL_NAME,
+      { ...otherSteerArgs, runtime_proof: otherSteerProof },
+      { ...callerContext, sessionId: "other-chat-conv" },
+    );
+    expect(refusedOtherSessionSteer.isError).toBe(true);
+    expect(JSON.stringify(refusedOtherSessionSteer)).toContain(
+      "bound to a different session",
+    );
+
+    const steerArgs = {
+      run_id: parsedLaunch.run.run_id,
+      message: "Take ticket PM-42 next",
+    };
+    await recordReleasedCall(
+      "call-steer-1",
+      TOOL_STEER_AGENT_RUN_FULL_NAME,
+      false,
+    );
+    const steerProof = signRuntimeToolProof({
+      session: parentSession,
+      toolCallId: "call-steer-1",
+      action: "steer_agent_run",
+      arguments: steerArgs,
+      spawn: false,
+      secret: proofSecret,
+    });
+    const steerResult = await executeArchestraTool(
+      TOOL_STEER_AGENT_RUN_FULL_NAME,
+      { ...steerArgs, runtime_proof: steerProof },
+      callerContext,
+    );
+    expect(steerResult.isError).toBeFalsy();
+
+    resolveCompletion?.({ outcome: "succeeded" });
+    await drainBackgroundWork();
+
+    // 4. A second router delegation rotates to the other ready worker (skipping Unready Runtime Worker)
+    const spawn2CallId = "call-router-2";
+    await recordReleasedCall(spawn2CallId, routerToolRow.name, true);
+    const spawn2Proof = signRuntimeToolProof({
+      session: parentSession,
+      toolCallId: spawn2CallId,
+      action: routerToolRow.name,
+      arguments: spawnArgs,
+      spawn: true,
+      secret: proofSecret,
+    });
+    vi.spyOn(backend, "waitForCompletion").mockResolvedValue({
+      outcome: "succeeded",
+    });
+    const secondResponse = await executeArchestraTool(
+      routerToolRow.name,
+      { ...spawnArgs, runtime_proof: spawn2Proof },
+      callerContext,
+    );
+    expect(secondResponse.isError).toBeFalsy();
+    const secondAgentId = (
+      secondResponse.structuredContent as { run: { agent_id: string } }
+    ).run.agent_id;
+    expect(new Set([parsedLaunch.run.agent_id, secondAgentId])).toEqual(
+      new Set([workerAlpha.id, workerBeta.id]),
+    );
+    await drainBackgroundWork();
+  });
+
+  test("hides pooled runtime worker agent__* schemas on load-balanced agents and gateways while implicitly exposing and admitting archestra__start_agent_run", async ({
+    makeAgent,
+  }) => {
+    const lbChatAgent = await makeAgent({
+      name: "Load-Balanced Chat Router",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      toolExposureMode: "search_and_run_only",
+      modelId,
+      llmApiKeyId,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    const workerAlpha = await makeAgent({
+      name: "Alpha Runtime Worker",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId,
+      runtime: runtimeConfig({ maxTier: "M" }),
+    });
+    const workerBeta = await makeAgent({
+      name: "Beta Runtime Worker",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId,
+      runtime: runtimeConfig({ maxTier: "M" }),
+    });
+    const inProcessHelper = await makeAgent({
+      name: "In-Process Helper Subagent",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId,
+      runtime: null,
+    });
+
+    const alphaTool = await ToolModel.findOrCreateDelegationTool(
+      workerAlpha.id,
+    );
+    const betaTool = await ToolModel.findOrCreateDelegationTool(workerBeta.id);
+    const helperTool = await ToolModel.findOrCreateDelegationTool(
+      inProcessHelper.id,
+    );
+    for (const tool of [alphaTool, betaTool, helperTool]) {
+      await AgentToolModel.create(lbChatAgent.id, tool.id);
+    }
+
+    // Notice we do NOT assign archestra__start_agent_run in agent_tools on lbChatAgent!
+    // Chat agents still keep self-fork (agent__self) plus non-runtime subagents, while pooled runtime workers are hidden.
+    const chatDelegationTools = await getAgentTools({
+      agentId: lbChatAgent.id,
+      organizationId,
+      userId: actorId,
+    });
+    expect(chatDelegationTools.map((t) => t.name)).toEqual([
+      "agent__self",
+      helperTool.name,
+    ]);
+
+    const chatMcpList = await buildAgentMcpToolList({
+      agent: lbChatAgent,
+      tokenAuth: {
+        tokenId: "tok-chat",
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId,
+        userId: actorId,
+      },
+    });
+    const chatListedNames = chatMcpList.tools.map((t) => t.name);
+    expect(chatListedNames).toContain(TOOL_START_AGENT_RUN_FULL_NAME);
+    expect(chatListedNames).not.toContain(alphaTool.name);
+    expect(chatListedNames).not.toContain(betaTool.name);
+
+    await mockDetachedTaskStart();
+    const lbChatContext: ArchestraContext = {
+      agent: { id: lbChatAgent.id, name: lbChatAgent.name },
+      agentId: lbChatAgent.id,
+      userId: actorId,
+      organizationId,
+    };
+    const r1 = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "First load-balanced chat launch" },
+      lbChatContext,
+    );
+    const r2 = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Second load-balanced chat launch" },
+      lbChatContext,
+    );
+    expect(r1.isError).toBeFalsy();
+    expect(r2.isError).toBeFalsy();
+    const a1 = (r1.structuredContent as { run: { agent_id: string } }).run
+      .agent_id;
+    const a2 = (r2.structuredContent as { run: { agent_id: string } }).run
+      .agent_id;
+    expect(new Set([a1, a2])).toEqual(new Set([workerAlpha.id, workerBeta.id]));
+
+    // Now verify an external MCP gateway in search_and_run_only mode with NO assigned archestra tools:
+    // tools/list stays compact (start_agent_run deferred), search_tools finds start_agent_run,
+    // and run_tool executes start_agent_run without an explicit agent_tools assignment.
+    const compactLbGateway = await makeAgent({
+      name: "Compact LB Gateway",
+      organizationId,
+      authorId: actorId,
+      agentType: "mcp_gateway",
+      toolExposureMode: "search_and_run_only",
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await AgentToolModel.create(compactLbGateway.id, alphaTool.id);
+    await AgentToolModel.create(compactLbGateway.id, betaTool.id);
+
+    const gatewayList = await buildAgentMcpToolList({
+      agent: compactLbGateway,
+      tokenAuth: {
+        tokenId: "tok-gw",
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId,
+        userId: actorId,
+      },
+    });
+    const gatewayListedNames = gatewayList.tools.map((t) => t.name);
+    expect(gatewayListedNames).toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
+    expect(gatewayListedNames).toContain(TOOL_RUN_TOOL_FULL_NAME);
+    expect(gatewayListedNames).not.toContain(TOOL_START_AGENT_RUN_FULL_NAME);
+    expect(gatewayListedNames).not.toContain(alphaTool.name);
+    expect(gatewayListedNames).not.toContain(betaTool.name);
+
+    const compactGwContext: ArchestraContext = {
+      agent: { id: compactLbGateway.id, name: compactLbGateway.name },
+      agentId: compactLbGateway.id,
+      userId: actorId,
+      organizationId,
+    };
+    const searchResult = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "start agent run" },
+      compactGwContext,
+    );
+    expect(searchResult.isError).toBeFalsy();
+    const discoveredNames = (
+      searchResult.structuredContent as { tools: Array<{ toolName: string }> }
+    ).tools.map((t) => t.toolName);
+    expect(discoveredNames).toContain(TOOL_START_AGENT_RUN_FULL_NAME);
+
+    const viaRunTool = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      {
+        tool_name: TOOL_START_AGENT_RUN_FULL_NAME,
+        tool_args: { message: "Launch via compact LB gateway" },
+      },
+      compactGwContext,
+    );
+    expect(viaRunTool.isError).toBeFalsy();
+    expect([workerAlpha.id, workerBeta.id]).toContain(
+      (viaRunTool.structuredContent as { run: { agent_id: string } }).run
+        .agent_id,
+    );
   });
 });

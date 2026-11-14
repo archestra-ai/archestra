@@ -3824,7 +3824,11 @@ export function ChatPageContent({
                                 reader looks before typing. */}
                             <div className="mb-3 empty:hidden">
                               {isInitialRuntimeMode &&
-                                runtimePreflight.data?.ready === false && (
+                                runtimePreflight.data != null &&
+                                (!runtimePreflight.data.ready ||
+                                  runtimePreflight.data.missing.length > 0 ||
+                                  runtimePreflight.data.misconfigured.length >
+                                    0) && (
                                   <AgentRuntimeCredentialPrompt
                                     agentId={initialAgentId ?? ""}
                                     missing={[

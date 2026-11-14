@@ -27,6 +27,7 @@ type MissingCredential = {
   description?: string;
   canConnect?: boolean;
   adminOnly?: boolean;
+  reconnect?: boolean;
 };
 
 type CredentialDeclaration = MissingCredential & {
@@ -55,8 +56,19 @@ export function AgentRuntimeCredentialPrompt({
     (entry) => entry.canConnect === false && !entry.adminOnly,
   );
   const connectable = missing.filter((entry) => entry.canConnect !== false);
-  const helperText =
-    connectable.length > 1
+  const optionalKeys = new Set(
+    declarations
+      .filter((declaration) => !declaration.required)
+      .map((declaration) => declaration.key),
+  );
+  const allConnectableOptionalReconnect =
+    connectable.length > 0 &&
+    connectable.every(
+      (entry) => entry.reconnect && optionalKeys.has(entry.key),
+    );
+  const helperText = allConnectableOptionalReconnect
+    ? "Optional — you can start a run without it, or reconnect to include it."
+    : connectable.length > 1
       ? "Set up the missing credentials to continue."
       : "Connect it once to use it with every compatible Agent.";
 
@@ -119,9 +131,13 @@ export function AgentRuntimeCredentialPrompt({
         <InlineNotice>
           <KeyRound />
           <span className="font-medium">
-            {connectable.length === 1
-              ? `${connectable[0].label} is required`
-              : `${connectable.length} connections are required`}
+            {allConnectableOptionalReconnect
+              ? connectable.length === 1
+                ? `${connectable[0].label} needs to be reconnected`
+                : `${connectable.length} optional connections need to be reconnected`
+              : connectable.length === 1
+                ? `${connectable[0].label} is required`
+                : `${connectable.length} connections are required`}
           </span>
           <InlineNoticeText>{helperText}</InlineNoticeText>
           <Button
@@ -131,7 +147,7 @@ export function AgentRuntimeCredentialPrompt({
             className="ml-auto shrink-0 bg-background"
             onClick={() => setConnecting(true)}
           >
-            Connect
+            {allConnectableOptionalReconnect ? "Reconnect" : "Connect"}
           </Button>
         </InlineNotice>
       )}

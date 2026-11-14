@@ -1227,6 +1227,7 @@ async function openSelfServiceInclude(params: {
     params.pull &&
     (await pullLeavesInclude({
       organizationId: params.organizationId,
+      entry,
       repo: source.repo,
       token,
       base,
@@ -1289,13 +1290,18 @@ const INCLUDE_TITLE = "Include each MCP server's Guardrails rules file";
 
 /**
  * Whether a pull leaves the include to a person: the newest include pull
- * request on the repository was closed without merging, so someone declined
- * it. GitHub keeps every pull request, so one an earlier version opened
- * counts too. A history that cannot be read now proves nothing either way:
- * the pull leaves the include, and the next one reads it again.
+ * request on the repository was closed without merging while it still
+ * proposed this folder's entry, so someone declined it. GitHub keeps every
+ * pull request, so one an earlier version opened counts too. One for an
+ * earlier folder declines nothing now, nor does one Archestra closed itself
+ * when the folder moved: that close rewrites its body. A history that
+ * cannot be read now proves nothing either way: the pull leaves the
+ * include, and the next one reads it again.
  */
 async function pullLeavesInclude(params: {
   organizationId: string;
+  /** The include entry for the current folder, such as `mcp/*.toml`. */
+  entry: string;
   repo: string;
   token: string;
   base: string;
@@ -1306,11 +1312,21 @@ async function pullLeavesInclude(params: {
     // Every include pull request GitHub keeps, in whatever order it lists
     // them: the greatest number is the newest.
     let newest:
-      | { number: number; state?: string; merged_at?: string | null }
+      | {
+          number: number;
+          state?: string;
+          merged_at?: string | null;
+          body?: string | null;
+        }
       | undefined;
     for (let page = 1; ; page++) {
       const pulls = await github<
-        Array<{ number?: number; state?: string; merged_at?: string | null }>
+        Array<{
+          number?: number;
+          state?: string;
+          merged_at?: string | null;
+          body?: string | null;
+        }>
       >({
         token: params.token,
         url: `${params.base}/pulls?state=all&head=${head}&per_page=100&page=${page}`,
@@ -1325,7 +1341,12 @@ async function pullLeavesInclude(params: {
       if (page === INCLUDE_HISTORY_PAGES)
         throw new Error("Too many include pull requests to read");
     }
-    if (newest?.state !== "closed" || newest.merged_at) return false;
+    if (
+      newest?.state !== "closed" ||
+      newest.merged_at ||
+      !newest.body?.includes(`Adds \`${params.entry}\``)
+    )
+      return false;
     logger.info(
       { organizationId: params.organizationId, pull: newest.number },
       "OpenAPPA leaves the include of the self-service folder to a person: its pull request was closed without merging",

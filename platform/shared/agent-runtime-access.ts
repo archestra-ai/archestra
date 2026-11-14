@@ -5,13 +5,14 @@ import {
 } from "./agent-catalog-images";
 
 /**
- * The runtime settings a locked Agent Runtime decides for every Agent of its
- * type: the launch command, the model protocol, how follow-ups reach a run,
- * the size and limits of its runs, and whose Claude account runs Claude Code.
- * The image is what makes an Agent of that type, so it is not listed here.
- * Credentials, environment values, ports and host access stay per Agent.
+ * The settings an Agent Runtime decides for an Agent whose builder may use the
+ * runtime but not configure it: the launch command, the model protocol, how
+ * follow-ups reach a run, the size and limits of its runs, and whose Claude
+ * account runs Claude Code. The image is what makes an Agent of that type, so
+ * it is not listed here. Credentials, environment values, ports and host
+ * access stay per Agent.
  */
-export type LockableAgentRuntime = {
+export type TemplatedAgentRuntime = {
   image: string;
   command: string[] | null;
   inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic";
@@ -33,14 +34,14 @@ export type LockableAgentRuntime = {
  */
 export type AgentRuntimeDefaults = Partial<
   Pick<
-    LockableAgentRuntime,
+    TemplatedAgentRuntime,
     "tier" | "maxTier" | "ttlHours" | "maxCostUsd" | "idleTimeoutMinutes"
   >
 > & { claudeCode?: { authentication: "provider" | "subscription" } };
 
 /** A maintained template's runtime with the organization's defaults applied. */
 export function withAgentRuntimeDefaults<
-  Runtime extends LockableAgentRuntime,
+  Runtime extends TemplatedAgentRuntime,
 >(params: {
   runtime: Runtime;
   defaults: AgentRuntimeDefaults | null | undefined;
@@ -68,11 +69,11 @@ export type AgentRuntimeTemplateRef =
  * The Agent Runtime a saved runtime is an Agent of. A runtime stores no
  * template id, so it is recognised by its image, then by its wrapper command:
  * a maintained catalog image, then a custom runtime's image, then a
- * maintained wrapper. That order keeps a locked runtime's image locked
- * whatever command an agent sets.
+ * maintained wrapper. That order keeps an agent on a maintained image on its
+ * built-in runtime whatever command it sets.
  */
 export function resolveAgentRuntimeTemplate(params: {
-  runtime: Pick<LockableAgentRuntime, "image" | "command">;
+  runtime: Pick<TemplatedAgentRuntime, "image" | "command">;
   catalogImages: Record<AgentCatalogId, string>;
   customTemplates: readonly { id: string; image: string }[];
 }): AgentRuntimeTemplateRef | null {
@@ -89,10 +90,31 @@ export function resolveAgentRuntimeTemplate(params: {
   return wrapper ? { kind: "built-in", id: wrapper } : null;
 }
 
-/** The runtime with its locked template's settings applied. */
-export function withLockedAgentRuntimeSettings<
-  Runtime extends LockableAgentRuntime,
->(params: { runtime: Runtime; template: LockableAgentRuntime }): Runtime {
+/**
+ * The permission scope of an Agent Runtime: a custom runtime's own id, or a
+ * fixed id per maintained runtime, since permission scopes are UUIDs.
+ */
+export function agentRuntimePermissionScope(
+  ref: AgentRuntimeTemplateRef,
+): string {
+  return ref.kind === "custom" ? ref.id : BUILT_IN_AGENT_RUNTIME_SCOPES[ref.id];
+}
+
+/** The maintained runtime a permission scope names, if any. */
+export function builtInAgentRuntimeForScope(
+  scope: string,
+): AgentCatalogId | null {
+  return (
+    (Object.entries(BUILT_IN_AGENT_RUNTIME_SCOPES).find(
+      ([, id]) => id === scope,
+    )?.[0] as AgentCatalogId | undefined) ?? null
+  );
+}
+
+/** The runtime with its Agent Runtime's own settings applied. */
+export function withAgentRuntimeTemplateSettings<
+  Runtime extends TemplatedAgentRuntime,
+>(params: { runtime: Runtime; template: TemplatedAgentRuntime }): Runtime {
   const { runtime, template } = params;
   return {
     ...runtime,
@@ -113,3 +135,14 @@ export function withLockedAgentRuntimeSettings<
     }),
   };
 }
+
+const BUILT_IN_AGENT_RUNTIME_SCOPES: Record<AgentCatalogId, string> = {
+  "claude-code": "00000000-0000-4000-8000-0000a7000001",
+  codex: "00000000-0000-4000-8000-0000a7000002",
+  opencode: "00000000-0000-4000-8000-0000a7000003",
+  hermes: "00000000-0000-4000-8000-0000a7000004",
+  openclaw: "00000000-0000-4000-8000-0000a7000005",
+  grok: "00000000-0000-4000-8000-0000a7000006",
+  kimi: "00000000-0000-4000-8000-0000a7000007",
+  copilot: "00000000-0000-4000-8000-0000a7000008",
+};

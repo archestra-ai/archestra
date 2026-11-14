@@ -77,7 +77,7 @@ import {
   type AgentRuntimeConfig,
   AgentRuntimeFields,
   isClaudeCodeRuntimeConfig,
-  LockedRuntimeNotice,
+  RuntimeSettingsNotice,
   supportsClaudeCodeSubscription as runtimeSupportsClaudeCodeSubscription,
 } from "@/components/agent-runtime-fields";
 import { AgentRuntimeHowItWorks } from "@/components/agent-runtime-how-it-works";
@@ -185,7 +185,7 @@ import {
 } from "@/lib/agent-knowledge-source-exclusions.query";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
-import { useLockedRuntimeName } from "@/lib/agent-runtime-templates.query";
+import { useAgentRuntimePermissions } from "@/lib/agent-runtime-templates.query";
 import {
   useAgentSkillExclusions,
   useAgentSkills,
@@ -1082,9 +1082,6 @@ export function AgentForm({
   // overwriting them with the empty default.
   const shouldLoadKnowledgeSources = showToolsSections;
   const shouldLoadLlmConfiguration = agentType === "agent";
-  const { data: canConfigureRuntime } = useHasPermissions({
-    agent: ["configure-runtime"],
-  });
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const { data: canReadAgentTriggers } = useHasPermissions({
     organizationSettings: ["read"],
@@ -1526,9 +1523,13 @@ export function AgentForm({
     runtimeSupportsClaudeCodeSubscription(runtime);
   const isClaudeCodeRuntime = isClaudeCodeRuntimeConfig(runtime);
   const agentCatalogImages = useAgentCatalogImages();
-  // Its Agent Runtime's settings, when locked, are this agent's: read-only.
-  // An existing agent's runtime is the saved one, never the unsaved draft.
-  const lockedRuntimeName = useLockedRuntimeName(
+  // Who may set this agent's runtime, and whether its settings are the
+  // runtime's own (read-only). An existing agent's runtime is the saved one,
+  // never the unsaved draft.
+  const {
+    canChange: canConfigureRuntime,
+    readOnlyBy: runtimeSettingsReadOnlyBy,
+  } = useAgentRuntimePermissions(
     agent ? agent.runtime : runtime,
     agentCatalogImages,
   );
@@ -3314,7 +3315,7 @@ export function AgentForm({
           {isClaudeCodeRuntime ? (
             <fieldset disabled={canConfigureRuntime !== true}>
               <ClaudeCodeInferenceSettings
-                authenticationLocked={!!lockedRuntimeName}
+                authenticationLocked={!!runtimeSettingsReadOnlyBy}
                 agentId={agent?.id ?? ""}
                 authentication={
                   usesClaudeSubscription ? "subscription" : "provider"
@@ -3549,7 +3550,7 @@ export function AgentForm({
                             }
                           }}
                           onChange={setAgentRuntime}
-                          lockedBy={lockedRuntimeName}
+                          readOnlyBy={runtimeSettingsReadOnlyBy}
                           onChangeTemplate={onChangeRuntimeTemplate}
                           modelBlock={showsModelControl ? modelBlock : null}
                           modelSummary={modelSummary}
@@ -4043,7 +4044,7 @@ export function AgentForm({
                   !isActiveSection("runtime") && "hidden",
                 )}
               >
-                {!canConfigureRuntime && (
+                {canConfigureRuntime === false && (
                   <InlineNotice variant="info">
                     <InfoIcon className="size-4 shrink-0" />
                     <InlineNoticeBody>
@@ -4051,20 +4052,20 @@ export function AgentForm({
                         Runtime settings are read-only
                       </span>
                       <InlineNoticeText>
-                        Configure runtime permission is required to change this
-                        agent's runtime. Existing settings are preserved.
+                        You don't have permission to use this agent's runtime.
+                        Existing settings are preserved.
                       </InlineNoticeText>
                     </InlineNoticeBody>
                   </InlineNotice>
                 )}
-                {canConfigureRuntime && lockedRuntimeName && (
-                  <LockedRuntimeNotice name={lockedRuntimeName} />
+                {canConfigureRuntime && runtimeSettingsReadOnlyBy && (
+                  <RuntimeSettingsNotice name={runtimeSettingsReadOnlyBy} />
                 )}
                 <fieldset disabled={canConfigureRuntime !== true}>
                   <AgentRuntimeFields
                     value={runtime}
                     onChange={setAgentRuntime}
-                    locked={!!lockedRuntimeName}
+                    locked={!!runtimeSettingsReadOnlyBy}
                   />
                 </fieldset>
               </div>

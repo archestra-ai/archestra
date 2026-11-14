@@ -10,6 +10,7 @@ import type {
 } from "@/types/agent-runtime-template";
 import { RuntimeTemplateSettingsSchema } from "@/types/agent-runtime-template";
 import OrganizationModel from "./organization";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import SecretModel from "./secret";
 
 class AgentRuntimeTemplateModel {
@@ -40,12 +41,6 @@ class AgentRuntimeTemplateModel {
     organizationId: string;
     settings: RuntimeTemplateSettingsInput;
     popularAgentOverrides: PopularAgentOverrides | null;
-    /** Runs in the saving transaction, after the new settings are written. */
-    afterWrite?: (params: {
-      tx: Transaction;
-      settings: RuntimeTemplateSettings;
-      previous: RuntimeTemplateSettings;
-    }) => Promise<void>;
   }): Promise<RuntimeTemplateEditorSettings> {
     const input = RuntimeTemplateSettingsSchema.parse(params.settings);
     const saved = await withDbTransaction(async (tx) => {
@@ -70,7 +65,17 @@ class AgentRuntimeTemplateModel {
         settings,
         tx,
       );
-      await params.afterWrite?.({ tx, settings, previous: current });
+      // A removed custom runtime takes its permissions with it, so a new one
+      // can never inherit them.
+      const kept = new Set(settings.templates.map(({ id }) => id));
+      for (const { id } of current.templates) {
+        if (kept.has(id)) continue;
+        await ResourcePermissionPolicyModel.deleteForTarget({
+          tx,
+          resources: ["agentRuntime"],
+          scope: id,
+        });
+      }
       await tx
         .update(schema.organizationsTable)
         .set({
@@ -235,6 +240,54 @@ class AgentRuntimeTemplateModel {
         params.tx,
       );
     }
+  }
+
+  /**
+   * Each organization's runtimes that were locked before runtime permissions
+   * replaced locking, clearing the retired `locked` flags from its stored
+   * settings. Used once, by the upgrade that turns them into permissions.
+   */
+  static async takeRetiredLocks(
+    tx: Transaction,
+  ): Promise<
+    { organizationId: string; locked: Set<string>; templateIds: string[] }[]
+  > {
+    const organizations = await tx
+      .select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable);
+    const result = [];
+    for (const { id } of organizations) {
+      const row = await SecretModel.findByName(
+        AgentRuntimeTemplateModel.secretName(id),
+        tx,
+      );
+      if (!row) continue;
+      const stored = row.secret as {
+        templates?: { id: string; locked?: boolean }[];
+        builtIns?: Record<string, { locked?: boolean } | undefined>;
+      };
+      const templates = stored.templates ?? [];
+      const builtIns = Object.entries(stored.builtIns ?? {});
+      const locked = new Set([
+        ...templates.filter((item) => item.locked).map((item) => item.id),
+        ...builtIns.filter(([, item]) => item?.locked).map(([key]) => key),
+      ]);
+      if (
+        templates.some((item) => "locked" in item) ||
+        builtIns.some(([, item]) => item && "locked" in item)
+      )
+        await AgentRuntimeTemplateModel.writeStoredSettings(
+          id,
+          RuntimeTemplateSettingsSchema.parse(stored),
+          tx,
+        );
+      result.push({
+        organizationId: id,
+        locked,
+        templateIds: templates.map((item) => item.id),
+      });
+    }
+    return result;
   }
 
   private static secretName(organizationId: string) {

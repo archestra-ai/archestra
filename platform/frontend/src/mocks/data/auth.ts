@@ -129,6 +129,7 @@ export const adminScopedCapabilitiesSeed: archestraApiTypes.GetScopedCapabilitie
     "oauthClient",
     "oauthClient",
     "environment",
+    "agentRuntime",
     "serviceAccount",
     "credential",
   ].flatMap((resource) =>

@@ -2,6 +2,7 @@
 // barrel (`@archestra/shared`) transitively imports a JSON module without an
 // import attribute, which the Playwright integration-test ESM loader rejects.
 // `client.ts` depends only on zod.
+import { AGENT_CATALOG_IDS } from "@archestra/shared";
 import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import {
   type ClientFilter,
@@ -415,6 +416,14 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/organization", organizationSeed),
   ...getJson("/api/agent-runtime-templates", []),
   ...getJson("/api/agent-runtime-templates/built-ins", []),
+  ...getJson("/api/agent-runtime-templates/access", {
+    runtimes: AGENT_CATALOG_IDS.map((id) => ({
+      id,
+      canUse: true,
+      canConfigure: true,
+    })),
+    canConfigureAny: true,
+  }),
   ...getJson("/api/agent-runtime-templates/settings", {
     revision: 0,
     templates: [],

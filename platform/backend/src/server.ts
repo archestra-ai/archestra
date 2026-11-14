@@ -115,6 +115,7 @@ import { initializeLlmProxyPlugins } from "@/proxy/plugins/registry";
 import guardrailsNoopAnnotatorRoutes from "@/routes/guardrails-policy/guardrails-noop-annotator.routes";
 import { captureClientRuntimeEvidence } from "@/routes/proxy/utils/client-runtime-evidence";
 import { activeChatRunService } from "@/services/active-chat-run";
+import { ensureAgentRuntimeLockUpgrade } from "@/services/agent-runtime/agent-runtime-lock-upgrade";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import {
   APP_BASE_CSS_PATH,
@@ -1008,6 +1009,8 @@ const startWebServer = async () => {
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     // Complete the one-time permission upgrade before admitting API traffic.
     await ensureScopedResourcePermissionCutover();
+    // Runtimes locked before runtime permissions become those permissions.
+    await ensureAgentRuntimeLockUpgrade();
     // SPDX-SnippetEnd
 
     // Initialize metrics with keys of custom agent labels

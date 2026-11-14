@@ -4481,6 +4481,13 @@
       "when": 1794673190880,
       "tag": "0639_curved_wildside",
       "breakpoints": true
+    },
+    {
+      "idx": 640,
+      "version": "7",
+      "when": 1794682150430,
+      "tag": "0640_agent-runtime-permissions",
+      "breakpoints": true
     }
   ]
 }

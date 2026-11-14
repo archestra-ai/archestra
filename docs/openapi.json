@@ -59174,7 +59174,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -66636,7 +66637,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -80706,7 +80708,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -100415,10 +100418,6 @@
                         "minimum": 0,
                         "maximum": 1000
                       },
-                      "locked": {
-                        "default": false,
-                        "type": "boolean"
-                      },
                       "image": {
                         "type": "string"
                       }
@@ -100430,7 +100429,6 @@
                       "icon",
                       "hidden",
                       "position",
-                      "locked",
                       "image"
                     ],
                     "additionalProperties": false
@@ -100685,7 +100683,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "List the settings administrators chose for the maintained runtimes, and which of them are locked.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "List the settings administrators chose for the maintained runtimes.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -100696,9 +100694,6 @@
                   "items": {
                     "type": "object",
                     "properties": {
-                      "locked": {
-                        "type": "boolean"
-                      },
                       "settings": {
                         "type": "object",
                         "properties": {
@@ -100766,7 +100761,6 @@
                       }
                     },
                     "required": [
-                      "locked",
                       "settings",
                       "id"
                     ],
@@ -101016,6 +101010,893 @@
         }
       }
     },
+    "/api/agent-runtime-templates/access": {
+      "get": {
+        "operationId": "listAgentRuntimeAccess",
+        "tags": [
+          "Agents"
+        ],
+        "description": "List which Agent Runtimes the caller may put agents on and configure, and whether they may run an image that is none of them.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "runtimes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "canUse": {
+                            "type": "boolean"
+                          },
+                          "canConfigure": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "canUse",
+                          "canConfigure"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "canConfigureAny": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "runtimes",
+                    "canConfigureAny"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
+    "/api/agent-runtime-templates/{id}/apply-to-agents": {
+      "get": {
+        "operationId": "countAgentsBehindRuntime",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Count the existing agents of an Agent Runtime whose settings differ from the runtime's saved settings.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
+        "parameters": [
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "claude-code",
+                    "codex",
+                    "opencode",
+                    "hermes",
+                    "openclaw",
+                    "grok",
+                    "kimi",
+                    "copilot"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                }
+              ]
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agents": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "agents"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "organizationSettings:update"
+          ]
+        }
+      },
+      "post": {
+        "operationId": "applyAgentRuntimeToAgents",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Give every existing agent of an Agent Runtime that runtime's current settings. Agents keep their own environment, credentials and ports.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
+        "parameters": [
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "claude-code",
+                    "codex",
+                    "opencode",
+                    "hermes",
+                    "openclaw",
+                    "grok",
+                    "kimi",
+                    "copilot"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                }
+              ]
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "updated": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "updated"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "organizationSettings:update"
+          ]
+        }
+      }
+    },
     "/api/agent-runtime-templates/settings": {
       "get": {
         "operationId": "getRuntimeTemplateSettings",
@@ -101068,10 +101949,6 @@
                             "type": "integer",
                             "minimum": 0,
                             "maximum": 1000
-                          },
-                          "locked": {
-                            "default": false,
-                            "type": "boolean"
                           },
                           "runtime": {
                             "type": "object",
@@ -101277,7 +102154,6 @@
                           "icon",
                           "hidden",
                           "position",
-                          "locked",
                           "runtime"
                         ],
                         "additionalProperties": false
@@ -101289,9 +102165,6 @@
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "locked": {
-                            "type": "boolean"
-                          },
                           "settings": {
                             "type": "object",
                             "properties": {
@@ -101346,7 +102219,6 @@
                           }
                         },
                         "required": [
-                          "locked",
                           "settings"
                         ],
                         "additionalProperties": false
@@ -101728,7 +102600,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Save custom templates, the maintained templates' settings, and the combined runtime order. Saving a locked runtime applies its settings to every agent of its type; an unlocked runtime's settings only start new agents. The revision prevents overwriting concurrent edits.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
+        "description": "Save custom templates, the maintained templates' settings, and the combined runtime order. Settings start new agents; apply them to existing agents separately. The revision prevents overwriting concurrent edits.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -101773,10 +102645,6 @@
                           "type": "integer",
                           "minimum": 0,
                           "maximum": 1000
-                        },
-                        "locked": {
-                          "default": false,
-                          "type": "boolean"
                         },
                         "runtime": {
                           "type": "object",
@@ -101988,9 +102856,6 @@
                     "additionalProperties": {
                       "type": "object",
                       "properties": {
-                        "locked": {
-                          "type": "boolean"
-                        },
                         "settings": {
                           "type": "object",
                           "properties": {
@@ -102043,7 +102908,6 @@
                         }
                       },
                       "required": [
-                        "locked",
                         "settings"
                       ]
                     }
@@ -102222,10 +103086,6 @@
                             "type": "integer",
                             "minimum": 0,
                             "maximum": 1000
-                          },
-                          "locked": {
-                            "default": false,
-                            "type": "boolean"
                           },
                           "runtime": {
                             "type": "object",
@@ -102431,7 +103291,6 @@
                           "icon",
                           "hidden",
                           "position",
-                          "locked",
                           "runtime"
                         ],
                         "additionalProperties": false
@@ -102443,9 +103302,6 @@
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "locked": {
-                            "type": "boolean"
-                          },
                           "settings": {
                             "type": "object",
                             "properties": {
@@ -102500,7 +103356,6 @@
                           }
                         },
                         "required": [
-                          "locked",
                           "settings"
                         ],
                         "additionalProperties": false
@@ -102932,10 +103787,6 @@
                       "minimum": 0,
                       "maximum": 1000
                     },
-                    "locked": {
-                      "default": false,
-                      "type": "boolean"
-                    },
                     "runtime": {
                       "type": "object",
                       "properties": {
@@ -103140,7 +103991,6 @@
                     "icon",
                     "hidden",
                     "position",
-                    "locked",
                     "runtime"
                   ],
                   "additionalProperties": false
@@ -111782,7 +112632,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -165122,8 +165973,7 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin",
-                            "configure-runtime"
+                            "admin"
                           ]
                         }
                       }
@@ -165157,6 +166007,7 @@
                               "externalAgent",
                               "oauthClient",
                               "environment",
+                              "agentRuntime",
                               "serviceAccount",
                               "credential"
                             ]
@@ -165184,7 +166035,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         },
@@ -232231,7 +233083,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -232726,7 +233579,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -233838,7 +234692,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -358925,7 +359780,8 @@
                             "update",
                             "delete",
                             "manage-permissions",
-                            "configure-deployment-spec"
+                            "configure-deployment-spec",
+                            "configure"
                           ]
                         }
                       }
@@ -359951,7 +360807,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -361363,7 +362220,8 @@
                                 "update",
                                 "delete",
                                 "manage-permissions",
-                                "configure-deployment-spec"
+                                "configure-deployment-spec",
+                                "configure"
                               ]
                             }
                           },
@@ -364507,7 +365365,8 @@
                           "update",
                           "delete",
                           "manage-permissions",
-                          "configure-deployment-spec"
+                          "configure-deployment-spec",
+                          "configure"
                         ]
                       }
                     },
@@ -384890,7 +385749,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -390835,7 +391695,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -406231,7 +407092,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -407205,7 +408067,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -421127,7 +421990,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -458084,7 +458948,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -493869,8 +494734,7 @@
                                   "query",
                                   "impersonate",
                                   "full-view",
-                                  "admin",
-                                  "configure-runtime"
+                                  "admin"
                                 ]
                               }
                             }
@@ -494229,8 +495093,7 @@
                           "query",
                           "impersonate",
                           "full-view",
-                          "admin",
-                          "configure-runtime"
+                          "admin"
                         ]
                       }
                     }
@@ -494283,8 +495146,7 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin",
-                            "configure-runtime"
+                            "admin"
                           ]
                         }
                       }
@@ -494631,8 +495493,7 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin",
-                            "configure-runtime"
+                            "admin"
                           ]
                         }
                       }
@@ -494943,8 +495804,7 @@
                           "query",
                           "impersonate",
                           "full-view",
-                          "admin",
-                          "configure-runtime"
+                          "admin"
                         ]
                       }
                     }
@@ -495019,8 +495879,7 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin",
-                            "configure-runtime"
+                            "admin"
                           ]
                         }
                       }
@@ -518118,7 +518977,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -519531,7 +520391,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -520920,7 +521781,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -527842,7 +528704,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -536399,7 +537262,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -545583,7 +546447,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -553048,7 +553913,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -561452,7 +562318,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -580400,8 +581267,7 @@
                               "query",
                               "impersonate",
                               "full-view",
-                              "admin",
-                              "configure-runtime"
+                              "admin"
                             ]
                           }
                         }
@@ -580685,8 +581551,7 @@
                         "query",
                         "impersonate",
                         "full-view",
-                        "admin",
-                        "configure-runtime"
+                        "admin"
                       ]
                     }
                   }
@@ -583690,7 +584555,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -599206,6 +600072,7 @@
                 "externalAgent",
                 "oauthClient",
                 "environment",
+                "agentRuntime",
                 "serviceAccount",
                 "credential"
               ]
@@ -599652,6 +600519,7 @@
                           "externalAgent",
                           "oauthClient",
                           "environment",
+                          "agentRuntime",
                           "serviceAccount",
                           "credential"
                         ]
@@ -599679,7 +600547,8 @@
                           "update",
                           "delete",
                           "manage-permissions",
-                          "configure-deployment-spec"
+                          "configure-deployment-spec",
+                          "configure"
                         ]
                       }
                     },
@@ -599987,6 +600856,7 @@
                 "externalAgent",
                 "oauthClient",
                 "environment",
+                "agentRuntime",
                 "serviceAccount",
                 "credential"
               ]
@@ -600442,6 +601312,7 @@
                 "externalAgent",
                 "oauthClient",
                 "environment",
+                "agentRuntime",
                 "serviceAccount",
                 "credential"
               ]
@@ -600500,6 +601371,7 @@
                         "externalAgent",
                         "oauthClient",
                         "environment",
+                        "agentRuntime",
                         "serviceAccount",
                         "credential"
                       ]
@@ -600676,7 +601548,8 @@
                                 "update",
                                 "delete",
                                 "manage-permissions",
-                                "configure-deployment-spec"
+                                "configure-deployment-spec",
+                                "configure"
                               ]
                             }
                           },
@@ -600837,7 +601710,8 @@
                                 "update",
                                 "delete",
                                 "manage-permissions",
-                                "configure-deployment-spec"
+                                "configure-deployment-spec",
+                                "configure"
                               ]
                             }
                           },
@@ -600878,7 +601752,8 @@
                           "update",
                           "delete",
                           "manage-permissions",
-                          "configure-deployment-spec"
+                          "configure-deployment-spec",
+                          "configure"
                         ]
                       }
                     },
@@ -601431,7 +602306,8 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "configure"
                             ]
                           }
                         }
@@ -601474,6 +602350,7 @@
                 "externalAgent",
                 "oauthClient",
                 "environment",
+                "agentRuntime",
                 "serviceAccount",
                 "credential"
               ]
@@ -601532,6 +602409,7 @@
                         "externalAgent",
                         "oauthClient",
                         "environment",
+                        "agentRuntime",
                         "serviceAccount",
                         "credential"
                       ]
@@ -601708,7 +602586,8 @@
                                 "update",
                                 "delete",
                                 "manage-permissions",
-                                "configure-deployment-spec"
+                                "configure-deployment-spec",
+                                "configure"
                               ]
                             }
                           },
@@ -601869,7 +602748,8 @@
                                 "update",
                                 "delete",
                                 "manage-permissions",
-                                "configure-deployment-spec"
+                                "configure-deployment-spec",
+                                "configure"
                               ]
                             }
                           },
@@ -601910,7 +602790,8 @@
                           "update",
                           "delete",
                           "manage-permissions",
-                          "configure-deployment-spec"
+                          "configure-deployment-spec",
+                          "configure"
                         ]
                       }
                     },

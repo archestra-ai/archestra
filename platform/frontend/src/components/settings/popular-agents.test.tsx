@@ -40,13 +40,19 @@ import {
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { organizationKeys } from "@/lib/organization.query";
-import { makeOrganization } from "@/mocks/data/organization";
+import { makeOrganization, teamsSeed } from "@/mocks/data/organization";
 import { IntegrationAvailabilitySection } from "./integration-availability-section";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("sonner");
+// The list's Permissions button reads the URL for its deep link.
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/settings/agents/runtimes",
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 const origin = "http://localhost:9000";
 const server = setupServer();
@@ -80,6 +86,20 @@ beforeEach(() => {
     http.get(`${origin}/api/agent-runtime-templates`, () =>
       HttpResponse.json([]),
     ),
+    http.get(`${origin}/api/agent-runtime-templates/built-ins`, () =>
+      HttpResponse.json([]),
+    ),
+    http.get(`${origin}/api/agent-runtime-templates/access`, () =>
+      HttpResponse.json({
+        runtimes: PopularAgentIdSchema.options.map((id) => ({
+          id,
+          canUse: true,
+          canConfigure: true,
+        })),
+        canConfigureAny: true,
+      }),
+    ),
+    http.get(`${origin}/api/teams`, () => HttpResponse.json(teamsSeed)),
     http.get(`${origin}/api/organization`, () =>
       HttpResponse.json(organization),
     ),
@@ -183,6 +203,8 @@ function savedOverrides(ids: string[]) {
 }
 
 async function ready() {
+  // Runtime cards appear once the reader's runtime access is known.
+  await screen.findByRole("button", { name: /^Custom image/ });
   await waitFor(() =>
     expect(
       screen.queryByRole("status", { name: "Loading Agent Runtimes" }),

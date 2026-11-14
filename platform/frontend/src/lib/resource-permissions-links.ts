@@ -20,6 +20,7 @@ export function getListPermissionsHref(resource: Resource | ScopedResource) {
 const listPermissionsPaths: Partial<Record<Resource | ScopedResource, string>> =
   {
     agent: "/agents",
+    agentRuntime: "/settings/agents/runtimes",
     app: "/apps",
     environment: "/settings/environments",
     knowledgeBase: "/knowledge/knowledge-bases",

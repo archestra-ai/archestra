@@ -6,8 +6,8 @@ import {
 } from "./agent-catalog-images";
 import {
   resolveAgentRuntimeTemplate,
-  withLockedAgentRuntimeSettings,
-} from "./agent-runtime-lock";
+  withAgentRuntimeTemplateSettings,
+} from "./agent-runtime-access";
 
 const catalogImages = getAgentCatalogImages({
   registry: "mirror.example.com/archestra",
@@ -70,15 +70,15 @@ describe("resolveAgentRuntimeTemplate", () => {
   });
 });
 
-describe("withLockedAgentRuntimeSettings", () => {
+describe("withAgentRuntimeTemplateSettings", () => {
   it("keeps the agent's own Claude account when the runtime sets none", () => {
     const agent = buildAgentCatalogRuntime({ id: "claude-code", image: "a:0" });
     const template = buildCustomAgentRuntime({ image: "a:0" });
-    const locked = withLockedAgentRuntimeSettings({ runtime: agent, template });
-    expect(locked.claudeCode).toEqual(agent.claudeCode);
+    const kept = withAgentRuntimeTemplateSettings({ runtime: agent, template });
+    expect(kept.claudeCode).toEqual(agent.claudeCode);
   });
 
-  it("takes the locked settings and keeps the agent's own image, values and model", () => {
+  it("takes the runtime's settings and keeps the agent's own image, values and model", () => {
     const template = {
       ...buildAgentCatalogRuntime({ id: "claude-code", image: "a:1" }),
       claudeCode: { authentication: "provider" as const },
@@ -91,8 +91,8 @@ describe("withLockedAgentRuntimeSettings", () => {
       ports: [3000],
       ttlHours: 1,
     };
-    const locked = withLockedAgentRuntimeSettings({ runtime: agent, template });
-    expect(locked).toMatchObject({
+    const kept = withAgentRuntimeTemplateSettings({ runtime: agent, template });
+    expect(kept).toMatchObject({
       image: "a:0",
       environment: agent.environment,
       ports: [3000],

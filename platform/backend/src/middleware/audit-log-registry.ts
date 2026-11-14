@@ -250,6 +250,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "organization.updated",
     fetchById: (id) => AgentRuntimeTemplateModel.findByIdForAudit(id),
   },
+  // The handler records which agents took the runtime's settings.
+  "/api/agent-runtime-templates/:id/apply-to-agents": {
+    resourceType: "organization",
+    resourceIdSource: "organizationContext",
+    action: "organization.updated",
+  },
   // Agents
   "/api/agents": {
     resourceType: "agent",

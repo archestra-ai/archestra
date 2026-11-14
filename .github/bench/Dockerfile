@@ -5,7 +5,7 @@
 ARG PLATFORM_IMAGE
 # Pinned static-musl uv image; a named stage is required because COPY --from cannot expand a variable
 # inside the image reference.
-ARG UV_VERSION=0.5.18@sha256:e2101b9e627153b8fe4e8a1249cc4194f1b38ece7f28a5a9b8f958e3b560e69c
+ARG UV_VERSION=0.13.4@sha256:9f130421e930bfbdc563c00740466603f8723158e90297d07957c2294640262b
 
 FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 

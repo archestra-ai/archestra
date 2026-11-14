@@ -11,7 +11,7 @@
 #
 # Build (from this directory):
 #   docker build -t archestra-lite-runtime:dev .
-ARG BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-claude-code:f80e33a1706019c355a80efb7343173f581ce042
+ARG BASE_IMAGE=ghcr.io/archestra-ai/agent-claude-code:1.5.0-rc.33@sha256:c4ea5f64ebaf240af4193452cc6b536929ddc84b72d64780b4e2db6c42784acb
 FROM ${BASE_IMAGE}
 
 # The commit whose dependency set is warmed into the image.

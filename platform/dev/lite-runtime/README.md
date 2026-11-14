@@ -144,8 +144,10 @@ cd platform/dev/lite-runtime
 docker build -t archestra-lite-runtime:dev .
 ```
 
-`BASE_IMAGE` must be a public agent image tag that carries PostgreSQL 18 and
-Rust (commit tags from `971714fea` on; `:latest` did not on 2026-10-29).
+`BASE_IMAGE` must be a public, attested agent release image that carries
+PostgreSQL 18 and Rust (`ghcr.io/archestra-ai/agent-claude-code`, 1.5.0-rc
+releases on), pinned by digest. The organization's supply-chain policy checks
+its attestation when the line changes.
 `WORKSPACE_REF` is the commit whose dependencies are warmed. The build needs
 BuildKit.
 

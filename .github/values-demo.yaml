@@ -12,6 +12,13 @@ archestra:
       instanceConnectionName: friendly-path-465518-r6:us-central1:archestra-demo-pg
   orchestrator:
     kubernetes:
+      # Agent Runtime sessions and warm pools run apart from the platform and
+      # its MCP servers in archestra-demo. archestra-ai/infra
+      # (gcp/gke/agent-runtime-namespaces.tf) creates the namespace, its Pod
+      # Security labels and the CI deployer's RBAC; apply that before this
+      # deploys. Runs started in archestra-demo before the move keep running
+      # there, but cannot be resumed.
+      agentRuntimeNamespace: archestra-demo-agent-runtimes
       serviceAccount:
         annotations:
           iam.gke.io/gcp-service-account: archestra-demo-platform@friendly-path-465518-r6.iam.gserviceaccount.com

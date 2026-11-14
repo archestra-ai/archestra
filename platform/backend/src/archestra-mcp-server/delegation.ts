@@ -130,6 +130,8 @@ export async function getAgentTools(context: {
   /** The caller's own delegation chain; a fork's ends in its agent twice. */
   delegationChain?: string;
   oauthExecution?: A2AOAuthExecution;
+  /** Whether the caller is a machine OAuth application barred from Agent Runtime. */
+  disallowOAuthApp?: boolean;
 }): Promise<Tool[]> {
   const { agentId, organizationId, userId, skipAccessCheck, lookups } = context;
 
@@ -159,10 +161,12 @@ export async function getAgentTools(context: {
   const hideRuntimeWorkerTools =
     callerGatewayAgent != null &&
     !context.oauthExecution &&
+    !context.disallowOAuthApp &&
     (await callerUsesImplicitLoadBalancedRunStarter({
       agent: callerGatewayAgent,
       actorUserId: realUserId,
       lookups,
+      disallowOAuthApp: context.disallowOAuthApp,
     }));
   const attestable = await isGuardrailsV2Active();
   const outboundTargets = environmentId
@@ -983,14 +987,13 @@ async function resolveLoadBalancedRouterPools(params: {
     params.actorUserId && params.actorUserId !== "system"
       ? params.actorUserId
       : undefined;
-  const canResolveAutoPools = realActorUserId !== undefined;
   const autoRouterIds: string[] = [];
   const manualRouterIds: string[] = [];
 
   for (const router of routerTargets) {
     const cfg = routerConfigById.get(router.id);
     if (!cfg) continue;
-    if (cfg.accessAllSubagents && canResolveAutoPools) {
+    if (cfg.accessAllSubagents) {
       autoRouterIds.push(router.id);
     } else {
       manualRouterIds.push(router.id);
@@ -1015,14 +1018,20 @@ async function resolveLoadBalancedRouterPools(params: {
     realActorUserId !== undefined && !params.skipAccessCheck && !isAgentAdmin;
 
   const accessibleEnvironmentKeys = new Map<string, string | null>();
+  const structuralAutoEnvironmentKeys = new Map<string, string | null>();
   for (const router of routerTargets) {
     const cfg = routerConfigById.get(router.id);
     if (!cfg) continue;
-    const isAutoRouter = cfg.accessAllSubagents && canResolveAutoPools;
-    if (isAutoRouter || filterManualByActorAccess) {
-      const envKey = cfg.environmentId ?? "__default__";
-      if (!accessibleEnvironmentKeys.has(envKey)) {
-        accessibleEnvironmentKeys.set(envKey, cfg.environmentId);
+    const envKey = cfg.environmentId ?? "__default__";
+    if (realActorUserId !== undefined) {
+      if (cfg.accessAllSubagents || filterManualByActorAccess) {
+        if (!accessibleEnvironmentKeys.has(envKey)) {
+          accessibleEnvironmentKeys.set(envKey, cfg.environmentId);
+        }
+      }
+    } else if (cfg.accessAllSubagents) {
+      if (!structuralAutoEnvironmentKeys.has(envKey)) {
+        structuralAutoEnvironmentKeys.set(envKey, cfg.environmentId);
       }
     }
   }
@@ -1031,6 +1040,7 @@ async function resolveLoadBalancedRouterPools(params: {
     assignedByManualRouter,
     autoExcludedByRouter,
     accessibleTargetsByEnvKey,
+    structuralTargetsByEnvKey,
   ] = await Promise.all([
     manualRouterIds.length > 0
       ? AgentModel.findAssignedRuntimeSubagentIdsByAgents(manualRouterIds)
@@ -1073,6 +1083,26 @@ async function resolveLoadBalancedRouterPools(params: {
       : Promise.resolve(
           new Map<string, { sortedIds: string[]; idSet: Set<string> }>(),
         ),
+    structuralAutoEnvironmentKeys.size > 0 && !realActorUserId
+      ? (async () => {
+          const entries = await Promise.all(
+            [...structuralAutoEnvironmentKeys.entries()].map(
+              async ([envKey, environmentId]) => {
+                const targets =
+                  await AgentModel.findStructuralRuntimeDelegationTargets({
+                    organizationId: params.organizationId,
+                    environmentId,
+                  });
+                for (const target of targets) {
+                  nameByAgentId.set(target.id, target.name);
+                }
+                return [envKey, targets.map((target) => target.id)] as const;
+              },
+            ),
+          );
+          return new Map(entries);
+        })()
+      : Promise.resolve(new Map<string, string[]>()),
   ]);
 
   const candidateIdsByRouter = routerTargets.map((router) => {
@@ -1081,9 +1111,10 @@ async function resolveLoadBalancedRouterPools(params: {
       return { router, candidateIds: [] as string[] };
     }
     const envKey = cfg.environmentId ?? "__default__";
-    if (cfg.accessAllSubagents && canResolveAutoPools) {
-      const envRuntimeIds =
-        accessibleTargetsByEnvKey.get(envKey)?.sortedIds ?? [];
+    if (cfg.accessAllSubagents) {
+      const envRuntimeIds = realActorUserId
+        ? (accessibleTargetsByEnvKey.get(envKey)?.sortedIds ?? [])
+        : (structuralTargetsByEnvKey.get(envKey) ?? []);
       const routerExcluded = autoExcludedByRouter.get(router.id);
       const candidateIds = envRuntimeIds.filter(
         (id) =>

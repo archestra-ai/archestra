@@ -26,6 +26,7 @@ import {
   buildAgentSystemPrompt,
   SUBAGENT_LOAD_BALANCING_INSTRUCTION,
 } from "@/agents/agent-system-prompt";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import * as chatMcpClient from "@/clients/chat-mcp-client";
 import {
@@ -5837,5 +5838,291 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       },
     );
     expect(permittedStart.isError).toBeFalsy();
+  });
+
+  test("aligns service-account gateway tool listing, Auto-router metadata, and runtime actor identity", async ({
+    makeAgent,
+    makeCustomRole,
+    makeLlmProviderApiKey,
+    makeSecret,
+    makeServiceAccount,
+  }) => {
+    const sharedSecret = await makeSecret({
+      secret: { apiKey: "test-sa-gateway-key" },
+    });
+    const sharedKey = await makeLlmProviderApiKey(
+      organizationId,
+      sharedSecret.id,
+      {
+        provider: "openai",
+        access: "org",
+      },
+    );
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(sharedKey.id, [
+      modelId,
+    ]);
+
+    const workerAlpha = await makeAgent({
+      name: "SA Pool Alpha",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      access: "org",
+      modelId,
+      llmApiKeyId: sharedKey.id,
+      runtime: runtimeConfig(),
+    });
+    const workerBeta = await makeAgent({
+      name: "SA Pool Beta",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      access: "org",
+      modelId,
+      llmApiKeyId: sharedKey.id,
+      runtime: runtimeConfig(),
+    });
+    const inProcessHelper = await makeAgent({
+      name: "SA Helper",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      access: "org",
+      modelId,
+      llmApiKeyId: sharedKey.id,
+    });
+
+    const alphaTool = await ToolModel.findOrCreateDelegationTool(
+      workerAlpha.id,
+    );
+    const betaTool = await ToolModel.findOrCreateDelegationTool(workerBeta.id);
+    const helperTool = await ToolModel.findOrCreateDelegationTool(
+      inProcessHelper.id,
+    );
+
+    const lbGateway = await makeAgent({
+      name: "SA Load Balanced Gateway",
+      organizationId,
+      authorId: actorId,
+      agentType: "mcp_gateway",
+      toolExposureMode: "full",
+      access: "org",
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await AgentToolModel.create(lbGateway.id, alphaTool.id);
+    await AgentToolModel.create(lbGateway.id, betaTool.id);
+    await AgentToolModel.create(lbGateway.id, helperTool.id);
+
+    const role = await makeCustomRole(organizationId, {
+      permission: {
+        agent: ["read", "use"],
+      },
+    });
+    const account = await makeServiceAccount(organizationId, {
+      role: role.role,
+    });
+    const bareServiceAccountAuth = {
+      tokenId: crypto.randomUUID(),
+      teamId: null,
+      isOrganizationToken: false,
+      serviceAccountId: account.id,
+      organizationId,
+      isUserToken: false,
+    };
+
+    const saLbList = await buildAgentMcpToolList({
+      agent: lbGateway,
+      tokenAuth: bareServiceAccountAuth,
+    });
+    const saLbNames = saLbList.tools.map((tool) => tool.name);
+    expect(saLbNames).toContain(TOOL_START_AGENT_RUN_FULL_NAME);
+    expect(saLbNames).not.toContain(alphaTool.name);
+    expect(saLbNames).not.toContain(betaTool.name);
+    expect(saLbNames).toContain(helperTool.name);
+
+    // Machine OAuth client_credentials backed by a service account cannot use
+    // Agent Runtime, so `start_agent_run` is omitted and worker visibility
+    // stays consistent with `includeImplicitStartAgentRun === false`.
+    const oauthAppAuth = {
+      ...bareServiceAccountAuth,
+      oauthClientId: "oauth-machine-client",
+      isUserToken: false,
+    };
+    const oauthLbList = await buildAgentMcpToolList({
+      agent: lbGateway,
+      tokenAuth: oauthAppAuth,
+    });
+    const oauthLbNames = oauthLbList.tools.map((tool) => tool.name);
+    expect(oauthLbNames).not.toContain(TOOL_START_AGENT_RUN_FULL_NAME);
+    expect(oauthLbNames).toContain(alphaTool.name);
+    expect(oauthLbNames).toContain(betaTool.name);
+
+    // Service-account `start_agent_run` executes under `{ kind: "serviceAccount", id: account.id }`.
+    const sendSpy = await mockDetachedTaskStart();
+    const saStartResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Service account pooled launch" },
+      {
+        agent: { id: lbGateway.id, name: lbGateway.name },
+        agentId: lbGateway.id,
+        userId: serviceAccountUserId(account.id),
+        organizationId,
+        tokenAuth: bareServiceAccountAuth,
+      },
+    );
+    expect(saStartResult.isError).toBeFalsy();
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy.mock.calls[0]?.[0]?.actor).toEqual({
+      kind: "serviceAccount",
+      id: account.id,
+      organizationId,
+    });
+
+    // Non-LB Auto-subagents gateway with a bare service-account token resolves
+    // Auto delegation targets and enriches an Auto load-balanced router's pool metadata.
+    const autoRouter = await makeAgent({
+      name: "SA Auto Router",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      access: "org",
+      accessAllSubagents: true,
+      modelId,
+      llmApiKeyId: sharedKey.id,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    const autoRouterTool = await ToolModel.findOrCreateDelegationTool(
+      autoRouter.id,
+    );
+    const autoDiscoveryGateway = await makeAgent({
+      name: "SA Auto Discovery Gateway",
+      organizationId,
+      authorId: actorId,
+      agentType: "mcp_gateway",
+      toolExposureMode: "full",
+      access: "org",
+      accessAllSubagents: true,
+    });
+
+    const saAutoGatewayList = await buildAgentMcpToolList({
+      agent: autoDiscoveryGateway,
+      tokenAuth: bareServiceAccountAuth,
+    });
+    const advertisedRouter = saAutoGatewayList.tools.find(
+      (tool) => tool.name === autoRouterTool.name,
+    );
+    expect(advertisedRouter).toBeDefined();
+    expect(advertisedRouter?._meta).toMatchObject({
+      [LOAD_BALANCED_RUNTIME_ROUTER_META_KEY]: true,
+    });
+    expect(advertisedRouter?.description).toContain(
+      "Runs in the background in Agent Runtime and returns a run link, not the answer.",
+    );
+    expect(advertisedRouter?.description).toContain("SA Pool Alpha");
+    expect(advertisedRouter?.description).toContain("SA Pool Beta");
+  });
+
+  test("resolves Auto load-balanced router pool metadata structurally for system and org/team-token callers", async ({
+    makeAgent,
+  }) => {
+    const workerOne = await createRuntimeSubagent(
+      makeAgent,
+      "Structural Worker One",
+      false,
+    );
+    const workerTwo = await createRuntimeSubagent(
+      makeAgent,
+      "Structural Worker Two",
+      false,
+    );
+    const excludedWorker = await createRuntimeSubagent(
+      makeAgent,
+      "Structural Excluded Worker",
+      false,
+    );
+
+    const autoRouter = await makeAgent({
+      name: "Unassigned Auto Router",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      access: "org",
+      accessAllSubagents: true,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await AgentExcludedSubagentModel.replaceForAgent(autoRouter.id, [
+      excludedWorker.id,
+    ]);
+    const autoRouterTool = await ToolModel.findOrCreateDelegationTool(
+      autoRouter.id,
+    );
+
+    const customCaller = await makeAgent({
+      name: "Non-User Caller",
+      organizationId,
+      authorId: actorId,
+      agentType: "mcp_gateway",
+      toolExposureMode: "full",
+      access: "org",
+      accessAllSubagents: false,
+    });
+    await AgentToolModel.create(customCaller.id, autoRouterTool.id);
+
+    const systemTools = await getAgentTools({
+      agentId: customCaller.id,
+      organizationId,
+      userId: "system",
+      skipAccessCheck: true,
+    });
+    const systemRouter = systemTools.find(
+      (tool) => tool.name === autoRouterTool.name,
+    );
+    expect(systemRouter?._meta).toMatchObject({
+      [LOAD_BALANCED_RUNTIME_ROUTER_META_KEY]: true,
+    });
+    expect(systemRouter?.description).toContain(
+      "Runs in the background in Agent Runtime and returns a run link, not the answer.",
+    );
+    expect(systemRouter?.description).toContain(workerOne.name);
+    expect(systemRouter?.description).toContain(workerTwo.name);
+    expect(systemRouter?.description).not.toContain(excludedWorker.name);
+
+    const teamTokenGatewayList = await buildAgentMcpToolList({
+      agent: customCaller,
+      tokenAuth: {
+        tokenId: crypto.randomUUID(),
+        teamId: crypto.randomUUID(),
+        isOrganizationToken: false,
+        organizationId,
+        isUserToken: false,
+      },
+    });
+    const teamTokenRouter = teamTokenGatewayList.tools.find(
+      (tool) => tool.name === autoRouterTool.name,
+    );
+    expect(teamTokenRouter?._meta).toMatchObject({
+      [LOAD_BALANCED_RUNTIME_ROUTER_META_KEY]: true,
+    });
+    expect(teamTokenRouter?.description).toContain(
+      "Runs in the background in Agent Runtime and returns a run link, not the answer.",
+    );
+    expect(teamTokenRouter?.description).toContain(workerOne.name);
+    expect(teamTokenRouter?.description).toContain(workerTwo.name);
+    expect(teamTokenRouter?.description).not.toContain(excludedWorker.name);
   });
 });

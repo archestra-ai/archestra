@@ -22,6 +22,10 @@ import { z } from "zod";
 import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { userHasPermission } from "@/auth";
+import {
+  actorFromUserId,
+  serviceAccountUserId,
+} from "@/auth/service-account-user-id";
 import { getAppAssetBaseOrigin } from "@/config";
 import logger from "@/logging";
 import {
@@ -431,8 +435,9 @@ export async function startDelegatedTask(params: {
         if (outcome) await recordRuntimeLaunch(params.context, outcome);
         return result;
       }
+      const principalUserId = actorPrincipalUserId(actor);
       const isAgentAdmin = await ResourcePermissions.allows({
-        userId: actor.id,
+        userId: principalUserId,
         organizationId: actor.organizationId,
         resource: "agent",
         scope: "*",
@@ -440,7 +445,7 @@ export async function startDelegatedTask(params: {
       });
       if (
         !(await AgentTeamModel.userHasAgentAccess({
-          userId: actor.id,
+          userId: principalUserId,
           agentId: explicitTargetAgent.id,
           isAgentAdmin,
           agentAccessContext: explicitTargetAgent,
@@ -512,7 +517,7 @@ export async function startDelegatedTask(params: {
       const resolved = await ephemeralCredentialGrantManager.resolveGrants({
         grantIds: params.credentialGrantIds,
         organizationId: actor.organizationId,
-        userId: actor.id,
+        userId: actorPrincipalUserId(actor),
         callerAgentId: params.context.agent.id,
         candidateAgentIds: [explicitAgentId],
       });
@@ -705,7 +710,7 @@ export async function startDelegatedTask(params: {
     const resolved = await ephemeralCredentialGrantManager.resolveGrants({
       grantIds: params.credentialGrantIds,
       organizationId: actor.organizationId,
-      userId: actor.id,
+      userId: actorPrincipalUserId(actor),
       callerAgentId: params.context.agent?.id || poolAgent.id,
       candidateAgentIds: activeCandidates,
     });
@@ -855,8 +860,9 @@ async function launchDelegatedTask(params: {
     if (!agent || agent.organizationId !== actor.organizationId) {
       return failedLaunch("agent_not_found", errorResult("Agent not found"));
     }
+    const principalUserId = actorPrincipalUserId(actor);
     const isAgentAdmin = await ResourcePermissions.allows({
-      userId: actor.id,
+      userId: principalUserId,
       organizationId: actor.organizationId,
       resource: "agent",
       scope: "*",
@@ -864,7 +870,7 @@ async function launchDelegatedTask(params: {
     });
     if (
       !(await AgentTeamModel.userHasAgentAccess({
-        userId: actor.id,
+        userId: principalUserId,
         agentId: agent.id,
         isAgentAdmin: isAgentAdmin,
         agentAccessContext: agent,
@@ -952,7 +958,8 @@ async function launchDelegatedTask(params: {
       preflight = await preflightAgentRuntimeCredentials({
         runtime,
         organizationId: actor.organizationId,
-        userId: actor.id,
+        userId: actor.kind === "user" ? actor.id : null,
+        authorizationUserId: principalUserId,
         ephemeralCredentials: params.ephemeralCredentials,
       });
     } catch (error) {
@@ -1015,7 +1022,7 @@ async function launchDelegatedTask(params: {
       const consumed = await ephemeralCredentialGrantManager.consumeGrants({
         grantIds: params.credentialGrantIds,
         organizationId: actor.organizationId,
-        userId: actor.id,
+        userId: principalUserId,
         callerAgentId: context.agent.id,
         candidateAgentIds: [
           agent.id,
@@ -1991,8 +1998,9 @@ const registry = defineArchestraTools([
           });
         }
 
+        const principalUserId = actorPrincipalUserId(actor);
         const isAgentAdmin = await ResourcePermissions.allows({
-          userId: actor.id,
+          userId: principalUserId,
           organizationId: actor.organizationId,
           resource: "agent",
           scope: "*",
@@ -2000,7 +2008,7 @@ const registry = defineArchestraTools([
         });
         const accessible = new Set(
           await AgentTeamModel.getUserAccessibleAgentIds(
-            actor.id,
+            principalUserId,
             isAgentAdmin,
           ),
         );
@@ -2019,8 +2027,18 @@ const registry = defineArchestraTools([
             : undefined,
         });
         const [canReadLogs, canReadAllLogs] = await Promise.all([
-          userHasPermission(actor.id, actor.organizationId, "log", "read"),
-          userHasPermission(actor.id, actor.organizationId, "log", "admin"),
+          userHasPermission(
+            principalUserId,
+            actor.organizationId,
+            "log",
+            "read",
+          ),
+          userHasPermission(
+            principalUserId,
+            actor.organizationId,
+            "log",
+            "admin",
+          ),
         ]);
         // The OpenAPPA key adds a caller scope and is not the key stored on
         // LLM interactions; continued turns keep the same key.
@@ -2029,7 +2047,7 @@ const registry = defineArchestraTools([
           ? await InteractionModel.findLoggedSessionIds({
               organizationId: actor.organizationId,
               sessionIds: sessionKeys,
-              ...(canReadAllLogs ? {} : { ownUserId: actor.id }),
+              ...(canReadAllLogs ? {} : { ownUserId: principalUserId }),
             })
           : new Set<string>();
         // Prompts and their generated titles may hold other people's data;
@@ -2121,7 +2139,7 @@ const registry = defineArchestraTools([
         }
         // Narrower than run access on purpose: steering types into a shell
         // holding that person's own credentials.
-        if (session.actorUserId !== actor.id) {
+        if (session.actorKind !== actor.kind || session.actorId !== actor.id) {
           return errorResult("Only the person the run acts as can steer it.");
         }
         const agent = await AgentModel.findById(session.agentId);
@@ -2313,7 +2331,11 @@ const registry = defineArchestraTools([
         if ("error" in task) return errorResult(task.error);
 
         const session = await AgentRunModel.findByTaskId(task.row.id);
-        if (!session || session.actorUserId !== actor.id) {
+        if (
+          !session ||
+          session.actorKind !== actor.kind ||
+          session.actorId !== actor.id
+        ) {
           return errorResult(
             "Only the person the runtime run acts as can post updates for it.",
           );
@@ -2420,7 +2442,7 @@ const registry = defineArchestraTools([
         }
         // Same narrowing as steering: the upload appears in the thread as the
         // run's own delivery, acting for the person the run runs as.
-        if (session.actorUserId !== actor.id) {
+        if (session.actorKind !== actor.kind || session.actorId !== actor.id) {
           return errorResult(
             "Only the person the run acts as can post files for it.",
           );
@@ -2785,10 +2807,16 @@ export function requireActor(context: ArchestraContext): A2AActor {
     );
   }
   return {
-    id: context.userId,
-    kind: "user",
+    ...actorFromUserId(context.userId),
     organizationId: context.organizationId,
   };
+}
+
+/** @public — synthetic `service-account:<id>` or human user ID for RBAC/grant checks. */
+export function actorPrincipalUserId(actor: A2AActor): string {
+  return actor.kind === "serviceAccount"
+    ? serviceAccountUserId(actor.id)
+    : actor.id;
 }
 
 function tryRequireActor(context: ArchestraContext): A2AActor | null {
@@ -2865,7 +2893,7 @@ async function requireAccessibleTask({
     const isAdmin =
       row.agentId !== null &&
       (await ResourcePermissions.allows({
-        userId: actor.id,
+        userId: actorPrincipalUserId(actor),
         organizationId: actor.organizationId,
         resource: "agent",
         scope: "*",

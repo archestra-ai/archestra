@@ -539,6 +539,10 @@ async function getSearchableTools(params: {
   const injectedOpenappaNames = new Set(
     injectedOpenappaTools.map((tool) => tool.name),
   );
+  const disallowOAuthApp = Boolean(
+    params.tokenAuth?.oauthExecution ||
+      (params.tokenAuth?.oauthClientId && !params.tokenAuth.isUserToken),
+  );
   const delegationTools =
     organizationId != null && !suppressContentLogging
       ? await getAgentTools({
@@ -548,6 +552,7 @@ async function getSearchableTools(params: {
           skipAccessCheck: userId === "system",
           parentLlm: params.parentLlm,
           delegationChain: params.delegationChain,
+          disallowOAuthApp,
         })
       : [];
   const includeImplicitStartAgentRun = Boolean(
@@ -558,10 +563,7 @@ async function getSearchableTools(params: {
         agent,
         actorUserId: userId,
         exclusionSets,
-        disallowOAuthApp: Boolean(
-          params.tokenAuth?.oauthExecution ||
-            (params.tokenAuth?.oauthClientId && !params.tokenAuth.isUserToken),
-        ),
+        disallowOAuthApp,
       })),
   );
   const hasTaskStarter =

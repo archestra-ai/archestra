@@ -451,6 +451,10 @@ export async function buildAgentMcpToolList(params: {
   // Compact external gateways expose delegation through search/run only.
   // Do not expand a potentially large caller-scoped surface only to discard
   // it below. Internal chat still uses it to decide which run controls to offer.
+  const disallowOAuthApp = Boolean(
+    tokenAuth?.oauthExecution ||
+      (tokenAuth?.oauthClientId && !tokenAuth.isUserToken),
+  );
   const resolveDelegations =
     agent.toolExposureMode !== "search_and_run_only" ||
     agent.agentType === "agent";
@@ -459,8 +463,9 @@ export async function buildAgentMcpToolList(params: {
         getAgentTools({
           agentId,
           organizationId: agent.organizationId,
-          userId: tokenAuth?.userId,
+          userId: callerUserId,
           lookups: params.lookups,
+          disallowOAuthApp,
         }),
         // Agent-designated skills surface as skill__<slug> delegation tools,
         // resolved per calling user with the same env/access symmetry.
@@ -478,10 +483,7 @@ export async function buildAgentMcpToolList(params: {
       actorUserId: callerUserId,
       exclusionSets,
       lookups: params.lookups,
-      disallowOAuthApp: Boolean(
-        tokenAuth?.oauthExecution ||
-          (tokenAuth?.oauthClientId && !tokenAuth.isUserToken),
-      ),
+      disallowOAuthApp,
     });
   const implicitTaskStarterTools = includeImplicitStartAgentRun
     ? getImplicitStartAgentRunTools()

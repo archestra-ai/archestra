@@ -3845,6 +3845,37 @@ class AgentModel {
   }
 
   /**
+   * Structural internal runtime delegation targets in `organizationId` and
+   * `environmentId`, sorted deterministically by `id`. Used to resolve Auto
+   * (`access_all_subagents = true`) router pools in batch when no real actor
+   * user ID is present (system, schedule, ChatOps, or org/team-token flows).
+   */
+  static async findStructuralRuntimeDelegationTargets(params: {
+    organizationId: string;
+    environmentId: string | null;
+  }): Promise<Array<{ id: string; name: string }>> {
+    return db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
+          AgentModel.isRegularOrSreAgent(),
+          isNotNull(schema.agentsTable.runtime),
+          params.environmentId === null
+            ? isNull(schema.agentsTable.environmentId)
+            : eq(schema.agentsTable.environmentId, params.environmentId),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .orderBy(asc(schema.agentsTable.id));
+  }
+
+  /**
    * Batch equivalent of {@link findAssignedRuntimeSubagentIds}: resolves the
    * ordered, environment-fenced, non-excluded runtime subagent IDs explicitly
    * assigned to each agent in `agentIds` in a single query.

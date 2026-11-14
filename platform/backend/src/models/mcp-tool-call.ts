@@ -1,5 +1,4 @@
 import {
-  ARCHESTRA_MCP_SERVER_NAME,
   type CursorQuery,
   type PaginationQuery,
   redactCatalogToolArguments,
@@ -21,6 +20,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   decryptMcpToolCallContent,
   encryptMcpToolCallContent,
@@ -534,10 +534,10 @@ class McpToolCallModel {
       params.includeAgentDelegations && params.toolNames.length > 0
         ? or(
             inArray(MCP_TOOL_CALL_TOOL_NAME, params.toolNames),
-            sql`${MCP_TOOL_CALL_TOOL_NAME} LIKE 'agent__%'`,
+            sql`${MCP_TOOL_CALL_TOOL_NAME} LIKE 'agent\\_\\_%'`,
           )
         : params.includeAgentDelegations
-          ? sql`${MCP_TOOL_CALL_TOOL_NAME} LIKE 'agent__%'`
+          ? sql`${MCP_TOOL_CALL_TOOL_NAME} LIKE 'agent\\_\\_%'`
           : inArray(MCP_TOOL_CALL_TOOL_NAME, params.toolNames);
     const rows = await db
       .select({
@@ -553,7 +553,7 @@ class McpToolCallModel {
       .where(
         and(
           eq(table.sessionId, params.sessionId),
-          eq(table.mcpServerName, ARCHESTRA_MCP_SERVER_NAME),
+          inArray(table.mcpServerName, archestraMcpBranding.allowedServerNames),
           toolNameFilter,
           ...(params.userId ? [eq(table.userId, params.userId)] : []),
           ...(params.since ? [gte(table.createdAt, params.since)] : []),

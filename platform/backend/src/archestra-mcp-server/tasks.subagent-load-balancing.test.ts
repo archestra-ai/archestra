@@ -16,6 +16,7 @@ import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
+import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
@@ -86,7 +87,11 @@ import { useMswServer } from "@/test/msw";
 import { type Agent, type AgentRuntime, SelectAgentSchema } from "@/types";
 import { AgentConfigSnapshotSchema } from "@/types/agent-version";
 import { drainBackgroundWork } from "@/utils/background-work";
-import { type ArchestraContext, executeArchestraTool } from ".";
+import {
+  type ArchestraContext,
+  archestraMcpBranding,
+  executeArchestraTool,
+} from ".";
 import { getAgentTools } from "./delegation";
 
 setupTestCacheManager();
@@ -5239,7 +5244,14 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         fallbackEnabled: false,
       },
     });
-    await AgentToolModel.create(manualRouter.id, privateWorkerTool.id);
+    const privateAssignment = await AgentToolModel.create(
+      manualRouter.id,
+      privateWorkerTool.id,
+    );
+    await db
+      .update(schema.agentToolsTable)
+      .set({ createdAt: new Date(Date.now() - 10_000) })
+      .where(eq(schema.agentToolsTable.id, privateAssignment.id));
     await AgentToolModel.create(manualRouter.id, sharedWorkerTool.id);
     const manualRouterTool = await ToolModel.findOrCreateDelegationTool(
       manualRouter.id,
@@ -5379,5 +5391,205 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     expect(delegated.structuredContent).toMatchObject({
       run: { agent_id: sharedTeamWorker.id },
     });
+  });
+
+  test("reconstructs direct and run_tool delegation push handoffs under full white-labeling", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const previousWhiteLabeling = config.enterpriseFeatures.fullWhiteLabeling;
+    config.enterpriseFeatures.fullWhiteLabeling = true;
+    await OrganizationModel.patch(organizationId, { appName: "Acme Cloud" });
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Acme Cloud",
+      iconLogo: null,
+    });
+
+    try {
+      expect(archestraMcpBranding.serverName).toBe("acme_cloud");
+
+      const workerAlpha = await createRuntimeSubagent(
+        makeAgent,
+        "Branded Handoff Worker Alpha",
+        false,
+      );
+      const workerBeta = await createRuntimeSubagent(
+        makeAgent,
+        "Branded Handoff Worker Beta",
+        false,
+      );
+      const alphaTool = await ToolModel.findOrCreateDelegationTool(
+        workerAlpha.id,
+      );
+      const betaTool = await ToolModel.findOrCreateDelegationTool(
+        workerBeta.id,
+      );
+
+      const routerAgent = await makeAgent({
+        name: "Branded Handoff Router",
+        organizationId,
+        authorId: actorId,
+        agentType: "agent",
+        accessAllSubagents: false,
+        modelId,
+        llmApiKeyId,
+        subagentLoadBalancing: {
+          enabled: true,
+          algorithm: "round_robin",
+          retries: 0,
+          fallbackEnabled: true,
+        },
+      });
+      await AgentToolModel.create(routerAgent.id, alphaTool.id);
+      await AgentToolModel.create(routerAgent.id, betaTool.id);
+      const routerToolRow = await ToolModel.findOrCreateDelegationTool(
+        routerAgent.id,
+      );
+
+      const callerAgent = await makeAgent({
+        name: "Branded Foreground Caller",
+        organizationId,
+        authorId: actorId,
+        agentType: "agent",
+        toolExposureMode: "search_and_run_only",
+        accessAllSubagents: false,
+        modelId,
+        llmApiKeyId,
+      });
+      await AgentToolModel.create(callerAgent.id, routerToolRow.id);
+
+      const advertisedTools = await getAgentTools({
+        agentId: callerAgent.id,
+        organizationId,
+        userId: actorId,
+      });
+      const advertisedRouter = advertisedTools.find(
+        (t) => t.name === routerToolRow.name,
+      );
+      if (!advertisedRouter) {
+        throw new Error("Expected advertised router delegation tool");
+      }
+
+      const launchedWorkloads: string[] = [];
+      vi.spyOn(backend, "launch").mockImplementation(async (spec) => {
+        launchedWorkloads.push(spec.frozenName);
+      });
+      vi.spyOn(backend, "stageInputs").mockResolvedValue();
+      vi.spyOn(backend, "waitUntilRunning").mockResolvedValue();
+      vi.spyOn(backend, "streamOutput").mockImplementation(
+        async ({ destination }) => {
+          destination.end();
+        },
+      );
+      vi.spyOn(backend, "snapshotOutput").mockImplementation(
+        async ({ destination }) => {
+          destination.end("===ARCHESTRA-FINAL-ANSWER===\nDone");
+        },
+      );
+      vi.spyOn(backend, "waitForCompletion").mockResolvedValue({
+        outcome: "succeeded",
+      });
+      vi.spyOn(backend, "steer").mockResolvedValue();
+      vi.spyOn(backend, "teardown").mockResolvedValue();
+      vi.spyOn(backend, "releaseRun").mockResolvedValue();
+      vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
+
+      const conversation = await makeConversation(callerAgent.id, {
+        organizationId,
+        userId: actorId,
+      });
+      const chatCtx: ChatToolContext = {
+        agentId: callerAgent.id,
+        agentName: callerAgent.name,
+        userId: actorId,
+        organizationId,
+        conversationId: conversation.id,
+        sessionId: conversation.id,
+        mcpGwToken: {
+          tokenValue: null,
+          tokenId: "tok-branded-handoff",
+          teamId: null,
+          isOrganizationToken: false,
+          isUserToken: true,
+        },
+        repeatTracker: new ToolCallRepeatTracker(),
+        modelAcceptsImageToolResults: true,
+      };
+
+      const wrappedDirectRouter = buildAgentDelegationTool({
+        agentTool: advertisedRouter,
+        ctx: chatCtx,
+      });
+      const directRaw = await wrappedDirectRouter.execute?.(
+        { message: "Direct branded router launch" },
+        { toolCallId: "branded-direct-call-1", messages: [] },
+      );
+      const directLaunch = JSON.parse(String(directRaw)) as {
+        run: { run_id: string };
+      };
+
+      const brandedRunToolName = archestraMcpBranding.getToolName("run_tool");
+      expect(brandedRunToolName).toBe("acme_cloud__run_tool");
+      const wrappedBrandedRunTool = buildMcpGatewayTool({
+        mcpTool: {
+          name: brandedRunToolName,
+          description: "Execute tool by name",
+          inputSchema: {
+            type: "object",
+            properties: {
+              tool_name: { type: "string" },
+              tool_args: { type: "object" },
+            },
+            required: ["tool_name"],
+          },
+        },
+        ctx: chatCtx,
+      });
+      const runToolRaw = await wrappedBrandedRunTool.execute?.(
+        {
+          tool_name: routerToolRow.name,
+          tool_args: { message: "Branded run_tool router launch" },
+        },
+        { toolCallId: "branded-run-tool-call-2", messages: [] },
+      );
+      const runToolText =
+        typeof runToolRaw === "string"
+          ? runToolRaw
+          : String((runToolRaw as { content?: unknown })?.content ?? "");
+      const indirectLaunch = JSON.parse(runToolText) as {
+        run: { run_id: string };
+      };
+      await vi.waitFor(() => {
+        expect(launchedWorkloads).toHaveLength(2);
+      });
+
+      const handoffs = await getSessionHandoffs({
+        organizationId,
+        sessionId: conversation.id,
+        ownUserId: actorId,
+      });
+      expect(handoffs.handedTo.map((r) => r.runId)).toEqual(
+        expect.arrayContaining([
+          directLaunch.run.run_id,
+          indirectLaunch.run.run_id,
+        ]),
+      );
+      expect(handoffs.moves).toContainEqual(
+        expect.objectContaining({
+          kind: "push",
+          runId: directLaunch.run.run_id,
+        }),
+      );
+      expect(handoffs.moves).toContainEqual(
+        expect.objectContaining({
+          kind: "push",
+          runId: indirectLaunch.run.run_id,
+        }),
+      );
+    } finally {
+      config.enterpriseFeatures.fullWhiteLabeling = previousWhiteLabeling;
+      await OrganizationModel.patch(organizationId, { appName: null });
+      archestraMcpBranding.syncFromOrganization(null);
+    }
   });
 });

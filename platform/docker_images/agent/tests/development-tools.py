@@ -56,6 +56,18 @@ class DevelopmentToolsTest(unittest.TestCase):
                          env={**env, "TEST_PID": str(os.getpid())})
             self.assertEqual(result.strip(), "1 corepack")
 
+    def test_playwright_driver_runs_on_the_image_node(self):
+        # The wheel's own Node build lags Node's security releases, and the
+        # image scan rejects it; the driver uses the image's Node instead.
+        driver_node = Path(run(
+            "/opt/agent-tools/bin/python", "-c",
+            "import pathlib, playwright;"
+            " print(pathlib.Path(playwright.__file__).parent / 'driver' / 'node')",
+        ).strip())
+        self.assertEqual(driver_node.resolve(), Path("/usr/local/bin/node").resolve())
+        # The CLI starts the driver, so this runs it on the image's Node.
+        self.assertTrue(run("playwright", "--version").startswith("Version "))
+
     def test_launchers_describe_the_machine_after_the_agent_prompt(self):
         prompt = run("archestra-agent-instructions",
                      env={**os.environ, "ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT": "Review the release."})

@@ -36,13 +36,11 @@ export async function resolveCandidateRuntimeSubagentIds(params: {
   actorUserId?: string | null;
 }): Promise<string[]> {
   const { callerAgent, actorUserId } = params;
-  if (
-    callerAgent.accessAllSubagents &&
-    actorUserId &&
-    actorUserId !== "system"
-  ) {
+  const realActorUserId =
+    actorUserId && actorUserId !== "system" ? actorUserId : null;
+  if (callerAgent.accessAllSubagents && realActorUserId) {
     const isAgentAdmin = await ResourcePermissions.allows({
-      userId: actorUserId,
+      userId: realActorUserId,
       organizationId: callerAgent.organizationId,
       resource: "agent",
       scope: "*",
@@ -50,7 +48,7 @@ export async function resolveCandidateRuntimeSubagentIds(params: {
     });
     const [targets, excludedIds] = await Promise.all([
       AgentModel.findAccessibleDelegationTargets({
-        userId: actorUserId,
+        userId: realActorUserId,
         isAdmin: isAgentAdmin,
         organizationId: callerAgent.organizationId,
         excludeAgentId: callerAgent.id,
@@ -65,10 +63,36 @@ export async function resolveCandidateRuntimeSubagentIds(params: {
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
       .map((target) => target.id);
   }
-  return AgentModel.findAssignedRuntimeSubagentIds(
+  const assignedIds = await AgentModel.findAssignedRuntimeSubagentIds(
     callerAgent.id,
     callerAgent.environmentId,
   );
+  if (assignedIds.length === 0 || !realActorUserId) {
+    return assignedIds;
+  }
+  const isAgentAdmin = await ResourcePermissions.allows({
+    userId: realActorUserId,
+    organizationId: callerAgent.organizationId,
+    resource: "agent",
+    scope: "*",
+    action: "update",
+  });
+  if (isAgentAdmin) {
+    return assignedIds;
+  }
+  const accessibleTargets = await AgentModel.findAccessibleDelegationTargets({
+    userId: realActorUserId,
+    isAdmin: false,
+    organizationId: callerAgent.organizationId,
+    includeDetails: false,
+    environmentId: callerAgent.environmentId,
+  });
+  const accessibleRuntimeIds = new Set(
+    accessibleTargets
+      .filter((target) => target.hasRuntime)
+      .map((target) => target.id),
+  );
+  return assignedIds.filter((id) => accessibleRuntimeIds.has(id));
 }
 
 /**

@@ -5169,4 +5169,215 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       "Subagent load balancing is enabled",
     );
   });
+
+  test("filters manual router pool notices and candidate selection by actor agent access", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeMember,
+    makeSecret,
+    makeUser,
+  }) => {
+    const memberUser = await makeUser();
+    await makeMember(memberUser.id, organizationId, { role: "member" });
+
+    const sharedSecret = await makeSecret({
+      secret: { apiKey: "test-manual-access-key" },
+    });
+    const sharedKey = await makeLlmProviderApiKey(
+      organizationId,
+      sharedSecret.id,
+      {
+        provider: "openai",
+        access: { users: [actorId, memberUser.id], preset: "use" },
+      },
+    );
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(sharedKey.id, [
+      modelId,
+    ]);
+
+    // Assigned first so without actor-access filtering it would be tried first and leaked in notices
+    const privateTeamWorker = await makeAgent({
+      name: "Confidential Team B Worker",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId: sharedKey.id,
+      access: { users: [actorId], preset: "use" },
+      runtime: runtimeConfig({ maxTier: "M" }),
+    });
+    const sharedTeamWorker = await makeAgent({
+      name: "Shared Team A Worker",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId: sharedKey.id,
+      access: { users: [actorId, memberUser.id], preset: "use" },
+      runtime: runtimeConfig({ maxTier: "M" }),
+    });
+    const privateWorkerTool = await ToolModel.findOrCreateDelegationTool(
+      privateTeamWorker.id,
+    );
+    const sharedWorkerTool = await ToolModel.findOrCreateDelegationTool(
+      sharedTeamWorker.id,
+    );
+
+    const manualRouter = await makeAgent({
+      name: "Team Scoped Manual Router",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: false,
+      modelId,
+      llmApiKeyId: sharedKey.id,
+      access: { users: [actorId, memberUser.id], preset: "use" },
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: false,
+      },
+    });
+    await AgentToolModel.create(manualRouter.id, privateWorkerTool.id);
+    await AgentToolModel.create(manualRouter.id, sharedWorkerTool.id);
+    const manualRouterTool = await ToolModel.findOrCreateDelegationTool(
+      manualRouter.id,
+    );
+
+    // Also create a manual router whose ONLY runtime worker is inaccessible to `memberUser`
+    const inaccessibleOnlyRouter = await makeAgent({
+      name: "Inaccessible Pool Only Router",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: false,
+      modelId,
+      llmApiKeyId: sharedKey.id,
+      access: { users: [actorId, memberUser.id], preset: "use" },
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await AgentToolModel.create(
+      inaccessibleOnlyRouter.id,
+      privateWorkerTool.id,
+    );
+    const inaccessibleOnlyRouterTool =
+      await ToolModel.findOrCreateDelegationTool(inaccessibleOnlyRouter.id);
+
+    const customCaller = await makeAgent({
+      name: "Custom Foreground Caller",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: false,
+      modelId,
+      llmApiKeyId: sharedKey.id,
+      access: { users: [actorId, memberUser.id], preset: "use" },
+    });
+    await AgentToolModel.create(customCaller.id, manualRouterTool.id);
+    await AgentToolModel.create(customCaller.id, inaccessibleOnlyRouterTool.id);
+
+    const autoCaller = await makeAgent({
+      name: "Auto Foreground Caller",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: true,
+      modelId,
+      llmApiKeyId: sharedKey.id,
+      access: { users: [actorId, memberUser.id], preset: "use" },
+    });
+
+    // Non-admin member in Custom mode: sees Shared Team A Worker, NOT Confidential Team B Worker
+    const memberCustomTools = await getAgentTools({
+      agentId: customCaller.id,
+      organizationId,
+      userId: memberUser.id,
+    });
+    const memberCustomRouter = memberCustomTools.find(
+      (t) => t.name === manualRouterTool.name,
+    );
+    expect(memberCustomRouter?.description).toContain(
+      "across its runtime pool (Shared Team A Worker)",
+    );
+    expect(memberCustomRouter?.description).not.toContain(
+      "Confidential Team B Worker",
+    );
+    const memberInaccessibleRouter = memberCustomTools.find(
+      (t) => t.name === inaccessibleOnlyRouterTool.name,
+    );
+    expect(memberInaccessibleRouter?.description).not.toContain(
+      "Confidential Team B Worker",
+    );
+    expect(memberInaccessibleRouter?.description).not.toContain(
+      "across its runtime pool",
+    );
+    expect(
+      memberInaccessibleRouter?._meta?.[LOAD_BALANCED_RUNTIME_ROUTER_META_KEY],
+    ).toBeUndefined();
+
+    // Non-admin member in Auto mode: same actor-scoped filtering
+    const memberAutoTools = await getAgentTools({
+      agentId: autoCaller.id,
+      organizationId,
+      userId: memberUser.id,
+    });
+    const memberAutoRouter = memberAutoTools.find(
+      (t) => t.name === manualRouterTool.name,
+    );
+    expect(memberAutoRouter?.description).toContain(
+      "across its runtime pool (Shared Team A Worker)",
+    );
+    expect(memberAutoRouter?.description).not.toContain(
+      "Confidential Team B Worker",
+    );
+
+    // Admin and system flows see both workers
+    const adminCustomTools = await getAgentTools({
+      agentId: customCaller.id,
+      organizationId,
+      userId: actorId,
+    });
+    expect(
+      adminCustomTools.find((t) => t.name === manualRouterTool.name)
+        ?.description,
+    ).toContain(
+      "across its runtime pool (Confidential Team B Worker, Shared Team A Worker)",
+    );
+    const systemCustomTools = await getAgentTools({
+      agentId: customCaller.id,
+      organizationId,
+      userId: "system",
+      skipAccessCheck: true,
+    });
+    expect(
+      systemCustomTools.find((t) => t.name === manualRouterTool.name)
+        ?.description,
+    ).toContain(
+      "across its runtime pool (Confidential Team B Worker, Shared Team A Worker)",
+    );
+
+    // Even with fallbackEnabled: false and privateTeamWorker listed first,
+    // memberUser's delegation dispatches cleanly to sharedTeamWorker.
+    await mockDetachedTaskStart();
+    const delegated = await executeArchestraTool(
+      manualRouterTool.name,
+      { message: "Run accessible worker only" },
+      {
+        agent: { id: customCaller.id, name: customCaller.name },
+        agentId: customCaller.id,
+        userId: memberUser.id,
+        organizationId,
+      },
+    );
+    expect(delegated.isError).toBeFalsy();
+    expect(delegated.structuredContent).toMatchObject({
+      run: { agent_id: sharedTeamWorker.id },
+    });
+  });
 });

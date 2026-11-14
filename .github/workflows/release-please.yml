@@ -452,6 +452,7 @@ jobs:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
@@ -473,6 +474,7 @@ jobs:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable Agent image workflow.
       id-token: write # Required for Workload Identity Federation.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
@@ -496,6 +498,7 @@ jobs:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
@@ -519,6 +522,7 @@ jobs:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
@@ -545,6 +549,7 @@ jobs:
       contents: read # Required to invoke the reusable Docker build workflow.
       packages: write # Stage the image in ghcr.io/archestra-ai/ci.
       id-token: write # Docker Hub OIDC login for the release scan.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       image_directory: ./platform
       image_name: platform

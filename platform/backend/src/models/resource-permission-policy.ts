@@ -96,6 +96,41 @@ export default class ResourcePermissionPolicyModel {
       .limit(100);
   }
 
+  /** One policy, row-locked until the caller's transaction ends. */
+  static async findForUpdate(params: PolicyKey & { tx: Transaction }) {
+    const [policy] = await params.tx
+      .select()
+      .from(schema.resourcePermissionPoliciesTable)
+      .where(policyCondition(params))
+      .for("update");
+    return policy ?? null;
+  }
+
+  /** Set one policy's grants inside a caller's transaction, creating it if absent. */
+  static async upsertGrants(
+    params: PolicyKey & { tx: Transaction; grants: ResourcePermissionGrant[] },
+  ): Promise<void> {
+    const table = schema.resourcePermissionPoliciesTable;
+    const grants = asPresets(params.grants, params.resource);
+    await params.tx
+      .insert(table)
+      .values({
+        organizationId: params.organizationId,
+        resource: params.resource,
+        scope: params.scope,
+        grants,
+        legacySharingMigrated: true,
+      })
+      .onConflictDoUpdate({
+        target: [table.organizationId, table.resource, table.scope],
+        set: {
+          grants,
+          revision: sql`${table.revision} + 1`,
+          updatedAt: sql`now()`,
+        },
+      });
+  }
+
   static async updatePresetUpgradePolicy(params: {
     tx: Transaction;
     policy: { organizationId: string; resource: ScopedResource; scope: string };

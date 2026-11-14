@@ -128,6 +128,4 @@ Reconnect notification streams to a live replica. An interrupted tool call can a
 
 For Docker, set the same [shutdown environment variables](/docs/admin/deployment/configuration#shutdown) and allow at least `max(drain, worker timeout) + cleanup + 40` seconds in `docker stop --time` or Compose's `stop_grace_period`.
 
-Install and upgrade the chart from `oci://ghcr.io/archestra-ai/helm-charts/archestra-platform`. The earlier address, `oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform`, gets no versions after 1.5.0. If your upgrade command, Argo CD application, Flux `HelmRelease`, or Terraform `helm_release` still names it, change it to the GHCR address; versions already published there stay available.
-
 New companion and agent runtime images are published at `ghcr.io/archestra-ai`. The main platform image remains at `archestra/platform` on Docker Hub. If you mirror images internally, import the release’s companion images from GHCR and preserve your Helm registry overrides. Existing releases remain at their original addresses.

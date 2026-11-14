@@ -15,6 +15,11 @@ on:
     # After the 04:17 UTC Platform byte scan, which covers main's Platform images.
     - cron: "41 4 * * *"
   workflow_dispatch:
+    inputs:
+      test-alert:
+        description: "Skip the scan and post a test message to the alerts channel"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -44,6 +49,7 @@ jobs:
   scan:
     name: Scan ${{ matrix.branch }} ${{ matrix.image }}
     needs: [targets]
+    if: ${{ !inputs.test-alert }}
     runs-on: ubuntu-24.04-16core
     timeout-minutes: 60
     permissions:
@@ -94,7 +100,7 @@ jobs:
   notify:
     name: Report scan failures
     needs: [targets, scan]
-    if: ${{ always() && github.repository == 'archestra-ai/archestra' && (needs.targets.result == 'failure' || needs.scan.result == 'failure') }}
+    if: ${{ always() && github.repository == 'archestra-ai/archestra' && (needs.targets.result == 'failure' || needs.scan.result == 'failure' || inputs.test-alert) }}
     runs-on: ubuntu-latest
     timeout-minutes: 3
     permissions:
@@ -120,6 +126,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SLACK_WEBHOOK_URL: ${{ steps.alerting.outputs.slack_webhook_url }}
+          TEST_ALERT: ${{ inputs.test-alert }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           JOBS_URL: repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs
         run: |
@@ -135,6 +142,13 @@ jobs:
             .jobs[] | select(.conclusion == "failure") |
             ([.steps[] | select(.conclusion == "failure") | .name][0] // "setup") as $step |
             "• <\(.html_url)|\(.name)>: " + (if $step == "Scan image" then "fixable critical/high CVEs" else "failed at \($step)" end)')"
+
+          if [[ "$TEST_ALERT" == "true" ]]; then
+            message=":test_tube: Test of the Nightly Release Image Scan alert; no images were scanned, nothing to do. <$RUN_URL|View workflow run>"
+            jq -n --arg text "$message" '{text: $text}' |
+              curl --fail-with-body -sS --max-time 15 -X POST -H 'Content-type: application/json' --data @- "$SLACK_WEBHOOK_URL"
+            exit 0
+          fi
 
           message=":rotating_light: Nightly release image scan found images a release would be held on. Fix them before cutting a release (see platform/dev/RELEASE.md, \"Image CVE Gate\"). <$RUN_URL|View workflow run>"$'\n'"${failures:-• No failed job was listed; check the run.}"
           jq -n --arg text "$message" '{text: $text}' |

@@ -397,8 +397,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /tmp/kimi \
  && cd /tmp/kimi \
- && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.5.1)" kimi-code.tgz \
- && echo "71f2b03758b2dd246fb414a531d12b533fdcdf14dbe869f908b1c4c0eee70457390cbc4d6c8dd2d4a0b32bf5785c985e219b79cb22804ec213f67277a2e0f6aa  kimi-code.tgz" | sha512sum -c - \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.5.2)" kimi-code.tgz \
+ && echo "6bb52eba0a90b8f04707664c8aef1ecc0148c09d1d9fac5a9ee4674ea6b6a575eed769e0ee4be2800957cb8ed3c4d2a99f28fcbe068d4ad79d4efe246ea482b8  kimi-code.tgz" | sha512sum -c - \
  && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
  && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
  && cd / && rm -rf /tmp/kimi /root/.npm \
@@ -422,13 +422,13 @@ FROM agent-base AS agent-copilot
 USER root
 ENV COPILOT_AUTO_UPDATE=false
 RUN case "$TARGETARCH" in \
-      amd64) copilot_arch=x64; copilot_checksum=b57e1cb65a393051298daa4271c363c4f2da124337d55002e2c99b54833a37b30363f3ab7c436628c3d4f32a77256c2c2ceef8741b9cceda7d54e710b582bc61 ;; \
-      arm64) copilot_arch=arm64; copilot_checksum=c675a429ddf5a39be86333f63372982947b3458d369517e94311a70e5bcfebb4d3222fde251dea6ac2e507f18bb6fa22e1412473bb8577dc22342ea23127e504 ;; \
+      amd64) copilot_arch=x64; copilot_checksum=0a13c4b826ff33cf670b4bf26166014c206c48657e562801c0f3c22487c9b607817f18d524d1e116c4f20365c2eefe2e678ed25ad97c2b9af11e9e259c9f4ac9 ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=7e035faaeaf75dd08df29de62e04631a1ebfcc008b9b1347d865af6d194a63593c383245a1864147690b5ff2f05008f40aae6d853039f4b686ece1a95bab6186 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /opt/copilot \
  && cd /tmp \
- && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.106)" copilot.tgz \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.107)" copilot.tgz \
  && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
  && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
  && test -s /opt/copilot/LICENSE.md \

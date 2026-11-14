@@ -1,4 +1,6 @@
 import {
+  isLoadBalancedRuntimeRouterTool,
+  LOAD_BALANCED_RUNTIME_ROUTER_META_KEY,
   TOOL_GET_AGENT_RUN_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
@@ -70,6 +72,7 @@ import {
 import { subagentLoadBalancer } from "@/services/agent-runtime/subagent-load-balancer";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { modelSyncService } from "@/services/model-sync";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { getSessionHandoffs } from "@/services/session-handoffs";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -3053,17 +3056,47 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       `Part of the load-balanced runtime pool of Coding Env Router (${routerToolRow.name}).`,
     );
 
+    const chatCtx: ChatToolContext = {
+      agentId: foregroundOrchestrator.id,
+      agentName: foregroundOrchestrator.name,
+      userId: actorId,
+      organizationId,
+      conversationId: "chat-conv-1",
+      sessionId: "chat-conv-1",
+      mcpGwToken: {
+        tokenValue: null,
+        tokenId: "tok-1",
+        teamId: null,
+        isOrganizationToken: false,
+        isUserToken: true,
+      },
+      repeatTracker: new ToolCallRepeatTracker(),
+      modelAcceptsImageToolResults: true,
+    };
+    expect(
+      (advertisedRouterTool?._meta as Record<string, unknown> | undefined)?.[
+        LOAD_BALANCED_RUNTIME_ROUTER_META_KEY
+      ],
+    ).toBe(true);
+    expect(
+      (advertisedAlphaTool?._meta as Record<string, unknown> | undefined)?.[
+        LOAD_BALANCED_RUNTIME_ROUTER_META_KEY
+      ],
+    ).toBeUndefined();
+
+    const builtCallerTools = Object.fromEntries(
+      callerDelegationTools.map((tool) => [
+        tool.name,
+        buildAgentDelegationTool({ agentTool: tool, ctx: chatCtx }),
+      ]),
+    );
+    expect(
+      isLoadBalancedRuntimeRouterTool(builtCallerTools[routerToolRow.name]),
+    ).toBe(true);
+
     const callerSystemPrompt = await buildAgentSystemPrompt({
       agent: foregroundOrchestrator,
-      mcpTools: Object.fromEntries(
-        callerDelegationTools.map((tool) => [
-          tool.name,
-          {
-            description: tool.description,
-            inputSchema: {} as never,
-          },
-        ]),
-      ),
+      mcpTools: builtCallerTools,
       organizationId,
       userId: actorId,
       agentId: foregroundOrchestrator.id,
@@ -3178,30 +3211,10 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     });
     expect(spawnProof).toBeDefined();
 
-    const chatCtx: ChatToolContext = {
-      agentId: foregroundOrchestrator.id,
-      agentName: foregroundOrchestrator.name,
-      userId: actorId,
-      organizationId,
-      conversationId: "chat-conv-1",
-      sessionId: "chat-conv-1",
-      mcpGwToken: {
-        tokenValue: null,
-        tokenId: "tok-1",
-        teamId: null,
-        isOrganizationToken: false,
-        isUserToken: true,
-      },
-      repeatTracker: new ToolCallRepeatTracker(),
-      modelAcceptsImageToolResults: true,
-    };
-    if (!advertisedRouterTool) {
-      throw new Error("Expected advertised router delegation tool");
+    const aiRouterTool = builtCallerTools[routerToolRow.name];
+    if (!aiRouterTool) {
+      throw new Error("Expected built router delegation tool");
     }
-    const aiRouterTool = buildAgentDelegationTool({
-      agentTool: advertisedRouterTool,
-      ctx: chatCtx,
-    });
     const rawResult = await aiRouterTool.execute?.(
       { ...spawnArgs, runtime_proof: spawnProof },
       {
@@ -3216,7 +3229,8 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     expect([workerAlpha.id, workerBeta.id]).toContain(
       parsedLaunch.run.agent_id,
     );
-    expect(chatCtx.runId).toBe(parsedLaunch.run.run_id);
+    expect(chatCtx.runId).toBeUndefined();
+    expect(chatCtx.launchedRunIds?.has(parsedLaunch.run.run_id)).toBe(true);
 
     // Wait briefly for the detached launch to reach waitForCompletion and bind its OpenAPPA child
     await vi.waitFor(async () => {
@@ -3361,31 +3375,63 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     resolveCompletion?.({ outcome: "succeeded" });
     await drainBackgroundWork();
 
-    // 4. A second router delegation rotates to the other ready worker (skipping Unready Runtime Worker)
+    // 4. A second router delegation on the same ChatToolContext wrapper rotates to the other ready worker
+    //    (skipping Unready Runtime Worker) and persists its own push handoff without mutating chatCtx.runId
     const spawn2CallId = "call-router-2";
+    const spawn2Args = { message: "Prepare the second repository workspace" };
     await recordReleasedCall(spawn2CallId, routerToolRow.name, true);
     const spawn2Proof = signRuntimeToolProof({
       session: parentSession,
       toolCallId: spawn2CallId,
       action: routerToolRow.name,
-      arguments: spawnArgs,
+      arguments: spawn2Args,
       spawn: true,
       secret: proofSecret,
     });
     vi.spyOn(backend, "waitForCompletion").mockResolvedValue({
       outcome: "succeeded",
     });
-    const secondResponse = await executeArchestraTool(
-      routerToolRow.name,
-      { ...spawnArgs, runtime_proof: spawn2Proof },
-      callerContext,
+    const rawSecondResult = await aiRouterTool.execute?.(
+      { ...spawn2Args, runtime_proof: spawn2Proof },
+      {
+        toolCallId: spawn2CallId,
+        messages: [],
+      },
     );
-    expect(secondResponse.isError).toBeFalsy();
-    const secondAgentId = (
-      secondResponse.structuredContent as { run: { agent_id: string } }
-    ).run.agent_id;
-    expect(new Set([parsedLaunch.run.agent_id, secondAgentId])).toEqual(
-      new Set([workerAlpha.id, workerBeta.id]),
+    const parsedSecondLaunch = JSON.parse(String(rawSecondResult)) as {
+      run: { run_id: string; agent_id: string };
+    };
+    expect(chatCtx.runId).toBeUndefined();
+    expect(
+      new Set([parsedLaunch.run.agent_id, parsedSecondLaunch.run.agent_id]),
+    ).toEqual(new Set([workerAlpha.id, workerBeta.id]));
+
+    await vi.waitFor(() => {
+      expect(launchedWorkloads).toHaveLength(2);
+    });
+
+    const updatedHandoffs = await getSessionHandoffs({
+      organizationId,
+      sessionId: "chat-conv-1",
+      ownUserId: actorId,
+    });
+    expect(updatedHandoffs.handedTo.map((r) => r.runId)).toEqual(
+      expect.arrayContaining([
+        parsedLaunch.run.run_id,
+        parsedSecondLaunch.run.run_id,
+      ]),
+    );
+    expect(updatedHandoffs.moves).toContainEqual(
+      expect.objectContaining({
+        kind: "push",
+        runId: parsedLaunch.run.run_id,
+      }),
+    );
+    expect(updatedHandoffs.moves).toContainEqual(
+      expect.objectContaining({
+        kind: "push",
+        runId: parsedSecondLaunch.run.run_id,
+      }),
     );
     await drainBackgroundWork();
   });
@@ -3565,5 +3611,473 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       (viaRunTool.structuredContent as { run: { agent_id: string } }).run
         .agent_id,
     );
+  });
+
+  test("persists push handoffs for parallel buildAgentDelegationTool launches without overwriting incoming ctx.runId", async ({
+    makeAgent,
+  }) => {
+    const routerAgent = await makeAgent({
+      name: "Parallel Router",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: false,
+      modelId,
+      llmApiKeyId,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    const workerA = await createRuntimeSubagent(
+      makeAgent,
+      "Parallel Worker A",
+      false,
+    );
+    const workerB = await createRuntimeSubagent(
+      makeAgent,
+      "Parallel Worker B",
+      false,
+    );
+    for (const worker of [workerA, workerB]) {
+      const workerTool = await ToolModel.findOrCreateDelegationTool(worker.id);
+      await AgentToolModel.create(routerAgent.id, workerTool.id);
+    }
+    const routerToolRow = await ToolModel.findOrCreateDelegationTool(
+      routerAgent.id,
+    );
+
+    const callerAgent = await makeAgent({
+      name: "Parallel Caller",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: false,
+      modelId,
+      llmApiKeyId,
+    });
+    await AgentToolModel.create(callerAgent.id, routerToolRow.id);
+
+    const callerTools = await getAgentTools({
+      agentId: callerAgent.id,
+      organizationId,
+      userId: actorId,
+    });
+    const advertisedRouter = callerTools.find(
+      (t) => t.name === routerToolRow.name,
+    );
+    if (!advertisedRouter) {
+      throw new Error("Expected advertised router delegation tool");
+    }
+
+    const parallelLaunchedWorkloads: string[] = [];
+    vi.spyOn(backend, "launch").mockImplementation(async (spec) => {
+      parallelLaunchedWorkloads.push(spec.frozenName);
+    });
+    vi.spyOn(backend, "stageInputs").mockResolvedValue();
+    vi.spyOn(backend, "waitUntilRunning").mockResolvedValue();
+    vi.spyOn(backend, "streamOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end();
+      },
+    );
+    vi.spyOn(backend, "snapshotOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end("===ARCHESTRA-FINAL-ANSWER===\nDone");
+      },
+    );
+    vi.spyOn(backend, "waitForCompletion").mockResolvedValue({
+      outcome: "succeeded",
+    });
+    vi.spyOn(backend, "steer").mockResolvedValue();
+    vi.spyOn(backend, "teardown").mockResolvedValue();
+    vi.spyOn(backend, "releaseRun").mockResolvedValue();
+    vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
+
+    // Case 1: Foreground chat context (no incoming runId) invokes the same wrapper in parallel
+    const chatCtx: ChatToolContext = {
+      agentId: callerAgent.id,
+      agentName: callerAgent.name,
+      userId: actorId,
+      organizationId,
+      conversationId: "parallel-chat-session",
+      sessionId: "parallel-chat-session",
+      mcpGwToken: {
+        tokenValue: null,
+        tokenId: "tok-parallel",
+        teamId: null,
+        isOrganizationToken: false,
+        isUserToken: true,
+      },
+      repeatTracker: new ToolCallRepeatTracker(),
+      modelAcceptsImageToolResults: true,
+    };
+    const wrappedRouter = buildAgentDelegationTool({
+      agentTool: advertisedRouter,
+      ctx: chatCtx,
+    });
+
+    const [rawA, rawB] = await Promise.all([
+      wrappedRouter.execute?.(
+        { message: "Parallel task A" },
+        { toolCallId: "parallel-call-1", messages: [] },
+      ),
+      wrappedRouter.execute?.(
+        { message: "Parallel task B" },
+        { toolCallId: "parallel-call-2", messages: [] },
+      ),
+    ]);
+    const launchA = JSON.parse(String(rawA)) as {
+      run: { run_id: string; agent_id: string };
+    };
+    const launchB = JSON.parse(String(rawB)) as {
+      run: { run_id: string; agent_id: string };
+    };
+    expect(launchA.run.run_id).not.toBe(launchB.run.run_id);
+    expect(chatCtx.runId).toBeUndefined();
+    expect(chatCtx.launchedRunIds).toEqual(
+      new Set([launchA.run.run_id, launchB.run.run_id]),
+    );
+    await vi.waitFor(() => {
+      expect(parallelLaunchedWorkloads).toHaveLength(2);
+    });
+
+    const handoffs = await getSessionHandoffs({
+      organizationId,
+      sessionId: "parallel-chat-session",
+      ownUserId: actorId,
+    });
+    expect(handoffs.handedTo.map((r) => r.runId)).toEqual(
+      expect.arrayContaining([launchA.run.run_id, launchB.run.run_id]),
+    );
+    expect(handoffs.moves).toContainEqual(
+      expect.objectContaining({ kind: "push", runId: launchA.run.run_id }),
+    );
+    expect(handoffs.moves).toContainEqual(
+      expect.objectContaining({ kind: "push", runId: launchB.run.run_id }),
+    );
+
+    // Case 2: Runtime caller context with a pre-existing incoming runId preserves ctx.runId
+    // across child launches while still recording child handoffs.
+    const runtimeParentCtx: ChatToolContext = {
+      ...chatCtx,
+      conversationId: "runtime-parent-session",
+      sessionId: "runtime-parent-session",
+      runId: launchA.run.run_id,
+      launchedRunIds: undefined,
+      repeatTracker: new ToolCallRepeatTracker(),
+    };
+    const runtimeWrappedRouter = buildAgentDelegationTool({
+      agentTool: advertisedRouter,
+      ctx: runtimeParentCtx,
+    });
+    const rawChild = await runtimeWrappedRouter.execute?.(
+      { message: "Child launch from runtime parent" },
+      { toolCallId: "runtime-parent-call-1", messages: [] },
+    );
+    const childLaunch = JSON.parse(String(rawChild)) as {
+      run: { run_id: string };
+    };
+    expect(runtimeParentCtx.runId).toBe(launchA.run.run_id);
+    expect(runtimeParentCtx.launchedRunIds).toEqual(
+      new Set([childLaunch.run.run_id]),
+    );
+    await vi.waitFor(() => {
+      expect(parallelLaunchedWorkloads).toHaveLength(3);
+    });
+    const parentHandoffs = await getSessionHandoffs({
+      organizationId,
+      sessionId: "runtime-parent-session",
+      ownUserId: actorId,
+    });
+    expect(parentHandoffs.moves).toContainEqual(
+      expect.objectContaining({ kind: "push", runId: childLaunch.run.run_id }),
+    );
+  });
+
+  test("does not treat an ordinary non-runtime agent quoting the router notice as a load-balanced runtime router", async ({
+    makeAgent,
+  }) => {
+    const spoofedHelper = await makeAgent({
+      name: "Spoofed Helper",
+      description:
+        "Automatic subagent load balancing and failover are enabled on this agent across its runtime pool (Fake Worker).",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId,
+      runtime: null,
+    });
+    const inProcessOnlyLbHelper = await makeAgent({
+      name: "In-Process LB Helper",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId,
+      runtime: null,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    const spoofedToolRow = await ToolModel.findOrCreateDelegationTool(
+      spoofedHelper.id,
+    );
+    await AgentToolModel.create(inProcessOnlyLbHelper.id, spoofedToolRow.id);
+    const inProcessLbToolRow = await ToolModel.findOrCreateDelegationTool(
+      inProcessOnlyLbHelper.id,
+    );
+
+    const callerAgent = await makeAgent({
+      name: "Spoof Guard Caller",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: false,
+      modelId,
+      llmApiKeyId,
+    });
+    await AgentToolModel.create(callerAgent.id, spoofedToolRow.id);
+    await AgentToolModel.create(callerAgent.id, inProcessLbToolRow.id);
+
+    const delegationTools = await getAgentTools({
+      agentId: callerAgent.id,
+      organizationId,
+      userId: actorId,
+    });
+    for (const descriptor of delegationTools) {
+      expect(
+        (descriptor._meta as Record<string, unknown> | undefined)?.[
+          LOAD_BALANCED_RUNTIME_ROUTER_META_KEY
+        ],
+      ).toBeUndefined();
+    }
+
+    const chatCtx: ChatToolContext = {
+      agentId: callerAgent.id,
+      agentName: callerAgent.name,
+      userId: actorId,
+      organizationId,
+      mcpGwToken: {
+        tokenValue: null,
+        tokenId: "tok-spoof",
+        teamId: null,
+        isOrganizationToken: false,
+        isUserToken: true,
+      },
+      repeatTracker: new ToolCallRepeatTracker(),
+      modelAcceptsImageToolResults: true,
+    };
+    const builtTools = Object.fromEntries(
+      delegationTools.map((tool) => [
+        tool.name,
+        buildAgentDelegationTool({ agentTool: tool, ctx: chatCtx }),
+      ]),
+    );
+    expect(
+      isLoadBalancedRuntimeRouterTool(builtTools[spoofedToolRow.name]),
+    ).toBe(false);
+    expect(
+      isLoadBalancedRuntimeRouterTool(builtTools[inProcessLbToolRow.name]),
+    ).toBe(false);
+
+    const systemPrompt = await buildAgentSystemPrompt({
+      agent: callerAgent,
+      mcpTools: builtTools,
+      organizationId,
+      userId: actorId,
+      agentId: callerAgent.id,
+    });
+    expect(systemPrompt).not.toContain(
+      "Load-balanced runtime router subagent(s) available",
+    );
+  });
+
+  test("batches load-balanced router pool resolution across multiple manual and Auto routers without N+1 queries", async ({
+    makeAgent,
+  }) => {
+    const workerOne = await createRuntimeSubagent(
+      makeAgent,
+      "Batch Worker One",
+      false,
+    );
+    const workerTwo = await createRuntimeSubagent(
+      makeAgent,
+      "Batch Worker Two",
+      false,
+    );
+    const workerOneTool = await ToolModel.findOrCreateDelegationTool(
+      workerOne.id,
+    );
+    const workerTwoTool = await ToolModel.findOrCreateDelegationTool(
+      workerTwo.id,
+    );
+
+    const manualRouterA = await makeAgent({
+      name: "Manual Router A",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: false,
+      modelId,
+      llmApiKeyId,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    const manualRouterB = await makeAgent({
+      name: "Manual Router B",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: false,
+      modelId,
+      llmApiKeyId,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await AgentToolModel.create(manualRouterA.id, workerOneTool.id);
+    await AgentToolModel.create(manualRouterB.id, workerTwoTool.id);
+
+    const autoRouterA = await makeAgent({
+      name: "Auto Router A",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: true,
+      modelId,
+      llmApiKeyId,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    const autoRouterB = await makeAgent({
+      name: "Auto Router B",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: true,
+      modelId,
+      llmApiKeyId,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await AgentExcludedSubagentModel.replaceForAgent(autoRouterB.id, [
+      workerTwo.id,
+    ]);
+
+    const manualRouterATool = await ToolModel.findOrCreateDelegationTool(
+      manualRouterA.id,
+    );
+    const manualRouterBTool = await ToolModel.findOrCreateDelegationTool(
+      manualRouterB.id,
+    );
+    const autoRouterATool = await ToolModel.findOrCreateDelegationTool(
+      autoRouterA.id,
+    );
+    const autoRouterBTool = await ToolModel.findOrCreateDelegationTool(
+      autoRouterB.id,
+    );
+
+    const orchestrator = await makeAgent({
+      name: "Batch Orchestrator",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: false,
+      modelId,
+      llmApiKeyId,
+    });
+    for (const routerTool of [
+      manualRouterATool,
+      manualRouterBTool,
+      autoRouterATool,
+      autoRouterBTool,
+    ]) {
+      await AgentToolModel.create(orchestrator.id, routerTool.id);
+    }
+
+    const gatewayLookupSpy = vi.spyOn(AgentModel, "findGatewayAgentById");
+    const routerConfigsSpy = vi.spyOn(
+      AgentModel,
+      "findRouterPoolConfigsByOrganizationIdAndIds",
+    );
+    const assignedBatchSpy = vi.spyOn(
+      AgentModel,
+      "findAssignedRuntimeSubagentIdsByAgents",
+    );
+    const excludedBatchSpy = vi.spyOn(
+      AgentExcludedSubagentModel,
+      "findTargetAgentIdsByAgents",
+    );
+    const permissionsSpy = vi.spyOn(ResourcePermissions, "allows");
+
+    const listed = await getAgentTools({
+      agentId: orchestrator.id,
+      organizationId,
+      userId: actorId,
+    });
+
+    // Only the caller itself (orchestrator) is looked up once; none of the 4 routers trigger findGatewayAgentById
+    expect(gatewayLookupSpy).toHaveBeenCalledTimes(1);
+    expect(gatewayLookupSpy).toHaveBeenCalledWith(orchestrator.id);
+    expect(routerConfigsSpy).toHaveBeenCalledTimes(1);
+    expect(assignedBatchSpy).toHaveBeenCalledTimes(1);
+    expect(excludedBatchSpy).toHaveBeenCalledTimes(1);
+    expect(permissionsSpy).toHaveBeenCalledTimes(1);
+
+    const byName = new Map(listed.map((tool) => [tool.name, tool]));
+    expect(byName.get(manualRouterATool.name)?.description).toContain(
+      "across its runtime pool (Batch Worker One)",
+    );
+    expect(byName.get(manualRouterBTool.name)?.description).toContain(
+      "across its runtime pool (Batch Worker Two)",
+    );
+    expect(byName.get(autoRouterATool.name)?.description).toContain(
+      "Batch Worker One",
+    );
+    expect(byName.get(autoRouterATool.name)?.description).toContain(
+      "Batch Worker Two",
+    );
+    expect(byName.get(autoRouterBTool.name)?.description).toContain(
+      "across its runtime pool (Batch Worker One)",
+    );
+    expect(byName.get(autoRouterBTool.name)?.description).not.toContain(
+      "Batch Worker Two",
+    );
+    for (const routerTool of [
+      manualRouterATool,
+      manualRouterBTool,
+      autoRouterATool,
+      autoRouterBTool,
+    ]) {
+      expect(
+        (
+          byName.get(routerTool.name)?._meta as
+            | Record<string, unknown>
+            | undefined
+        )?.[LOAD_BALANCED_RUNTIME_ROUTER_META_KEY],
+      ).toBe(true);
+    }
   });
 });

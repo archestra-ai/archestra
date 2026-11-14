@@ -1,5 +1,6 @@
 import {
   AGENT_TOOL_PREFIX,
+  LOAD_BALANCED_RUNTIME_ROUTER_META_KEY,
   type ModelSelection,
   normalizeSubagentLoadBalancingConfig,
   SELF_FORK_TOOL_NAME,
@@ -44,7 +45,6 @@ import {
   promptWithContract,
   SPAWN_TARGET_MISMATCH,
 } from "@/services/agent-runtime/runtime-crossing";
-import { resolveCandidateRuntimeSubagentIds } from "@/services/agent-subagent-exclusions";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { type Agent, ApiError } from "@/types";
@@ -205,6 +205,7 @@ export async function getAgentTools(context: {
 
   // Filter by user access if user ID is provided (skip for A2A/ChatOps flows)
   let accessibleTools = allToolsWithDetails;
+  let resolvedIsAgentAdmin: boolean | undefined;
   if (userId && !skipAccessCheck) {
     // Check if user has agent admin permission directly (don't trust caller)
     const isAgentAdmin = await ResourcePermissions.allows({
@@ -215,6 +216,7 @@ export async function getAgentTools(context: {
       action: "update",
       lookups,
     });
+    resolvedIsAgentAdmin = isAgentAdmin;
 
     const userAccessibleAgentIds =
       await AgentTeamModel.getUserAccessibleAgentIds(
@@ -251,6 +253,10 @@ export async function getAgentTools(context: {
         callerAgentId: agentId,
         organizationId,
         actorUserId: realUserId,
+        actorIsAgentAdmin:
+          realUserId && realUserId === userId
+            ? resolvedIsAgentAdmin
+            : undefined,
         targets: visibleTools.map((t) => ({
           id: t.targetAgent.id,
           name: t.targetAgent.name,
@@ -728,6 +734,7 @@ async function buildAutoDelegationTools(params: {
         callerAgentId: agentId,
         organizationId,
         actorUserId: userId,
+        actorIsAgentAdmin: isAgentAdmin,
         callerExcludedIds: excluded,
         targets: dedupedTargets.map(({ name, targetAgent }) => ({
           id: targetAgent.id,
@@ -909,6 +916,7 @@ async function resolveLoadBalancedRouterPools(params: {
   callerAgentId: string;
   organizationId: string;
   actorUserId?: string;
+  actorIsAgentAdmin?: boolean;
   callerExcludedIds?: ReadonlySet<string>;
   targets: ReadonlyArray<{
     id: string;
@@ -925,34 +933,126 @@ async function resolveLoadBalancedRouterPools(params: {
     return EMPTY_ROUTER_POOL_METADATA;
   }
 
+  const [callerExcludedIds, routerConfigs] = await Promise.all([
+    params.callerExcludedIds
+      ? Promise.resolve(null)
+      : AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
+          params.callerAgentId,
+        ),
+    AgentModel.findRouterPoolConfigsByOrganizationIdAndIds({
+      organizationId: params.organizationId,
+      agentIds: routerTargets.map((router) => router.id),
+    }),
+  ]);
   const callerExcludedSet =
-    params.callerExcludedIds ??
-    new Set(
-      await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
-        params.callerAgentId,
-      ),
-    );
+    params.callerExcludedIds ?? new Set(callerExcludedIds ?? []);
+  const routerConfigById = new Map(
+    routerConfigs
+      .filter(
+        (cfg) =>
+          normalizeSubagentLoadBalancingConfig(cfg.subagentLoadBalancing)
+            ?.enabled === true,
+      )
+      .map((cfg) => [cfg.id, cfg] as const),
+  );
+  if (routerConfigById.size === 0) {
+    return EMPTY_ROUTER_POOL_METADATA;
+  }
+
   const nameByAgentId = new Map(
     params.targets.map((target) => [target.id, target.name] as const),
   );
-  const candidateIdsByRouter = await Promise.all(
-    routerTargets.map(async (router) => {
-      const routerAgent = await AgentModel.findGatewayAgentById(router.id);
-      if (
-        !routerAgent ||
-        routerAgent.organizationId !== params.organizationId
-      ) {
-        return { router, candidateIds: [] as string[] };
-      }
-      const candidateIds = (
-        await resolveCandidateRuntimeSubagentIds({
-          callerAgent: routerAgent,
-          actorUserId: params.actorUserId,
-        })
-      ).filter((id) => !callerExcludedSet.has(id));
-      return { router, candidateIds };
-    }),
+  const canResolveAutoPools = Boolean(
+    params.actorUserId && params.actorUserId !== "system",
   );
+  const autoRouterIds: string[] = [];
+  const autoEnvironmentKeys = new Map<string, string | null>();
+  const manualRouterIds: string[] = [];
+
+  for (const router of routerTargets) {
+    const cfg = routerConfigById.get(router.id);
+    if (!cfg) continue;
+    if (cfg.accessAllSubagents && canResolveAutoPools) {
+      autoRouterIds.push(router.id);
+      const envKey = cfg.environmentId ?? "__default__";
+      if (!autoEnvironmentKeys.has(envKey)) {
+        autoEnvironmentKeys.set(envKey, cfg.environmentId);
+      }
+    } else {
+      manualRouterIds.push(router.id);
+    }
+  }
+
+  const [assignedByManualRouter, autoExcludedByRouter, autoTargetsByEnvKey] =
+    await Promise.all([
+      manualRouterIds.length > 0
+        ? AgentModel.findAssignedRuntimeSubagentIdsByAgents(manualRouterIds)
+        : Promise.resolve(new Map<string, string[]>()),
+      autoRouterIds.length > 0
+        ? AgentExcludedSubagentModel.findTargetAgentIdsByAgents(autoRouterIds)
+        : Promise.resolve(new Map<string, Set<string>>()),
+      autoRouterIds.length > 0 && params.actorUserId
+        ? (async () => {
+            const actorUserId = params.actorUserId as string;
+            const isAgentAdmin =
+              params.actorIsAgentAdmin ??
+              (await ResourcePermissions.allows({
+                userId: actorUserId,
+                organizationId: params.organizationId,
+                resource: "agent",
+                scope: "*",
+                action: "update",
+              }));
+            const entries = await Promise.all(
+              [...autoEnvironmentKeys.entries()].map(
+                async ([envKey, environmentId]) => {
+                  const targets =
+                    await AgentModel.findAccessibleDelegationTargets({
+                      userId: actorUserId,
+                      isAdmin: isAgentAdmin,
+                      organizationId: params.organizationId,
+                      includeDetails: false,
+                      environmentId,
+                    });
+                  for (const target of targets) {
+                    nameByAgentId.set(target.id, target.name);
+                  }
+                  const sortedRuntimeIds = targets
+                    .filter((target) => target.hasRuntime)
+                    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+                    .map((target) => target.id);
+                  return [envKey, sortedRuntimeIds] as const;
+                },
+              ),
+            );
+            return new Map<string, string[]>(entries);
+          })()
+        : Promise.resolve(new Map<string, string[]>()),
+    ]);
+
+  const candidateIdsByRouter = routerTargets.map((router) => {
+    const cfg = routerConfigById.get(router.id);
+    if (!cfg) {
+      return { router, candidateIds: [] as string[] };
+    }
+    if (cfg.accessAllSubagents && canResolveAutoPools) {
+      const envKey = cfg.environmentId ?? "__default__";
+      const envRuntimeIds = autoTargetsByEnvKey.get(envKey) ?? [];
+      const routerExcluded = autoExcludedByRouter.get(router.id);
+      const candidateIds = envRuntimeIds.filter(
+        (id) =>
+          id !== router.id &&
+          !routerExcluded?.has(id) &&
+          !callerExcludedSet.has(id),
+      );
+      return { router, candidateIds };
+    }
+    const assigned = assignedByManualRouter.get(router.id) ?? [];
+    return {
+      router,
+      candidateIds: assigned.filter((id) => !callerExcludedSet.has(id)),
+    };
+  });
 
   const missingIds = [
     ...new Set(
@@ -1077,6 +1177,9 @@ function buildDelegationToolDescriptor(params: {
     _meta: {
       targetAgentId: targetAgent.id,
       ...(externalA2a ? { targetType: "external_a2a" } : {}),
+      ...(isLoadBalancedRuntimeRouter
+        ? { [LOAD_BALANCED_RUNTIME_ROUTER_META_KEY]: true }
+        : {}),
       ...(toolId ? { toolId } : {}),
     },
   };

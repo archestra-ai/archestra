@@ -996,6 +996,7 @@ export async function getChatMcpTools({
       modelAcceptsImageToolResults ?? true;
     cached.context.parentLlm = parentLlm;
     cached.context.runId = runId;
+    cached.context.launchedRunIds = undefined;
     cached.context.agentRuntimeTier = agentRuntimeTier;
     logger.info(
       {

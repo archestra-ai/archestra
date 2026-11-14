@@ -2,6 +2,7 @@ import {
   type ArchestraToolShortName,
   buildElicitationMandateInstruction,
   buildUserSystemPromptContext,
+  isLoadBalancedRuntimeRouterTool,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
   TOOL_ASK_USER_SHORT_NAME,
@@ -803,11 +804,7 @@ function buildLoadBalancedRouterDelegationInstruction(
   const routerToolNames = Object.entries(mcpTools)
     .filter(
       ([name, tool]) =>
-        name.startsWith("agent__") &&
-        typeof tool.description === "string" &&
-        tool.description.includes(
-          "Automatic subagent load balancing and failover are enabled on this agent",
-        ),
+        name.startsWith("agent__") && isLoadBalancedRuntimeRouterTool(tool),
     )
     .map(([name]) => `\`${name}\``);
   if (routerToolNames.length === 0) return null;

@@ -8,9 +8,11 @@ import {
   extractMcpHumanRuling,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
+  LOAD_BALANCED_RUNTIME_ROUTER_META_KEY,
   MCP_EXECUTED_AS_META_KEY,
   MCP_HUMAN_RULING_META_KEY,
   type ModelSelection,
+  markLoadBalancedRuntimeRouterTool,
   OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES,
   parseFullToolName,
   platformExecutedAs,
@@ -114,6 +116,8 @@ export interface ChatToolContext {
   scheduleTriggerRunId?: string;
   /** The calling agent run's task ID or run ID, when dispatched from a runtime container or chat. */
   runId?: string;
+  /** Child runtime run IDs already persisted as handoffs in this context, distinct from the caller's incoming `runId`. */
+  launchedRunIds?: Set<string>;
   /** Explicit runtime tier of the calling instance, when available. */
   agentRuntimeTier?: string;
   abortSignal?: AbortSignal;
@@ -348,7 +352,7 @@ export function buildMcpGatewayTool(params: {
                 mcpTool.name,
                 toolArguments,
               );
-            } else if (!ctx.runId) {
+            } else {
               const targetToolName = resolveRunToolTargetName(
                 mcpTool.name,
                 toolArguments,
@@ -357,49 +361,17 @@ export function buildMcpGatewayTool(params: {
                 archestraMcpBranding.getToolShortName(targetToolName) ===
                   TOOL_START_AGENT_RUN_SHORT_NAME ||
                 targetToolName === TOOL_START_AGENT_RUN_SHORT_NAME;
-              const launchedRunId = isStartAgentRun
-                ? (
-                    archestraResponse.structuredContent as
-                      | { run?: { run_id?: unknown } }
-                      | undefined
-                  )?.run?.run_id
-                : undefined;
-              if (
-                typeof launchedRunId === "string" &&
-                launchedRunId.length > 0
-              ) {
-                ctx.runId = launchedRunId;
-                const sessionId = ctx.conversationId ?? ctx.sessionId ?? null;
-                if (sessionId) {
-                  try {
-                    await McpToolCallModel.create({
-                      agentId: ctx.agentId,
-                      mcpServerName: archestraMcpBranding.serverName,
-                      method: "tools/call",
-                      durationMs: Math.max(0, Date.now() - startTime),
-                      toolCall: {
-                        id: options.toolCallId,
-                        name: mcpTool.name,
-                        arguments: toolArguments || {},
-                      },
-                      toolResult: ctx.suppressContentLogging
-                        ? { redacted: true }
-                        : archestraResponse,
-                      userId: ctx.userId ?? null,
-                      runId: launchedRunId,
-                      sessionId,
-                      llmToolCallId: options.toolCallId ?? null,
-                      authMethod: null,
-                      oauthClientId: ctx.mcpGwToken?.oauthClientId ?? null,
-                      source: "chat",
-                    });
-                  } catch (dbError) {
-                    logger.info(
-                      { err: dbError },
-                      "Failed to persist archestra run launch tool call",
-                    );
-                  }
-                }
+              if (isStartAgentRun) {
+                await persistLaunchedRuntimeToolCall({
+                  ctx,
+                  toolName: mcpTool.name,
+                  toolArguments,
+                  toolCallId: options.toolCallId,
+                  response: archestraResponse,
+                  startTime,
+                  failureLogMessage:
+                    "Failed to persist archestra run launch tool call",
+                });
               }
             }
 
@@ -496,8 +468,12 @@ export function buildAgentDelegationTool(params: {
 }): Tool {
   const { agentTool, ctx } = params;
   const normalizedSchema = normalizeJsonSchema(agentTool.inputSchema);
+  const isLoadBalancedRuntimeRouter =
+    (agentTool._meta as Record<string, unknown> | undefined)?.[
+      LOAD_BALANCED_RUNTIME_ROUTER_META_KEY
+    ] === true;
 
-  return {
+  const builtTool: Tool = {
     description: agentTool.description || `Agent tool: ${agentTool.name}`,
     inputSchema: jsonSchema(normalizedSchema),
     execute: async (args: Record<string, unknown>, options) =>
@@ -576,46 +552,17 @@ export function buildAgentDelegationTool(params: {
             isError: response.isError ?? false,
           });
 
-          if (!response.isError && !ctx.runId) {
-            const launchedRunId = (
-              response.structuredContent as
-                | { run?: { run_id?: unknown } }
-                | undefined
-            )?.run?.run_id;
-            if (typeof launchedRunId === "string" && launchedRunId.length > 0) {
-              ctx.runId = launchedRunId;
-              const sessionId = ctx.conversationId ?? ctx.sessionId ?? null;
-              if (sessionId) {
-                try {
-                  await McpToolCallModel.create({
-                    agentId: ctx.agentId,
-                    mcpServerName: archestraMcpBranding.serverName,
-                    method: "tools/call",
-                    durationMs: Math.max(0, Date.now() - startTime),
-                    toolCall: {
-                      id: options.toolCallId,
-                      name: agentTool.name,
-                      arguments: args || {},
-                    },
-                    toolResult: ctx.suppressContentLogging
-                      ? { redacted: true }
-                      : response,
-                    userId: ctx.userId ?? null,
-                    runId: launchedRunId,
-                    sessionId,
-                    llmToolCallId: options.toolCallId ?? null,
-                    authMethod: null,
-                    oauthClientId: ctx.mcpGwToken?.oauthClientId ?? null,
-                    source: "chat",
-                  });
-                } catch (dbError) {
-                  logger.info(
-                    { err: dbError },
-                    "Failed to persist archestra delegation run launch tool call",
-                  );
-                }
-              }
-            }
+          if (!response.isError) {
+            await persistLaunchedRuntimeToolCall({
+              ctx,
+              toolName: agentTool.name,
+              toolArguments: args,
+              toolCallId: options.toolCallId,
+              response,
+              startTime,
+              failureLogMessage:
+                "Failed to persist archestra delegation run launch tool call",
+            });
           }
 
           const content = response.content
@@ -632,6 +579,71 @@ export function buildAgentDelegationTool(params: {
         },
       }),
   };
+
+  return isLoadBalancedRuntimeRouter
+    ? markLoadBalancedRuntimeRouterTool(builtTool)
+    : builtTool;
+}
+
+async function persistLaunchedRuntimeToolCall(params: {
+  ctx: ChatToolContext;
+  toolName: string;
+  toolArguments: Record<string, unknown> | undefined;
+  toolCallId: string;
+  response: CallToolResult;
+  startTime: number;
+  failureLogMessage: string;
+}): Promise<void> {
+  const {
+    ctx,
+    toolName,
+    toolArguments,
+    toolCallId,
+    response,
+    startTime,
+    failureLogMessage,
+  } = params;
+  const launchedRunId = (
+    response.structuredContent as { run?: { run_id?: unknown } } | undefined
+  )?.run?.run_id;
+  if (typeof launchedRunId !== "string" || launchedRunId.length === 0) {
+    return;
+  }
+  if (launchedRunId === ctx.runId || ctx.launchedRunIds?.has(launchedRunId)) {
+    return;
+  }
+  const sessionId = ctx.conversationId ?? ctx.sessionId ?? null;
+  if (!sessionId) {
+    return;
+  }
+  if (!ctx.launchedRunIds) {
+    ctx.launchedRunIds = new Set();
+  }
+  ctx.launchedRunIds.add(launchedRunId);
+  try {
+    await McpToolCallModel.create({
+      agentId: ctx.agentId,
+      mcpServerName: archestraMcpBranding.serverName,
+      method: "tools/call",
+      durationMs: Math.max(0, Date.now() - startTime),
+      toolCall: {
+        id: toolCallId,
+        name: toolName,
+        arguments: toolArguments || {},
+      },
+      toolResult: ctx.suppressContentLogging ? { redacted: true } : response,
+      userId: ctx.userId ?? null,
+      runId: launchedRunId,
+      sessionId,
+      llmToolCallId: toolCallId ?? null,
+      authMethod: null,
+      oauthClientId: ctx.mcpGwToken?.oauthClientId ?? null,
+      source: "chat",
+    });
+  } catch (dbError) {
+    ctx.launchedRunIds.delete(launchedRunId);
+    logger.info({ err: dbError }, failureLogMessage);
+  }
 }
 
 /**

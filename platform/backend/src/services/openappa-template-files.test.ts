@@ -11,7 +11,7 @@ import {
   getAppaGithubSync,
   syncAppaGithubPolicy,
 } from "@/services/openappa-github-sync";
-import { expect, test } from "@/test";
+import { expect, test, vi } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { FakeGitlab } from "@/test/fake-gitlab";
 import { useMswServer } from "@/test/msw";
@@ -60,6 +60,8 @@ function serveGithub(state: {
   files: Record<string, string>;
   /** Whether writing a tree fails, as GitHub may for a while. */
   failTrees?: boolean;
+  /** The branch head a sync reads: HEAD, older than any merge a test makes. */
+  head?: string;
 }) {
   const pulls: Array<{
     number: number;
@@ -68,6 +70,8 @@ function serveGithub(state: {
     body: string;
     head: string;
     base: string;
+    /** Merged: the commit the merge left, which holds the template's files. */
+    mergeCommit?: string;
   }> = [];
   const trees: Array<Array<{ path: string; content: string }>> = [];
   const commits: Array<{ message: string; parents: string[] }> = [];
@@ -81,7 +85,21 @@ function serveGithub(state: {
     http.get(REPO, () => HttpResponse.json({ default_branch: "main" })),
     // Self-service is off: each sync takes away a ruleset it may have left.
     http.get(`${REPO}/rulesets`, () => HttpResponse.json([])),
-    http.get(`${REPO}/commits/main`, () => HttpResponse.json({ sha: HEAD })),
+    http.get(`${REPO}/commits/main`, () =>
+      HttpResponse.json({ sha: state.head ?? HEAD }),
+    ),
+    http.get(
+      ({ request }) => request.url.startsWith(`${REPO}/compare/`),
+      ({ request }) => {
+        const [base, head] = new URL(request.url).pathname
+          .slice("/repos/example/policies/compare/".length)
+          .split("...");
+        return HttpResponse.json({
+          status:
+            base === head ? "identical" : head === HEAD ? "behind" : "ahead",
+        });
+      },
+    ),
     http.get(
       ({ request }) => request.url.startsWith(`${REPO}/contents/`),
       ({ request }) => {
@@ -91,9 +109,12 @@ function serveGithub(state: {
         );
         const ref = url.searchParams.get("ref");
         const text = state.files[path];
-        // The proposal's commit holds the template's files over the head's.
+        // The proposal's commit, and a merge of it, hold the template's
+        // files over the head's.
         const proposed =
-          ref === PROPOSED ? (TEMPLATE_FILES[path] ?? text) : text;
+          ref === PROPOSED || pulls.some((pull) => pull.mergeCommit === ref)
+            ? (TEMPLATE_FILES[path] ?? text)
+            : text;
         return proposed === undefined
           ? new HttpResponse(null, { status: 404 })
           : HttpResponse.text(proposed);
@@ -121,6 +142,8 @@ function serveGithub(state: {
             number: pull.number,
             state: pull.state,
             html_url: `https://github.com/example/policies/pull/${pull.number}`,
+            merged: !!pull.mergeCommit,
+            merge_commit_sha: pull.mergeCommit ?? null,
           })
         : new HttpResponse(null, { status: 404 });
     }),
@@ -349,6 +372,100 @@ test("a sync proposes the template's files a repository lacks or holds in an old
     paths: [],
   });
   expect(github.closed).toEqual([]);
+});
+
+test("a pull request that merges while a sync runs is not proposed again: its files are read at its merge commit", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  await connectApp(org.id);
+  const files: Record<string, string> = {
+    "appa.toml": POLICY,
+    ...TEMPLATE_FILES,
+    [WORKFLOW]: "name: Validate OpenAPPA policy\n# an older workflow\n",
+    "README.md": "# Older README\n",
+  };
+  const repository: Parameters<typeof serveGithub>[0] = { files };
+  const github = serveGithub(repository);
+  await syncAppaGithubPolicy(org.id);
+  expect(github.pulls).toHaveLength(1);
+
+  // Merged on GitHub after the next sync read the branch: the commit that
+  // sync read still holds the older files, which the merge brought current.
+  Object.assign(github.pulls[0] ?? {}, {
+    state: "closed",
+    mergeCommit: "7".repeat(40),
+  });
+  await syncAppaGithubPolicy(org.id);
+  expect(github.pulls).toHaveLength(1);
+  expect(github.trees).toHaveLength(1);
+  expect((await syncStatus(org.id)).templateFiles).toMatchObject({
+    state: "current",
+    paths: [],
+  });
+
+  // Drift after a merge the head holds is still drift: proposed on that head.
+  Object.assign(files, TEMPLATE_FILES);
+  files["README.md"] = "# A README edited again\n";
+  await syncAppaGithubPolicy(org.id);
+  expect(github.pulls).toHaveLength(2);
+  Object.assign(github.pulls[1] ?? {}, {
+    state: "closed",
+    mergeCommit: "8".repeat(40),
+  });
+  const moved = "2".repeat(40);
+  repository.head = moved;
+  files["README.md"] = "# A README edited after the merge\n";
+  await syncAppaGithubPolicy(org.id);
+  expect(github.pulls).toHaveLength(3);
+  expect(github.trees.at(-1)?.map((file) => file.path)).toEqual(["README.md"]);
+  expect(github.commits.at(-1)).toMatchObject({ parents: [moved] });
+  expect((await syncStatus(org.id)).templateFiles).toMatchObject({
+    state: "pull_open",
+    pull: { number: 3 },
+  });
+});
+
+test("a pull that starts while another still proposes the files leaves the outcome to it: one pull request", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  await connectApp(org.id);
+  const github = serveGithub({
+    files: {
+      "appa.toml": POLICY,
+      ...TEMPLATE_FILES,
+      "README.md": "# Older README\n",
+    },
+  });
+  // The first pull's proposal waits at GitHub while a second pull runs
+  // from start to end: both accepted the commit, so both compare.
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let held = false;
+  server.use(
+    http.post(`${REPO}/git/trees`, async () => {
+      if (held) return undefined;
+      held = true;
+      await gate;
+      return undefined;
+    }),
+  );
+  const first = syncAppaGithubPolicy(org.id);
+  await vi.waitFor(() => expect(held).toBe(true));
+  await syncAppaGithubPolicy(org.id);
+  release();
+  await first;
+  expect(github.pulls).toHaveLength(1);
+  expect(github.trees).toHaveLength(1);
+  expect((await syncStatus(org.id)).templateFiles).toMatchObject({
+    state: "pull_open",
+    pull: { number: 1 },
+  });
 });
 
 test("without the Workflows permission the pull request carries the other files and names the workflow it leaves out, and a later sync adds it once granted", async ({

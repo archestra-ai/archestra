@@ -336,13 +336,15 @@ export async function getOpenAppaPolicyChangeStatus(params: {
     ))
   )
     throw new ApiError(403, "GitHub credential read permission is required");
+  const repo = source.repo;
   if (source.gitlabTokenId) {
+    const access = await resolveOpenAppaGitlabAccess({
+      organizationId: params.organizationId,
+      gitlabTokenId: source.gitlabTokenId,
+    });
     const request = await openappaGitlab.changeStatus({
-      access: await resolveOpenAppaGitlabAccess({
-        organizationId: params.organizationId,
-        gitlabTokenId: source.gitlabTokenId,
-      }),
-      repo: source.repo,
+      access,
+      repo,
       iid: params.number,
     });
     return {
@@ -350,6 +352,16 @@ export async function getOpenAppaPolicyChangeStatus(params: {
       url: request.webUrl,
       state: request.state,
       mergeable: request.mergeable,
+      ...(request.state === "merged"
+        ? await mergedChangeSync({
+            organizationId: params.organizationId,
+            source,
+            mergeCommit: request.mergeCommitSha,
+            mergedAt: request.mergedAt,
+            contains: (commit, ancestor) =>
+              openappaGitlab.contains({ access, repo, commit, ancestor }),
+          })
+        : {}),
       sync: {
         sourceCommit: source.sourceCommit,
         lastSyncedAt: source.lastSyncedAt,
@@ -363,10 +375,12 @@ export async function getOpenAppaPolicyChangeStatus(params: {
     html_url: string;
     state: "open" | "closed";
     merged: boolean;
+    merged_at?: string | null;
+    merge_commit_sha?: string | null;
     mergeable: boolean | null;
     head: { ref: string };
   }>({
-    url: `${api}/repos/${source.repo}/pulls/${params.number}`,
+    url: `${api}/repos/${repo}/pulls/${params.number}`,
     token,
     errors: githubPolicyChangeErrors,
   });
@@ -377,16 +391,90 @@ export async function getOpenAppaPolicyChangeStatus(params: {
     url: checkedPullUrl({
       url: pull.html_url,
       web,
-      repo: source.repo,
+      repo,
       number: pull.number,
     }),
     state: pull.merged ? "merged" : pull.state,
     mergeable: pull.mergeable,
+    ...(pull.merged
+      ? await mergedChangeSync({
+          organizationId: params.organizationId,
+          source,
+          mergeCommit: pull.merge_commit_sha ?? null,
+          mergedAt: pull.merged_at ?? null,
+          contains: async (commit, ancestor) =>
+            commit === ancestor ||
+            ["ahead", "identical"].includes(
+              (
+                await githubJson<{ status?: string }>({
+                  url: `${api}/repos/${repo}/compare/${ancestor}...${commit}`,
+                  token,
+                  errors: githubPolicyChangeErrors,
+                })
+              ).status ?? "",
+            ),
+        })
+      : {}),
     sync: {
       sourceCommit: source.sourceCommit,
       lastSyncedAt: source.lastSyncedAt,
       lastSyncError: source.lastSyncError,
     },
+  };
+}
+
+/**
+ * Whether Git sync applied a merged change: the accepted commit contains its
+ * merge. Until it does, a pull is queued rather than left to the schedule,
+ * unless a pull since the merge failed: nothing applies until that is put
+ * right, so the failure is the answer.
+ */
+async function mergedChangeSync(params: {
+  organizationId: string;
+  source: {
+    sourceCommit: string | null;
+    lastSyncedAt: Date | null;
+    lastSyncError: string | null;
+  };
+  /** The commit the merge left on the branch; null when the host gives none. */
+  mergeCommit: string | null;
+  mergedAt: string | null;
+  contains: (commit: string, ancestor: string) => Promise<boolean>;
+}): Promise<{
+  applied: boolean;
+  syncQueued?: boolean;
+  syncFailed?: { reason: string };
+  instruction: string;
+}> {
+  const { source } = params;
+  if (
+    source.sourceCommit &&
+    params.mergeCommit &&
+    (await params.contains(source.sourceCommit, params.mergeCommit))
+  )
+    return {
+      applied: true,
+      instruction:
+        "Git sync applied the merged change: the policy it carries is the one in force.",
+    };
+  const mergedAt = params.mergedAt ? Date.parse(params.mergedAt) : Number.NaN;
+  if (
+    source.lastSyncError &&
+    source.lastSyncedAt &&
+    (Number.isNaN(mergedAt) || source.lastSyncedAt.getTime() > mergedAt)
+  )
+    return {
+      applied: false,
+      syncFailed: { reason: source.lastSyncError },
+      instruction:
+        "The change merged, but Git sync failed since: say why, from syncFailed.reason. The merged policy is not in force until that is fixed.",
+    };
+  await OpenAppaGithubSyncModel.enqueue(params.organizationId);
+  return {
+    applied: false,
+    syncQueued: true,
+    instruction:
+      "The change merged and Git sync is applying it now. Check again in a minute before you say it is in force.",
   };
 }
 

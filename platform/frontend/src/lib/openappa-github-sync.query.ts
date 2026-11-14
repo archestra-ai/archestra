@@ -170,7 +170,15 @@ export function useAppaGithubSyncing() {
   );
 }
 
-export function useUpdateAppaGithubSync() {
+export function useUpdateAppaGithubSync({
+  quiet = false,
+}: {
+  /**
+   * For a wizard that shows each outcome in its own rows: no toast says it
+   * again. A failed request still shows its error toast.
+   */
+  quiet?: boolean;
+} = {}) {
   const client = useQueryClient();
   return useMutation({
     mutationKey: updateAppaGithubSyncKey,
@@ -198,6 +206,10 @@ export function useUpdateAppaGithubSync() {
       client.invalidateQueries({ queryKey: appaSelfServiceQueryKey });
     },
     onSuccess: (data, body, context) => {
+      // Every action answers with the status: whoever waits on a sync reads
+      // its outcome as soon as the sync ends, not at the next refetch.
+      if (data) client.setQueryData(appaGithubSyncQueryKey, data);
+      if (quiet) return;
       // The setup dialog reports the protection it brought in line.
       if (body.action === "protect") return;
       if (body.action === "include_servers") {

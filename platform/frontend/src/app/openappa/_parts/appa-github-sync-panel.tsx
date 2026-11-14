@@ -17,6 +17,7 @@ import {
   GitSourceCard,
   GitSourceError,
   GitSourceNotice,
+  GitSourceSchedule,
 } from "@/components/git/git-source-card";
 import { OpenAppaGithubAppRequirements } from "@/components/openappa-github-app-requirements";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -59,17 +60,21 @@ import {
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { appaGitHost } from "./appa-git-host";
-import { FinishSetupNotice, useFinishSetupPieces } from "./finish-setup-dialog";
-import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
+import {
+  FinishSetupHost,
+  FinishSetupNotice,
+  useFinishSetupPieces,
+} from "./finish-setup-dialog";
+import {
+  DEFAULT_SYNC_INTERVAL,
+  GithubSyncSetupDialog,
+  SYNC_INTERVAL_LABELS,
+  SyncScheduleSelect,
+} from "./github-sync-setup-dialog";
 
 type Source = NonNullable<
   archestraApiTypes.GetAppaGithubSyncResponses["200"]["source"]
 >;
-const intervals = {
-  "15m": "Every 15 minutes",
-  "1h": "Every hour",
-  "1d": "Once a day",
-};
 
 export function AppaGithubSyncPanel() {
   const query = useAppaGithubSync();
@@ -178,7 +183,12 @@ export function AppaGithubSyncPanel() {
                 details={
                   <>
                     <GitSourceBranch branch={source.ref} />
-                    <span className="font-mono">{source.path}</span>
+                    {/* The repository link opens the policy file: only a
+                        file kept elsewhere than appa.toml at the root is
+                        named here. */}
+                    {source.path !== "appa.toml" ? (
+                      <span className="font-mono">{source.path}</span>
+                    ) : null}
                     {source.sourceCommit ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -196,6 +206,11 @@ export function AppaGithubSyncPanel() {
                     ) : (
                       <span>{lastChecked}</span>
                     )}
+                    {source.interval ? (
+                      <GitSourceSchedule
+                        schedule={SYNC_INTERVAL_LABELS[source.interval]}
+                      />
+                    ) : null}
                   </>
                 }
                 sync={
@@ -204,7 +219,7 @@ export function AppaGithubSyncPanel() {
                         onClick: () => update.mutate({ action: "sync" }),
                         pending: syncing,
                         tooltip: source.interval
-                          ? `Checks ${intervals[source.interval].toLowerCase()}. ${lastChecked}.`
+                          ? `Checks ${SYNC_INTERVAL_LABELS[source.interval].toLowerCase()}. ${lastChecked}.`
                           : `${lastChecked}.`,
                       }
                     : undefined
@@ -302,7 +317,7 @@ export function AppaGithubSyncPanel() {
               repo: source.repo,
               ref: source.ref,
               path: source.path,
-              interval: source.interval ?? "1h",
+              interval: source.interval ?? DEFAULT_SYNC_INTERVAL,
               validationDirectory,
               webUrl: githubWebUrl,
             }}
@@ -324,6 +339,8 @@ export function AppaGithubSyncPanel() {
           setDisconnecting(false);
         }}
       />
+      {/* The card stays when its notice goes, so the wizard lives here. */}
+      <FinishSetupHost />
     </>
   );
 }
@@ -643,6 +660,7 @@ export function OpenAppaSourceForm({
       repo: source?.repo ?? "",
       ref: source?.ref ?? "",
       path: source?.path ?? "appa.toml",
+      interval: source?.interval ?? DEFAULT_SYNC_INTERVAL,
       credential: source?.githubPatId
         ? `pat:${source.githubPatId}`
         : source?.githubAppConfigId
@@ -658,9 +676,9 @@ export function OpenAppaSourceForm({
         repo: values.repo.trim(),
         ref: values.ref.trim() || null,
         path: values.path.trim(),
-        // Validations stay in the source's folder (traces by default), and the
-        // sync interval is changed on the panel, so neither is asked here.
-        interval: source?.interval ?? "1h",
+        // Validations stay in the source's folder (traces by default), so
+        // they are not asked here.
+        interval: values.interval,
         githubPatId: values.credential.startsWith("pat:")
           ? values.credential.slice(4)
           : null,
@@ -732,6 +750,16 @@ export function OpenAppaSourceForm({
               {...form.register("path", { required: true })}
             />
           </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="appa-interval">Sync schedule</Label>
+          <SyncScheduleSelect
+            id="appa-interval"
+            value={form.watch("interval")}
+            onValueChange={(value) =>
+              form.setValue("interval", value, { shouldDirty: true })
+            }
+          />
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">

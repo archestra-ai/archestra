@@ -3068,7 +3068,7 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `run_openappa_policy_tests` | Replay saved validations against the current policy and record the result in validation run history. | [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update) |
 | `preview_guardrails_validation_change` | Validate a proposed change to the .appa validation files and replay it. | [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) |
 | `update_guardrails_validation` | Save a change to the .appa validation files. | [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update) |
-| `get_guardrails_policy_change_status` | Check the review state of an OpenAPPA policy pull request and whether Git sync has processed the merged policy. | [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) |
+| `get_guardrails_policy_change_status` | Check the review state of an OpenAPPA policy pull request, and once it merges whether Git sync applied it (`applied`), with an `instruction` for what to tell the user. | [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) |
 | `get_remedy_plans` | Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. | None |
 | `execute_remedy_plan` | Apply a remedy plan that the organization's guardrails policy offers for a blocked call. | None |
 | `get_guardrails_server_rules` | Read one MCP server's own Guardrails rules: its file in the Git sync policy repository's self-service folder (`path`, e.g. | None |
@@ -3165,7 +3165,7 @@ Required RBAC permission: [`organizationSettings:update`](/docs/reference/permis
 | `name` | `string` | Yes |  |
 | `githubAppConfigId` | `string` | No |  |
 | `gitlabTokenId` | `string` | No |  |
-| `interval` | `"15m" \| "1h" \| "1d"` | No |  |
+| `interval` | `"5m" \| "15m" \| "1h" \| "1d"` | No |  |
 
 
 #### connect_guardrails_repository
@@ -3181,7 +3181,7 @@ Required RBAC permission: [`organizationSettings:update`](/docs/reference/permis
 | `ref` | `string \| null` | No | Branch, tag, or commit to follow. Omit to follow the default branch. |
 | `githubAppConfigId` | `string` | No | An organization GitHub App, for a GitHub repository. |
 | `gitlabTokenId` | `string` | No | A GitLab access token, for a GitLab project. |
-| `interval` | `"15m" \| "1h" \| "1d"` | No |  |
+| `interval` | `"5m" \| "15m" \| "1h" \| "1d"` | No |  |
 
 
 #### sync_guardrails_repository

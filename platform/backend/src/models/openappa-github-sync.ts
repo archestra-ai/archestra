@@ -154,7 +154,20 @@ class OpenAppaGithubSyncModel {
       .where(
         and(
           isNotNull(table.interval),
-          sql`(${table.lastSyncedAt} IS NULL OR ${table.lastSyncedAt} <= NOW() - CASE WHEN ${table.setupPullRequestNumber} IS NOT NULL THEN INTERVAL '1 minute' WHEN ${table.interval} = '15m' THEN INTERVAL '15 minutes' WHEN ${table.interval} = '1h' THEN INTERVAL '1 hour' ELSE INTERVAL '1 day' END)`,
+          sql`(${table.lastSyncedAt} IS NULL OR ${table.lastSyncedAt} <= NOW() - CASE WHEN ${table.setupPullRequestNumber} IS NOT NULL THEN INTERVAL '1 minute' WHEN ${table.interval} = '5m' THEN INTERVAL '5 minutes' WHEN ${table.interval} = '15m' THEN INTERVAL '15 minutes' WHEN ${table.interval} = '1h' THEN INTERVAL '1 hour' ELSE INTERVAL '1 day' END)`,
+        ),
+      );
+  }
+  /** The organizations whose policy syncs from a repository now. */
+  static async findSyncing() {
+    return db
+      .select({ organizationId: table.organizationId })
+      .from(table)
+      .where(
+        and(
+          isNotNull(table.interval),
+          isNotNull(table.repo),
+          isNotNull(table.path),
         ),
       );
   }

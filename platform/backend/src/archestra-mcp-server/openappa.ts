@@ -151,7 +151,10 @@ import {
   ExternalConsultOutcomeSchema,
   ExternalConsultRoleSchema,
 } from "@/types/openappa-external-consults";
-import { AppaGithubSourceSchema } from "@/types/openappa-github-sync";
+import {
+  AppaGithubSourceSchema,
+  AppaSyncIntervalSchema,
+} from "@/types/openappa-github-sync";
 import { RunPolicyTestsSchema } from "@/types/openappa-policy-tests";
 import {
   PreviewOpenAppaValidationChangeSchema,
@@ -476,7 +479,7 @@ const registry = defineArchestraTools([
       name: z.string().regex(/^[a-zA-Z0-9_.-]+$/),
       githubAppConfigId: z.string().uuid().optional(),
       gitlabTokenId: z.string().uuid().optional(),
-      interval: z.enum(["15m", "1h", "1d"]).default("1h"),
+      interval: AppaSyncIntervalSchema.default("15m"),
     }),
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(context);
@@ -531,7 +534,7 @@ const registry = defineArchestraTools([
         .uuid()
         .optional()
         .describe("A GitLab access token, for a GitLab project."),
-      interval: z.enum(["15m", "1h", "1d"]).default("1h"),
+      interval: AppaSyncIntervalSchema.default("15m"),
     }),
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(context);
@@ -1117,7 +1120,7 @@ const registry = defineArchestraTools([
     title: "Check OpenAPPA policy pull request",
     annotations: { readOnlyHint: true },
     description:
-      "Check the review state of an OpenAPPA policy pull request and whether Git sync has processed the merged policy. Use the pull request number returned by update_guardrails_policy.",
+      "Check the review state of an OpenAPPA policy pull request, and once it merges whether Git sync applied it (`applied`), with an `instruction` for what to tell the user. A merged pull request not yet applied queues a sync. Use the pull request number returned by update_guardrails_policy or update_guardrails_validation.",
     schema: z.strictObject({ number: z.number().int().positive() }),
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(

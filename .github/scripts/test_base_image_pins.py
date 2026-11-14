@@ -34,15 +34,30 @@ class BaseImagePinTest(unittest.TestCase):
     def test_dependabot_bumps_those_bases_on_main_and_every_supported_line(self):
         entries = docker_entries()
         lines = json.loads((ROOT / ".github/backport-targets.json").read_text())["branches"]
-        self.assertEqual(sorted(entry["target"] or "main" for entry in entries), sorted(["main", *lines]))
         directories = sorted({str(Path(dockerfile).parent) for dockerfile in DOCKERFILES})
+        by_target = {}
         for entry in entries:
-            with self.subTest(target=entry["target"] or "main"):
-                self.assertEqual(sorted(entry["directories"]), directories)
-                self.assertIn("interval: daily", entry["body"])
-        # The release-line entries copy main's (dependabot.yml has no includes).
-        self.assertEqual(len({entry["body"] for entry in entries}), 1)
+            by_target.setdefault(entry["target"] or "main", []).append(entry)
+        self.assertEqual(sorted(by_target), sorted(["main", *lines]))
+        for target, target_entries in by_target.items():
+            with self.subTest(target=target):
+                covered = [directory for entry in target_entries for directory in entry["directories"]]
+                self.assertEqual(sorted(covered), directories)
+                for entry in target_entries:
+                    self.assertIn("interval: daily", entry["body"])
+        # Release-line entries copy main's (dependabot.yml has no includes).
+        for target_entries in by_target.values():
+            self.assertEqual(sorted(entry["body"] for entry in target_entries),
+                             sorted(entry["body"] for entry in by_target["main"]))
 
+    def test_dependabot_leaves_the_sandbox_uv_base_to_sandbox_core(self):
+        # check:sandbox-base requires the sandbox's uv base to equal sandbox-core's
+        # DEFAULT_BASE_IMAGE, which Dependabot cannot bump alongside it.
+        for entry in docker_entries():
+            if "platform/docker_images/sandbox_base" in entry["directories"]:
+                with self.subTest(target=entry["target"] or "main"):
+                    self.assertEqual(entry["directories"], ["platform/docker_images/sandbox_base"])
+                    self.assertRegex(entry["body"], r'(?m)^      - dependency-name: "\*uv"\n(?!        update-types:)')
 
 def docker_entries():
     text = (ROOT / ".github/dependabot.yml").read_text()

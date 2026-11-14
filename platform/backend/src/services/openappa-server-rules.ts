@@ -1153,13 +1153,16 @@ export async function ensureSelfServiceInclude(params: Caller) {
  * After a pull, with self-service on and the include missing: the App
  * proposes it at once, so the Git sync setup lists its pull request waiting
  * rather than a step that asks for one. Another caller opening it right now
- * is left to it. Returns what was opened, or null.
+ * is left to it, and one someone closed without merging is not opened
+ * again: Finish setup still offers it to a person. Returns what was opened,
+ * or null.
  */
 export async function proposeSelfServiceInclude(organizationId: string) {
   const leased = await withOpenAppaLease({
     key: includeLeaseKey(organizationId),
     ttlMs: INCLUDE_LEASE_MS,
-    work: () => openSelfServiceInclude({ organizationId, requester: null }),
+    work: () =>
+      openSelfServiceInclude({ organizationId, requester: null, pull: true }),
   });
   return leased.ran ? leased.value : null;
 }
@@ -1177,6 +1180,11 @@ async function openSelfServiceInclude(params: {
   organizationId: string;
   /** Who turned self-service on, named on the pull request; none for a pull. */
   requester: { name: string; email: string } | null;
+  /**
+   * A pull proposes it: the include pull request someone closed without
+   * merging is their answer, so it opens again only when a person asks.
+   */
+  pull?: boolean;
 }): Promise<{ number: number; url: string } | null> {
   // A connect that proposed the current policy in a setup pull request has
   // no accepted commit until it merges, and the include changes that
@@ -1215,6 +1223,17 @@ async function openSelfServiceInclude(params: {
   const root = await guardrailsPolicyService.get(params.organizationId);
   const { token, api } = await githubWriter(source);
   const base = `${api}/repos/${source.repo}`;
+  if (
+    params.pull &&
+    (await pullLeavesInclude({
+      organizationId: params.organizationId,
+      entry,
+      repo: source.repo,
+      token,
+      base,
+    }))
+  )
+    return null;
   if (situation.stale) {
     await github({
       token,
@@ -1268,6 +1287,82 @@ async function openSelfServiceInclude(params: {
 }
 
 const INCLUDE_TITLE = "Include each MCP server's Guardrails rules file";
+
+/**
+ * Whether a pull leaves the include to a person: the newest include pull
+ * request on the repository was closed without merging while it still
+ * proposed this folder's entry, so someone declined it. GitHub keeps every
+ * pull request, so one an earlier version opened counts too. One for an
+ * earlier folder declines nothing now, nor does one Archestra closed itself
+ * when the folder moved: that close rewrites its body. A history that
+ * cannot be read now proves nothing either way: the pull leaves the
+ * include, and the next one reads it again.
+ */
+async function pullLeavesInclude(params: {
+  organizationId: string;
+  /** The include entry for the current folder, such as `mcp/*.toml`. */
+  entry: string;
+  repo: string;
+  token: string;
+  base: string;
+}): Promise<boolean> {
+  const owner = params.repo.slice(0, params.repo.indexOf("/"));
+  const head = encodeURIComponent(`${owner}:${SELF_SERVICE_INCLUDE_BRANCH}`);
+  try {
+    // Every include pull request GitHub keeps, in whatever order it lists
+    // them: the greatest number is the newest.
+    let newest:
+      | {
+          number: number;
+          state?: string;
+          merged_at?: string | null;
+          body?: string | null;
+        }
+      | undefined;
+    for (let page = 1; ; page++) {
+      const pulls = await github<
+        Array<{
+          number?: number;
+          state?: string;
+          merged_at?: string | null;
+          body?: string | null;
+        }>
+      >({
+        token: params.token,
+        url: `${params.base}/pulls?state=all&head=${head}&per_page=100&page=${page}`,
+      });
+      for (const pull of pulls)
+        if (
+          typeof pull.number === "number" &&
+          pull.number > (newest?.number ?? 0)
+        )
+          newest = { ...pull, number: pull.number };
+      if (pulls.length < 100) break;
+      if (page === INCLUDE_HISTORY_PAGES)
+        throw new Error("Too many include pull requests to read");
+    }
+    if (
+      newest?.state !== "closed" ||
+      newest.merged_at ||
+      !newest.body?.includes(`Adds \`${params.entry}\``)
+    )
+      return false;
+    logger.info(
+      { organizationId: params.organizationId, pull: newest.number },
+      "OpenAPPA leaves the include of the self-service folder to a person: its pull request was closed without merging",
+    );
+    return true;
+  } catch (error) {
+    logger.warn(
+      { organizationId: params.organizationId, error },
+      "OpenAPPA could not read the include pull requests; the next pull proposes the include if it is still missing",
+    );
+    return true;
+  }
+}
+
+/** The most pages of include pull requests a pull reads, 100 each. */
+const INCLUDE_HISTORY_PAGES = 5;
 
 /**
  * Add the include to the setup pull request's branch when the policy it

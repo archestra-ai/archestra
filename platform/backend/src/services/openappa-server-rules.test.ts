@@ -4418,32 +4418,48 @@ test("a pull with self-service on and the policy file lacking the servers' folde
  * A repository whose policy file lacks the servers' folder, with the include
  * pull requests GitHub keeps: numbers opened, those closed without merging.
  */
-function serveIncludePulls(params: { closedBefore?: number }) {
+function serveIncludePulls(params: {
+  /** Include pull requests GitHub keeps from before, all closed. */
+  earlier?: Array<{ number: number; merged: boolean }>;
+}) {
   // While set, GitHub cannot list the pull requests of every state.
   const history = { failing: false };
   serveRepository({
     head: FIRST,
     files: { [FIRST]: { "appa.toml": RULES }, main: { "appa.toml": RULES } },
   });
-  const pulls: number[] = params.closedBefore ? [params.closedBefore] : [];
+  const earlier = params.earlier ?? [];
+  const pulls: number[] = earlier.map((pull) => pull.number);
   const closed = new Set<number>(pulls);
+  const merged = new Set<number>(
+    earlier.filter((pull) => pull.merged).map((pull) => pull.number),
+  );
   const opened: Array<{ head: string }> = [];
   server.use(
     http.get(`${REPO}/rulesets`, () => HttpResponse.json([])),
-    // Open ones by default; every state, newest first, when asked.
+    // Open ones by default; every state, oldest first, when asked: the
+    // order GitHub lists them in decides nothing.
     http.get(`${REPO}/pulls`, ({ request }) => {
-      const all = new URL(request.url).searchParams.get("state") === "all";
-      if (all && history.failing)
-        return HttpResponse.json({ message: "Server Error" }, { status: 502 });
+      const query = new URL(request.url).searchParams;
+      const all = query.get("state") === "all";
+      if (all) {
+        expect(query.get("head")).toBe(
+          "example:archestra/openappa-self-service",
+        );
+        if (history.failing)
+          return HttpResponse.json(
+            { message: "Server Error" },
+            { status: 502 },
+          );
+      }
       return HttpResponse.json(
         [...pulls]
-          .reverse()
           .filter((number) => all || !closed.has(number))
           .map((number) => ({
             number,
             html_url: `https://github.com/example/policies/pull/${number}`,
             state: closed.has(number) ? "closed" : "open",
-            merged_at: null,
+            merged_at: merged.has(number) ? "2026-11-01T00:00:00Z" : null,
           })),
       );
     }),
@@ -4527,9 +4543,29 @@ test("an include pull request closed without merging before this version counts 
   const org = await makeOrganization();
   await connectApp({ organizationId: org.id });
   // GitHub keeps it: an earlier version opened #7, and someone closed it.
-  const { opened } = serveIncludePulls({ closedBefore: 7 });
+  const { opened } = serveIncludePulls({
+    earlier: [{ number: 7, merged: false }],
+  });
   await syncAppaGithubPolicy(org.id);
   expect(opened).toEqual([]);
+});
+
+test("the newest include pull request decides: one merged after an older one was declined lets a pull propose the include again", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  await connectApp({ organizationId: org.id });
+  // #7 was declined, #8 merged later, and the include left the policy file
+  // since: GitHub lists the oldest first here.
+  const { opened } = serveIncludePulls({
+    earlier: [
+      { number: 7, merged: false },
+      { number: 8, merged: true },
+    ],
+  });
+  await syncAppaGithubPolicy(org.id);
+  expect(opened).toHaveLength(1);
 });
 
 test("a pull and a person asking for the include at once open one pull request: whoever comes second finds it waiting", async ({

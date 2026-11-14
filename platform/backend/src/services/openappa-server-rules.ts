@@ -1301,13 +1301,30 @@ async function pullLeavesInclude(params: {
   base: string;
 }): Promise<boolean> {
   const owner = params.repo.slice(0, params.repo.indexOf("/"));
+  const head = encodeURIComponent(`${owner}:${SELF_SERVICE_INCLUDE_BRANCH}`);
   try {
-    const [newest] = await github<
-      Array<{ number?: number; state?: string; merged_at?: string | null }>
-    >({
-      token: params.token,
-      url: `${params.base}/pulls?state=all&sort=created&direction=desc&per_page=1&head=${encodeURIComponent(`${owner}:${SELF_SERVICE_INCLUDE_BRANCH}`)}`,
-    });
+    // Every include pull request GitHub keeps, in whatever order it lists
+    // them: the greatest number is the newest.
+    let newest:
+      | { number: number; state?: string; merged_at?: string | null }
+      | undefined;
+    for (let page = 1; ; page++) {
+      const pulls = await github<
+        Array<{ number?: number; state?: string; merged_at?: string | null }>
+      >({
+        token: params.token,
+        url: `${params.base}/pulls?state=all&head=${head}&per_page=100&page=${page}`,
+      });
+      for (const pull of pulls)
+        if (
+          typeof pull.number === "number" &&
+          pull.number > (newest?.number ?? 0)
+        )
+          newest = { ...pull, number: pull.number };
+      if (pulls.length < 100) break;
+      if (page === INCLUDE_HISTORY_PAGES)
+        throw new Error("Too many include pull requests to read");
+    }
     if (newest?.state !== "closed" || newest.merged_at) return false;
     logger.info(
       { organizationId: params.organizationId, pull: newest.number },
@@ -1322,6 +1339,9 @@ async function pullLeavesInclude(params: {
     return true;
   }
 }
+
+/** The most pages of include pull requests a pull reads, 100 each. */
+const INCLUDE_HISTORY_PAGES = 5;
 
 /**
  * Add the include to the setup pull request's branch when the policy it

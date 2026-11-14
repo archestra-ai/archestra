@@ -2,8 +2,6 @@
 # build KinD, Docker CLI, Dagger CLI, and kubectl from source with a patched Go toolchain.
 # the Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
-ARG GOLANG_IMAGE=golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0
-ARG NODE_IMAGE=node:24-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
 ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
 ARG DOCKER_CLI_VERSION=v29.3.0
@@ -12,9 +10,8 @@ ARG DAGGER_VERSION=v0.21.9
 ARG DAGGER_COMMIT=f2aefc20cf41b5ed7922df7244e0f10ddc6031f7
 ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
-ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:8.0-alpine@sha256:8a80a27ddac789b4cb6d09d244f9c8d840da599c5ad22f7233c04be470e55261
 
-FROM ${GOLANG_IMAGE} AS go-builder-base
+FROM golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0 AS go-builder-base
 ARG TARGETARCH
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
@@ -175,7 +172,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # on every boot (KinD recreates its node each run and its containerd cannot see
 # the host Docker image cache). tagged to match the engine ref the rendered
 # manifest uses, so imagePullPolicy: IfNotPresent finds it locally.
-FROM ${NODE_IMAGE} AS dagger-engine-image
+FROM node:24.22.1-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2 AS dagger-engine-image
 ARG TARGETARCH
 ARG DAGGER_VERSION
 RUN apk add --no-cache skopeo
@@ -190,7 +187,7 @@ RUN skopeo copy --override-os linux --override-arch "${TARGETARCH}" \
 # framework-neutral IL (net472 assemblies zipped into a .mfappx), so the
 # stage always runs on the build platform — never under target-arch
 # emulation — and the same bytes land in every target arch.
-FROM --platform=$BUILDPLATFORM ${DOTNET_SDK_IMAGE} AS vaf-add-on-builder
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:8.0-alpine@sha256:8a80a27ddac789b4cb6d09d244f9c8d840da599c5ad22f7233c04be470e55261 AS vaf-add-on-builder
 WORKDIR /src
 COPY backend/src/knowledge-base/connectors/mfiles/vaf-add-on/ ./
 # The csproj's packaging target writes exactly one versioned
@@ -206,7 +203,7 @@ RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
     cp "${versioned}" /out/; \
     cp "${versioned}" /out/archestra-m-files-vaf-add-on.mfappx
 
-FROM ${NODE_IMAGE} AS base
+FROM node:24.22.1-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2 AS base
 
 # Enable pnpm
 ENV PNPM_HOME="/pnpm"

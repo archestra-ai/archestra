@@ -74,6 +74,92 @@ updates:
     cooldown:
       default-days: 7
 
+  # Base images of the release images. A release scan holds a release on any
+  # fixable critical/high CVE, so bases are checked daily; the organization's
+  # 7-day cooldown still applies. Each supported release line gets its own
+  # entry; keep them equal to .github/backport-targets.json
+  # (test_base_image_pins.py enforces it). New majors, and minors outside Node,
+  # stay deliberate.
+  - package-ecosystem: docker
+    directories:
+      - platform
+      - platform/docker_images/agent
+      - platform/docker_images/mcp_server
+      - platform/docker_images/p4_shim
+      - platform/docker_images/sandbox_base
+    schedule:
+      interval: daily
+    groups:
+      base-images:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "python"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "golang"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "rust"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "*uv"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "*dotnet/sdk"
+        update-types:
+          - version-update:semver-minor
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+
+  # Same as above, for a supported release line.
+  - package-ecosystem: docker
+    target-branch: release/1.4
+    directories:
+      - platform
+      - platform/docker_images/agent
+      - platform/docker_images/mcp_server
+      - platform/docker_images/p4_shim
+      - platform/docker_images/sandbox_base
+    schedule:
+      interval: daily
+    groups:
+      base-images:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "python"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "golang"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "rust"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "*uv"
+        update-types:
+          - version-update:semver-minor
+      - dependency-name: "*dotnet/sdk"
+        update-types:
+          - version-update:semver-minor
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+
   - package-ecosystem: github-actions
     directories:
       - /

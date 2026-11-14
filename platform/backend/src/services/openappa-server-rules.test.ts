@@ -4462,8 +4462,11 @@ test("a pull with self-service on and the policy file lacking the servers' folde
  * pull requests GitHub keeps: numbers opened, those closed without merging.
  */
 function serveIncludePulls(params: {
-  /** Include pull requests GitHub keeps from before, all closed. */
-  earlier?: Array<{ number: number; merged: boolean }>;
+  /**
+   * Include pull requests GitHub keeps from before, all closed: for this
+   * folder's entry unless their body says otherwise.
+   */
+  earlier?: Array<{ number: number; merged: boolean; body?: string }>;
 }) {
   // While set, GitHub cannot list the pull requests of every state.
   const history = { failing: false };
@@ -4476,6 +4479,13 @@ function serveIncludePulls(params: {
   const closed = new Set<number>(pulls);
   const merged = new Set<number>(
     earlier.filter((pull) => pull.merged).map((pull) => pull.number),
+  );
+  const bodies = new Map<number, string>(
+    earlier.map((pull) => [
+      pull.number,
+      pull.body ??
+        "Adds `mcp/*.toml` to `appa.toml`'s include list, so the rules file each MCP server keeps in `mcp/` applies once merged and pulled by Git sync.",
+    ]),
   );
   const opened: Array<{ head: string }> = [];
   server.use(
@@ -4503,6 +4513,7 @@ function serveIncludePulls(params: {
             html_url: `https://github.com/example/policies/pull/${number}`,
             state: closed.has(number) ? "closed" : "open",
             merged_at: merged.has(number) ? "2026-11-01T00:00:00Z" : null,
+            body: bodies.get(number) ?? null,
           })),
       );
     }),
@@ -4521,9 +4532,11 @@ function serveIncludePulls(params: {
       () => new HttpResponse(null, { status: 422 }),
     ),
     http.post(`${REPO}/pulls`, async ({ request }) => {
-      opened.push((await request.json()) as { head: string });
+      const pull = (await request.json()) as { head: string; body: string };
+      opened.push(pull);
       const number = 8 + opened.length;
       pulls.push(number);
+      bodies.set(number, pull.body);
       return HttpResponse.json({
         number,
         html_url: `https://github.com/example/policies/pull/${number}`,
@@ -4591,6 +4604,27 @@ test("an include pull request closed without merging before this version counts 
   });
   await syncAppaGithubPolicy(org.id);
   expect(opened).toEqual([]);
+});
+
+test("a decline is of one folder's include: one for an earlier folder, or one Archestra closed itself when the folder moved, holds back nothing", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  for (const body of [
+    // Someone declined the include of the folder used before.
+    "Adds `servers/*.toml` to `appa.toml`'s include list, so the rules file each MCP server keeps in `servers/` applies once merged and pulled by Git sync.",
+    // Archestra closed it when the folder moved, then could not open the
+    // new one.
+    "Closed by Archestra: the self-service folder is now `mcp/`, and a new pull request includes it.",
+  ]) {
+    const org = await makeOrganization();
+    await connectApp({ organizationId: org.id });
+    const { opened } = serveIncludePulls({
+      earlier: [{ number: 7, merged: false, body }],
+    });
+    await syncAppaGithubPolicy(org.id);
+    expect(opened, body).toHaveLength(1);
+  }
 });
 
 test("the newest include pull request decides: one merged after an older one was declined lets a pull propose the include again", async ({

@@ -56,6 +56,29 @@ class DevelopmentToolsTest(unittest.TestCase):
             "    browser.close()",
         ).strip(), "ok")
 
+    def test_playwright_driver_runs_on_the_image_node(self):
+        # The wheel's own Node build lags Node's security releases, and the
+        # image scan rejects it; the driver uses the image's Node instead.
+        driver_node = Path(run(
+            "/opt/agent-tools/bin/python", "-c",
+            "import pathlib, playwright;"
+            " print(pathlib.Path(playwright.__file__).parent / 'driver' / 'node')",
+        ).strip())
+        self.assertEqual(driver_node.resolve(), Path("/usr/local/bin/node").resolve())
+        # The CLI starts the driver, so this runs it on the image's Node.
+        self.assertTrue(run("playwright", "--version").startswith("Version "))
+        # A session speaks the driver protocol and launches the image's Chromium.
+        self.assertEqual(run(
+            "/opt/agent-tools/bin/python", "-c",
+            "from playwright.sync_api import sync_playwright\n"
+            "with sync_playwright() as p:\n"
+            "    browser = p.chromium.launch()\n"
+            "    page = browser.new_page()\n"
+            "    page.set_content('<p>ok</p>')\n"
+            "    print(page.text_content('p'))\n"
+            "    browser.close()",
+        ).strip(), "ok")
+
     def test_launchers_describe_the_machine_after_the_agent_prompt(self):
         prompt = run("archestra-agent-instructions",
                      env={**os.environ, "ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT": "Review the release."})

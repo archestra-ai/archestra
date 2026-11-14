@@ -37,6 +37,10 @@ import config, {
   k8sMemoryQuantityToBytes,
   parseActiveChatRunPollIntervalMs,
   parseActiveUsersRefreshIntervalMs,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  parseAgentRuntimeNamespace,
   parseAnthropicWifConfig,
   parseBodyLimit,
   parseChatMaxOutputTokens,
@@ -57,9 +61,6 @@ import config, {
   parseFileStorageProvider,
   parseFileStorageS3Config,
   parseFrontendBaseUrl,
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   parseHelmReleaseName,
   // SPDX-SnippetEnd
   parseK8sResourceQuantity,
@@ -3065,6 +3066,27 @@ describe("parseMcpIdleHibernationSeconds", () => {
   });
 });
 // SPDX-SnippetEnd
+
+describe("parseAgentRuntimeNamespace", () => {
+  test("takes a valid namespace name", () => {
+    expect(parseAgentRuntimeNamespace("agent-runtimes")).toBe("agent-runtimes");
+    expect(parseAgentRuntimeNamespace("  agent-runtimes  ")).toBe(
+      "agent-runtimes",
+    );
+  });
+
+  test("unset or blank leaves runs in their fallback namespace", () => {
+    expect(parseAgentRuntimeNamespace(undefined)).toBeUndefined();
+    expect(parseAgentRuntimeNamespace("   ")).toBeUndefined();
+  });
+
+  test("ignores a name Kubernetes would reject", () => {
+    expect(parseAgentRuntimeNamespace("Agent-Runtimes")).toBeUndefined();
+    expect(parseAgentRuntimeNamespace("agent_runtimes")).toBeUndefined();
+    expect(parseAgentRuntimeNamespace("-agent-runtimes")).toBeUndefined();
+    expect(parseAgentRuntimeNamespace("a".repeat(64))).toBeUndefined();
+  });
+});
 
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

@@ -1089,6 +1089,10 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
 - **`ARCHESTRA_AGENT_RUNTIME_IMAGE_PREFETCH_ENABLED`** - Pulls every catalog Agent image onto each runtime node at startup and after each upgrade, so the first run of an Agent does not wait for its image. Turn it off when node disk or registry bandwidth is tight; each run then pulls only its own image.
   - Default: `true`
 
+- **`ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE`** - Runs Agent Runtime sessions and warm pools in their own namespace, apart from MCP servers, so each can get its own Pod Security, NetworkPolicy, and RBAC. An Agent whose [environment](/docs/admin/environments) names a namespace still runs there.
+  - Default: unset (the default environment's namespace, or else [`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE))
+  - The Helm chart sets it from `archestra.orchestrator.kubernetes.agentRuntimeNamespace` and grants the platform ServiceAccount access there. Create the namespace first.
+
 - **`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`** - Schedules runtime pods onto a dedicated node pool.
   - Default: unset (scheduled like any other pod)
   - Values: comma-separated `key=value` pairs, for example `archestra-agent-runtime=true`. Each pair also adds a matching `NoSchedule` toleration.

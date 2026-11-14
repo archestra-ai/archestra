@@ -407,6 +407,10 @@ the injection.
 - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
   value: {{ default .Release.Namespace .Values.archestra.orchestrator.kubernetes.namespace | quote }}
 {{- end }}
+{{- if and .Values.archestra.orchestrator.kubernetes.agentRuntimeNamespace (not (hasKey .Values.archestra.env "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE")) }}
+- name: ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE
+  value: {{ .Values.archestra.orchestrator.kubernetes.agentRuntimeNamespace | quote }}
+{{- end }}
 {{/* The release name, told to the backend rather than left for it to infer.
      Cluster objects the backend creates for ITSELF (the MCP image pre-pull
      DaemonSet) are named after it, so two releases sharing a namespace never

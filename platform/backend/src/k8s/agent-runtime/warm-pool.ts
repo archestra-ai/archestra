@@ -39,6 +39,7 @@ import {
   type KubernetesAgentRunLaunchSpec,
 } from "./manifests";
 import { AGENT_RUNTIME_WORKSPACE_LABEL, agentRuntimeLabels } from "./naming";
+import { resolveAgentRuntimeNamespace } from "./runtime-namespace";
 import { AGENT_SANDBOX_EXTENSIONS_API, agentSandboxApi } from "./sandbox-api";
 import { warmPoolTemplate } from "./warm-pool-template";
 
@@ -176,6 +177,9 @@ class AgentWarmPoolManager {
       const managedSelector = `${MANAGED_SELECTOR},archestra.io/organization-id in (${organizations.map(({ id }) => id).join(",")})`;
       const namespaces = new Set([
         clients.namespace,
+        ...(config.agentRuntime.namespace
+          ? [config.agentRuntime.namespace]
+          : []),
         ...environments.flatMap((environment) =>
           environment.namespace ? [environment.namespace] : [],
         ),
@@ -201,8 +205,10 @@ class AgentWarmPoolManager {
           (runtime.privileged && !config.agentRuntime.allowPrivileged)
         )
           continue;
-        const namespace =
-          agent.namespace ?? agent.defaultNamespace ?? clients.namespace;
+        const namespace = resolveAgentRuntimeNamespace({
+          environmentNamespace: agent.namespace,
+          organizationNamespace: agent.defaultNamespace,
+        });
         namespaces.add(namespace);
         const tiers = resolveAgentRuntimeTiers(
           agent.agentRuntimeTiers,

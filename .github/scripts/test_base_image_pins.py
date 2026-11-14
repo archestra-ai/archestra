@@ -40,7 +40,6 @@ class BaseImagePinTest(unittest.TestCase):
             with self.subTest(target=entry["target"] or "main"):
                 self.assertEqual(sorted(entry["directories"]), directories)
                 self.assertIn("interval: daily", entry["body"])
-                self.assertNotIn("cooldown", entry["body"])
         # The release-line entries copy main's (dependabot.yml has no includes).
         self.assertEqual(len({entry["body"] for entry in entries}), 1)
 

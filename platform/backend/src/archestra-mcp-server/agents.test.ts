@@ -4,6 +4,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_MCP_SERVER_NAME,
   type ArchestraToolShortName,
+  agentRuntimePermissionScope,
   buildAgentCatalogRuntime,
   buildCustomAgentRuntime,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
@@ -30,8 +31,10 @@ import {
   ToolModel,
 } from "@/models";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 import { archestraMcpBranding } from "./branding";
@@ -1477,7 +1480,7 @@ describe("agent runtime and model tools", () => {
     return model;
   }
 
-  test("MCP templates and runtime edits require Configure runtime while ordinary edits work", async ({
+  test("MCP templates and runtime edits require Agent Runtime permissions while ordinary edits work", async ({
     makeUser,
     makeMember,
     makeCustomRole,
@@ -1494,7 +1497,9 @@ describe("agent runtime and model tools", () => {
       runtime: { template: "codex" },
     });
     expect(refused.isError).toBe(true);
-    expect(JSON.stringify(refused)).toContain("Configure runtime permission");
+    expect(JSON.stringify(refused)).toContain(
+      "permission to use the Codex runtime",
+    );
     const runtime = buildCustomAgentRuntime({
       image: "example.test/worker:v1",
     });
@@ -1516,7 +1521,7 @@ describe("agent runtime and model tools", () => {
         runtime: next,
       });
       expect(denied.isError).toBe(true);
-      expect(JSON.stringify(denied)).toContain("Configure runtime permission");
+      expect(JSON.stringify(denied)).toContain("configure every Agent Runtime");
     }
     expect((await AgentModel.findById(agent.id))?.runtime).toEqual(runtime);
   });
@@ -1540,22 +1545,22 @@ describe("agent runtime and model tools", () => {
     expect(created?.systemPrompt).toContain("You are Claude Code");
   });
 
-  test("create_agent starts from an administrator's runtime settings and keeps locked ones", async () => {
-    const saveClaudeCode = (revision: number, locked: boolean) =>
-      AgentRuntimeTemplateModel.saveSettings({
-        organizationId,
-        settings: {
-          revision,
-          templates: [],
-          builtIns: {
-            "claude-code": {
-              locked,
-              settings: { ttlHours: 6, idleTimeoutMinutes: 30 },
-            },
-          },
+  test("create_agent starts from an administrator's runtime settings, which a caller who can only use the runtime keeps", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    await AgentRuntimeTemplateModel.saveSettings({
+      organizationId,
+      settings: {
+        revision: 0,
+        templates: [],
+        builtIns: {
+          "claude-code": { settings: { ttlHours: 6, idleTimeoutMinutes: 30 } },
         },
-        popularAgentOverrides: null,
-      });
+      },
+      popularAgentOverrides: null,
+    });
     const create = async (name: string) =>
       findCreated(
         await call(TOOL_CREATE_AGENT_SHORT_NAME, {
@@ -1564,52 +1569,49 @@ describe("agent runtime and model tools", () => {
         }),
       );
 
-    await saveClaudeCode(0, false);
     expect((await create("Defaults"))?.runtime).toMatchObject({
       ttlHours: 6,
       idleTimeoutMinutes: 240,
     });
 
-    await saveClaudeCode(1, true);
-    const locked = await create("Locked");
-    expect(locked?.runtime).toMatchObject({
+    const builder = await useOnlyClaudeCodeBuilder({
+      organizationId,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    });
+    mockContext.userId = builder.id;
+    const kept = await create("Use only");
+    expect(kept?.runtime).toMatchObject({
       ttlHours: 6,
       idleTimeoutMinutes: 30,
     });
     const edited = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
-      id: locked?.id,
+      id: kept?.id,
       runtime: { template: "claude-code", ttlHours: 2 },
     });
     expect(edited.isError).not.toBe(true);
     expect(
-      (await AgentModel.findById(locked?.id as string))?.runtime,
+      (await AgentModel.findById(kept?.id as string))?.runtime,
     ).toMatchObject({ ttlHours: 6, idleTimeoutMinutes: 30 });
   });
 
-  test("only an administrator can move an agent off a locked runtime", async ({
+  test("a caller who can use only one runtime can't move an agent to an image that is none of them", async ({
     makeUser,
     makeMember,
     makeCustomRole,
     makeAgent,
   }) => {
-    await AgentRuntimeTemplateModel.saveSettings({
-      organizationId,
-      settings: {
-        revision: 0,
-        templates: [],
-        builtIns: { "claude-code": { locked: true, settings: {} } },
-      },
-      popularAgentOverrides: null,
-    });
     const runtime = buildAgentCatalogRuntime({
       id: "claude-code",
       image: config.agentRuntime.catalogImages["claude-code"],
     });
-    const builder = await makeUser();
-    const role = await makeCustomRole(organizationId, {
-      permission: { agent: ["read", "create", "update", "configure-runtime"] },
+    const builder = await useOnlyClaudeCodeBuilder({
+      organizationId,
+      makeUser,
+      makeMember,
+      makeCustomRole,
     });
-    await makeMember(builder.id, organizationId, { role: role.role });
     const agent = await makeAgent({
       organizationId,
       authorId: builder.id,
@@ -1622,7 +1624,7 @@ describe("agent runtime and model tools", () => {
       runtime: { image: "example.test/own:v1" },
     });
     expect(refused.isError).toBe(true);
-    expect(JSON.stringify(refused)).toContain("locked Claude Code runtime");
+    expect(JSON.stringify(refused)).toContain("configure every Agent Runtime");
     expect((await AgentModel.findById(agent.id))?.runtime).toEqual(runtime);
   });
 
@@ -1698,7 +1700,13 @@ describe("agent runtime and model tools", () => {
     await define("restricted", []);
     const member = await makeUser();
     const runtimeRole = await makeCustomRole(organizationId, {
-      permission: { agent: ["configure-runtime"] },
+      permission: { agent: ["read"] },
+    });
+    await grantRoleEverywhere({
+      organizationId,
+      resource: "agentRuntime",
+      roleId: runtimeRole.id,
+      actions: ["read", "use", "configure"],
     });
     await makeMember(member.id, organizationId, {
       role: `member,${runtimeRole.role}`,
@@ -2139,4 +2147,39 @@ function extractCreatedId(
   }
 
   return createdAgentId;
+}
+
+/** An agent builder who may use the Claude Code runtime but not configure it. */
+async function useOnlyClaudeCodeBuilder(fixtures: {
+  organizationId: string;
+  makeUser: () => Promise<{ id: string }>;
+  makeMember: (
+    userId: string,
+    organizationId: string,
+    options: { role: string },
+  ) => Promise<unknown>;
+  makeCustomRole: (
+    organizationId: string,
+    options: { permission: Record<string, string[]> },
+  ) => Promise<{ role: string }>;
+}) {
+  const builder = await fixtures.makeUser();
+  const { organizationId } = fixtures;
+  const role = await fixtures.makeCustomRole(organizationId, {
+    permission: { agent: ["read", "create", "update"] },
+  });
+  await fixtures.makeMember(builder.id, organizationId, { role: role.role });
+  const key = {
+    organizationId,
+    resource: "agentRuntime" as const,
+    scope: agentRuntimePermissionScope({ kind: "built-in", id: "claude-code" }),
+  };
+  await ResourcePermissionPolicyModel.replace({
+    ...key,
+    revision: 0,
+    grants: [
+      { subject: { type: "user", id: builder.id }, actions: ["read", "use"] },
+    ],
+  });
+  return builder;
 }

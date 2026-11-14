@@ -82,7 +82,10 @@ import {
   assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
-import { applyAgentRuntimeLock } from "@/services/agent-runtime/agent-runtime-lock";
+import {
+  applyAgentRuntimeAccess,
+  assertCanUseAgentRuntime,
+} from "@/services/agent-runtime/agent-runtime-access";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
@@ -796,7 +799,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
       if (body.runtime !== undefined) {
-        body.runtime = await applyAgentRuntimeLock({
+        body.runtime = await applyAgentRuntimeAccess({
           organizationId,
           userId: user.id,
           runtime: body.runtime,
@@ -806,8 +809,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentType,
         runtime: body.runtime,
         isAdmin: checker.isAdmin(agentType),
-        userId: user.id,
-        organizationId,
       });
       await assertAgentRuntimeTiersExist({
         runtime: body.runtime,
@@ -1329,12 +1330,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      await assertCanUseAgentRuntime({
+        organizationId,
+        userId: user.id,
+        runtime: sourceAgent.runtime,
+      });
       await requireAgentRuntimePermission({
         agentType: sourceAgent.agentType,
         runtime: sourceAgent.runtime,
         isAdmin: checker.isAdmin(sourceAgent.agentType),
-        userId: user.id,
-        organizationId,
       });
 
       // The copy is the caller's own Agent, so the credentials it reads are
@@ -2110,7 +2114,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Only a body that sets the runtime carries one: assigning `undefined`
       // would leave a `runtime` key with nothing to save.
       if (body.runtime !== undefined) {
-        body.runtime = await applyAgentRuntimeLock({
+        body.runtime = await applyAgentRuntimeAccess({
           organizationId,
           userId: user.id,
           runtime: body.runtime,
@@ -2121,9 +2125,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentType: existingAgent.agentType,
         runtime: body.runtime,
         isAdmin: checker.isAdmin(existingAgent.agentType),
-        userId: user.id,
-        organizationId,
-        previous: existingAgent.runtime,
       });
       await assertAgentRuntimeTiersExist({
         runtime: body.runtime,

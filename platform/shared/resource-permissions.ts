@@ -29,6 +29,9 @@ export const ScopedResourceSchema = z.enum([
   "llmOauthClient",
   // Deploying into an environment is `use` on that environment.
   "environment",
+  // An Agent Runtime: `use` puts agents on it with its own settings, and
+  // `configure` lets an agent of it change those settings.
+  "agentRuntime",
   // A service account carries no audience of its own — the organization owns
   // every one of them — but it is still an object somebody has to be allowed
   // to manage, so it is scoped by id like the rest rather than being
@@ -65,6 +68,9 @@ export const ResourcePermissionActionSchema = z.enum([
   // server into the cluster it runs on, so it sits above Full access rather
   // than inside it, and a creator's automatic Full access never carries it.
   "configure-deployment-spec",
+  // Agent Runtime only: change the runtime's settings on an agent of it,
+  // rather than taking the runtime's own.
+  "configure",
 ]);
 
 /** Every selector is local to one resource type and one organization. */
@@ -140,6 +146,7 @@ export const scopedResourceNouns: Record<ScopedResource, string> = {
   mcpOauthClient: "OAuth client",
   llmOauthClient: "OAuth client",
   environment: "environment",
+  agentRuntime: "runtime",
   log: "log",
   auditLog: "audit log entry",
   serviceAccount: "service account",
@@ -341,6 +348,21 @@ export function resourcePermissionPresetsFor(
       manage: {
         label: "Full access",
         actions: ["read", "update", "delete", "manage-permissions"],
+      },
+    };
+  }
+  // A runtime's settings and its place in the list are organization settings,
+  // so a runtime grant is only about putting agents on it.
+  if (resource === "agentRuntime") {
+    return {
+      use: resourcePermissionPresets.use,
+      configure: {
+        label: "Can use and configure",
+        actions: ["read", "use", "configure"],
+      },
+      manage: {
+        label: "Full access",
+        actions: ["read", "use", "configure", "manage-permissions"],
       },
     };
   }

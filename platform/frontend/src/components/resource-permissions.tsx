@@ -1114,6 +1114,7 @@ const actionLabels: Record<ResourcePermissionAction, string> = {
   delete: "Delete",
   "manage-permissions": "Manage access",
   "configure-deployment-spec": "Configure deployment spec",
+  configure: "Configure",
 };
 
 export const resourcePluralNames: Record<ScopedResource, string> = {
@@ -1137,6 +1138,7 @@ export const resourcePluralNames: Record<ScopedResource, string> = {
   mcpOauthClient: "OAuth clients",
   llmOauthClient: "OAuth clients",
   environment: "environments",
+  agentRuntime: "agent runtimes",
   log: "LLM and MCP logs",
   auditLog: "audit logs",
   serviceAccount: "service accounts",

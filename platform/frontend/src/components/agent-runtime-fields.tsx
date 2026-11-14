@@ -230,18 +230,20 @@ export function AgentRuntimeFields({
   );
 }
 
-/** Says which locked Agent Runtime sets the settings shown read-only. */
-export function LockedRuntimeNotice({ name }: { name: string }) {
+/**
+ * Says which Agent Runtime sets the settings shown read-only: the reader may
+ * use it but not configure it.
+ */
+export function RuntimeSettingsNotice({ name }: { name: string }) {
   return (
     <InlineNotice variant="info">
       <LockKeyhole className="size-4 shrink-0" />
       <InlineNoticeBody>
         <span className="font-medium">Set by the {name} runtime</span>
         <InlineNoticeText>
-          Its launch command, protocol, follow-up delivery, limits, tiers and
-          Claude account apply to every agent that uses it. Administrators
-          change them in Settings, under Agents. Environment, credentials and
-          ports stay this agent's own.
+          Changing its launch command, protocol, follow-up delivery, limits,
+          tiers or Claude account needs <code>agentRuntime:configure</code> on
+          it. Environment, credentials and ports stay this agent's own.
         </InlineNoticeText>
       </InlineNoticeBody>
     </InlineNotice>

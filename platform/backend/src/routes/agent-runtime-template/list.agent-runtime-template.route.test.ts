@@ -40,7 +40,6 @@ describe("GET /api/agent-runtime-templates", () => {
         icon: null,
         hidden: false,
         position: 1,
-        locked: false,
         image: template.runtime.image,
       },
     ]);

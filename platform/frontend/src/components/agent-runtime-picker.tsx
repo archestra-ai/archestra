@@ -25,7 +25,7 @@ import {
   AgentRuntimeSteeringField,
   defaultAgentRuntime,
   isClaudeCodeRuntimeConfig,
-  LockedRuntimeNotice,
+  RuntimeSettingsNotice,
 } from "@/components/agent-runtime-fields";
 import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavailable-notice";
 import { ConfigurationRow } from "@/components/configuration-row";
@@ -54,7 +54,7 @@ export function AgentRuntimePicker({
   modelBlock,
   modelSummary,
   modelAttention,
-  lockedBy,
+  readOnlyBy,
   onChangeTemplate,
 }: {
   selectedId: AgentRuntimeSelection;
@@ -67,8 +67,11 @@ export function AgentRuntimePicker({
   modelBlock: ReactNode;
   modelSummary: string;
   modelAttention?: string;
-  /** The locked Agent Runtime that sets this runtime's settings, if any. */
-  lockedBy?: string | null;
+  /**
+   * The Agent Runtime whose settings this agent takes because the reader may
+   * use it but not configure it, if any.
+   */
+  readOnlyBy?: string | null;
   /**
    * Set when the runtime was picked from the catalog. The picker then shows
    * that choice as a summary rather than asking a second time, and this
@@ -80,7 +83,7 @@ export function AgentRuntimePicker({
   const appName = useAppName();
   const runtimeEnabled = useFeature("agentRuntime");
   const resolver = useResolveRuntimeTemplate();
-  const { templates, isError, isFetching, refetch } =
+  const { templates, canUseCustomImage, isError, isFetching, refetch } =
     useAvailableAgentCatalogTemplates();
   const options: Array<{
     id: AgentRuntimeSelection;
@@ -95,11 +98,15 @@ export function AgentRuntimePicker({
       runtime: template.initialValues.runtime ?? null,
       icon: template.icon,
     })),
-    {
-      id: "custom",
-      name: "Custom image",
-      runtime: defaultAgentRuntime(),
-    },
+    ...(canUseCustomImage
+      ? [
+          {
+            id: "custom",
+            name: "Custom image",
+            runtime: defaultAgentRuntime(),
+          },
+        ]
+      : []),
   ];
   // Hiding a template must not replace an existing agent's runtime settings.
   const visibleSelectedId = options.some((option) => option.id === selectedId)
@@ -229,7 +236,7 @@ export function AgentRuntimePicker({
         />
       )}
       {runtimeEnabled === false && <AgentRuntimeUnavailableNotice />}
-      {lockedBy && <LockedRuntimeNotice name={lockedBy} />}
+      {readOnlyBy && <RuntimeSettingsNotice name={readOnlyBy} />}
       <Accordion
         type="multiple"
         value={expandedRows}
@@ -299,7 +306,7 @@ export function AgentRuntimePicker({
                 description="The API the harness uses to call models."
                 summary={protocol}
               >
-                <fieldset disabled={!!lockedBy}>
+                <fieldset disabled={!!readOnlyBy}>
                   <AgentRuntimeProtocolField
                     value={value}
                     onChange={onChange}
@@ -316,7 +323,7 @@ export function AgentRuntimePicker({
               description="What happens to a message you send while it works."
               summary={steering}
             >
-              <fieldset disabled={!!lockedBy}>
+              <fieldset disabled={!!readOnlyBy}>
                 <AgentRuntimeSteeringField
                   value={value}
                   onChange={onChange}
@@ -332,7 +339,7 @@ export function AgentRuntimePicker({
               summary={runControlsSummary(value)}
             >
               <div className="space-y-5">
-                <fieldset disabled={!!lockedBy}>
+                <fieldset disabled={!!readOnlyBy}>
                   <AgentRuntimeLimitFields value={value} onChange={onChange} />
                 </fieldset>
                 <AgentRuntimeAccessFields value={value} onChange={onChange} />

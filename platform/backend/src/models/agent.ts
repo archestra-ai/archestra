@@ -3796,6 +3796,55 @@ class AgentModel {
   }
 
   /**
+   * Structural Auto-mode (`access_all_subagents = true`) equivalent of
+   * {@link findAssignedRuntimeSubagentIds}: resolves all non-excluded regular/SRE
+   * internal runtime agents in `organizationId` and `environmentId` (excluding
+   * `callerAgentId` itself), sorted deterministically by `id`.
+   */
+  static async findAutoRuntimeSubagentIds(params: {
+    callerAgentId: string;
+    organizationId: string;
+    environmentId: string | null;
+  }): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
+          AgentModel.isRegularOrSreAgent(),
+          ne(schema.agentsTable.id, params.callerAgentId),
+          isNotNull(schema.agentsTable.runtime),
+          params.environmentId === null
+            ? isNull(schema.agentsTable.environmentId)
+            : eq(schema.agentsTable.environmentId, params.environmentId),
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(schema.agentExcludedSubagentsTable)
+              .where(
+                and(
+                  eq(
+                    schema.agentExcludedSubagentsTable.agentId,
+                    params.callerAgentId,
+                  ),
+                  eq(
+                    schema.agentExcludedSubagentsTable.targetAgentId,
+                    schema.agentsTable.id,
+                  ),
+                ),
+              ),
+          ),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .orderBy(asc(schema.agentsTable.id));
+
+    return rows.map((row) => row.id);
+  }
+
+  /**
    * Batch equivalent of {@link findAssignedRuntimeSubagentIds}: resolves the
    * ordered, environment-fenced, non-excluded runtime subagent IDs explicitly
    * assigned to each agent in `agentIds` in a single query.

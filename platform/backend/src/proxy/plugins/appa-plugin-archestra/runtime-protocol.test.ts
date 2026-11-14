@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { ToolModel } from "@/models";
+import { AgentExcludedSubagentModel, ToolModel } from "@/models";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import * as agentRuntimeMetrics from "@/observability/metrics/agent-runtime";
@@ -672,6 +672,7 @@ describe("protected runtime protocol", () => {
     const runtimeWorker = await makeAgent({
       organizationId: org.id,
       name: "Lobster Grok",
+      agentType: "agent",
       runtime: runtimeConfig(),
     });
     const workerDelegationTool = await ToolModel.findOrCreateDelegationTool(
@@ -792,6 +793,62 @@ describe("protected runtime protocol", () => {
     });
     expect(
       evaluate.mock.calls.at(-1)?.[2]?.spawnCallIds?.has("plain-no-spawn"),
+    ).toBe(false);
+
+    // 2b. Auto-subagent Chat agent (`accessAllSubagents: true`) classifies omitted
+    // `agent_id` as `spawn: true` when non-excluded runtime targets exist, and
+    // `spawn: false` once all runtime targets are excluded.
+    const autoRouter = await makeAgent({
+      organizationId: org.id,
+      name: "Auto Router",
+      agentType: "agent",
+      accessAllSubagents: true,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    const autoCtx = request(org.id);
+    autoCtx.profileId = autoRouter.id;
+    const autoTrusted = autoCtx.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    autoTrusted.profileId = autoRouter.id;
+    autoTrusted.chatSource = "chat";
+    await plugin.onSessionInit(autoCtx);
+    await plugin.onToolCalls({
+      ...autoCtx,
+      toolCalls: [
+        {
+          id: "auto-spawn",
+          name: "archestra__start_agent_run",
+          arguments: { message: "Dispatch via auto subagent pool" },
+        },
+      ],
+    });
+    expect(
+      evaluate.mock.calls.at(-1)?.[2]?.spawnCallIds?.has("auto-spawn"),
+    ).toBe(true);
+
+    await AgentExcludedSubagentModel.replaceForAgent(autoRouter.id, [
+      runtimeWorker.id,
+    ]);
+    await plugin.onToolCalls({
+      ...autoCtx,
+      toolCalls: [
+        {
+          id: "auto-excluded-no-spawn",
+          name: "archestra__start_agent_run",
+          arguments: { message: "All runtime targets excluded" },
+        },
+      ],
+    });
+    expect(
+      evaluate.mock.calls
+        .at(-1)?.[2]
+        ?.spawnCallIds?.has("auto-excluded-no-spawn"),
     ).toBe(false);
 
     // 3. Attested external gateways: both LB and non-LB gateways with assigned runtime

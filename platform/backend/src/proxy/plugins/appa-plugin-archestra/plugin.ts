@@ -3696,9 +3696,6 @@ async function resolveRuntimeCalls(params: {
     )
   ) {
     const { organizationId } = params;
-    const actorUserId = params.callerId?.startsWith("user:")
-      ? params.callerId.slice("user:".length)
-      : undefined;
     const [runtimeTargets, spawnTargets] = await Promise.all([
       AgentModel.findRuntimeTargets(organizationId),
       AgentModel.findSpawnTargets(organizationId),
@@ -3725,7 +3722,6 @@ async function resolveRuntimeCalls(params: {
         cached = callerHasCandidateRuntimeSubagents({
           callerAgentId,
           organizationId,
-          actorUserId,
         });
         candidatePoolByCaller.set(callerAgentId, cached);
       }

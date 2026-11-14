@@ -38,7 +38,14 @@ export async function resolveCandidateRuntimeSubagentIds(params: {
   const { callerAgent, actorUserId } = params;
   const realActorUserId =
     actorUserId && actorUserId !== "system" ? actorUserId : null;
-  if (callerAgent.accessAllSubagents && realActorUserId) {
+  if (callerAgent.accessAllSubagents) {
+    if (!realActorUserId) {
+      return AgentModel.findAutoRuntimeSubagentIds({
+        callerAgentId: callerAgent.id,
+        organizationId: callerAgent.organizationId,
+        environmentId: callerAgent.environmentId,
+      });
+    }
     const isAgentAdmin = await ResourcePermissions.allows({
       userId: realActorUserId,
       organizationId: callerAgent.organizationId,
@@ -96,13 +103,17 @@ export async function resolveCandidateRuntimeSubagentIds(params: {
 }
 
 /**
- * Whether `callerAgentId` in `organizationId` has at least one candidate runtime
- * subagent when `start_agent_run` omits `agent_id`.
+ * Whether `callerAgentId` in `organizationId` structurally has at least one
+ * candidate runtime subagent when `start_agent_run` omits `agent_id`.
+ *
+ * Used by OpenAPPA's LLM Proxy spawn classification (`runtimeCalls`) alongside
+ * `AgentModel.findRuntimeTargets(organizationId)`: spawn classification is
+ * structural (independent of per-user RBAC grants, which `tasks.ts` enforces
+ * at tool execution time and reports via `failedLaunch`).
  */
 export async function callerHasCandidateRuntimeSubagents(params: {
   callerAgentId: string;
   organizationId: string;
-  actorUserId?: string | null;
 }): Promise<boolean> {
   if (!isUuid(params.callerAgentId)) {
     return false;
@@ -113,7 +124,6 @@ export async function callerHasCandidateRuntimeSubagents(params: {
   }
   const candidates = await resolveCandidateRuntimeSubagentIds({
     callerAgent,
-    actorUserId: params.actorUserId,
   });
   return candidates.length > 0;
 }

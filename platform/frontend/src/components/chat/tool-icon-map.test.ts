@@ -39,15 +39,15 @@ describe("buildToolIconMap", () => {
       catalogItems: [
         {
           id: "cat-long",
-          name: "Spark Smartsheet Jira Description Review Server",
-          toolPrefix: "spark_smartsheet_jira_description",
+          name: "Acme Planning Board Description Review Server",
+          toolPrefix: "acme_planning_board_description",
           icon: "📋",
         },
       ],
     });
 
     expect(
-      map.get("spark_smartsheet_jira_description__validate-description-review"),
+      map.get("acme_planning_board_description__validate-description-review"),
     ).toEqual({ icon: "📋", catalogId: "cat-long" });
   });
 

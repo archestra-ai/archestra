@@ -7,8 +7,8 @@ import {
   reconcileCatalogToolPrefixes,
 } from "./mcp-tool-names";
 
-/** 47 characters: with these tool names, over the 64-character limit. */
-const LONG_NAME = "Spark Smartsheet Jira Description Review Server";
+/** 45 characters: with these tool names, over the 64-character limit. */
+const LONG_NAME = "Acme Planning Board Description Review Server";
 const PREPARE = "prepare-description-review";
 const VALIDATE = "validate-description-review";
 /** What the old format appended to a cut prefix: `-` and 8 hex characters. */
@@ -42,14 +42,14 @@ describe("mintCatalogToolNames", () => {
     });
 
     expect(nameFor(PREPARE)).toBe(
-      "spark_smartsheet_jira_description__prepare-description-review",
+      "acme_planning_board_description__prepare-description-review",
     );
     expect(nameFor(VALIDATE)).toBe(
-      "spark_smartsheet_jira_description__validate-description-review",
+      "acme_planning_board_description__validate-description-review",
     );
     expect(
       (await InternalMcpCatalogModel.findById(catalog.id))?.toolPrefix,
-    ).toBe("spark_smartsheet_jira_description");
+    ).toBe("acme_planning_board_description");
   });
 
   test("counts apart a different name that cuts to the same prefix", async ({
@@ -57,7 +57,7 @@ describe("mintCatalogToolNames", () => {
   }) => {
     const first = await makeInternalMcpCatalog({ name: LONG_NAME });
     const second = await makeInternalMcpCatalog({
-      name: "Spark Smartsheet Jira Description Review Staging",
+      name: "Acme Planning Board Description Review Staging",
     });
 
     const firstName = await mintCatalogToolNames({
@@ -70,10 +70,10 @@ describe("mintCatalogToolNames", () => {
     });
 
     expect(firstName(VALIDATE)).toBe(
-      "spark_smartsheet_jira_description__validate-description-review",
+      "acme_planning_board_description__validate-description-review",
     );
     expect(secondName(VALIDATE)).toBe(
-      "spark_smartsheet_jira_description-2__validate-description-review",
+      "acme_planning_board_description-2__validate-description-review",
     );
   });
 
@@ -113,7 +113,7 @@ describe("mintCatalogToolNames", () => {
       catalogId: catalog.id,
     });
     expect(stored.name).toBe(
-      "spark_smartsheet_jira_description_review_server__list",
+      "acme_planning_board_description_review_server__list",
     );
 
     const nameFor = await mintCatalogToolNames({
@@ -122,10 +122,10 @@ describe("mintCatalogToolNames", () => {
     });
 
     expect(nameFor(VALIDATE)).toBe(
-      "spark_smartsheet_jira_description__validate-description-review",
+      "acme_planning_board_description__validate-description-review",
     );
     expect((await ToolModel.findById(stored.id))?.name).toBe(
-      "spark_smartsheet_jira_description__list",
+      "acme_planning_board_description__list",
     );
   });
 });
@@ -158,7 +158,7 @@ describe("reconcileCatalogToolPrefixes", () => {
     expect(renamed).toEqual([catalog.id]);
     const after = await ToolModel.findById(tool.id);
     expect(after?.name).toBe(
-      "spark_smartsheet_jira_description__validate-description-review",
+      "acme_planning_board_description__validate-description-review",
     );
     expect((await LimitModel.findById(limit.id))?.toolName).toBe(after?.name);
     // Idempotent: a second boot finds nothing to move.

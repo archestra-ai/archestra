@@ -272,6 +272,7 @@ export function useMcpCatalogDirectory(options?: { enabled?: boolean }) {
       query.data?.catalogItems.map((item) => ({
         id: item.id,
         name: item.name,
+        toolPrefix: item.toolPrefix ?? null,
         serverType: item.serverType,
         environmentId: item.environmentId,
         icon: item.iconUrl ?? item.icon,

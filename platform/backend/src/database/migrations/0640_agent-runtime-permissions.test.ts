@@ -7,7 +7,7 @@ import { describe, expect, test } from "@/test";
 
 const statements = fs
   .readFileSync(
-    path.join(__dirname, "0639_agent-runtime-permissions.sql"),
+    path.join(__dirname, "0640_agent-runtime-permissions.sql"),
     "utf8",
   )
   .split("--> statement-breakpoint")

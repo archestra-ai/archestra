@@ -241,6 +241,8 @@ const layerTable = [
       // identity provider check and the team access to a model.
       "src/routes/proxy/utils/model-team-access.ts",
       "src/services/apps/app-mcp-backing.ts",
+      // The tool-name prefix allocation the app MCP backing mints with.
+      "src/services/mcp-tool-names.ts",
       "src/services/credential-resource-permissions.ts",
       "src/services/identity-providers/linked-idp-auth.ts",
       "src/services/mcp-advanced-settings.ts",

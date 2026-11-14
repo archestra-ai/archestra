@@ -93,9 +93,48 @@ class BuildInputsTests(unittest.TestCase):
     def inputs(self, manifests, image="platform", arch="arm64"):
         manifest = json.dumps({"platform": "1.4.1"})
         with patch.object(Path, "read_text", return_value=manifest), patch.object(
-            CANDIDATE, "command", side_effect=["platform-v1.4.0", "platform-v1.4.0", json.dumps({"manifests": manifests})]
-        ):
+            CANDIDATE, "command", side_effect=["platform-v1.4.0", "platform-v1.4.0"]
+        ), patch.object(CANDIDATE, "published_index", return_value={"manifests": manifests}):
             return CANDIDATE.build_inputs(image, arch)
+
+    def test_abandoned_versions_hand_over_to_the_newest_published_release(self):
+        rows = [{"digest": "sha256:" + "7" * 64, "platform": {"os": "linux", "architecture": "arm64"}}]
+        describe = ("git", "describe", "--tags", "--abbrev=0", "--match", "platform-v*")
+        commands = {("git", "tag", "--merged", "HEAD^", "--list", "platform-v*"): "platform-v1.4.30",
+                    (*describe, "HEAD^"): "platform-v1.4.31", (*describe, "platform-v1.4.31^"): "platform-v1.4.30",
+                    (*describe, "platform-v1.4.30^"): "platform-v1.4.29"}
+        published = {f"{CANDIDATE.PLATFORM}:1.4.29": {"manifests": rows}}
+        def git(*args):
+            if args not in commands:  # git describe finds no older tag
+                raise subprocess.CalledProcessError(128, args)
+            return commands[args]
+        with patch.object(Path, "read_text", return_value='{"platform":"1.4.32"}'), patch.object(
+            CANDIDATE, "command", side_effect=git
+        ), patch.object(CANDIDATE, "published_index", side_effect=published.get) as index:
+            self.assertEqual(CANDIDATE.build_inputs("platform", "arm64")["previous_image"],
+                             f"{CANDIDATE.PLATFORM}@sha256:" + "7" * 64)
+        self.assertEqual([call.args[0] for call in index.call_args_list],
+                         [f"{CANDIDATE.PLATFORM}:{v}" for v in ("1.4.31", "1.4.30", "1.4.29")])
+        # Without any published release left, git describe fails the candidate.
+        del commands[(*describe, "platform-v1.4.30^")]
+        with patch.object(Path, "read_text", return_value='{"platform":"1.4.32"}'), patch.object(
+            CANDIDATE, "command", side_effect=git
+        ), patch.object(CANDIDATE, "published_index", return_value=None), self.assertRaises(subprocess.CalledProcessError):
+            CANDIDATE.build_inputs("platform", "arm64")
+
+    def test_only_the_registry_not_found_answer_means_unpublished(self):
+        reference = f"{CANDIDATE.PLATFORM}:1.4.30"
+        def run(stdout="", stderr="", returncode=0):
+            return subprocess.CompletedProcess((), returncode, stdout, stderr)
+        with patch.object(subprocess, "run", return_value=run('{"manifests": []}')):
+            self.assertEqual(CANDIDATE.published_index(reference), {"manifests": []})
+        with patch.object(subprocess, "run", return_value=run(stderr=f"ERROR: {reference}: not found\n", returncode=1)):
+            self.assertIsNone(CANDIDATE.published_index(reference))
+        for stderr in ("ERROR: toomanyrequests: rate limit\n", "ERROR: unauthorized\n",
+                       f"ERROR: {CANDIDATE.PLATFORM}:1.4.29: not found\n", ""):
+            with patch.object(subprocess, "run", return_value=run(stderr=stderr, returncode=1)), \
+                    self.assertRaises(subprocess.CalledProcessError):
+                CANDIDATE.published_index(reference)
 
     def test_previous_assets_resolve_separately_for_both_architectures(self):
         rows = [{"digest": "sha256:" + str(i + 1) * 64,

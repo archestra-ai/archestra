@@ -34,12 +34,12 @@ export async function ensureAgentRuntimeLockUpgrade(): Promise<void> {
  * Turn locked runtimes into permissions. A locked runtime's settings could be
  * changed only by people who manage organization settings, while the roles
  * that held `agent:configure-runtime` could change every other runtime's.
- * Migration 0639 gave those roles configure on every runtime; in an
+ * Migration 0640 gave those roles configure on every runtime; in an
  * organization that locked a runtime this narrows them to use everywhere,
  * plus configure on each runtime that wasn't locked. Admin and Platform
  * Admin keep full access. The settings' retired `locked` flags are cleared.
  *
- * Runs after the schema migrations, since it reads the grants 0639 wrote, and
+ * Runs after the schema migrations, since it reads the grants 0640 wrote, and
  * in the startup transaction, so the grants and the cleared flags commit
  * together.
  *

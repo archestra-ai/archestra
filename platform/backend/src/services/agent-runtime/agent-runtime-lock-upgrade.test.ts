@@ -17,7 +17,7 @@ const claudeCode = agentRuntimePermissionScope({
 });
 const codex = agentRuntimePermissionScope({ kind: "built-in", id: "codex" });
 
-/** An organization as 1.4 left it, after migration 0639 ran. */
+/** An organization as 1.4 left it, after migration 0640 ran. */
 async function seedUpgradedOrganization(params: {
   organizationId: string;
   roleId: string;

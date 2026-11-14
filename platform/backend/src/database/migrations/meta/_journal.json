@@ -4478,8 +4478,15 @@
     {
       "idx": 639,
       "version": "7",
-      "when": 1794675046093,
-      "tag": "0639_agent-runtime-permissions",
+      "when": 1794673190880,
+      "tag": "0639_curved_wildside",
+      "breakpoints": true
+    },
+    {
+      "idx": 640,
+      "version": "7",
+      "when": 1794682150430,
+      "tag": "0640_agent-runtime-permissions",
       "breakpoints": true
     }
   ]

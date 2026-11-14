@@ -263,6 +263,8 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     // InternalMcpCatalogModel.create / the startup adopt pass, never
     // accepted from input.
     deploymentName: true,
+    // Allocated by services/mcp-tool-names.ts, never accepted from input.
+    toolPrefix: true,
     ...PRESET_COLUMNS_OMIT,
     ...CATALOG_ITEM_APPROVAL_COLUMNS_OMIT,
     ...INTERNAL_DISCOVERY_COLUMNS_OMIT,
@@ -336,6 +338,8 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     multitenant: true,
     // Frozen at creation/adopt time — renames must never touch it
     deploymentName: true,
+    // Allocated by services/mcp-tool-names.ts, never accepted from input.
+    toolPrefix: true,
     // Clone lineage is locked after creation
     clonedFrom: true,
     ...PRESET_COLUMNS_OMIT,

@@ -1893,6 +1893,30 @@ export const parseHelmReleaseName = (
 // SPDX-SnippetEnd
 
 /**
+ * Parses ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE. A value that is not a valid
+ * Kubernetes namespace name (a DNS-1123 label) is ignored with a warning, so
+ * runs keep their namespace instead of failing on every launch.
+ *
+ * @public — exported for testability
+ */
+export const parseAgentRuntimeNamespace = (
+  envValue: string | undefined,
+): string | undefined => {
+  const namespace = envValue?.trim();
+  if (!namespace) return undefined;
+  if (
+    namespace.length > 63 ||
+    !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(namespace)
+  ) {
+    logger.warn(
+      `Ignoring ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE "${namespace}": not a valid Kubernetes namespace name (lowercase alphanumerics and "-", at most 63 characters)`,
+    );
+    return undefined;
+  }
+  return namespace;
+};
+
+/**
  * resolves the Dagger runner host. A misconfigured host returns `undefined`
  * (and logs) rather than throwing — config is built at module import, so a
  * throw here would crash the whole backend over one optional feature.
@@ -2741,6 +2765,15 @@ const config = {
    * cluster serves the Agent Sandbox API (see `k8s/agent-runtime/sandbox-api`).
    */
   agentRuntime: {
+    /**
+     * Namespace for Agent Runtime pods whose Agent's Environment sets none,
+     * so runs can live apart from MCP servers. An Environment's own namespace
+     * still wins; unset falls back to the organization's default Environment
+     * namespace, then ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE.
+     */
+    namespace: parseAgentRuntimeNamespace(
+      process.env.ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE,
+    ),
     /** Ready spare workspaces per compatible runtime configuration. */
     warmPoolSize: parseNonNegativeInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE,

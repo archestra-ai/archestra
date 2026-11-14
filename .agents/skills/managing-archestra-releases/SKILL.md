@@ -24,7 +24,7 @@ Both channels publish only after a second Engineering member (not whoever merged
 3. Monitor the resulting backport PRs and their checks — including the cross-track migration compatibility check and the released-tag upgrade replay. Review the release-specific diff before queueing them under the user's merge authorization.
 4. On conflicts, use the manual `cherry-pick -x` procedure in `platform/dev/RELEASE.md`. Include only necessary fixes; no features, refactors, or schema changes. Never merge `main` into release or candidate branches. A migration backport is only permissible under the prefix rule in `platform/dev/RELEASE.md` (the stable branch's migration history must remain a prefix of main's, matched by SQL content); forward repairs on `main` recover already-shipped gaps and are never a planned backport path.
 5. Retry API failures through **Open Backport PRs** workflow dispatch. Existing PRs are not duplicated or reopened, and existing branches are not overwritten. Investigate an unexpected existing branch instead of deleting it.
-6. During stable cutover, update the configured targets and their labels to include the new branch and remove the retired line. The automation's source of truth is the default branch.
+6. During stable cutover, update the configured targets and their labels to include the new branch and remove the retired line. In the same PR, change the release-line `docker` entry's `target-branch` in `.github/dependabot.yml` to match (`test_base_image_pins.py` fails until they agree). The automation's source of truth is the default branch.
 
 ## Cutting A New Stable Line End To End
 

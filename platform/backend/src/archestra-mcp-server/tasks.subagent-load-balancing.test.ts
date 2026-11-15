@@ -4175,6 +4175,9 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
   test("excludes implicit runtime starters and refuses runtime launches in encrypted chats without writing A2A or ordinary message rows", async ({
     makeAgent,
     makeConversation,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
   }) => {
     const encryptedWorker = await createRuntimeSubagent(
       makeAgent,
@@ -4350,6 +4353,20 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         ...accessGrants("org"),
       });
       const designatedSkillToolName = `${SKILL_TOOL_PREFIX}encrypted_designated_skill`;
+      const gatewaySkillCatalog = await makeInternalMcpCatalog({
+        organizationId,
+      });
+      await makeMcpServer({
+        catalogId: gatewaySkillCatalog.id,
+        ownerId: actorId,
+      });
+      const gatewayListedSkillTool = await makeTool({
+        catalogId: gatewaySkillCatalog.id,
+        name: `${SKILL_TOOL_PREFIX}gateway_listed_helper`,
+        description: "Gateway-listed skill delegation tool.",
+      });
+      const encryptedBlockedRegexQuery =
+        "^(agent__|skill__|archestra__(start_agent_run|steer_agent_run|post_agent_run_message|post_agent_run_file|write_workspace_file))";
 
       const startRunDbTool = await ToolModel.findByName(
         TOOL_START_AGENT_RUN_FULL_NAME,
@@ -4372,6 +4389,7 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         postMessageDbTool,
         postFileDbTool,
         writeWorkspaceFileDbTool,
+        gatewayListedSkillTool,
       ]) {
         if (dbTool) {
           await AgentToolModel.create(fullEncryptedAgent.id, dbTool.id);
@@ -4730,6 +4748,68 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
           ),
         ).toBe(false);
       }
+      const unencryptedSkillRegexSearch = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { mode: "regex", query: "^skill__", limit: 20 },
+        {
+          agent: { id: fullEncryptedAgent.id, name: fullEncryptedAgent.name },
+          agentId: fullEncryptedAgent.id,
+          userId: actorId,
+          organizationId,
+          conversationId: unencryptedFullConversation.id,
+          sessionId: unencryptedFullConversation.id,
+          suppressContentLogging: false,
+        },
+      );
+      expect(unencryptedSkillRegexSearch.isError).toBeFalsy();
+      const unencryptedSkillRegexNames = (
+        (
+          unencryptedSkillRegexSearch.structuredContent as
+            | { tools?: Array<{ toolName: string }> }
+            | undefined
+        )?.tools ?? []
+      ).map((t) => t.toolName);
+      expect(unencryptedSkillRegexNames).toEqual(
+        expect.arrayContaining([
+          designatedSkillToolName,
+          gatewayListedSkillTool.name,
+        ]),
+      );
+
+      for (const searchCtx of [
+        encryptedContext,
+        {
+          agent: { id: autoEncryptedAgent.id, name: autoEncryptedAgent.name },
+          agentId: autoEncryptedAgent.id,
+          userId: actorId,
+          organizationId,
+          suppressContentLogging: true,
+        },
+        {
+          agent: { id: gateway.id, name: gateway.name },
+          agentId: gateway.id,
+          userId: actorId,
+          organizationId,
+          suppressContentLogging: true,
+        },
+        assignedEncryptedContext,
+      ]) {
+        const regexRes = await executeArchestraTool(
+          TOOL_SEARCH_TOOLS_FULL_NAME,
+          { mode: "regex", query: encryptedBlockedRegexQuery, limit: 20 },
+          searchCtx,
+        );
+        expect(regexRes.isError).toBeFalsy();
+        const regexNames = (
+          (
+            regexRes.structuredContent as
+              | { tools?: Array<{ toolName: string }> }
+              | undefined
+          )?.tools ?? []
+        ).map((t) => t.toolName);
+        expect(regexNames).toEqual([]);
+      }
+
       const assignedDirectAttempt = await executeArchestraTool(
         TOOL_START_AGENT_RUN_FULL_NAME,
         { message: sensitiveSecret },

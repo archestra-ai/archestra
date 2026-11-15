@@ -5,6 +5,7 @@ import {
   isImplicitOpenAppaReadToolShortName,
   isRequiredOpenAppaToolShortName,
   isRunControlArchestraToolShortName,
+  isSkillTool,
   isYellToolShortName,
   type ModelSelection,
   parseFullToolName,
@@ -636,9 +637,10 @@ async function getSearchableTools(params: {
       permittedNames.has(tool.name) &&
       !(
         suppressContentLogging &&
-        isEncryptedBlockedRuntimeToolShortName(
+        (isEncryptedBlockedRuntimeToolShortName(
           archestraMcpBranding.getToolShortName(tool.name),
-        )
+        ) ||
+          isSkillTool(tool.name))
       ) &&
       !isExcludedFromSearchResults({
         toolName: tool.name,
@@ -650,6 +652,8 @@ async function getSearchableTools(params: {
 
   // Agent-designated skills are searchable through their skill__<slug>
   // delegation tools, resolved per calling user like agent delegations.
+  // Encrypted chats omit them: a child run would log content outside the
+  // parent's suppression scope.
   const skillDelegationTools =
     organizationId != null && !suppressContentLogging
       ? await getSkillDelegationTools({ agentId, organizationId, userId })

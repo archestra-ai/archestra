@@ -1447,10 +1447,14 @@ describe("getChatMcpTools OpenAPPA delegated runs", () => {
     expect(Object.keys(delegated)).not.toContain(policyTool);
   });
 
-  test("encrypted chats omit start_run, steer_run, post_run_message, and agent/skill delegation tools and isolate tool cache entries", async () => {
+  test("encrypted chats omit start_run, steer_run, post_run_message, post_run_file, write_workspace_file, and agent/skill delegation tools and isolate tool cache entries", async () => {
     const startRunTool = getArchestraToolFullName("start_run");
     const steerRunTool = getArchestraToolFullName("steer_run");
     const postRunMessageTool = getArchestraToolFullName("post_run_message");
+    const postRunFileTool = getArchestraToolFullName("post_run_file");
+    const writeWorkspaceFileTool = getArchestraToolFullName(
+      "write_workspace_file",
+    );
     const getRunTool = getArchestraToolFullName("get_run");
     const skillToolName = `${SKILL_TOOL_PREFIX}designated_helper`;
     const { org, agent, baseParams } = await setupChatToolEnv({
@@ -1458,6 +1462,8 @@ describe("getChatMcpTools OpenAPPA delegated runs", () => {
         externalTool(startRunTool),
         externalTool(steerRunTool),
         externalTool(postRunMessageTool),
+        externalTool(postRunFileTool),
+        externalTool(writeWorkspaceFileTool),
         externalTool(getRunTool),
         externalTool(skillToolName),
         externalTool("extsrv__fetch_data"),
@@ -1489,6 +1495,8 @@ describe("getChatMcpTools OpenAPPA delegated runs", () => {
         startRunTool,
         steerRunTool,
         postRunMessageTool,
+        postRunFileTool,
+        writeWorkspaceFileTool,
         getRunTool,
         "extsrv__fetch_data",
         delegationTool.name,
@@ -1507,6 +1515,8 @@ describe("getChatMcpTools OpenAPPA delegated runs", () => {
     expect(Object.keys(encryptedTools)).not.toContain(startRunTool);
     expect(Object.keys(encryptedTools)).not.toContain(steerRunTool);
     expect(Object.keys(encryptedTools)).not.toContain(postRunMessageTool);
+    expect(Object.keys(encryptedTools)).not.toContain(postRunFileTool);
+    expect(Object.keys(encryptedTools)).not.toContain(writeWorkspaceFileTool);
     expect(Object.keys(encryptedTools)).not.toContain(delegationTool.name);
     expect(Object.keys(encryptedTools)).not.toContain(skillToolName);
   });

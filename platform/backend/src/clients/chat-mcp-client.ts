@@ -7,9 +7,11 @@ import {
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   SOURCE_HEADER,
   TimeInMs,
+  TOOL_POST_RUN_FILE_SHORT_NAME,
   TOOL_POST_RUN_MESSAGE_SHORT_NAME,
   TOOL_START_RUN_SHORT_NAME,
   TOOL_STEER_RUN_SHORT_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import type {
   McpUiResourceCsp,
@@ -1062,7 +1064,9 @@ export async function getChatMcpTools({
         suppressContentLogging &&
         (shortName === TOOL_START_RUN_SHORT_NAME ||
           shortName === TOOL_STEER_RUN_SHORT_NAME ||
-          shortName === TOOL_POST_RUN_MESSAGE_SHORT_NAME)
+          shortName === TOOL_POST_RUN_MESSAGE_SHORT_NAME ||
+          shortName === TOOL_POST_RUN_FILE_SHORT_NAME ||
+          shortName === TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME)
       ) {
         return false;
       }

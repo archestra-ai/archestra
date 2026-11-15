@@ -1904,6 +1904,33 @@ describe("run tools", () => {
         "Agent Runtime runs are not available in encrypted chats.",
       ],
       [
+        TOOL_POST_RUN_FILE_FULL_NAME,
+        {
+          task_id: fakeTaskId,
+          filename: "secret.txt",
+          content_base64: Buffer.from("secret bytes").toString("base64"),
+          comment: "secret comment",
+        },
+        "Agent Runtime runs are not available in encrypted chats.",
+      ],
+      [
+        "archestra__write_workspace_file",
+        { task_id: fakeTaskId, path: "secret.txt", content: "secret content" },
+        "Agent Runtime runs are not available in encrypted chats.",
+      ],
+      [
+        "archestra__transfer_workspace_file",
+        {
+          task_id: fakeTaskId,
+          direction: "upload",
+          path: "secret.txt",
+          local_path: "/tmp/secret.txt",
+          size: 6,
+          sha256: "a".repeat(64),
+        },
+        "Agent Runtime runs are not available in encrypted chats.",
+      ],
+      [
         workerToolName,
         { message: "secret delegation" },
         "Agent delegation is not available in encrypted chats.",
@@ -1953,6 +1980,21 @@ describe("run tools", () => {
     );
     expect(skillViaRunTool.isError).toBe(true);
 
+    // Read-only workspace access and downloads stay open in encrypted chats.
+    const downloadResult = await executeArchestraTool(
+      "archestra__transfer_workspace_file",
+      {
+        task_id: fakeTaskId,
+        direction: "download",
+        path: "report.txt",
+        local_path: "/tmp/report.txt",
+      },
+      encryptedContext,
+    );
+    expect(
+      (downloadResult.content[0] as { text?: string } | undefined)?.text,
+    ).not.toContain("not available in encrypted chats");
+
     expect(launchSpy).not.toHaveBeenCalled();
     expect(executeA2ASpy).not.toHaveBeenCalled();
     const tasks = await db.select().from(schema.a2aTasksTable);
@@ -1962,11 +2004,12 @@ describe("run tools", () => {
 
     // Non-encrypted search_tools surfaces delegation and assigned/discoverable
     // runtime tools, whereas encrypted search_tools omits start_run, steer_run,
-    // post_run_message, agent__*, and skill__* on both chat agents and gateways.
+    // post_run_message, post_run_file, write_workspace_file, agent__*, and
+    // skill__* on both chat agents and gateways while keeping read/cancel tools.
     await AgentModel.update(callingAgent.id, { accessAllTools: true });
     const unencryptedSearch = await executeArchestraTool(
       TOOL_SEARCH_TOOLS_FULL_NAME,
-      { query: "run encrypted target", limit: 25 },
+      { query: "run workspace file encrypted target", limit: 25 },
       context,
     );
     const unencryptedNames = (
@@ -1979,6 +2022,9 @@ describe("run tools", () => {
     expect(unencryptedNames).toEqual(
       expect.arrayContaining([
         TOOL_START_RUN_FULL_NAME,
+        TOOL_POST_RUN_FILE_FULL_NAME,
+        "archestra__write_workspace_file",
+        "archestra__read_workspace_file",
         workerToolName,
         skillToolName,
       ]),
@@ -1986,7 +2032,7 @@ describe("run tools", () => {
 
     const encryptedAgentSearch = await executeArchestraTool(
       TOOL_SEARCH_TOOLS_FULL_NAME,
-      { query: "run encrypted target", limit: 25 },
+      { query: "run workspace file encrypted target", limit: 25 },
       encryptedContext,
     );
     const encryptedAgentNames = (
@@ -1996,9 +2042,14 @@ describe("run tools", () => {
         }
       ).tools ?? []
     ).map((t) => t.toolName);
+    expect(encryptedAgentNames).toContain("archestra__read_workspace_file");
     expect(encryptedAgentNames).not.toContain(TOOL_START_RUN_FULL_NAME);
     expect(encryptedAgentNames).not.toContain(TOOL_STEER_RUN_FULL_NAME);
     expect(encryptedAgentNames).not.toContain(TOOL_POST_RUN_MESSAGE_FULL_NAME);
+    expect(encryptedAgentNames).not.toContain(TOOL_POST_RUN_FILE_FULL_NAME);
+    expect(encryptedAgentNames).not.toContain(
+      "archestra__write_workspace_file",
+    );
     expect(encryptedAgentNames).not.toContain(workerToolName);
     expect(encryptedAgentNames).not.toContain(skillToolName);
 
@@ -2011,7 +2062,7 @@ describe("run tools", () => {
     await seedAndAssignArchestraTools(gateway.id);
     const encryptedGatewaySearch = await executeArchestraTool(
       TOOL_SEARCH_TOOLS_FULL_NAME,
-      { query: "run", limit: 25 },
+      { query: "run workspace file", limit: 25 },
       {
         agent: { id: gateway.id, name: gateway.name },
         agentId: gateway.id,
@@ -2031,12 +2082,17 @@ describe("run tools", () => {
       expect.arrayContaining([
         TOOL_GET_RUN_FULL_NAME,
         TOOL_CANCEL_RUN_FULL_NAME,
+        "archestra__read_workspace_file",
       ]),
     );
     expect(encryptedGatewayNames).not.toContain(TOOL_START_RUN_FULL_NAME);
     expect(encryptedGatewayNames).not.toContain(TOOL_STEER_RUN_FULL_NAME);
     expect(encryptedGatewayNames).not.toContain(
       TOOL_POST_RUN_MESSAGE_FULL_NAME,
+    );
+    expect(encryptedGatewayNames).not.toContain(TOOL_POST_RUN_FILE_FULL_NAME);
+    expect(encryptedGatewayNames).not.toContain(
+      "archestra__write_workspace_file",
     );
   });
 });

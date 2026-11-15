@@ -9,6 +9,7 @@ import {
   parseFullToolName,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_POST_RUN_FILE_SHORT_NAME,
   TOOL_POST_RUN_MESSAGE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
@@ -17,6 +18,7 @@ import {
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_START_RUN_SHORT_NAME,
   TOOL_STEER_RUN_SHORT_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import safeRegex from "safe-regex2";
@@ -493,7 +495,9 @@ async function getSearchableTools(params: {
   ): boolean =>
     shortName === TOOL_START_RUN_SHORT_NAME ||
     shortName === TOOL_STEER_RUN_SHORT_NAME ||
-    shortName === TOOL_POST_RUN_MESSAGE_SHORT_NAME;
+    shortName === TOOL_POST_RUN_MESSAGE_SHORT_NAME ||
+    shortName === TOOL_POST_RUN_FILE_SHORT_NAME ||
+    shortName === TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME;
   // Match tools/list's implicit run-handle controls, including gateways with
   // no assigned tools. They are assignment-exempt at dispatch, but still pass
   // RBAC here and actor/proof checks in their handlers. Internal chat already

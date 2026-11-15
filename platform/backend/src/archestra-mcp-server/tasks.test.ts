@@ -11,6 +11,9 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  AGENT_TOOL_PREFIX,
+  SKILL_TOOL_PREFIX,
+  slugify,
   TOOL_CANCEL_RUN_FULL_NAME,
   TOOL_GET_RUN_FULL_NAME,
   TOOL_LIST_AGENT_RUNS_FULL_NAME,
@@ -18,7 +21,9 @@ import {
   TOOL_POST_RUN_FILE_FULL_NAME,
   TOOL_POST_RUN_MESSAGE_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
+  TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_START_RUN_FULL_NAME,
+  TOOL_STEER_RUN_FULL_NAME,
 } from "@archestra/shared";
 import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
@@ -40,6 +45,7 @@ import {
   ChatOpsChannelBindingModel,
   EnvironmentModel,
   MemberModel,
+  SkillModel,
   ToolModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
@@ -48,7 +54,14 @@ import { openappaActor } from "@/openappa/actor";
 import { superyellSession } from "@/openappa/unenforced";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import { runtimeOpenAppaSession } from "@/services/agent-runtime/runtime-identity";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import { type Agent, ApiError } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
@@ -1825,6 +1838,206 @@ describe("run tools", () => {
         ],
       });
     });
+  });
+
+  test("isolates encrypted chats from runtime launches, steering, thread messages, and delegations across direct calls, run_tool, and search_tools", async ({
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    const launchSpy = vi.spyOn(backend, "launch");
+    const executeA2ASpy = vi.spyOn(a2aExecutor, "executeA2AMessage");
+    const targetWorker = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      name: "Encrypted Target Worker",
+      agentType: "agent",
+      runtime: {
+        image: "ghcr.io/archestra-ai/agent-runtime:latest",
+        command: null,
+        inferenceProtocol: "anthropic",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        environment: null,
+        credentials: null,
+        ttlHours: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId,
+        name: "encrypted-designated-skill",
+        description: "Skill targeting Encrypted Target Worker.",
+        content: "Run designated work.",
+        agentName: targetWorker.name,
+        metadata: {},
+        sourceType: "manual",
+      },
+      files: [],
+      ...accessGrants("org"),
+    });
+
+    const encryptedContext: ArchestraContext = {
+      ...context,
+      suppressContentLogging: true,
+    };
+    const fakeTaskId = crypto.randomUUID();
+    const workerToolName = `${AGENT_TOOL_PREFIX}${slugify(targetWorker.name)}`;
+    const skillToolName = `${SKILL_TOOL_PREFIX}encrypted_designated_skill`;
+
+    for (const [toolName, args, expectedMessage] of [
+      [
+        TOOL_START_RUN_FULL_NAME,
+        { agent_id: targetWorker.id, message: "secret prompt" },
+        "Agent Runtime runs are not available in encrypted chats.",
+      ],
+      [
+        TOOL_STEER_RUN_FULL_NAME,
+        { task_id: fakeTaskId, message: "secret follow-up" },
+        "Agent Runtime runs are not available in encrypted chats.",
+      ],
+      [
+        TOOL_POST_RUN_MESSAGE_FULL_NAME,
+        { task_id: fakeTaskId, message: "secret progress" },
+        "Agent Runtime runs are not available in encrypted chats.",
+      ],
+      [
+        workerToolName,
+        { message: "secret delegation" },
+        "Agent delegation is not available in encrypted chats.",
+      ],
+    ] as const) {
+      const directResult = await executeArchestraTool(
+        toolName,
+        args,
+        encryptedContext,
+      );
+      expect(directResult.isError).toBe(true);
+      expect(directResult.content).toEqual([
+        { type: "text", text: `Error: ${expectedMessage}` },
+      ]);
+
+      const viaRunTool = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: toolName, tool_args: args },
+        encryptedContext,
+      );
+      expect(viaRunTool.isError).toBe(true);
+      expect(
+        (viaRunTool.content[0] as { text?: string } | undefined)?.text,
+      ).toContain(expectedMessage);
+    }
+
+    const directSkillResult = await executeArchestraTool(
+      skillToolName,
+      { message: "secret skill delegation" },
+      encryptedContext,
+    );
+    expect(directSkillResult.isError).toBe(true);
+    expect(directSkillResult.content).toEqual([
+      {
+        type: "text",
+        text: "Error: Agent delegation is not available in encrypted chats.",
+      },
+    ]);
+
+    const skillViaRunTool = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      {
+        tool_name: skillToolName,
+        tool_args: { message: "secret skill delegation" },
+      },
+      encryptedContext,
+    );
+    expect(skillViaRunTool.isError).toBe(true);
+
+    expect(launchSpy).not.toHaveBeenCalled();
+    expect(executeA2ASpy).not.toHaveBeenCalled();
+    const tasks = await db.select().from(schema.a2aTasksTable);
+    expect(tasks).toHaveLength(0);
+    const messages = await db.select().from(schema.a2aMessagesTable);
+    expect(messages).toHaveLength(0);
+
+    // Non-encrypted search_tools surfaces delegation and assigned/discoverable
+    // runtime tools, whereas encrypted search_tools omits start_run, steer_run,
+    // post_run_message, agent__*, and skill__* on both chat agents and gateways.
+    await AgentModel.update(callingAgent.id, { accessAllTools: true });
+    const unencryptedSearch = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "run encrypted target", limit: 25 },
+      context,
+    );
+    const unencryptedNames = (
+      (
+        unencryptedSearch.structuredContent as {
+          tools: Array<{ toolName: string }>;
+        }
+      ).tools ?? []
+    ).map((t) => t.toolName);
+    expect(unencryptedNames).toEqual(
+      expect.arrayContaining([
+        TOOL_START_RUN_FULL_NAME,
+        workerToolName,
+        skillToolName,
+      ]),
+    );
+
+    const encryptedAgentSearch = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "run encrypted target", limit: 25 },
+      encryptedContext,
+    );
+    const encryptedAgentNames = (
+      (
+        encryptedAgentSearch.structuredContent as {
+          tools: Array<{ toolName: string }>;
+        }
+      ).tools ?? []
+    ).map((t) => t.toolName);
+    expect(encryptedAgentNames).not.toContain(TOOL_START_RUN_FULL_NAME);
+    expect(encryptedAgentNames).not.toContain(TOOL_STEER_RUN_FULL_NAME);
+    expect(encryptedAgentNames).not.toContain(TOOL_POST_RUN_MESSAGE_FULL_NAME);
+    expect(encryptedAgentNames).not.toContain(workerToolName);
+    expect(encryptedAgentNames).not.toContain(skillToolName);
+
+    const gateway = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "mcp_gateway",
+      accessAllSubagents: true,
+    });
+    await seedAndAssignArchestraTools(gateway.id);
+    const encryptedGatewaySearch = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "run", limit: 25 },
+      {
+        agent: { id: gateway.id, name: gateway.name },
+        agentId: gateway.id,
+        userId: actorId,
+        organizationId,
+        suppressContentLogging: true,
+      },
+    );
+    const encryptedGatewayNames = (
+      (
+        encryptedGatewaySearch.structuredContent as {
+          tools: Array<{ toolName: string }>;
+        }
+      ).tools ?? []
+    ).map((t) => t.toolName);
+    expect(encryptedGatewayNames).toEqual(
+      expect.arrayContaining([
+        TOOL_GET_RUN_FULL_NAME,
+        TOOL_CANCEL_RUN_FULL_NAME,
+      ]),
+    );
+    expect(encryptedGatewayNames).not.toContain(TOOL_START_RUN_FULL_NAME);
+    expect(encryptedGatewayNames).not.toContain(TOOL_STEER_RUN_FULL_NAME);
+    expect(encryptedGatewayNames).not.toContain(
+      TOOL_POST_RUN_MESSAGE_FULL_NAME,
+    );
   });
 });
 

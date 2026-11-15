@@ -227,6 +227,12 @@ async function launchDelegatedTask(params: {
   context: ArchestraContext;
 }): Promise<{ result: CallToolResult; outcome?: RuntimeLaunchOutcome }> {
   const { agentId, message, context } = params;
+  if (context.suppressContentLogging) {
+    return failedLaunch(
+      "not_allowed",
+      errorResult("Agent Runtime runs are not available in encrypted chats."),
+    );
+  }
   try {
     let actor: A2AActor;
     try {
@@ -1308,6 +1314,11 @@ const registry = defineArchestraTools([
         ),
     }),
     handler: async ({ args, context }) => {
+      if (context.suppressContentLogging) {
+        return errorResult(
+          "Agent Runtime runs are not available in encrypted chats.",
+        );
+      }
       try {
         const actor = requireActor(context);
         const task = await requireAccessibleTask({
@@ -1503,6 +1514,11 @@ const registry = defineArchestraTools([
       message: z.string().trim().min(1).max(2_000),
     }),
     handler: async ({ args, context }) => {
+      if (context.suppressContentLogging) {
+        return errorResult(
+          "Agent Runtime runs are not available in encrypted chats.",
+        );
+      }
       try {
         const actor = requireActor(context);
         const task = await requireAccessibleTask({

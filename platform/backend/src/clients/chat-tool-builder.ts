@@ -424,27 +424,6 @@ export function buildAgentDelegationTool(params: {
 }): Tool {
   const { agentTool, ctx } = params;
   const normalizedSchema = normalizeJsonSchema(agentTool.inputSchema);
-  const archestraContext: ArchestraContext = {
-    agent: { id: ctx.agentId, name: ctx.agentName },
-    agentId: ctx.agentId,
-    organizationId: ctx.organizationId,
-    userId: ctx.userId,
-    conversationId: ctx.conversationId,
-    isolationKey: ctx.scopeKey,
-    chatOpsBindingId: ctx.chatOpsBindingId,
-    chatOpsThreadId: ctx.chatOpsThreadId,
-    chatOpsPinnedAgentId: ctx.chatOpsPinnedAgentId,
-    sessionId: ctx.sessionId,
-    scheduleTriggerRunId: ctx.scheduleTriggerRunId,
-    delegationChain: ctx.delegationChain,
-    openappaSubagent: ctx.appaSubagent,
-    abortSignal: ctx.abortSignal,
-    tokenAuth: buildTokenAuthContext({
-      mcpGwToken: ctx.mcpGwToken,
-      organizationId: ctx.organizationId,
-      userId: ctx.userId,
-    }),
-  };
 
   return {
     description: agentTool.description || `Agent tool: ${agentTool.name}`,
@@ -472,13 +451,42 @@ export function buildAgentDelegationTool(params: {
             return repeatNudge;
           }
 
-          const response = await executeArchestraTool(agentTool.name, args, {
-            ...archestraContext,
+          const archestraContext: ArchestraContext = {
+            agent: { id: ctx.agentId, name: ctx.agentName },
+            agentId: ctx.agentId,
+            organizationId: ctx.organizationId,
+            userId: ctx.userId,
+            conversationId: ctx.conversationId,
+            isolationKey: ctx.scopeKey,
+            chatOpsBindingId: ctx.chatOpsBindingId,
+            chatOpsThreadId: ctx.chatOpsThreadId,
+            chatOpsPinnedAgentId: ctx.chatOpsPinnedAgentId,
+            sessionId: ctx.sessionId,
+            scheduleTriggerRunId: ctx.scheduleTriggerRunId,
+            delegationChain: ctx.delegationChain,
+            openappaSubagent: ctx.appaSubagent,
+            abortSignal: ctx.abortSignal,
             // Surface the child's tool calls on the caller's conversation,
             // attributed to this delegation call (options.toolCallId).
             subagentToolStream: ctx.subagentToolStream,
             currentToolCallId: options.toolCallId,
-          });
+            deliversMediaAsImageParts: true,
+            suppressContentLogging: ctx.suppressContentLogging,
+            encryptedChatAudit: ctx.encryptedChatAudit,
+            tokenAuth: buildTokenAuthContext({
+              mcpGwToken: ctx.mcpGwToken,
+              organizationId: ctx.organizationId,
+              userId: ctx.userId,
+              llmSessionId: ctx.sessionId,
+              llmToolCallId: options.toolCallId,
+            }),
+          };
+
+          const response = await executeArchestraTool(
+            agentTool.name,
+            args,
+            archestraContext,
+          );
 
           span.setAttribute(
             ATTR_MCP_IS_ERROR_RESULT,

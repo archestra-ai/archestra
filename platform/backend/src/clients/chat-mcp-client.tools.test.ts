@@ -1445,4 +1445,49 @@ describe("getChatMcpTools OpenAPPA delegated runs", () => {
     expect(Object.keys(delegated)).toContain("extsrv__fetch_data");
     expect(Object.keys(delegated)).not.toContain(policyTool);
   });
+
+  test("encrypted chats omit start_run, steer_run, post_run_message, and delegation tools and isolate tool cache entries", async () => {
+    const startRunTool = getArchestraToolFullName("start_run");
+    const steerRunTool = getArchestraToolFullName("steer_run");
+    const postRunMessageTool = getArchestraToolFullName("post_run_message");
+    const getRunTool = getArchestraToolFullName("get_run");
+    const { org, agent, baseParams } = await setupChatToolEnv({
+      gatewayTools: [
+        externalTool(startRunTool),
+        externalTool(steerRunTool),
+        externalTool(postRunMessageTool),
+        externalTool(getRunTool),
+        externalTool("extsrv__fetch_data"),
+      ],
+    });
+    const { delegationTool } = await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Helper Subagent",
+    });
+
+    const standardTools = await chatClient.getChatMcpTools(baseParams);
+    expect(Object.keys(standardTools)).toEqual(
+      expect.arrayContaining([
+        startRunTool,
+        steerRunTool,
+        postRunMessageTool,
+        getRunTool,
+        "extsrv__fetch_data",
+        delegationTool.name,
+      ]),
+    );
+
+    const encryptedTools = await chatClient.getChatMcpTools({
+      ...baseParams,
+      suppressContentLogging: true,
+    });
+    expect(Object.keys(encryptedTools)).toEqual(
+      expect.arrayContaining([getRunTool, "extsrv__fetch_data"]),
+    );
+    expect(Object.keys(encryptedTools)).not.toContain(startRunTool);
+    expect(Object.keys(encryptedTools)).not.toContain(steerRunTool);
+    expect(Object.keys(encryptedTools)).not.toContain(postRunMessageTool);
+    expect(Object.keys(encryptedTools)).not.toContain(delegationTool.name);
+  });
 });

@@ -2,7 +2,7 @@
 title: PostgreSQL
 description: Choose, size, and connect the PostgreSQL database that holds Archestra's state
 order: 4
-lastUpdated: 2026-11-09
+lastUpdated: 2026-11-14
 ---
 
 <span id="large-log-histories"></span><span id="docker-persistence"></span>
@@ -302,6 +302,32 @@ When running outside AWS with network connectivity to RDS on port `5432`, you ca
   ```
 
 - **Secret-backed AWS credentials**: Supply `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optional `AWS_SESSION_TOKEN` through `archestra.envFromSecrets` (or `archestra.env`, where the chart automatically stores `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` in a Kubernetes Secret).
+
+### 4. Connect Through RDS Proxy
+
+Put [RDS Proxy](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy.html) in front of the database when you want failovers to stay behind one endpoint: Archestra keeps signing IAM tokens, now for the proxy, with no chart change. Archestra holds session state on most connections (prepared statements, `LISTEN`, advisory locks), so the proxy pins them and pools little; size the proxy for the same [connection budget](#connection-capacity) as the database.
+
+1. Create the proxy with IAM authentication for clients. With end-to-end IAM authentication, the proxy also signs in to the database with IAM and needs no Secrets Manager secret; the database user still needs `rds_iam`, as in [Prepare the PostgreSQL Database and IAM Role](#1-prepare-the-postgresql-database-and-iam-role).
+2. Allow `rds-db:connect` on the proxy's resource ID (`prx-…`), not the database's:
+
+   ```json
+   {
+     "Effect": "Allow",
+     "Action": "rds-db:connect",
+     "Resource": "arn:aws:rds-db:eu-west-1:123456789012:dbuser:prx-ABCDEFGHIJKL01234/archestra_iam"
+   }
+   ```
+
+3. Point the URL at the proxy endpoint and run the Helm upgrade. It worked when the migration Job completes and the web pods turn ready:
+
+   ```yaml
+   archestra:
+     env:
+       ARCHESTRA_DATABASE_URL: postgresql://archestra_iam@archestra.proxy-abc123xyz.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
+   ```
+
+- **TLS:** the proxy presents an AWS Certificate Manager certificate, which the platform image already trusts. Leave `sslrootcert` unset, because the RDS CA bundle does not cover the proxy, and use the proxy endpoint name rather than a DNS alias.
+- **Statement timeout:** Archestra sends [`ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS) as a startup parameter, and RDS Proxy accepts only a fixed set of them. If connections fail with an error that names `statement_timeout`, set it to `0` and set the timeout on the role instead: `ALTER ROLE archestra_iam SET statement_timeout = '30s';`.
 
 ## Connection Capacity
 

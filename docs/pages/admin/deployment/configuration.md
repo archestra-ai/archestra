@@ -1103,6 +1103,11 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
   - Default: unset (scheduled like any other pod)
   - Values: comma-separated `key=value` pairs, for example `archestra-agent-runtime=true`. Each pair also adds a matching `NoSchedule` toleration.
 
+- **`ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR`** - Schedules [privileged](/docs/agents/runtime/setup#privileged-containers) runtime pods onto their own node pool, away from unprivileged runs and other workloads.
+  - Default: unset (privileged pods use [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR))
+  - Values: comma-separated `key=value` pairs, for example `archestra-agent-runtime-privileged=true`. Each pair also adds a matching `NoSchedule` toleration, so taint the pool with the same pairs.
+  - The [runtime image cache](/docs/agents/runtime/setup#runtime-image-cache) fills only the `ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR` pool, so the first privileged run on a new node pulls its image.
+
 - **`ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME`** - RuntimeClass for unprivileged runtime pods, such as `gvisor`, so a run does not share the node's kernel.
   - Default: unset (the cluster's default runtime)
   - Privileged runtime pods ignore it, because gVisor cannot run privileged containers. The cluster needs nodes that serve the RuntimeClass. See [Sandboxed Runtime](/docs/agents/runtime/setup#sandboxed-runtime).

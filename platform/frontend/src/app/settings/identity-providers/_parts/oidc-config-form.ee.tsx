@@ -121,7 +121,7 @@ export function OidcConfigForm({
           </FormItem>
         )}
       />
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid items-start gap-4 md:grid-cols-2">
         <FormField
           control={form.control}
           name="oidcConfig.mapping.id"
@@ -213,7 +213,7 @@ export function OidcConfigForm({
   return (
     <div className="space-y-6">
       {(!activeSection || activeSection === "general") && (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid items-start gap-4 md:grid-cols-2">
           <div className="md:col-span-2">
             <IdentityProviderSectionHeader title="Provider Details">
               Identify this provider and choose who can sign in.
@@ -297,9 +297,6 @@ export function OidcConfigForm({
                 <FormDescription>
                   The client secret provided by your OIDC provider.
                 </FormDescription>
-                <StoredSecretNote
-                  stored={isSecretStored("oidcConfig.clientSecret")}
-                />
                 <FormControl>
                   <SecretInput
                     placeholder={
@@ -310,6 +307,9 @@ export function OidcConfigForm({
                     {...field}
                   />
                 </FormControl>
+                <StoredSecretNote
+                  stored={isSecretStored("oidcConfig.clientSecret")}
+                />
                 <FormMessage />
               </FormItem>
             )}
@@ -607,7 +607,7 @@ function EnterpriseManagedCredentialsForm(props: {
         provider are selected below.
       </IdentityProviderSectionHeader>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid items-start gap-4 md:grid-cols-2">
         <FormField
           control={form.control}
           name="oidcConfig.enterpriseManagedCredentials.clientId"
@@ -637,11 +637,6 @@ function EnterpriseManagedCredentialsForm(props: {
               <FormDescription>
                 Required when using client secret authentication.
               </FormDescription>
-              <StoredSecretNote
-                stored={isSecretStored(
-                  "oidcConfig.enterpriseManagedCredentials.clientSecret",
-                )}
-              />
               <FormControl>
                 <SecretInput
                   placeholder={
@@ -654,6 +649,11 @@ function EnterpriseManagedCredentialsForm(props: {
                   {...field}
                 />
               </FormControl>
+              <StoredSecretNote
+                stored={isSecretStored(
+                  "oidcConfig.enterpriseManagedCredentials.clientSecret",
+                )}
+              />
               <FormMessage />
             </FormItem>
           )}
@@ -681,7 +681,7 @@ function EnterpriseManagedCredentialsForm(props: {
         )}
       />
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid items-start gap-4 md:grid-cols-2">
         <FormField
           control={form.control}
           name="oidcConfig.enterpriseManagedCredentials.tokenEndpointAuthentication"
@@ -750,7 +750,7 @@ function EnterpriseManagedCredentialsForm(props: {
         />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid items-start gap-4 md:grid-cols-2">
         <FormField
           control={form.control}
           name="oidcConfig.enterpriseManagedCredentials.privateKeyId"
@@ -797,11 +797,6 @@ function EnterpriseManagedCredentialsForm(props: {
             <FormDescription>
               Only used for <code>private_key_jwt</code> authentication.
             </FormDescription>
-            <StoredSecretNote
-              stored={isSecretStored(
-                "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
-              )}
-            />
             <FormControl>
               <SecretTextarea
                 placeholder={
@@ -815,6 +810,11 @@ function EnterpriseManagedCredentialsForm(props: {
                 {...field}
               />
             </FormControl>
+            <StoredSecretNote
+              stored={isSecretStored(
+                "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+              )}
+            />
             <FormMessage />
           </FormItem>
         )}
@@ -847,10 +847,5 @@ const STORED_SECRET_PLACEHOLDER = "••••••••";
 function StoredSecretNote({ stored }: { stored: boolean }) {
   if (!stored) return null;
 
-  return (
-    <FormDescription>
-      A value is already stored. Leave blank to keep it, or enter a new value to
-      replace.
-    </FormDescription>
-  );
+  return <FormDescription>Stored. Leave blank to keep it.</FormDescription>;
 }

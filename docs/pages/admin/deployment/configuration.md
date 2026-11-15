@@ -230,6 +230,11 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Default: unset
   - Ignored in production builds. The session has that user's normal permissions.
 
+- **`ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN`** - SPIFFE trust domain of agents' SPIFFE IDs (`spiffe://<trust domain>/agent/<agent ID>`). See [SPIFFE Agent Identities](/docs/agents/identity/spiffe).
+  - Default: the hostname of [`ARCHESTRA_FRONTEND_URL`](/docs/admin/deployment/configuration#ARCHESTRA_FRONTEND_URL)
+  - Values: lowercase letters, digits, dots, dashes, and underscores
+  - Changing it changes every agent's SPIFFE ID, so update the policies that name them.
+
 ## Encryption and Secrets
 
 To change any of these secrets, follow [Secret Rotation](/docs/admin/deployment/secret-rotation).

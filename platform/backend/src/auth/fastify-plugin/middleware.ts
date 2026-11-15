@@ -45,6 +45,7 @@ import {
   READY_PATH,
   SKILL_MARKETPLACE_PREFIX,
   SKILL_MARKETPLACE_STATIC_PATH,
+  SPIFFE_ISSUER_PATH,
   WELL_KNOWN_ACME_PREFIX,
   WELL_KNOWN_OAUTH_PREFIX,
   WORKLOAD_IDENTITY_TOKEN_PATH,
@@ -257,6 +258,9 @@ export class Authnz {
       // Workload identity token exchange: the OIDC token in the body is the
       // proof, verified in-route against the account's federated credentials.
       (method === "POST" && url === WORKLOAD_IDENTITY_TOKEN_PATH) ||
+      // The SPIFFE issuer's discovery document, key set and trust bundle are
+      // public by design: verifiers fetch them to trust agents' JWT-SVIDs.
+      (isGetOrHead && url.startsWith(`${SPIFFE_ISSUER_PATH}/`)) ||
       // Public existence check for connected remotes (Claude Code startup
       // guard) — the querystring rides along on request.url
       (isGetOrHead &&

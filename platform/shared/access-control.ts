@@ -1236,6 +1236,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // Public: the OIDC token in the body is the proof, checked in the handler
   // against the account's federated credentials. The authnz layer exempts it.
   [RouteId.ExchangeWorkloadIdentityToken]: {},
+  // Public: verifiers fetch the SPIFFE issuer's keys to trust agents' SVIDs.
+  [RouteId.GetSpiffeDiscoveryDocument]: {},
+  [RouteId.GetSpiffeJwks]: {},
+  [RouteId.GetSpiffeTrustBundle]: {},
   // SPDX-SnippetEnd
   [RouteId.GetAllVirtualApiKeys]: {},
   [RouteId.GetVirtualApiKeyLabelKeys]: { llmVirtualKey: ["read"] },

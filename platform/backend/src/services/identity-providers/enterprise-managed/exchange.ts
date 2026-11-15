@@ -127,23 +127,28 @@ export function assertAgentIdentityRequirement(params: {
 
 /**
  * How agents get their own identity at the identity provider, or null while it
- * is not set up: an Entra agent identity under an Entra Agent ID blueprint, or
+ * is not set up: an Entra agent identity under an Entra Agent ID blueprint,
  * the agent's own client signed for with the provider's agent key (Okta AI
- * agents, RFC 8693 actors).
+ * agents, RFC 8693 actors), or, for RFC 8693, the SPIFFE ID Archestra issues
+ * every agent. Only the first two are bound per agent.
  */
 export function agentIdentityKind(
   identityProvider: ExternalIdentityProviderConfig,
-): "entra" | "client" | null {
+): "entra" | "client" | "spiffe" | null {
   const enterpriseConfig =
     identityProvider.oidcConfig?.enterpriseManagedCredentials;
   if (!enterpriseConfig) return null;
-  if (
-    getEnterpriseCredentialExchangeStrategy(identityProvider) ===
-    entraOboStrategy
-  ) {
+  const strategy = getEnterpriseCredentialExchangeStrategy(identityProvider);
+  if (strategy === entraOboStrategy) {
     return enterpriseConfig.entraAgentId?.blueprintClientId?.trim()
       ? "entra"
       : null;
+  }
+  if (
+    strategy === rfc8693TokenExchangeStrategy &&
+    enterpriseConfig.agentIdentity?.source === "spiffe"
+  ) {
+    return "spiffe";
   }
   return enterpriseConfig.agentIdentity?.privateKeyPem ? "client" : null;
 }

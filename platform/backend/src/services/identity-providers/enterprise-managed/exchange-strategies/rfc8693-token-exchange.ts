@@ -16,6 +16,7 @@ import {
   type EnterpriseManagedCredentialResult,
   extractProviderErrorMessage,
 } from "../exchange";
+import { spiffeIssuer } from "../spiffe-issuer";
 
 /**
  * RFC 8693 token exchange. When the calling agent is bound to its own client at
@@ -24,6 +25,9 @@ import {
  * provider that supports delegation (Keycloak, PingOne, ZITADEL, Auth0 Custom
  * Token Exchange) issues a token with the person in `sub` and the agent in
  * `act`. Whether the provider adds `act` is its policy, not the request's.
+ * With SPIFFE agent identities the actor token is instead the agent's JWT-SVID,
+ * which the provider trusts through Archestra's SPIFFE issuer, so agents need
+ * no client of their own there.
  */
 // Declared before the class: its singleton is created at module load.
 const ACTOR_TOKEN_EXPIRY_MARGIN_SECONDS = 300;
@@ -101,7 +105,18 @@ class Rfc8693TokenExchangeStrategy
     }
 
     const agentClientId = params.agentIdentity?.externalId ?? null;
-    if (agentClientId) {
+    if (agentClientId && enterpriseConfig.agentIdentity?.source === "spiffe") {
+      requestBody.set(
+        "actor_token",
+        await spiffeIssuer.mintJwtSvid({
+          spiffeId: agentClientId,
+          audience:
+            enterpriseConfig.agentIdentity.spiffeAudience ||
+            params.identityProvider.issuer,
+        }),
+      );
+      requestBody.set("actor_token_type", OAUTH_TOKEN_TYPE.Jwt);
+    } else if (agentClientId) {
       requestBody.set(
         "actor_token",
         await this.getActorToken({

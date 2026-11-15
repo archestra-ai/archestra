@@ -736,6 +736,7 @@ const layerTable = [
       "src/services/identity-providers/enterprise-managed/exchange-strategies/okta-managed-credential-exchange.ts",
       "src/services/identity-providers/enterprise-managed/exchange-strategies/rfc8693-token-exchange.ts",
       "src/services/identity-providers/enterprise-managed/exchange.ts",
+      "src/services/identity-providers/enterprise-managed/spiffe-issuer.ts",
       "src/services/identity-providers/oidc.ts",
       "src/services/identity-providers/session-token.ts",
       "src/services/instance-analytics.ts",

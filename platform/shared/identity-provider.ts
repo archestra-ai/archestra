@@ -112,13 +112,32 @@ export const EntraAgentIdConfigSchema = z.object({
 export type EntraAgentIdConfig = z.infer<typeof EntraAgentIdConfigSchema>;
 
 /**
- * Agent identities at an Okta or RFC 8693 identity provider: each agent is its
- * own OAuth client there (an Okta AI agent, or a client with a service account
- * for RFC 8693 actor tokens), and Archestra authenticates as it with
- * `private_key_jwt`. One key signs for every agent; the admin registers its
- * public key on each agent's client. Off while no private key is stored.
+ * Where agents' identities at an RFC 8693 provider come from: each agent's own
+ * OAuth client there (`client`), or a SPIFFE ID Archestra issues every agent
+ * (`spiffe`), sent as a JWT-SVID the provider trusts through Archestra's
+ * issuer, so no agent needs a client of its own.
+ */
+export const AgentIdentitySourceSchema = z.enum(["client", "spiffe"]);
+
+export type AgentIdentitySource = z.infer<typeof AgentIdentitySourceSchema>;
+
+/**
+ * Agent identities at an Okta or RFC 8693 identity provider. With the default
+ * `client` source each agent is its own OAuth client there (an Okta AI agent,
+ * or a client with a service account for RFC 8693 actor tokens), and
+ * Archestra authenticates as it with `private_key_jwt`: one key signs for
+ * every agent, and the admin registers its public key on each agent's client.
+ * Off while no private key is stored. The `spiffe` source (RFC 8693 only)
+ * needs no key here: Archestra signs each agent's JWT-SVID itself.
  */
 export const AgentIdentityConfigSchema = z.object({
+  /** Defaults to `client`. */
+  source: AgentIdentitySourceSchema.optional(),
+  /**
+   * `spiffe` only: the audience of each JWT-SVID. Defaults to the identity
+   * provider's issuer.
+   */
+  spiffeAudience: z.string().trim().optional(),
   /** PKCS#8 private key Archestra signs each agent client's assertions with. */
   privateKeyPem: z.string().optional(),
   /** Key ID (`kid`) the identity provider knows the public key by. */

@@ -4514,6 +4514,7 @@ export function AgentForm({
                     )}
                     {showAgentIdentities && (
                       <AgentIdentityBindingsField
+                        agentId={persistedAgent?.id ?? null}
                         identityProviders={identityProviders}
                         selectedIdentityProviderId={identityProviderId}
                         value={identityBindings}

@@ -52,6 +52,15 @@ export async function replaceAgentIdentityBindings(params: {
       );
     }
     seen.add(binding.identityProviderId);
+    // A binding kept as stored was checked when it was made. Checking it
+    // again would block every other change once its provider stops taking
+    // bindings, such as on a switch to SPIFFE IDs.
+    const kept = previous.some(
+      (stored) =>
+        stored.identityProviderId === binding.identityProviderId &&
+        stored.externalId === binding.externalId,
+    );
+    if (kept) continue;
     await assertBindable({ organizationId: params.organizationId, binding });
     const boundAgentId =
       await AgentIdentityBindingModel.findAgentIdByExternalId(binding);
@@ -115,6 +124,12 @@ async function assertBindable(params: {
   }
 
   const kind = agentIdentityKind(identityProvider);
+  if (kind === "spiffe") {
+    throw new ApiError(
+      400,
+      "This identity provider takes agents' SPIFFE IDs, which Archestra issues every agent: there is nothing to bind.",
+    );
+  }
   if (kind === "entra" && !GUID_PATTERN.test(params.binding.externalId)) {
     throw new ApiError(
       400,

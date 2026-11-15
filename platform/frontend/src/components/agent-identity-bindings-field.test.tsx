@@ -10,6 +10,9 @@ import {
 } from "./agent-identity-bindings-field";
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: () => ({ trustDomain: "archestra.example.com" }),
+}));
 vi.mock("@/lib/docs/docs", () => ({ getFrontendDocsUrl: () => null }));
 
 type IdentityProvider =
@@ -35,6 +38,14 @@ const KEYCLOAK = makeProvider({
   issuer: "https://keycloak.example.com/realms/archestra",
   enterpriseManagedCredentials: { agentIdentity: {} },
   configuredSecretPaths: [AGENT_KEY_PATH],
+});
+const KEYCLOAK_SPIFFE = makeProvider({
+  id: "keycloak-spiffe",
+  issuer: "https://keycloak.example.com/realms/spiffe",
+  enterpriseManagedCredentials: {
+    exchangeStrategy: "rfc8693",
+    agentIdentity: { source: "spiffe" },
+  },
 });
 const KEYCLOAK_WITHOUT_KEY = makeProvider({
   id: "keycloak-without-key",
@@ -88,6 +99,7 @@ describe("AgentIdentityBindingsField", () => {
   test("names each identity the way its provider does", () => {
     render(
       <AgentIdentityBindingsField
+        agentId="agent-1"
         identityProviders={[ENTRA, OKTA, KEYCLOAK]}
         selectedIdentityProviderId={null}
         value={{ entra: "", okta: "", keycloak: "" }}
@@ -104,6 +116,7 @@ describe("AgentIdentityBindingsField", () => {
     const onChange = vi.fn();
     render(
       <AgentIdentityBindingsField
+        agentId="agent-1"
         identityProviders={[ENTRA, OKTA]}
         selectedIdentityProviderId="okta"
         value={{ entra: "0f1e2d3c-4b5a-4968-8776-a5b4c3d2e1f0" }}
@@ -125,6 +138,7 @@ describe("AgentIdentityBindingsField", () => {
     const onChange = vi.fn();
     render(
       <AgentIdentityBindingsField
+        agentId="agent-1"
         identityProviders={[ENTRA, OKTA]}
         selectedIdentityProviderId="okta"
         value={{ entra: "0f1e2d3c-4b5a-4968-8776-a5b4c3d2e1f0", okta: "x" }}
@@ -142,12 +156,33 @@ describe("AgentIdentityBindingsField", () => {
     ).toBeNull();
   });
 
+  test("shows the agent's SPIFFE ID at a provider that takes them, with nothing to enter or add", () => {
+    render(
+      <AgentIdentityBindingsField
+        agentId="agent-1"
+        identityProviders={[KEYCLOAK_SPIFFE]}
+        selectedIdentityProviderId="keycloak-spiffe"
+        value={{}}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText("spiffe://archestra.example.com/agent/agent-1"),
+    ).toBeVisible();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(
+      screen.queryByText("Add an identity at another provider"),
+    ).toBeNull();
+  });
+
   test("is read-only without permission to update identity providers", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
     } as ReturnType<typeof useHasPermissions>);
     render(
       <AgentIdentityBindingsField
+        agentId="agent-1"
         identityProviders={[OKTA, KEYCLOAK]}
         selectedIdentityProviderId="okta"
         value={{}}

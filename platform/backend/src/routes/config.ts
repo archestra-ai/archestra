@@ -31,9 +31,14 @@ import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
 import { devFeedbackService } from "@/services/dev-feedback";
+import { spiffeIssuer } from "@/services/identity-providers/enterprise-managed/spiffe-issuer";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { EmailProviderTypeSchema } from "@/types";
-import { PUBLIC_CONFIG_PATH } from "./route-paths";
+import {
+  PUBLIC_CONFIG_PATH,
+  SPIFFE_BUNDLE_PATH,
+  SPIFFE_JWKS_PATH,
+} from "./route-paths";
 
 export const publicConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -93,6 +98,20 @@ export const ConfigResponseSchema = z.strictObject({
   features: z.strictObject({
     betaEnabled: z.boolean(),
     orchestratorK8sRuntime: z.boolean(),
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    /**
+     * Archestra's issuer of agents' SPIFFE JWT-SVIDs: what an admin registers
+     * at an identity provider that takes them. All of it is public.
+     */
+    agentIdentitySpiffe: z.strictObject({
+      trustDomain: z.string(),
+      issuer: z.string(),
+      jwksUri: z.string(),
+      bundleUri: z.string(),
+    }),
+    // SPDX-SnippetEnd
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -218,6 +237,16 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
     features: {
       betaEnabled: config.beta,
       orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      agentIdentitySpiffe: {
+        trustDomain: config.agentIdentity.spiffeTrustDomain,
+        issuer: spiffeIssuer.issuer,
+        jwksUri: `${config.frontendBaseUrl}${SPIFFE_JWKS_PATH}`,
+        bundleUri: `${config.frontendBaseUrl}${SPIFFE_BUNDLE_PATH}`,
+      },
+      // SPDX-SnippetEnd
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

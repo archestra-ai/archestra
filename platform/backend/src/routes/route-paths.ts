@@ -31,6 +31,14 @@ export const GITHUB_ACTIONS_TOKEN_PATH = "/api/github-actions/token";
  * against the account's federated credentials.
  */
 export const WORKLOAD_IDENTITY_TOKEN_PATH = "/api/workload-identity/token";
+/**
+ * Archestra's issuer of agents' SPIFFE JWT-SVIDs, and its public discovery
+ * document, key set and SPIFFE trust bundle below it.
+ */
+export const SPIFFE_ISSUER_PATH = "/api/agent-identity/spiffe";
+export const SPIFFE_DISCOVERY_PATH = `${SPIFFE_ISSUER_PATH}/.well-known/openid-configuration`;
+export const SPIFFE_JWKS_PATH = `${SPIFFE_ISSUER_PATH}/keys`;
+export const SPIFFE_BUNDLE_PATH = `${SPIFFE_ISSUER_PATH}/bundle`;
 export const WELL_KNOWN_ACME_PREFIX = "/.well-known/acme-challenge/";
 export const MCP_GATEWAY_PREFIX = "/v1/mcp";
 export const PROXY_API_PREFIX = "/v1";

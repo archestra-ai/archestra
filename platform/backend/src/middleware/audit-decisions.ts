@@ -411,6 +411,10 @@ export const AUDIT_DECISIONS = {
     reason: "better-auth verification flow state",
   },
   jwksTable: { audited: false, reason: "better-auth signing key material" },
+  spiffeSigningKeysTable: {
+    audited: false,
+    reason: "SPIFFE JWT-SVID signing key material, minted by the server",
+  },
 
   // =========================================================================
   // OAuth runtime

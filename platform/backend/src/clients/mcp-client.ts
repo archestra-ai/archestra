@@ -110,9 +110,11 @@ import {
 } from "@/services/identity-providers/enterprise-managed/broker";
 import {
   type AgentIdentityContext,
+  agentIdentityKind,
   assertAgentIdentityRequirement,
   identityProviderRequiresAgentIdentity,
 } from "@/services/identity-providers/enterprise-managed/exchange";
+import { spiffeIdForAgent } from "@/services/identity-providers/enterprise-managed/spiffe-issuer";
 import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -6011,8 +6013,9 @@ class McpClient {
   }
 
   /**
-   * The calling agent's binding at the identity provider this tool's token
-   * exchange runs at, or null for an app or an agent bound to none there.
+   * The identity the calling agent acts as at the identity provider this
+   * tool's token exchange runs at: its SPIFFE ID when the provider takes
+   * those, else its binding there. Null for an app or an agent bound to none.
    * Refuses a caller without one when the provider requires it.
    */
   private async resolveCallerAgentIdentity(params: {
@@ -6026,13 +6029,17 @@ class McpClient {
     if (!identityProviderId) {
       return null;
     }
+    const identityProvider =
+      await findExternalIdentityProviderById(identityProviderId);
     const externalId =
-      params.owner.type === "agent"
-        ? await AgentIdentityBindingModel.findExternalId({
-            agentId: params.owner.id,
-            identityProviderId,
-          })
-        : null;
+      params.owner.type !== "agent"
+        ? null
+        : identityProvider && agentIdentityKind(identityProvider) === "spiffe"
+          ? spiffeIdForAgent(params.owner.id)
+          : await AgentIdentityBindingModel.findExternalId({
+              agentId: params.owner.id,
+              identityProviderId,
+            });
     const agentIdentity = externalId
       ? { identityProviderId, externalId }
       : null;
@@ -6041,8 +6048,6 @@ class McpClient {
       !agentIdentity &&
       params.enterpriseManagedConfig.assertionMode !== "passthrough"
     ) {
-      const identityProvider =
-        await findExternalIdentityProviderById(identityProviderId);
       assertAgentIdentityRequirement({
         agentIdentity,
         requireAgentIdentity:

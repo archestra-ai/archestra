@@ -9,7 +9,7 @@ lastUpdated: 2026-11-14
 
 Give each agent its own client at your identity provider, and every downstream token names the person and the agent. The person stays the subject (`sub`), and the agent is the actor (`act`), as [RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693#section-4.1) defines. Use it with Keycloak, PingOne, ZITADEL, Auth0 Custom Token Exchange, or any provider whose token exchange accepts an actor token.
 
-This builds on [IdP token exchange](/docs/mcp/authentication/idp-token-exchange) with RFC 8693. Set that up first.
+This builds on [IdP token exchange](/docs/mcp/authentication/idp-token-exchange) with RFC 8693. Set that up first. If your identity provider can trust a JWT from another issuer as the actor, [SPIFFE Agent Identities](/docs/agents/identity/spiffe) need no client per agent.
 
 ## What Happens on a Tool Call
 

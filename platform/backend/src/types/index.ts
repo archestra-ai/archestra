@@ -107,6 +107,7 @@ export * from "./skill-marketplace-repo";
 export * from "./skill-sandbox";
 export * from "./skill-share-link";
 export * from "./skill-share-link-revision";
+export * from "./spiffe-signing-key";
 export * from "./statistics";
 export * from "./task";
 export * from "./team";

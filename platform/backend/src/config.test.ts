@@ -85,6 +85,7 @@ import config, {
   parseSampleRate,
   parseSandboxMemoryMaxBytes,
   parseShutdownSeconds,
+  parseSpiffeTrustDomain,
   parseSreApiServerCidrs,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
@@ -536,6 +537,37 @@ describe("getRumOtlpAuthHeaders", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       "OTEL authentication misconfigured: both ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
     );
+  });
+});
+
+describe("parseSpiffeTrustDomain", () => {
+  test("defaults to the frontend's hostname", () => {
+    expect(
+      parseSpiffeTrustDomain({
+        rawValue: undefined,
+        frontendBaseUrl: "https://archestra.example.com:8443",
+      }),
+    ).toBe("archestra.example.com");
+  });
+
+  test("takes a configured trust domain", () => {
+    expect(
+      parseSpiffeTrustDomain({
+        rawValue: " prod.example.org ",
+        frontendBaseUrl: "https://archestra.example.com",
+      }),
+    ).toBe("prod.example.org");
+  });
+
+  test("rejects a value that is not a trust domain", () => {
+    for (const rawValue of ["Example.com", "spiffe://example.com", "a b"]) {
+      expect(() =>
+        parseSpiffeTrustDomain({
+          rawValue,
+          frontendBaseUrl: "https://archestra.example.com",
+        }),
+      ).toThrow(/SPIFFE trust domain/);
+    }
   });
 });
 

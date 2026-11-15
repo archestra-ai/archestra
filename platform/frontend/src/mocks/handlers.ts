@@ -695,6 +695,8 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/agents/:id/default-suggested-prompts", []),
   ...getJson("/api/agents/:id/delegations", []),
   ...getJson("/api/agents/:id/a2a-delegations", []),
+  ...getJson("/api/agents/:id/identity-bindings", { bindings: [] }),
+  ...putJson("/api/agents/:id/identity-bindings", { bindings: [] }),
   ...getJson("/api/a2a/remote-agents", []),
   ...getJson("/api/agents/default-mcp-gateway", null),
   // The agents list asks which of the caller's agents is their personal

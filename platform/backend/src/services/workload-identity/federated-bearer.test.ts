@@ -28,11 +28,13 @@ const PUBLIC_ADDRESS = [{ address: "93.184.216.34", family: 4 }];
 let signingKey: CryptoKey;
 let publicJwk: JWK;
 let issuerRequests: string[];
+let issuerDown: boolean;
 
 // biome-ignore lint/correctness/useHookAtTopLevel: registers test lifecycle hooks, not a React hook
 useMswServer(
   http.get(`${ISSUER}/.well-known/openid-configuration`, ({ request }) => {
     issuerRequests.push(request.url);
+    if (issuerDown) return new HttpResponse(null, { status: 503 });
     return HttpResponse.json({
       issuer: ISSUER,
       jwks_uri: `${ISSUER}/openid/v1/jwks`,
@@ -53,6 +55,7 @@ beforeAll(async () => {
 describe("a workload's OIDC token as a bearer token", () => {
   beforeEach(() => {
     issuerRequests = [];
+    issuerDown = false;
     oidcIssuerKeys.clear();
     vi.mocked(lookup).mockResolvedValue(PUBLIC_ADDRESS as never);
   });
@@ -108,6 +111,42 @@ describe("a workload's OIDC token as a bearer token", () => {
       mode: "bearer",
       reason: "no_matching_credential",
     });
+  });
+
+  test("audits a token it keeps refusing only once", async ({
+    makeOrganization,
+    makeServiceAccount,
+  }) => {
+    const org = await makeOrganization();
+    const account = await makeServiceAccount(org.id);
+    await trust({ organizationId: org.id, serviceAccountId: account.id });
+    const token = await actorJwt({ sub: "actor/support/replayed" });
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      expect(await verifyServiceAccountBearer({ token })).toBeNull();
+    }
+
+    expect(await exchangeEvents(org.id)).toHaveLength(1);
+  });
+
+  test("asks an issuer that is down for its keys once for requests arriving together", async ({
+    makeOrganization,
+    makeServiceAccount,
+  }) => {
+    const org = await makeOrganization();
+    const account = await makeServiceAccount(org.id);
+    await trust({ organizationId: org.id, serviceAccountId: account.id });
+    issuerDown = true;
+
+    const results = await Promise.all(
+      Array.from({ length: 5 }, async () =>
+        verifyServiceAccountBearer({ token: await actorJwt({ sub: ACTOR }) }),
+      ),
+    );
+    await verifyServiceAccountBearer({ token: await actorJwt({ sub: ACTOR }) });
+
+    expect(results).toEqual([null, null, null, null, null]);
+    expect(issuerRequests).toHaveLength(1);
   });
 
   test("acts as neither of two service accounts that both trust it", async ({

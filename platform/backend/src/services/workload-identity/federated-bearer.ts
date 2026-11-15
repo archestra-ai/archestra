@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
+import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import ServiceAccountModel, {
   type VerifiedServiceAccountToken,
@@ -75,6 +76,14 @@ async function verifyFederatedBearerToken(params: {
     Promise.all(
       [...ids].map((id) => {
         const account = accounts.get(id);
+        // A refusal is audited once per account, subject and reason a while:
+        // anyone can get a correctly signed token from a shared issuer such
+        // as GitHub Actions and send it again and again.
+        if (outcome !== "success") {
+          const key = `${id}:${String(details.subject ?? "")}:${String(details.reason)}`;
+          if (recentRefusals.get(key)) return undefined;
+          recentRefusals.set(key, true);
+        }
         return account
           ? recordFederationAudit({
               account,
@@ -215,3 +224,9 @@ const SIGNED_TOKEN_FAILURES = new Set([
 
 /** Three base64url segments: a JWS in compact form. */
 const JWT_SHAPE = /^[\w-]+\.[\w-]+\.[\w-]+$/;
+
+/** Refusals audited recently, so a repeated token adds no audit rows. */
+const recentRefusals = new LRUCacheManager<true>({
+  maxSize: 10_000,
+  defaultTtl: 10 * 60 * 1000,
+});

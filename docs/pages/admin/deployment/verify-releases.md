@@ -24,7 +24,6 @@ What to know:
 
 - The SBOMs list the `linux/amd64` image. The `linux/arm64` image is built from the same source and is covered by the same provenance.
 - An image with a live credential is never released. The secret scan holds counts only, never a secret or where it was found.
-- Releases from 1.4.32 and 1.5.0-rc.34 carry SBOMs and a secret scan. Earlier releases carry build provenance only.
 
 ## Verify Archestra Images
 

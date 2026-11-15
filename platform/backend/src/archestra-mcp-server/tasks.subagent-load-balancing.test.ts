@@ -1,13 +1,19 @@
 import {
+  getArchestraToolFullName,
   isLoadBalancedRuntimeRouterTool,
   LOAD_BALANCED_RUNTIME_ROUTER_META_KEY,
+  SKILL_TOOL_PREFIX,
   TOOL_GET_AGENT_RUN_FULL_NAME,
+  TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
   TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
+  TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_START_AGENT_RUN_FULL_NAME,
   TOOL_STEER_AGENT_RUN_FULL_NAME,
   TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
+  TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { context as otelContext, trace } from "@opentelemetry/api";
@@ -52,6 +58,7 @@ import {
   McpToolCallModel,
   ModelModel,
   OrganizationModel,
+  SkillModel,
   ToolModel,
 } from "@/models";
 import ClaudeCodeAccountModel from "@/models/claude-code-account";
@@ -84,7 +91,14 @@ import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { modelSyncService } from "@/services/model-sync";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { getSessionHandoffs } from "@/services/session-handoffs";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import { type Agent, type AgentRuntime, SelectAgentSchema } from "@/types";
@@ -4305,6 +4319,38 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         fullEncryptedAgent.id,
         workerDelegationTool.id,
       );
+      const writeWorkspaceFileToolName = getArchestraToolFullName(
+        TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
+      );
+      const readWorkspaceFileToolName = getArchestraToolFullName(
+        TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
+      );
+      const transferWorkspaceFileToolName = getArchestraToolFullName(
+        TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
+      );
+      const designatedTargetAgent = await makeAgent({
+        name: "Encrypted Designated Subagent",
+        organizationId,
+        authorId: actorId,
+        agentType: "agent",
+        modelId,
+        llmApiKeyId,
+      });
+      await SkillModel.createWithFiles({
+        skill: {
+          organizationId,
+          name: "encrypted-designated-skill",
+          description: "Delegates to Encrypted Designated Subagent.",
+          content: "Run designated subagent task.",
+          agentName: designatedTargetAgent.name,
+          metadata: {},
+          sourceType: "manual",
+        },
+        files: [],
+        ...accessGrants("org"),
+      });
+      const designatedSkillToolName = `${SKILL_TOOL_PREFIX}encrypted_designated_skill`;
+
       const startRunDbTool = await ToolModel.findByName(
         TOOL_START_AGENT_RUN_FULL_NAME,
       );
@@ -4314,15 +4360,52 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       const postMessageDbTool = await ToolModel.findByName(
         TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
       );
+      const postFileDbTool = await ToolModel.findByName(
+        TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
+      );
+      const writeWorkspaceFileDbTool = await ToolModel.findByName(
+        writeWorkspaceFileToolName,
+      );
       for (const dbTool of [
         startRunDbTool,
         steerRunDbTool,
         postMessageDbTool,
+        postFileDbTool,
+        writeWorkspaceFileDbTool,
       ]) {
         if (dbTool) {
           await AgentToolModel.create(fullEncryptedAgent.id, dbTool.id);
         }
       }
+      const unencryptedFullConversation = await makeConversation(
+        fullEncryptedAgent.id,
+        {
+          organizationId,
+          userId: actorId,
+        },
+      );
+      seedGatewayListClient(fullEncryptedAgent, unencryptedFullConversation.id);
+      const unencryptedFullTools = await chatMcpClient.getChatMcpTools({
+        agentName: fullEncryptedAgent.name,
+        agentId: fullEncryptedAgent.id,
+        userId: actorId,
+        organizationId,
+        conversationId: unencryptedFullConversation.id,
+        sessionId: unencryptedFullConversation.id,
+        suppressContentLogging: false,
+        encryptedChatAudit: null,
+      });
+      expect(Object.keys(unencryptedFullTools)).toEqual(
+        expect.arrayContaining([
+          TOOL_START_AGENT_RUN_FULL_NAME,
+          TOOL_STEER_AGENT_RUN_FULL_NAME,
+          TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
+          TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
+          writeWorkspaceFileToolName,
+          designatedSkillToolName,
+        ]),
+      );
+
       const fullEncryptedConversation = await makeConversation(
         fullEncryptedAgent.id,
         {
@@ -4354,9 +4437,16 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       expect(Object.keys(encryptedFullTools)).not.toContain(
         TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
       );
+      expect(Object.keys(encryptedFullTools)).not.toContain(
+        TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
+      );
+      expect(Object.keys(encryptedFullTools)).not.toContain(
+        writeWorkspaceFileToolName,
+      );
       expect(
-        Object.keys(encryptedFullTools).some((name) =>
-          name.startsWith("agent__"),
+        Object.keys(encryptedFullTools).some(
+          (name) =>
+            name.startsWith("agent__") || name.startsWith(SKILL_TOOL_PREFIX),
         ),
       ).toBe(false);
 
@@ -4389,6 +4479,8 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         "start agent run runtime",
         "steer agent run message",
         "post agent run message Slack thread",
+        "post_agent_run_file upload thread",
+        "write_workspace_file workspace",
       ]) {
         const searchRes = await executeArchestraTool(
           TOOL_SEARCH_TOOLS_FULL_NAME,
@@ -4408,9 +4500,15 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         expect(discoveredNames).not.toContain(
           TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
         );
-        expect(discoveredNames.some((n) => n.startsWith("agent__"))).toBe(
-          false,
+        expect(discoveredNames).not.toContain(
+          TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
         );
+        expect(discoveredNames).not.toContain(writeWorkspaceFileToolName);
+        expect(
+          discoveredNames.some(
+            (n) => n.startsWith("agent__") || n.startsWith(SKILL_TOOL_PREFIX),
+          ),
+        ).toBe(false);
       }
 
       // Auto-tools (`accessAllTools: true`) configuration with `start_agent_run`
@@ -4441,7 +4539,11 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
 
       const unencryptedAutoSteerSearch = await executeArchestraTool(
         TOOL_SEARCH_TOOLS_FULL_NAME,
-        { query: "steer_agent_run post_agent_run_message", limit: 20 },
+        {
+          query:
+            "steer_agent_run post_agent_run_message post_agent_run_file write_workspace_file read_workspace_file",
+          limit: 25,
+        },
         {
           agent: { id: autoEncryptedAgent.id, name: autoEncryptedAgent.name },
           agentId: autoEncryptedAgent.id,
@@ -4461,15 +4563,22 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       expect(unencryptedAutoNames).toContain(
         TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
       );
+      expect(unencryptedAutoNames).toContain(
+        TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
+      );
+      expect(unencryptedAutoNames).toContain(writeWorkspaceFileToolName);
+      expect(unencryptedAutoNames).toContain(readWorkspaceFileToolName);
 
       for (const query of [
         "start agent run runtime",
         "steer_agent_run message",
         "post_agent_run_message Slack thread",
+        "post_agent_run_file upload thread",
+        "write_workspace_file read_workspace_file workspace",
       ]) {
         const autoEncryptedSearch = await executeArchestraTool(
           TOOL_SEARCH_TOOLS_FULL_NAME,
-          { query, limit: 20 },
+          { query, limit: 25 },
           {
             agent: { id: autoEncryptedAgent.id, name: autoEncryptedAgent.name },
             agentId: autoEncryptedAgent.id,
@@ -4495,13 +4604,22 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         expect(autoEncryptedNames).not.toContain(
           TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
         );
-        expect(autoEncryptedNames.some((n) => n.startsWith("agent__"))).toBe(
-          false,
+        expect(autoEncryptedNames).not.toContain(
+          TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
         );
+        expect(autoEncryptedNames).not.toContain(writeWorkspaceFileToolName);
+        expect(
+          autoEncryptedNames.some(
+            (n) => n.startsWith("agent__") || n.startsWith(SKILL_TOOL_PREFIX),
+          ),
+        ).toBe(false);
+        if (query.includes("read_workspace_file")) {
+          expect(autoEncryptedNames).toContain(readWorkspaceFileToolName);
+        }
 
         const gatewayEncryptedSearch = await executeArchestraTool(
           TOOL_SEARCH_TOOLS_FULL_NAME,
-          { query, limit: 20 },
+          { query, limit: 25 },
           {
             agent: { id: gateway.id, name: gateway.name },
             agentId: gateway.id,
@@ -4527,6 +4645,13 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         expect(gatewayEncryptedNames).not.toContain(
           TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
         );
+        expect(gatewayEncryptedNames).not.toContain(
+          TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
+        );
+        expect(gatewayEncryptedNames).not.toContain(writeWorkspaceFileToolName);
+        if (query.includes("read_workspace_file")) {
+          expect(gatewayEncryptedNames).toContain(readWorkspaceFileToolName);
+        }
       }
 
       // Attempting direct or `run_tool` launches (both implicit and explicitly assigned) must refuse
@@ -4568,6 +4693,8 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         "start agent run runtime",
         "steer agent run message",
         "post agent run message Slack thread",
+        "post_agent_run_file upload thread",
+        "write_workspace_file workspace",
       ]) {
         const assignedSearchRes = await executeArchestraTool(
           TOOL_SEARCH_TOOLS_FULL_NAME,
@@ -4591,8 +4718,16 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         expect(assignedDiscoveredNames).not.toContain(
           TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
         );
+        expect(assignedDiscoveredNames).not.toContain(
+          TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
+        );
+        expect(assignedDiscoveredNames).not.toContain(
+          writeWorkspaceFileToolName,
+        );
         expect(
-          assignedDiscoveredNames.some((n) => n.startsWith("agent__")),
+          assignedDiscoveredNames.some(
+            (n) => n.startsWith("agent__") || n.startsWith(SKILL_TOOL_PREFIX),
+          ),
         ).toBe(false);
       }
       const assignedDirectAttempt = await executeArchestraTool(
@@ -4616,6 +4751,104 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       );
       expect(assignedRunToolAttempt.isError).toBe(true);
 
+      const unknownRunId = crypto.randomUUID();
+      const autoEncryptedExecContext: ArchestraContext = {
+        agent: { id: autoEncryptedAgent.id, name: autoEncryptedAgent.name },
+        agentId: autoEncryptedAgent.id,
+        userId: actorId,
+        organizationId,
+        conversationId: encryptedConversation.id,
+        sessionId: encryptedConversation.id,
+        suppressContentLogging: true,
+        encryptedChatAudit,
+      };
+      for (const [blockedToolName, blockedToolArgs] of [
+        [
+          TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
+          {
+            task_id: unknownRunId,
+            filename: "secret.txt",
+            content_base64: Buffer.from(sensitiveSecret, "utf8").toString(
+              "base64",
+            ),
+            comment: sensitiveSecret,
+          },
+        ],
+        [
+          writeWorkspaceFileToolName,
+          {
+            run_id: unknownRunId,
+            path: "notes/secret.txt",
+            content: sensitiveSecret,
+          },
+        ],
+        [
+          transferWorkspaceFileToolName,
+          {
+            run_id: unknownRunId,
+            direction: "upload",
+            path: "notes/secret.txt",
+            local_path: "/tmp/secret.txt",
+            size: 16,
+            sha256: "a".repeat(64),
+          },
+        ],
+      ] as const) {
+        const directBlocked = await executeArchestraTool(
+          blockedToolName,
+          blockedToolArgs,
+          autoEncryptedExecContext,
+        );
+        expect(directBlocked.isError).toBe(true);
+        expect(
+          (directBlocked.content[0] as { text?: string } | undefined)?.text,
+        ).toContain("not available in encrypted chats");
+
+        const runToolBlocked = await executeArchestraTool(
+          TOOL_RUN_TOOL_FULL_NAME,
+          {
+            tool_name: blockedToolName,
+            tool_args: blockedToolArgs,
+          },
+          autoEncryptedExecContext,
+        );
+        expect(runToolBlocked.isError).toBe(true);
+        expect(
+          (runToolBlocked.content[0] as { text?: string } | undefined)?.text,
+        ).toContain("not available in encrypted chats");
+      }
+
+      // Workspace downloads and reads remain permitted in encrypted chats (failing
+      // on the unknown run handle rather than the encrypted-chat guard).
+      const downloadAttempt = await executeArchestraTool(
+        transferWorkspaceFileToolName,
+        {
+          run_id: unknownRunId,
+          direction: "download",
+          path: "reports/summary.md",
+          local_path: "/tmp/summary.md",
+        },
+        autoEncryptedExecContext,
+      );
+      expect(downloadAttempt.isError).toBe(true);
+      expect(
+        (downloadAttempt.content[0] as { text?: string } | undefined)?.text,
+      ).not.toContain("not available in encrypted chats");
+
+      const readWorkspaceAttempt = await executeArchestraTool(
+        readWorkspaceFileToolName,
+        {
+          run_id: unknownRunId,
+          path: "reports/summary.md",
+        },
+        autoEncryptedExecContext,
+      );
+      expect(readWorkspaceAttempt.isError).toBe(true);
+      expect(
+        (readWorkspaceAttempt.content[0] as { text?: string } | undefined)
+          ?.text,
+      ).not.toContain("not available in encrypted chats");
+
       const delegationAttempt = await executeArchestraTool(
         workerDelegationTool.name,
         { message: sensitiveSecret },
@@ -4624,6 +4857,17 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       expect(delegationAttempt.isError).toBe(true);
       expect(
         (delegationAttempt.content[0] as { text?: string } | undefined)?.text,
+      ).toContain("not available in encrypted chats");
+
+      const skillDelegationAttempt = await executeArchestraTool(
+        designatedSkillToolName,
+        { message: sensitiveSecret },
+        assignedEncryptedContext,
+      );
+      expect(skillDelegationAttempt.isError).toBe(true);
+      expect(
+        (skillDelegationAttempt.content[0] as { text?: string } | undefined)
+          ?.text,
       ).toContain("not available in encrypted chats");
 
       expect(launchSpy).not.toHaveBeenCalled();

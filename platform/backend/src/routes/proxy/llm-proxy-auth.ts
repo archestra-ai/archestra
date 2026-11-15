@@ -167,7 +167,7 @@ export async function validateVirtualApiKey(params: {
   /**
    * Organization of the resolved proxy agent the request will be attributed
    * to, or null for pure credential-swap sinks with no agent attribution
-   * (model listing, Gemini query-key rewriting). When set, a key from another
+   * (model listing, Gemini pass-through key swapping). When set, a key from another
    * organization is rejected so its traffic can never be attributed — or
    * limit-checked — against a different organization's proxy.
    */
@@ -1330,6 +1330,8 @@ async function authenticatePassthroughProxyRequest(params: {
             );
           }
         }
+      } else if (provider === "gemini") {
+        providerApiKey = await geminiMappedApiKey(bearerToken);
       }
       return;
     }
@@ -1415,6 +1417,26 @@ function forwardPassthroughProviderApiKey(params: {
       request.headers["anthropic-beta"] = nextBeta;
       request.raw.headers["anthropic-beta"] = nextBeta;
     }
+  }
+}
+
+/**
+ * The Gemini key a standard virtual key maps, or null when it maps none.
+ * Google's SDKs send the virtual key where the Gemini key belongs, so the
+ * catch-all forwards the mapped key in its place, as generateContent does.
+ */
+async function geminiMappedApiKey(tokenValue: string): Promise<string | null> {
+  try {
+    const { apiKey } = await validateVirtualApiKey({
+      tokenValue,
+      expectedProvider: "gemini",
+      expectedOrganizationId: null,
+    });
+    return apiKey ?? null;
+  } catch (error) {
+    // No usable mapping: the request still passes, forwarding no credential.
+    if (error instanceof ApiError && error.statusCode < 500) return null;
+    throw error;
   }
 }
 

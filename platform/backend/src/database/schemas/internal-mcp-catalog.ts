@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   AuthField,
+  AwsIamMcpAuthConfig,
   CatalogItemApprovalStatus,
   DesktopMcpConfig,
   EnterpriseManagedCredentialConfig,
@@ -119,6 +120,8 @@ const internalMcpCatalogTable = softDeletablePgTable(
     enterpriseManagedConfig: jsonb(
       "enterprise_managed_config",
     ).$type<EnterpriseManagedCredentialConfig>(),
+    // AWS IAM (SigV4) sign-in for remote servers behind an AWS service
+    awsIamConfig: jsonb("aws_iam_config").$type<AwsIamMcpAuthConfig>(),
     /** Catalog item icon: emoji character or base64-encoded image data URL */
     icon: text("icon"),
     organizationId: text("organization_id"),

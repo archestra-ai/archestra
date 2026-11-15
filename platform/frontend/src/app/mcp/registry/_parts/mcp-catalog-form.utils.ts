@@ -281,6 +281,10 @@ export function transformFormToApiData(
           headerName: values.enterpriseManagedConfig.headerName,
         }
       : null;
+  } else if (values.authMethod === "aws_iam" && values.awsIamConfig) {
+    data.userConfig = buildStaticHeaderUserConfig(values);
+    data.oauthConfig = null;
+    data.enterpriseManagedConfig = null;
   } else if (values.authMethod === "bearer") {
     data.userConfig = buildStaticHeaderUserConfig(values, {
       authFieldName: values.includeBearerPrefix
@@ -297,6 +301,19 @@ export function transformFormToApiData(
     data.oauthConfig = null;
     data.enterpriseManagedConfig = null;
   }
+  data.awsIamConfig =
+    values.serverType === "remote" &&
+    values.authMethod === "aws_iam" &&
+    values.awsIamConfig
+      ? {
+          roleArn: values.awsIamConfig.roleArn.trim(),
+          region: values.awsIamConfig.region.trim(),
+          service: values.awsIamConfig.service.trim(),
+          ...(values.awsIamConfig.audience?.trim() && {
+            audience: values.awsIamConfig.audience.trim(),
+          }),
+        }
+      : null;
 
   // Handle labels
   if (values.labels && values.labels.length > 0) {
@@ -350,6 +367,8 @@ export function transformCatalogItemToFormValues(
   if (item.serverType === "desktop_mcp") {
     // A desktop MCP server has no authentication, whatever its name suggests.
     authMethod = "none";
+  } else if (item.awsIamConfig) {
+    authMethod = "aws_iam";
   } else if (item.enterpriseManagedConfig) {
     authMethod =
       item.enterpriseManagedConfig.assertionMode === "passthrough"
@@ -556,6 +575,7 @@ export function transformCatalogItemToFormValues(
         : "",
     additionalHeaders,
     enterpriseManagedConfig: item.enterpriseManagedConfig ?? null,
+    awsIamConfig: item.awsIamConfig ?? null,
     oauthConfig,
     localConfig,
     desktopConfig:

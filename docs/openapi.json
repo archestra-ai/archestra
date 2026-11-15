@@ -360157,6 +360157,35 @@
                         },
                         "additionalProperties": false
                       },
+                      "awsIamConfig": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "roleArn": {
+                            "type": "string",
+                            "pattern": "^arn:aws[a-z-]*:iam::\\d{12}:role\\/[\\w+=,.@/-]{1,512}$"
+                          },
+                          "region": {
+                            "type": "string",
+                            "pattern": "^[a-z]{2}(-[a-z]+)+-\\d{1,2}$"
+                          },
+                          "service": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9-]{1,64}$"
+                          },
+                          "audience": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255
+                          }
+                        },
+                        "required": [
+                          "roleArn",
+                          "region",
+                          "service"
+                        ],
+                        "additionalProperties": false
+                      },
                       "icon": {
                         "nullable": true,
                         "type": "string"
@@ -360425,6 +360454,7 @@
                       "userConfig",
                       "oauthConfig",
                       "enterpriseManagedConfig",
+                      "awsIamConfig",
                       "icon",
                       "organizationId",
                       "authorId",
@@ -361235,6 +361265,34 @@
                       }
                     }
                   },
+                  "awsIamConfig": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "roleArn": {
+                        "type": "string",
+                        "pattern": "^arn:aws[a-z-]*:iam::\\d{12}:role\\/[\\w+=,.@/-]{1,512}$"
+                      },
+                      "region": {
+                        "type": "string",
+                        "pattern": "^[a-z]{2}(-[a-z]+)+-\\d{1,2}$"
+                      },
+                      "service": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,64}$"
+                      },
+                      "audience": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      }
+                    },
+                    "required": [
+                      "roleArn",
+                      "region",
+                      "service"
+                    ]
+                  },
                   "icon": {
                     "nullable": true,
                     "type": "string"
@@ -361988,6 +362046,35 @@
                       },
                       "additionalProperties": false
                     },
+                    "awsIamConfig": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "roleArn": {
+                          "type": "string",
+                          "pattern": "^arn:aws[a-z-]*:iam::\\d{12}:role\\/[\\w+=,.@/-]{1,512}$"
+                        },
+                        "region": {
+                          "type": "string",
+                          "pattern": "^[a-z]{2}(-[a-z]+)+-\\d{1,2}$"
+                        },
+                        "service": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9-]{1,64}$"
+                        },
+                        "audience": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255
+                        }
+                      },
+                      "required": [
+                        "roleArn",
+                        "region",
+                        "service"
+                      ],
+                      "additionalProperties": false
+                    },
                     "icon": {
                       "nullable": true,
                       "type": "string"
@@ -362170,6 +362257,7 @@
                     "userConfig",
                     "oauthConfig",
                     "enterpriseManagedConfig",
+                    "awsIamConfig",
                     "icon",
                     "organizationId",
                     "authorId",
@@ -365797,6 +365885,35 @@
                       },
                       "additionalProperties": false
                     },
+                    "awsIamConfig": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "roleArn": {
+                          "type": "string",
+                          "pattern": "^arn:aws[a-z-]*:iam::\\d{12}:role\\/[\\w+=,.@/-]{1,512}$"
+                        },
+                        "region": {
+                          "type": "string",
+                          "pattern": "^[a-z]{2}(-[a-z]+)+-\\d{1,2}$"
+                        },
+                        "service": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9-]{1,64}$"
+                        },
+                        "audience": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255
+                        }
+                      },
+                      "required": [
+                        "roleArn",
+                        "region",
+                        "service"
+                      ],
+                      "additionalProperties": false
+                    },
                     "icon": {
                       "nullable": true,
                       "type": "string"
@@ -366013,6 +366130,7 @@
                     "userConfig",
                     "oauthConfig",
                     "enterpriseManagedConfig",
+                    "awsIamConfig",
                     "icon",
                     "organizationId",
                     "authorId",
@@ -366812,6 +366930,34 @@
                       }
                     }
                   },
+                  "awsIamConfig": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "roleArn": {
+                        "type": "string",
+                        "pattern": "^arn:aws[a-z-]*:iam::\\d{12}:role\\/[\\w+=,.@/-]{1,512}$"
+                      },
+                      "region": {
+                        "type": "string",
+                        "pattern": "^[a-z]{2}(-[a-z]+)+-\\d{1,2}$"
+                      },
+                      "service": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,64}$"
+                      },
+                      "audience": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      }
+                    },
+                    "required": [
+                      "roleArn",
+                      "region",
+                      "service"
+                    ]
+                  },
                   "icon": {
                     "nullable": true,
                     "type": "string"
@@ -367426,6 +367572,35 @@
                       },
                       "additionalProperties": false
                     },
+                    "awsIamConfig": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "roleArn": {
+                          "type": "string",
+                          "pattern": "^arn:aws[a-z-]*:iam::\\d{12}:role\\/[\\w+=,.@/-]{1,512}$"
+                        },
+                        "region": {
+                          "type": "string",
+                          "pattern": "^[a-z]{2}(-[a-z]+)+-\\d{1,2}$"
+                        },
+                        "service": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9-]{1,64}$"
+                        },
+                        "audience": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255
+                        }
+                      },
+                      "required": [
+                        "roleArn",
+                        "region",
+                        "service"
+                      ],
+                      "additionalProperties": false
+                    },
                     "icon": {
                       "nullable": true,
                       "type": "string"
@@ -367608,6 +367783,7 @@
                     "userConfig",
                     "oauthConfig",
                     "enterpriseManagedConfig",
+                    "awsIamConfig",
                     "icon",
                     "organizationId",
                     "authorId",
@@ -370244,6 +370420,35 @@
                         },
                         "additionalProperties": false
                       },
+                      "awsIamConfig": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "roleArn": {
+                            "type": "string",
+                            "pattern": "^arn:aws[a-z-]*:iam::\\d{12}:role\\/[\\w+=,.@/-]{1,512}$"
+                          },
+                          "region": {
+                            "type": "string",
+                            "pattern": "^[a-z]{2}(-[a-z]+)+-\\d{1,2}$"
+                          },
+                          "service": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9-]{1,64}$"
+                          },
+                          "audience": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255
+                          }
+                        },
+                        "required": [
+                          "roleArn",
+                          "region",
+                          "service"
+                        ],
+                        "additionalProperties": false
+                      },
                       "icon": {
                         "nullable": true,
                         "type": "string"
@@ -370426,6 +370631,7 @@
                       "userConfig",
                       "oauthConfig",
                       "enterpriseManagedConfig",
+                      "awsIamConfig",
                       "icon",
                       "organizationId",
                       "authorId",
@@ -371257,6 +371463,35 @@
                       },
                       "additionalProperties": false
                     },
+                    "awsIamConfig": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "roleArn": {
+                          "type": "string",
+                          "pattern": "^arn:aws[a-z-]*:iam::\\d{12}:role\\/[\\w+=,.@/-]{1,512}$"
+                        },
+                        "region": {
+                          "type": "string",
+                          "pattern": "^[a-z]{2}(-[a-z]+)+-\\d{1,2}$"
+                        },
+                        "service": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9-]{1,64}$"
+                        },
+                        "audience": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255
+                        }
+                      },
+                      "required": [
+                        "roleArn",
+                        "region",
+                        "service"
+                      ],
+                      "additionalProperties": false
+                    },
                     "icon": {
                       "nullable": true,
                       "type": "string"
@@ -371439,6 +371674,7 @@
                     "userConfig",
                     "oauthConfig",
                     "enterpriseManagedConfig",
+                    "awsIamConfig",
                     "icon",
                     "organizationId",
                     "authorId",

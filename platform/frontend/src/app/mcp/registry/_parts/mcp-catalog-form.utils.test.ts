@@ -53,6 +53,77 @@ describe("transformFormToApiData", () => {
     });
   });
 
+  it("saves AWS IAM sign-in for a remote server, and loads it back", () => {
+    const awsIamConfig = {
+      roleArn: "arn:aws:iam::123456789012:role/archestra-agents",
+      region: "us-east-1",
+      service: "bedrock-agentcore",
+    };
+    const data = transformFormToApiData({
+      name: "AgentCore Gateway",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://gateway.example.com/mcp",
+      authMethod: "aws_iam",
+      includeBearerPrefix: true,
+      additionalHeaders: [],
+      awsIamConfig: { ...awsIamConfig, audience: " " },
+      enterpriseManagedConfig: null,
+      labels: [],
+      scope: "org",
+      teams: [],
+    });
+
+    expect(data.awsIamConfig).toEqual(awsIamConfig);
+    expect(data.oauthConfig).toBeNull();
+    expect(data.enterpriseManagedConfig).toBeNull();
+
+    const loaded = transformCatalogItemToFormValues({
+      id: "catalog-aws",
+      name: "AgentCore Gateway",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://gateway.example.com/mcp",
+      oauthConfig: null,
+      enterpriseManagedConfig: null,
+      awsIamConfig,
+      localConfig: null,
+      deploymentSpecYaml: null,
+      userConfig: {},
+      scope: "org",
+      teams: [],
+      labels: [],
+    } as never);
+    expect(loaded.authMethod).toBe("aws_iam");
+    expect(loaded.awsIamConfig).toEqual(awsIamConfig);
+  });
+
+  it("clears AWS IAM sign-in when another method is chosen", () => {
+    const data = transformFormToApiData({
+      name: "AgentCore Gateway",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://gateway.example.com/mcp",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      additionalHeaders: [],
+      awsIamConfig: {
+        roleArn: "arn:aws:iam::123456789012:role/archestra-agents",
+        region: "us-east-1",
+        service: "bedrock-agentcore",
+      },
+      enterpriseManagedConfig: null,
+      labels: [],
+      scope: "org",
+      teams: [],
+    });
+
+    expect(data.awsIamConfig).toBeNull();
+  });
+
   it("includes OAuth discovery overrides in the API payload", () => {
     const values: McpCatalogFormValues = {
       name: "Direct OAuth MCP",

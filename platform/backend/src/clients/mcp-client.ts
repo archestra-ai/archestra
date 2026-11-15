@@ -97,6 +97,7 @@ import {
   isToolRowExcluded,
 } from "@/services/agent-tool-exclusions";
 import { escapeAppNameForModelText } from "@/services/apps/app-run-link";
+import { awsIamMcpSigner } from "@/services/aws-iam/aws-iam-mcp-signer";
 import {
   filterToolsByCallerCatalogAccess,
   getCallerAccessibleCatalogIds,
@@ -973,6 +974,41 @@ class McpClient {
         });
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // An AWS IAM server is called as the agent: assume its role now, so a
+      // refusal reaches the model as a clear error rather than a failed
+      // request. Apps have no agent to assume it as.
+      const awsIamIdentity: AwsIamIdentity | undefined =
+        owner.type === "agent" ? { agentId: owner.id } : undefined;
+      if (catalogItem.awsIamConfig) {
+        const awsIamError = !awsIamIdentity
+          ? "This MCP server signs in with AWS IAM as the calling agent, so only agents can call its tools."
+          : await awsIamMcpSigner
+              .assumeRole({
+                config: catalogItem.awsIamConfig,
+                agentId: owner.id,
+              })
+              .then(
+                () => null,
+                (error: unknown) =>
+                  error instanceof Error ? error.message : String(error),
+              );
+        if (awsIamError) {
+          return this.createErrorResult({
+            toolCall,
+            owner,
+            error: awsIamError,
+            mcpServerName,
+            authInfo,
+            encryptedChatContent,
+            startedAt,
+          });
+        }
+      }
+      // SPDX-SnippetEnd
+
       const secretsResult = await this.getSecretsForMcpServer({
         targetMcpServerId: targetMcpServerId,
         toolCall,
@@ -1565,6 +1601,8 @@ class McpClient {
                   connectionKey,
                   tokenAuth,
                   enterpriseTransportCredential ?? undefined,
+                  undefined,
+                  awsIamIdentity,
                 ),
               resetSecrets,
               true,
@@ -1662,6 +1700,8 @@ class McpClient {
               connectionKey,
               tokenAuth,
               enterpriseTransportCredential ?? undefined,
+              undefined,
+              awsIamIdentity,
             ),
           secrets,
         );
@@ -1708,6 +1748,8 @@ class McpClient {
               connectionKey,
               tokenAuth,
               enterpriseTransportCredential ?? undefined,
+              undefined,
+              awsIamIdentity,
             );
           }, secrets),
       );
@@ -2929,6 +2971,7 @@ class McpClient {
       headerValue: string;
     },
     onHttpFailure?: (failure: McpDiscoveryHttpFailure) => void,
+    awsIamIdentity?: AwsIamIdentity,
   ): Promise<Transport> {
     await assertMayConnect(catalogItem.id, caller);
     // Also covers queued calls and retry paths that bypass getTransport().
@@ -3002,6 +3045,7 @@ class McpClient {
             enterpriseTransportCredential,
           );
         } else if (
+          !catalogItem.awsIamConfig &&
           !staticCredentialsProvideAuthorization({ catalogItem, secrets }) &&
           tokenAuth?.isExternalIdp &&
           tokenAuth.rawToken
@@ -3068,6 +3112,16 @@ class McpClient {
         mergePassthroughHeaders(headers, tokenAuth?.passthroughHeaders);
         this.trackTransportCredentialFingerprint(connectionKey, headers);
 
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        const baseFetch = catalogItem.awsIamConfig
+          ? awsIamMcpSigner.signingFetch({
+              config: catalogItem.awsIamConfig,
+              agentId: requireAwsIamIdentity(awsIamIdentity),
+            })
+          : undefined;
+        // SPDX-SnippetEnd
         return new StreamableHTTPClientTransport(
           new URL(catalogItem.serverUrl),
           {
@@ -3076,7 +3130,7 @@ class McpClient {
             // known Bearer error code. Never retain an upstream body or header.
             fetch: onHttpFailure
               ? async (url, init) => {
-                  const response = await fetch(url, init);
+                  const response = await (baseFetch ?? fetch)(url, init);
                   if (!response.ok) {
                     onHttpFailure({
                       status: response.status,
@@ -3087,7 +3141,7 @@ class McpClient {
                   }
                   return response;
                 }
-              : undefined,
+              : baseFetch,
           },
         );
       }
@@ -3330,6 +3384,7 @@ class McpClient {
       headerValue: string;
     },
     onHttpFailure?: (failure: McpDiscoveryHttpFailure) => void,
+    awsIamIdentity?: AwsIamIdentity,
   ): Promise<Transport> {
     if (
       PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
@@ -3366,6 +3421,7 @@ class McpClient {
       tokenAuth,
       enterpriseTransportCredential,
       onHttpFailure,
+      awsIamIdentity,
     );
   }
 
@@ -4467,6 +4523,7 @@ class McpClient {
           (failure) => {
             httpFailure = failure;
           },
+          "platform",
         );
 
         // No `roots` — see the identical omission above.
@@ -4652,6 +4709,8 @@ class McpClient {
         undefined,
         undefined,
         enterpriseTransportCredential,
+        undefined,
+        "platform",
       );
 
       const client = new Client(buildMcpClientInfo("archestra-inspector"), {
@@ -5516,6 +5575,8 @@ class McpClient {
         undefined,
         tokenAuth,
         enterpriseTransportCredential ?? undefined,
+        undefined,
+        { agentId },
       );
       const connectionKey = `${catalogItem.id}:${server.id}:${agentId}`;
       const client = await this.getOrCreateClient(
@@ -5788,6 +5849,8 @@ class McpClient {
                 connectionKey,
                 tokenAuth,
                 enterpriseTransportCredential ?? undefined,
+                undefined,
+                { agentId },
               );
               const client = await this.getOrCreateClient(
                 connectionKey,
@@ -6902,3 +6965,27 @@ function fingerprintHeaders(headers: Record<string, string>): string {
     .update(JSON.stringify(canonicalHeaders))
     .digest("base64url");
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Who assumes an AWS IAM server's role: the agent making a tool call, or the
+ * platform itself when it lists the server's tools.
+ */
+type AwsIamIdentity = { agentId: string } | "platform";
+
+/**
+ * The agent an AWS IAM server's role is assumed as, or null for the platform.
+ * A path that names neither fails closed rather than falling back to the
+ * platform's own session.
+ */
+function requireAwsIamIdentity(identity: AwsIamIdentity | undefined) {
+  if (!identity) {
+    throw new Error(
+      "This MCP server signs in with AWS IAM as the calling agent, and this call has no agent.",
+    );
+  }
+  return identity === "platform" ? null : identity.agentId;
+}
+// SPDX-SnippetEnd

@@ -84,7 +84,7 @@ kubectl get pods -n <namespace> -l archestra.io/agent-workspace \
   -o custom-columns=NAME:.metadata.name,RUNTIME:.spec.runtimeClassName
 ```
 
-- Archestra does not check that the RuntimeClass exists. A misspelled name stops Kubernetes from creating the run's pod, and the run never starts.
+- Archestra checks that the RuntimeClass exists, at startup and before each run. If it is missing, the platform logs an error and runs fail at once with a reason that names it. The Helm chart grants the read; without it, Archestra logs that it cannot check and runs start unchecked.
 - With [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR) set, give the sandbox nodes that label too.
 - [Privileged runs](#privileged-containers) ignore the RuntimeClass and share the node's kernel. Keep [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED) off unless runs need Docker.
 

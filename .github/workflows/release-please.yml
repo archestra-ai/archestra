@@ -717,7 +717,10 @@ jobs:
     needs: [release-please, attest-release-images]
     permissions:
       actions: read # Download the saved chart.
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@dece2adc8ef7600e4654648e045e7d85ddf3338d # v1.23.0
+      id-token: write # sign the image contents attestations (release-publish.yml)
+      attestations: write # store them
+      packages: read # pull the staged images to scan them
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@7e99001200cbd9510a90930f78fd79d6b79cb94c # v1.28.0
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser

@@ -142,7 +142,7 @@ jobs:
           signer-workflow: ${{ github.repository }}/.github/workflows/release-please.yml
           image-tag: "{version}"
           chart-repositories: |
-            archestra-platform oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts
+            archestra-platform oci://ghcr.io/archestra-ai/helm-charts
 
       - name: Download the release run's chart
         if: ${{ steps.request.outputs.publish == 'true' }}

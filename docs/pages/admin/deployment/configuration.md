@@ -46,13 +46,13 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 - **`ARCHESTRA_DATABASE_IAM_AUTH_ENABLED`** - Signs a fresh 15-minute Amazon RDS or Aurora IAM token for each new PostgreSQL connection in the query pool, cache pool, LISTEN/NOTIFY client, and migration Job, keeping TLS certificate and hostname verification with the RDS CA bundle.
   - Default: `false`
   - Values: `true`, `false`
-  - In Helm, set `archestra.database.iamAuth.enabled: true`. See [Amazon RDS IAM Authentication](/docs/admin/deployment/database#amazon-rds-iam-authentication).
+  - In Helm, set `archestra.database.iamAuth.enabled: true`. See [Amazon RDS and Aurora](/docs/admin/deployment/database/aws).
 
 - **`ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED`** - Signs in to Azure Database for PostgreSQL flexible server with a Microsoft Entra ID access token for the pod's Azure identity on each new PostgreSQL connection in the query pool, cache pool, LISTEN/NOTIFY client, and migration Job, keeping TLS certificate and hostname verification.
   - Default: `false`
   - Values: `true`, `false`
   - Put the managed identity's name as the user in [`ARCHESTRA_DATABASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_URL). Cannot be combined with [`ARCHESTRA_DATABASE_IAM_AUTH_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_IAM_AUTH_ENABLED).
-  - In Helm, set `archestra.database.entraAuth.enabled: true`. See the Azure tab of [Connect a Database](/docs/admin/deployment/database#connect-a-database).
+  - In Helm, set `archestra.database.entraAuth.enabled: true`. See [Azure Database for PostgreSQL](/docs/admin/deployment/database/azure).
 
 - **`ARCHESTRA_DATABASE_AWS_REGION`** - AWS region used to sign RDS IAM database authentication tokens.
   - Default: derived from an `*.rds.amazonaws.com` database hostname, falling back to `AWS_REGION` or `AWS_DEFAULT_REGION`

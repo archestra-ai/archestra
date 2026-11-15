@@ -66,8 +66,8 @@ spec:
     metadata:
       labels:
         {{- include "archestra-platform.migrationJobLabels" . | nindent 8 }}
-        {{- with .Values.archestra.podLabels }}
-        {{- toYaml . | nindent 8 }}
+        {{- with include "archestra-platform.podLabels" . }}
+        {{- . | nindent 8 }}
         {{- end }}
     spec:
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
@@ -137,7 +137,7 @@ spec:
             - name: ARCHESTRA_DATABASE_URL
               value: {{ index .Values.archestra.env "ARCHESTRA_DATABASE_URL" | quote }}
             {{- end }}
-            {{- range $dbEnvKey := list "ARCHESTRA_DATABASE_IAM_AUTH_ENABLED" "ARCHESTRA_DATABASE_AWS_REGION" "AWS_REGION" "AWS_DEFAULT_REGION" "AWS_ROLE_ARN" "AWS_WEB_IDENTITY_TOKEN_FILE" "AWS_ROLE_SESSION_NAME" "AWS_SHARED_CREDENTIALS_FILE" "AWS_CONFIG_FILE" "AWS_PROFILE" "AWS_SDK_LOAD_CONFIG" "AWS_ACCESS_KEY_ID" "PGSSLMODE" "PGSSLROOTCERT" "NODE_EXTRA_CA_CERTS" }}
+            {{- range $dbEnvKey := list "ARCHESTRA_DATABASE_IAM_AUTH_ENABLED" "ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED" "AZURE_CLIENT_ID" "AZURE_TENANT_ID" "AZURE_AUTHORITY_HOST" "ARCHESTRA_DATABASE_AWS_REGION" "AWS_REGION" "AWS_DEFAULT_REGION" "AWS_ROLE_ARN" "AWS_WEB_IDENTITY_TOKEN_FILE" "AWS_ROLE_SESSION_NAME" "AWS_SHARED_CREDENTIALS_FILE" "AWS_CONFIG_FILE" "AWS_PROFILE" "AWS_SDK_LOAD_CONFIG" "AWS_ACCESS_KEY_ID" "PGSSLMODE" "PGSSLROOTCERT" "NODE_EXTRA_CA_CERTS" }}
             {{- if and (hasKey $.Values.archestra.env $dbEnvKey) (not (hasKey $migrationOverrides $dbEnvKey)) }}
             - name: {{ $dbEnvKey }}
               value: {{ index $.Values.archestra.env $dbEnvKey | quote }}

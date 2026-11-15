@@ -113,6 +113,11 @@ The Bitnami chart auto-generates a strong password and persists it across helm u
 - name: ARCHESTRA_DATABASE_IAM_AUTH_ENABLED
   value: "true"
 {{- end }}
+{{- $entraAuth := (.Values.archestra.database).entraAuth | default dict }}
+{{- if and $entraAuth.enabled (not (hasKey $envOverrides "ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED")) }}
+- name: ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED
+  value: "true"
+{{- end }}
 {{- if and $iamAuth.awsRegion (not (hasKey $envOverrides "ARCHESTRA_DATABASE_AWS_REGION")) }}
 - name: ARCHESTRA_DATABASE_AWS_REGION
   value: {{ $iamAuth.awsRegion | quote }}
@@ -706,6 +711,54 @@ File storage PVC claim name
 */}}
 {{- define "archestra-platform.fileStorageClaimName" -}}
 {{- default (printf "%s-file-storage" (include "archestra-platform.fullname" .)) .Values.archestra.fileStorage.filesystem.existingClaim -}}
+{{- end }}
+
+{{/*
+Annotations for the platform ServiceAccount, as YAML: the configured
+annotations plus the IRSA role derived from archestra.database.iamAuth and the
+Workload Identity client ID from archestra.database.entraAuth. The migration
+Job's hook ServiceAccount carries the same annotations.
+*/}}
+{{- define "archestra-platform.serviceAccountAnnotations" -}}
+{{- $saAnnotations := deepCopy (.Values.archestra.orchestrator.kubernetes.serviceAccount.annotations | default dict) -}}
+{{- $iamAuth := (.Values.archestra.database).iamAuth | default dict -}}
+{{- if and $iamAuth.roleArn (not $iamAuth.injectWebIdentityTokenVolume) (not (hasKey $saAnnotations "eks.amazonaws.com/role-arn")) -}}
+{{- $_ := set $saAnnotations "eks.amazonaws.com/role-arn" $iamAuth.roleArn -}}
+{{- end -}}
+{{- $entraAuth := (.Values.archestra.database).entraAuth | default dict -}}
+{{- if and $entraAuth.clientId (not (hasKey $saAnnotations "azure.workload.identity/client-id")) -}}
+{{- $_ := set $saAnnotations "azure.workload.identity/client-id" $entraAuth.clientId -}}
+{{- end -}}
+{{- toYaml $saAnnotations -}}
+{{- end }}
+
+{{/*
+Extra labels for the web, worker, and migration Job pods, as YAML:
+archestra.podLabels plus the AKS Workload Identity opt-in label when
+archestra.database.entraAuth.clientId is set. Renders nothing when empty.
+*/}}
+{{- define "archestra-platform.podLabels" -}}
+{{- $podLabels := deepCopy (.Values.archestra.podLabels | default dict) -}}
+{{- $entraAuth := (.Values.archestra.database).entraAuth | default dict -}}
+{{- if and $entraAuth.clientId (not (hasKey $podLabels "azure.workload.identity/use")) -}}
+{{- $_ := set $podLabels "azure.workload.identity/use" "true" -}}
+{{- end -}}
+{{- with $podLabels -}}
+{{- toYaml . -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+ServiceAccount name for the database migration Job: the hook-only
+<fullname>-migrate account when migrationJob.serviceAccount.create is set,
+otherwise the platform ServiceAccount.
+*/}}
+{{- define "archestra-platform.migrationJobServiceAccountName" -}}
+{{- if (.Values.archestra.migrationJob.serviceAccount).create -}}
+{{- printf "%s-migrate" (include "archestra-platform.fullname" .) -}}
+{{- else -}}
+{{- include "archestra-platform.serviceAccountName" . -}}
+{{- end -}}
 {{- end }}
 
 {{/*

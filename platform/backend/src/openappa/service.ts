@@ -579,6 +579,7 @@ async function binding() {
         getDatabaseConnectionString(),
         {
           iamAuthEnabled: config.database.iamAuthEnabled,
+          entraAuthEnabled: config.database.entraAuthEnabled,
           awsRegion: config.database.awsRegion || undefined,
         },
       ),

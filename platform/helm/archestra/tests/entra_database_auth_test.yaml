@@ -1,0 +1,123 @@
+suite: Microsoft Entra ID database authentication
+templates:
+  - archestra-platform.yaml
+  - archestra-worker.yaml
+  - migration-job.yaml
+  - migration-job-serviceaccount.yaml
+  - serviceaccount.yaml
+set:
+  postgresql.enabled: false
+  postgresql.external_database_url: postgresql://archestra-identity@archestra.postgres.database.azure.com:5432/archestra?sslmode=require
+  archestra.database.entraAuth.enabled: true
+  archestra.database.entraAuth.clientId: 00000000-0000-0000-0000-000000000000
+tests:
+  - it: turns on Entra sign-in in the web pod
+    template: archestra-platform.yaml
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED
+            value: "true"
+      - equal:
+          path: spec.template.metadata.labels["azure.workload.identity/use"]
+          value: "true"
+
+  - it: turns on Entra sign-in in worker pods
+    template: archestra-worker.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED
+            value: "true"
+      - equal:
+          path: spec.template.metadata.labels["azure.workload.identity/use"]
+          value: "true"
+
+  - it: turns on Entra sign-in in the migration Job so migrations sign in too
+    template: migration-job.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED
+            value: "true"
+      - equal:
+          path: spec.template.metadata.labels["azure.workload.identity/use"]
+          value: "true"
+
+  - it: annotates the platform ServiceAccount with the managed identity client ID
+    template: serviceaccount.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.annotations["azure.workload.identity/client-id"]
+          value: 00000000-0000-0000-0000-000000000000
+
+  - it: annotates the migration Job's own ServiceAccount the same way
+    template: migration-job-serviceaccount.yaml
+    set:
+      archestra.migrationJob.serviceAccount.create: true
+    asserts:
+      - equal:
+          path: metadata.annotations["azure.workload.identity/client-id"]
+          value: 00000000-0000-0000-0000-000000000000
+
+  - it: keeps an explicitly configured client ID annotation
+    template: serviceaccount.yaml
+    documentIndex: 0
+    set:
+      archestra.orchestrator.kubernetes.serviceAccount.annotations:
+        azure.workload.identity/client-id: 11111111-1111-1111-1111-111111111111
+    asserts:
+      - equal:
+          path: metadata.annotations["azure.workload.identity/client-id"]
+          value: 11111111-1111-1111-1111-111111111111
+
+  - it: keeps user pod labels and adds no Workload Identity label without a client ID
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.database.entraAuth.clientId: ""
+      archestra.podLabels:
+        team: platform
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.team
+          value: platform
+      - notExists:
+          path: spec.template.metadata.labels["azure.workload.identity/use"]
+
+  - it: leaves Entra sign-in off by default
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.database.entraAuth.enabled: false
+      archestra.database.entraAuth.clientId: ""
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED
+            value: "true"
+      - notExists:
+          path: spec.template.metadata.labels["azure.workload.identity/use"]
+
+  - it: refuses to run alongside the bundled PostgreSQL
+    template: archestra-platform.yaml
+    set:
+      postgresql.enabled: true
+      postgresql.external_database_url: null
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: When archestra.database.entraAuth.enabled is true, you must set postgresql.enabled=false and configure an external Azure Database for PostgreSQL flexible server."
+
+  - it: refuses to combine Entra sign-in with RDS IAM authentication
+    template: archestra-platform.yaml
+    set:
+      archestra.database.iamAuth.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: Enable only one of archestra.database.iamAuth and archestra.database.entraAuth."

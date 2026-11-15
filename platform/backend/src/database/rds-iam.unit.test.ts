@@ -572,6 +572,147 @@ function createLoopbackTlsCredentials(): {
   return { certPem, keyPem };
 }
 
+describe.each(MODULES)("entra database auth (%s)", (_moduleName, dbAuth) => {
+  const {
+    buildPgConnectionConfig,
+    configurePgDefaultsForRdsIam,
+    entraTokenScopeForHostname,
+    isEntraDatabaseAuthEnabled,
+  } = dbAuth;
+
+  const originalPgDefaultPassword = pg.defaults.password;
+  const originalPgDefaultSsl = pg.defaults.ssl;
+  const AZURE_URL =
+    "postgresql://archestra-identity@archestra.postgres.database.azure.com:5432/archestra?sslmode=require";
+
+  afterEach(() => {
+    pg.defaults.password = originalPgDefaultPassword;
+    pg.defaults.ssl = originalPgDefaultSsl;
+  });
+
+  test("isEntraDatabaseAuthEnabled checks ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED", () => {
+    expect(
+      isEntraDatabaseAuthEnabled({
+        ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED: "true",
+      }),
+    ).toBe(true);
+    expect(isEntraDatabaseAuthEnabled({})).toBe(false);
+  });
+
+  test("entraTokenScopeForHostname picks the scope for the server's Azure cloud", () => {
+    expect(
+      entraTokenScopeForHostname("archestra.postgres.database.azure.com"),
+    ).toBe("https://ossrdbms-aad.database.windows.net/.default");
+    expect(
+      entraTokenScopeForHostname(
+        "archestra.privatelink.postgres.database.azure.com.",
+      ),
+    ).toBe("https://ossrdbms-aad.database.windows.net/.default");
+    expect(
+      entraTokenScopeForHostname(
+        "Archestra.Postgres.Database.USGovCloudAPI.net",
+      ),
+    ).toBe("https://ossrdbms-aad.database.usgovcloudapi.net/.default");
+    expect(
+      entraTokenScopeForHostname(
+        "archestra.postgres.database.chinacloudapi.cn",
+      ),
+    ).toBe("https://ossrdbms-aad.database.chinacloudapi.cn/.default");
+    expect(entraTokenScopeForHostname("10.0.0.4")).toBe(
+      "https://ossrdbms-aad.database.windows.net/.default",
+    );
+  });
+
+  test("buildPgConnectionConfig uses a cached Entra access token as the password and fetches a new one once it expires", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const credential = makeFakeAzureCredential();
+    const poolConfig = buildPgConnectionConfig(
+      `${AZURE_URL}&application_name=archestra-web`,
+      { max: 5 },
+      { entraAuthEnabled: true, azureCredential: credential, env: {} },
+    );
+
+    expect(poolConfig.connectionString).toBeUndefined();
+    expect(poolConfig.host).toBe("archestra.postgres.database.azure.com");
+    expect(poolConfig.user).toBe("archestra-identity");
+    expect(poolConfig.database).toBe("archestra");
+    expect(poolConfig.application_name).toBe("archestra-web");
+    expect(poolConfig.ssl).toMatchObject({ rejectUnauthorized: true });
+
+    const pool = new pg.Pool(poolConfig);
+    try {
+      const poolOptions = (pool as unknown as { options: pg.ClientConfig })
+        .options;
+      const first = new pg.Client(poolOptions) as unknown as {
+        password: () => Promise<string>;
+      };
+      const second = new pg.Client(poolOptions) as unknown as {
+        password: () => Promise<string>;
+      };
+      expect(await first.password()).toBe("entra-token-1");
+      expect(await second.password()).toBe("entra-token-1");
+      expect(credential.getToken).toHaveBeenCalledTimes(1);
+      expect(credential.getToken).toHaveBeenCalledWith(
+        ["https://ossrdbms-aad.database.windows.net/.default"],
+        expect.anything(),
+      );
+
+      vi.setSystemTime(Date.now() + 2 * 60 * 60 * 1000);
+      expect(await first.password()).toBe("entra-token-2");
+      expect(credential.getToken).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+      await pool.end();
+    }
+  });
+
+  test("buildPgConnectionConfig keeps TLS on and refuses to combine Entra with RDS IAM", () => {
+    const credential = makeFakeAzureCredential();
+    expect(() =>
+      buildPgConnectionConfig(
+        AZURE_URL.replace("sslmode=require", "sslmode=disable"),
+        {},
+        { entraAuthEnabled: true, azureCredential: credential, env: {} },
+      ),
+    ).toThrow(
+      /TLS must stay enabled when Microsoft Entra ID database authentication is enabled/,
+    );
+    expect(() =>
+      buildPgConnectionConfig(
+        AZURE_URL,
+        {},
+        {
+          env: {
+            ARCHESTRA_DATABASE_IAM_AUTH_ENABLED: "true",
+            ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED: "true",
+          },
+        },
+      ),
+    ).toThrow(
+      "Enable only one of ARCHESTRA_DATABASE_IAM_AUTH_ENABLED and ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED.",
+    );
+  });
+
+  test("configurePgDefaultsForRdsIam gives drizzle-kit Pools the Entra token when only the environment enables it", async () => {
+    const env: NodeJS.ProcessEnv = {
+      ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED: "true",
+      PGPASSWORD: "stale",
+    };
+    const credential = makeFakeAzureCredential();
+    const url = configurePgDefaultsForRdsIam(
+      AZURE_URL.replace("archestra-identity@", "archestra-identity:stale@"),
+      { azureCredential: credential, env },
+    );
+
+    expect(new URL(url).password).toBe("");
+    expect(new URL(url).searchParams.get("sslmode")).toBeNull();
+    expect(env.PGPASSWORD).toBeUndefined();
+    const defaultPassword = pg.defaults
+      .password as unknown as () => Promise<string>;
+    expect(await defaultPassword()).toBe("entra-token-1");
+  });
+});
+
 describe("rds-iam native bridge & retry helpers", () => {
   afterEach(async () => {
     await tsRdsIam.closeRdsIamNativeBridges();
@@ -586,65 +727,9 @@ describe("rds-iam native bridge & retry helpers", () => {
       }),
     ).toBe(rawUrl);
 
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "rds-bridge-tls-"));
-    const certFile = path.join(tempDir, "server.crt");
-    const { certPem: serverCert, keyPem: serverKey } =
-      createLoopbackTlsCredentials();
-    fs.writeFileSync(certFile, serverCert, "utf8");
-
-    const receivedPasswords: string[] = [];
-    let upstreamConnectionCount = 0;
-    const mockPgServer = net.createServer((rawSocket) => {
-      upstreamConnectionCount += 1;
-      rawSocket.once("data", (sslReq) => {
-        const reqBuf = Buffer.isBuffer(sslReq) ? sslReq : Buffer.from(sslReq);
-        // Expect 8-byte PostgreSQL SSLRequest (80877103) and reply 'S' (0x53)
-        if (reqBuf.length === 8 && reqBuf.readInt32BE(4) === 80877103) {
-          rawSocket.write(Buffer.from([0x53]));
-          const tlsSocket = new tls.TLSSocket(rawSocket, {
-            isServer: true,
-            key: serverKey,
-            cert: serverCert,
-          });
-          let startupDone = false;
-          tlsSocket.on("data", (data: Buffer) => {
-            if (!startupDone) {
-              startupDone = true;
-              // Send AuthenticationCleartextPassword ('R', len=8, type=3)
-              const authReq = Buffer.alloc(9);
-              authReq[0] = 0x52;
-              authReq.writeInt32BE(8, 1);
-              authReq.writeInt32BE(3, 5);
-              tlsSocket.write(authReq);
-              return;
-            }
-            const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-            if (buf[0] === 0x70) {
-              const msgLen = buf.readInt32BE(1);
-              const pwd = buf.subarray(5, 1 + msgLen - 1).toString("utf8");
-              receivedPasswords.push(pwd);
-              // Send AuthenticationOk ('R', len=8, type=0) + ReadyForQuery ('Z', len=5, 'I')
-              const okAndReady = Buffer.from([
-                0x52, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x5a,
-                0x00, 0x00, 0x00, 0x05, 0x49,
-              ]);
-              tlsSocket.write(okAndReady);
-              tlsSocket.end();
-            }
-          });
-          tlsSocket.on("error", () => rawSocket.destroy());
-        } else {
-          rawSocket.destroy();
-        }
-      });
-    });
-
-    await new Promise<void>((resolve) =>
-      mockPgServer.listen(0, "127.0.0.1", resolve),
-    );
-    const serverAddr = mockPgServer.address();
-    const upstreamPort =
-      typeof serverAddr === "object" && serverAddr ? serverAddr.port : 0;
+    const upstream = await startCleartextPgServer();
+    const { certFile, receivedPasswords } = upstream;
+    const upstreamPort = upstream.port;
 
     try {
       let seq = 0;
@@ -680,7 +765,7 @@ describe("rds-iam native bridge & retry helpers", () => {
         await client.end().catch(() => {});
       }
 
-      expect(upstreamConnectionCount).toBe(2);
+      expect(upstream.connectionCount()).toBe(2);
       expect(credentialsSpy).toHaveBeenCalledTimes(2);
       expect(receivedPasswords).toHaveLength(2);
       expect(receivedPasswords[0]).toContain("native-token-1");
@@ -716,12 +801,37 @@ describe("rds-iam native bridge & retry helpers", () => {
         idleSock.on("error", () => resolve());
       });
 
-      expect(upstreamConnectionCount).toBe(2);
+      expect(upstream.connectionCount()).toBe(2);
       expect(credentialsSpy).toHaveBeenCalledTimes(2);
       expect(receivedPasswords).toHaveLength(2);
     } finally {
-      await new Promise<void>((resolve) => mockPgServer.close(() => resolve()));
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      await upstream.close();
+    }
+  });
+
+  test("resolveNativeDatabaseConnectionString injects the Entra access token over TLS per native connection", async () => {
+    const upstream = await startCleartextPgServer();
+    try {
+      const credential = makeFakeAzureCredential();
+      const bridgeUrl = await tsRdsIam.resolveNativeDatabaseConnectionString(
+        `postgresql://archestra-identity@127.0.0.1:${upstream.port}/archestra?sslmode=require&sslrootcert=${encodeURIComponent(upstream.certFile)}`,
+        { entraAuthEnabled: true, azureCredential: credential, env: {} },
+      );
+      expect(new URL(bridgeUrl).hostname).toBe("127.0.0.1");
+
+      for (let i = 0; i < 2; i++) {
+        const client = new pg.Client({ connectionString: bridgeUrl });
+        await client.connect();
+        await client.end().catch(() => {});
+      }
+
+      expect(upstream.connectionCount()).toBe(2);
+      expect(upstream.receivedPasswords).toEqual([
+        "entra-token-1",
+        "entra-token-1",
+      ]);
+    } finally {
+      await upstream.close();
     }
   });
 
@@ -788,3 +898,98 @@ describe("rds-iam native bridge & retry helpers", () => {
     expect(exhaustedAttempts).toBe(3);
   });
 });
+
+function makeFakeAzureCredential() {
+  let issued = 0;
+  let current: { token: string; expiresOnTimestamp: number } | null = null;
+  const getToken = vi.fn(
+    async (_scopes: string | string[], _options?: unknown) => {
+      if (!current || current.expiresOnTimestamp <= Date.now()) {
+        issued += 1;
+        current = {
+          token: `entra-token-${issued}`,
+          expiresOnTimestamp: Date.now() + 60 * 60 * 1000,
+        };
+      }
+      return current;
+    },
+  );
+  return { getToken };
+}
+
+/**
+ * A loopback PostgreSQL server that accepts TLS, asks for a cleartext password,
+ * records it, and accepts the login.
+ */
+async function startCleartextPgServer() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "rds-bridge-tls-"));
+  const certFile = path.join(tempDir, "server.crt");
+  const { certPem: serverCert, keyPem: serverKey } =
+    createLoopbackTlsCredentials();
+  fs.writeFileSync(certFile, serverCert, "utf8");
+
+  const receivedPasswords: string[] = [];
+  let upstreamConnectionCount = 0;
+  const mockPgServer = net.createServer((rawSocket) => {
+    upstreamConnectionCount += 1;
+    rawSocket.once("data", (sslReq) => {
+      const reqBuf = Buffer.isBuffer(sslReq) ? sslReq : Buffer.from(sslReq);
+      // Expect 8-byte PostgreSQL SSLRequest (80877103) and reply 'S' (0x53)
+      if (reqBuf.length === 8 && reqBuf.readInt32BE(4) === 80877103) {
+        rawSocket.write(Buffer.from([0x53]));
+        const tlsSocket = new tls.TLSSocket(rawSocket, {
+          isServer: true,
+          key: serverKey,
+          cert: serverCert,
+        });
+        let startupDone = false;
+        tlsSocket.on("data", (data: Buffer) => {
+          if (!startupDone) {
+            startupDone = true;
+            // Send AuthenticationCleartextPassword ('R', len=8, type=3)
+            const authReq = Buffer.alloc(9);
+            authReq[0] = 0x52;
+            authReq.writeInt32BE(8, 1);
+            authReq.writeInt32BE(3, 5);
+            tlsSocket.write(authReq);
+            return;
+          }
+          const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+          if (buf[0] === 0x70) {
+            const msgLen = buf.readInt32BE(1);
+            const pwd = buf.subarray(5, 1 + msgLen - 1).toString("utf8");
+            receivedPasswords.push(pwd);
+            // Send AuthenticationOk ('R', len=8, type=0) + ReadyForQuery ('Z', len=5, 'I')
+            const okAndReady = Buffer.from([
+              0x52, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x5a, 0x00,
+              0x00, 0x00, 0x05, 0x49,
+            ]);
+            tlsSocket.write(okAndReady);
+            tlsSocket.end();
+          }
+        });
+        tlsSocket.on("error", () => rawSocket.destroy());
+      } else {
+        rawSocket.destroy();
+      }
+    });
+  });
+
+  await new Promise<void>((resolve) =>
+    mockPgServer.listen(0, "127.0.0.1", resolve),
+  );
+  const serverAddr = mockPgServer.address();
+  const port =
+    typeof serverAddr === "object" && serverAddr ? serverAddr.port : 0;
+
+  return {
+    port,
+    certFile,
+    receivedPasswords,
+    connectionCount: () => upstreamConnectionCount,
+    close: async () => {
+      await new Promise<void>((resolve) => mockPgServer.close(() => resolve()));
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    },
+  };
+}

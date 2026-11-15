@@ -5597,7 +5597,12 @@ class McpClient {
         undefined,
         { agentId },
       );
-      const connectionKey = `${catalogItem.id}:${server.id}:${agentId}`;
+      const connectionKey = catalogItem.awsIamConfig
+        ? `${catalogItem.id}:${server.id}:${agentId}:${awsIamConnectionSegment({
+            config: catalogItem.awsIamConfig,
+            ownerKey: `agent:${agentId}`,
+          })}`
+        : `${catalogItem.id}:${server.id}:${agentId}`;
       const client = await this.getOrCreateClient(
         connectionKey,
         transport,

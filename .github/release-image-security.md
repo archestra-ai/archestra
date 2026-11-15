@@ -44,6 +44,12 @@ target of `platform/Dockerfile`, which rebuilds upstream's engine binaries
 against the CVE floors in `platform/docker/dagger-deps.sh`). The publisher-inventory regression follows release
 workflow callers, including new companion images and catalog targets.
 
+Third-party images a release runs unchanged are not built here, so the queue
+scans their exact pinned references (`upstream_matrix`) on both architectures
+under the same policy, and `Release Image Security` requires those legs too.
+Images in `ADVISORY_UPSTREAM_IMAGES` are left out of the gate and reported only
+by the nightly scan.
+
 ## Build and evidence contract
 
 Both architectures build and scan natively. Scout 1.24.0's AMD64 and ARM64 CLI

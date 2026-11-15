@@ -99,8 +99,11 @@ archestra:
       instanceConnectionName: ""
       image:
         repository: gcr.io/cloud-sql-connectors/cloud-sql-proxy
-        tag: "2.26.3"
-        digest: "sha256:f333a9c59890c3c67b8505166c5dbdcc0b29fca9173a2e09ca0446ab6997a736"
+        # The digest rides in the tag so Dependabot moves both together, and
+        # overriding the tag drops the pin instead of keeping a stale digest.
+        tag: "2.28.0@sha256:e0cbea7b63455c1635d354ef456696d019dd02a5db47bf1994e849823e71ae89"
+        # Optional digest appended to the tag (for a tag without one).
+        digest: ""
       # Local port the application connects to on 127.0.0.1.
       port: 5432
       # Port of the proxy's health endpoints, used by the startup probe.
@@ -1263,7 +1266,7 @@ postgresql:
     image:
       repository: bitnamisecure/postgres-exporter
       tag: latest
-      digest: sha256:53ab72a1b940d7637e91619f1000da9ebef14bc7dad74321a78731d65c79f55b
+      digest: sha256:dcc484937554c90c78f0a4bcef1d990744687894ea8ca7214782bc22dedf50ff
     service:
       ports:
         metrics: 9187
@@ -1279,10 +1282,10 @@ postgresql:
     # so pin the exact image by digest: a database must not change versions
     # whenever its pod happens to be rescheduled onto a new node (a
     # major-version jump refuses to start against the existing data
-    # directory). This digest is PostgreSQL 18.4.0. Refresh it deliberately
+    # directory). This digest is PostgreSQL 18.7.0. Refresh it deliberately
     # alongside chart updates:
     #   docker buildx imagetools inspect bitnamisecure/postgresql:latest
-    digest: sha256:91a6c3f4b4d687546c1d07c1ef7c27a5e85e2a0ce8a192fe94cad5bbde0a1aba
+    digest: sha256:d80128c86146ef35185682c08594b560cbb0dab39a3feabedffa820e1b54687c
   global:
     security:
       allowInsecureImages: true

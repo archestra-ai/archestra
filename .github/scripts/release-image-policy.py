@@ -73,6 +73,32 @@ def candidate_matrix(root):
     return {"include": images}
 
 
+def upstream_matrix(root):
+    """Third-party images a release runs unchanged, by the exact reference it pins.
+
+    Nothing here builds them, so a release scans each pinned reference under the
+    candidates' policy, and the nightly scan alerts on every one of them.
+    Images in ADVISORY_UPSTREAM_IMAGES do not hold a release (see there).
+    test_release_image_security.py fails when a chart image default is neither
+    built here nor listed.
+    """
+    chart = (root / "platform/helm/archestra/values.yaml").read_text()
+    playwright = json.loads((root / "platform/backend/src/playwright-mcp-image.json").read_text())
+    images = {
+        "busybox": chart_value_pin(chart, "busyboxImage"),
+        "busybox-musl": chart_value_pin(chart, "bootstrapImage"),
+        "cloud-sql-proxy": chart_block_pin(chart, "gcr.io/cloud-sql-connectors/cloud-sql-proxy"),
+        "postgresql": chart_block_pin(chart, "bitnamisecure/postgresql"),
+        "postgres-exporter": chart_block_pin(chart, "bitnamisecure/postgres-exporter"),
+        "playwright-mcp": playwright.get("image") if isinstance(playwright, dict) else None,
+    }
+    for image, reference in images.items():
+        if not isinstance(reference, str) or not PINNED_REFERENCE.fullmatch(reference):
+            raise ValueError(f"Upstream image is not pinned by digest: {image}")
+    return {"include": [{"image": image, "reference": reference, "blocking": image not in ADVISORY_UPSTREAM_IMAGES}
+                        for image, reference in images.items()]}
+
+
 def is_release_pr(pr, repository):
     head, base = pr["head"], pr["base"]
     if not head["ref"].startswith("release-please--"):
@@ -102,7 +128,7 @@ def requires_scan(event_name, event, repository):
 
 
 def validate_gate(event_name, event, repository, classify_result, decision, scan_result, current=None,
-                  workflow_sha=None):
+                  workflow_sha=None, *, upstream_scan_result):
     if classify_result != "success":
         raise ValueError("Release classification did not succeed")
     required = requires_scan(event_name, event, repository)
@@ -111,11 +137,13 @@ def validate_gate(event_name, event, repository, classify_result, decision, scan
     if decision != str(required).lower():
         raise ValueError("Missing or inconsistent scan decision")
     if not required:
-        if scan_result != "skipped":
+        if scan_result != "skipped" or upstream_scan_result != "skipped":
             raise ValueError("Unexpected scan result for an ordinary event")
         return
     if scan_result != "success":
         raise ValueError(f"Every release image scan must succeed (got {scan_result!r})")
+    if upstream_scan_result != "success":
+        raise ValueError(f"Every pinned upstream image scan must succeed (got {upstream_scan_result!r})")
     group = event["merge_group"]
     if workflow_sha != group["head_sha"] or current != group["head_sha"]:
         raise ValueError("Merge group changed or scans belong to another queue revision")
@@ -183,12 +211,14 @@ def main():
     event_name, repository = os.environ["GITHUB_EVENT_NAME"], os.environ["GITHUB_REPOSITORY"]
     if mode == "classify":
         decision = requires_scan(event_name, event, repository)
-        inventory = candidate_matrix(Path(__file__).resolve().parents[2])
-        matrix = {"include": [row | {"arch": arch} for row in inventory["include"]
-                              for arch in ("amd64", "arm64")]}
+        root = Path(__file__).resolve().parents[2]
+        matrix, upstream = ({"include": [row | {"arch": arch} for row in inventory["include"]
+                                         for arch in ("amd64", "arm64")]}
+                            for inventory in (candidate_matrix(root), blocking_upstream_matrix(root)))
         with open(os.environ["GITHUB_OUTPUT"], "a") as output:
             output.write(f"scan={str(decision).lower()}\n")
             output.write(f"matrix={json.dumps(matrix, separators=(',', ':'))}\n")
+            output.write(f"upstream-matrix={json.dumps(upstream, separators=(',', ':'))}\n")
     elif mode == "gate":
         required = requires_scan(event_name, event, repository)
         current = None
@@ -205,7 +235,7 @@ def main():
                 ))
         validate_gate(event_name, event, repository, os.environ["CLASSIFY_RESULT"],
                       os.environ["SCAN_REQUIRED"], os.environ["SCAN_RESULT"], current,
-                      os.environ["GITHUB_SHA"])
+                      os.environ["GITHUB_SHA"], upstream_scan_result=os.environ["UPSTREAM_SCAN_RESULT"])
         if required and event_name == "merge_group":
             branch = event["merge_group"]["base_ref"].removeprefix("refs/heads/")
             head = f"{repository.split('/')[0]}:release-please--branches--{branch}--components--platform"
@@ -242,6 +272,44 @@ def main():
               "No release image scan required for this event; publication scans its own artifacts.")
     else:
         raise ValueError(f"Unsupported mode: {mode}")
+
+
+# ============================================================================
+# Internal helpers
+# ============================================================================
+
+
+# Upstream images with fixable Critical/High findings that no newer upstream
+# release removes yet. Holding releases on them would hold every release, so
+# only the nightly scan reports them. Remove an entry once its image passes.
+ADVISORY_UPSTREAM_IMAGES = frozenset({"postgresql", "postgres-exporter", "playwright-mcp"})
+
+
+def blocking_upstream_matrix(root):
+    return {"include": [row for row in upstream_matrix(root)["include"] if row["blocking"]]}
+
+
+PINNED_REFERENCE = re.compile(r"[a-z0-9][a-z0-9./_-]*(?::[\w][\w.-]*)?@sha256:[0-9a-f]{64}")
+
+
+def chart_value_pin(chart, key):
+    """A chart image value and its `<key>Digest` sibling, as one reference."""
+    image = re.findall(rf'^\s*{key}: "([^"\s]+)"$', chart, re.M)
+    digest = re.findall(rf'^\s*{key}Digest: "(sha256:[0-9a-f]{{64}})"$', chart, re.M)
+    if len(image) != 1 or len(digest) != 1:
+        raise ValueError(f"Missing or ambiguous chart image pin: {key}")
+    return f"{image[0]}@{digest[0]}"
+
+
+def chart_block_pin(chart, repository):
+    """A chart `image:` block (repository, tag, optional digest), as one reference."""
+    comments = r"(?:\1#.*\n)*"
+    blocks = re.findall(rf'^(\s*)repository: {re.escape(repository)}\n{comments}\1tag: "?([^"\s]+)"?\n'
+                        rf'{comments}\1digest: "?(sha256:[0-9a-f]{{64}}|)"?$', chart, re.M)
+    if len(blocks) != 1:
+        raise ValueError(f"Missing or ambiguous chart image block: {repository}")
+    _, tag, digest = blocks[0]
+    return f"{repository}:{tag}@{digest}" if digest else f"{repository}:{tag}"
 
 
 if __name__ == "__main__":

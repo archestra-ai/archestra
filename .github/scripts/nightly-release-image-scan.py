@@ -58,8 +58,13 @@ def release_branches(root):
 
 
 def branch_inventory(root, sha):
-    """Run the branch's own candidate_matrix against that branch's files."""
-    archive = subprocess.run(["git", "-C", str(root), "archive", "--format=tar", sha, *INVENTORY_PATHS],
+    """Run the branch's own candidate_matrix against that branch's files.
+
+    A line whose policy also pins upstream images (upstream_matrix) adds one
+    row per pinned reference; those rows scan the registry image unbuilt.
+    """
+    present = git(root, "ls-tree", "--name-only", sha, *INVENTORY_PATHS).splitlines()
+    archive = subprocess.run(["git", "-C", str(root), "archive", "--format=tar", sha, *present],
                              check=True, capture_output=True).stdout
     with tempfile.TemporaryDirectory() as tree:
         with tarfile.open(fileobj=io.BytesIO(archive)) as source:
@@ -68,7 +73,11 @@ def branch_inventory(root, sha):
             f"release_image_policy_{sha}", Path(tree) / ".github/scripts/release-image-policy.py")
         policy = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(policy)
-        return policy.candidate_matrix(Path(tree))["include"]
+        rows = policy.candidate_matrix(Path(tree))["include"]
+        if hasattr(policy, "upstream_matrix"):
+            rows += [{"image": row["image"], "reference": row["reference"], "context": "", "dockerfile": "",
+                      "target": ""} for row in policy.upstream_matrix(Path(tree))["include"]]
+        return rows
 
 
 def git(root, *args):
@@ -79,13 +88,16 @@ RELEASE_BRANCH = re.compile(r"release/[0-9]+\.[0-9]+")
 SHA = re.compile(r"[0-9a-f]{40}")
 # nightly-platform-image-byte-scan.yml already scans main's Platform full and slim bytes.
 COVERED_ON_MAIN = frozenset({"platform", "platform-slim"})
-# Everything candidate_matrix reads: the policy itself, the agent catalog, and
-# the Dockerfiles it checks exist.
+# Everything candidate_matrix and upstream_matrix read: the policy itself, the
+# agent catalog, the Dockerfiles it checks exist, and the upstream image pins.
+# A path a line does not have is left out; its own policy decides if that fails.
 INVENTORY_PATHS = (
     ".github/scripts/release-image-policy.py",
     "platform/shared/agent-catalog-images.json",
     "platform/Dockerfile",
     "platform/docker_images",
+    "platform/helm/archestra/values.yaml",
+    "platform/backend/src/playwright-mcp-image.json",
 )
 
 

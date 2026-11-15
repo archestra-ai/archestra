@@ -107,6 +107,60 @@ class ReleasePolicyTests(unittest.TestCase):
                     catalog.write_text(json.dumps(value))
                     POLICY.candidate_matrix(root)
 
+    def test_every_pinned_upstream_image_is_scanned_and_an_unpinned_one_fails_closed(self):
+        rows = POLICY.upstream_matrix(ROOT)["include"]
+        self.assertEqual([row["image"] for row in rows], ["busybox", "busybox-musl", "cloud-sql-proxy",
+                                                         "postgresql", "postgres-exporter", "playwright-mcp"])
+        for row in rows:
+            self.assertRegex(row["reference"], r"@sha256:[0-9a-f]{64}$")
+        # Advisory images are named, so a new image holds releases by default.
+        self.assertEqual({row["image"] for row in rows if not row["blocking"]}, POLICY.ADVISORY_UPSTREAM_IMAGES)
+        self.assertEqual({row["image"] for row in POLICY.blocking_upstream_matrix(ROOT)["include"]},
+                         {"busybox", "busybox-musl", "cloud-sql-proxy"})
+        chart = (ROOT / "platform/helm/archestra/values.yaml").read_text()
+        playwright = (ROOT / "platform/backend/src/playwright-mcp-image.json").read_text()
+        digest = re.search(r'busyboxImageDigest: "(sha256:[0-9a-f]{64})"', chart).group(1)
+        proxy = re.search(r'tag: "(2\.[0-9.]+@sha256:[0-9a-f]{64})"', chart).group(1)
+        for name, mutate in (
+            ("unpinned busybox", lambda c, p: (c.replace(digest, ""), p)),
+            ("ambiguous busybox", lambda c, p: (c + f'    busyboxImageDigest: "{digest}"\n', p)),
+            ("proxy tag without digest", lambda c, p: (c.replace(proxy, proxy.split("@")[0]), p)),
+            ("missing database block", lambda c, p: (c.replace("repository: bitnamisecure/postgresql\n", ""), p)),
+            ("floating playwright", lambda c, p: (c, re.sub(r"mcp@sha256:[0-9a-f]{64}", "mcp:latest", p))),
+        ):
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                values, image = mutate(chart, playwright)
+                for path, text in (("platform/helm/archestra/values.yaml", values),
+                                   ("platform/backend/src/playwright-mcp-image.json", image)):
+                    (root / path).parent.mkdir(parents=True, exist_ok=True)
+                    (root / path).write_text(text)
+                with self.assertRaises(ValueError):
+                    POLICY.upstream_matrix(root)
+
+    def test_every_chart_image_default_is_built_here_or_scanned(self):
+        # A new chart image must join upstream_matrix, or it ships unscanned.
+        chart = (ROOT / "platform/helm/archestra/values.yaml").read_text()
+        defaults = re.findall(r'^\s*(?:repository|image|[A-Za-z]+Image): "?([^"\s]+)"?$', chart, re.M)
+        scanned = [row["reference"] for row in POLICY.upstream_matrix(ROOT)["include"]]
+        for image in defaults:
+            with self.subTest(image=image):
+                if image != "archestra/platform":  # Built and scanned as a release candidate.
+                    self.assertTrue(any(reference.startswith(f"{image}:") or reference.startswith(f"{image}@")
+                                        for reference in scanned), image)
+
+    def test_chart_pins_the_busybox_defaults_it_scans(self):
+        # The chart applies a busybox digest only while the image equals its
+        # template default, so a values-only bump would ship that image unpinned.
+        chart = (ROOT / "platform/helm/archestra/values.yaml").read_text()
+        helpers = (ROOT / "platform/helm/archestra/templates/_helpers.tpl").read_text()
+        for key in ("busyboxImage", "bootstrapImage"):
+            with self.subTest(key=key):
+                image = re.search(rf'^\s*{key}: "([^"]+)"$', chart, re.M).group(1)
+                defaults = set(re.findall(rf'\.{key} \| default "([^"]+)"\) .*?"defaultImage" "([^"]+)"',
+                                          helpers))
+                self.assertEqual(defaults, {(image, image)})
+
     def test_classification_emits_complete_matrix_and_ordinary_events_still_skip(self):
         with tempfile.TemporaryDirectory() as directory:
             event, output = Path(directory) / "event", Path(directory) / "output"
@@ -123,6 +177,9 @@ class ReleasePolicyTests(unittest.TestCase):
                 self.assertEqual(values["scan"], "false")
                 self.assertEqual(json.loads(values["matrix"]), {"include": [row | {"arch": arch}
                     for row in POLICY.candidate_matrix(ROOT)["include"] for arch in ("amd64", "arm64")]})
+                self.assertEqual(json.loads(values["upstream-matrix"]), {"include": [row | {"arch": arch}
+                    for row in POLICY.upstream_matrix(ROOT)["include"] if row["blocking"]
+                    for arch in ("amd64", "arm64")]})
 
     def test_main_and_stable_release_prs_only_scan_in_the_queue(self):
         for branch in ("main", "release/1.4", "release/12.30"):
@@ -155,17 +212,22 @@ class ReleasePolicyTests(unittest.TestCase):
                 with patch.object(POLICY, "queue_versions", return_value=[before, after]):
                     event = {"merge_group": group}
                     self.assertEqual(POLICY.requires_scan("merge_group", event, REPOSITORY), required)
+                    expected = "success" if required else "skipped"
                     POLICY.validate_gate("merge_group", event, REPOSITORY, "success", str(required).lower(),
-                                         "success" if required else "skipped", group["head_sha"], group["head_sha"])
+                                         expected, group["head_sha"], group["head_sha"],
+                                         upstream_scan_result=expected)
                     if required:
                         for scan in ("failure", "cancelled", "skipped", "", "neutral"):
-                            with self.assertRaises(ValueError):
-                                POLICY.validate_gate("merge_group", event, REPOSITORY, "success", "true",
-                                                     scan, group["head_sha"], group["head_sha"])
+                            for candidate, upstream in ((scan, "success"), ("success", scan)):
+                                with self.subTest(candidate=candidate, upstream=upstream), \
+                                        self.assertRaises(ValueError):
+                                    POLICY.validate_gate("merge_group", event, REPOSITORY, "success", "true",
+                                                         candidate, group["head_sha"], group["head_sha"],
+                                                         upstream_scan_result=upstream)
                         for live, workflow in (("d" * 40, "c" * 40), ("c" * 40, "d" * 40), (None, "c" * 40)):
                             with self.assertRaises(ValueError):
                                 POLICY.validate_gate("merge_group", event, REPOSITORY, "success", "true",
-                                                     "success", live, workflow)
+                                                     "success", live, workflow, upstream_scan_result="success")
         for key, value in (("base_sha", ""), ("head_sha", "bad"), ("head_ref", "refs/heads/feature")):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 POLICY.requires_scan("merge_group", {"merge_group": group | {key: value}}, REPOSITORY)
@@ -211,18 +273,20 @@ class ReleasePolicyTests(unittest.TestCase):
     def test_skipped_pr_scan_still_requires_a_consistent_successful_gate(self):
         args = dict(event_name="pull_request", event={"pull_request": release_pr()},
                     repository=REPOSITORY, classify_result="success", decision="false",
-                    scan_result="skipped", workflow_sha="c" * 40)
+                    scan_result="skipped", workflow_sha="c" * 40, upstream_scan_result="skipped")
         POLICY.validate_gate(**args)
         for field, values in (("classify_result", ("failure", "cancelled", "")),
                               ("decision", ("true", "", "unknown")),
-                              ("scan_result", ("success", "failure", "cancelled", ""))):
+                              ("scan_result", ("success", "failure", "cancelled", "")),
+                              ("upstream_scan_result", ("success", "failure", "cancelled", ""))):
             for value in values:
                 with self.subTest(field=field, value=value), self.assertRaises(ValueError):
                     POLICY.validate_gate(**(args | {field: value}))
 
     def test_manual_pass_requires_an_explicit_successful_classification(self):
         args = dict(event_name="workflow_dispatch", event={}, repository=REPOSITORY,
-                    classify_result="success", decision="false", scan_result="skipped")
+                    classify_result="success", decision="false", scan_result="skipped",
+                    upstream_scan_result="skipped")
         POLICY.validate_gate(**args)
         with self.assertRaises(ValueError):
             POLICY.validate_gate(**(args | {"decision": ""}))
@@ -238,7 +302,8 @@ class ReleasePolicyTests(unittest.TestCase):
             env = os.environ | {"PATH": f"{root}:{os.environ['PATH']}",
                 "GITHUB_EVENT_PATH": str(event), "GITHUB_EVENT_NAME": "pull_request",
                 "GITHUB_REPOSITORY": REPOSITORY, "GITHUB_SHA": "c" * 40,
-                "CLASSIFY_RESULT": "success", "SCAN_REQUIRED": "false", "SCAN_RESULT": "skipped"}
+                "CLASSIFY_RESULT": "success", "SCAN_REQUIRED": "false", "SCAN_RESULT": "skipped",
+                "UPSTREAM_SCAN_RESULT": "skipped"}
             return subprocess.run(["python3", str(SCRIPTS / "release-image-policy.py"), "gate"],
                 env=env | overrides, text=True, capture_output=True)
 
@@ -246,6 +311,7 @@ class ReleasePolicyTests(unittest.TestCase):
         result = self.run_gate()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertNotEqual(self.run_gate(SCAN_RESULT="failure").returncode, 0)
+        self.assertNotEqual(self.run_gate(UPSTREAM_SCAN_RESULT="failure").returncode, 0)
         self.assertNotEqual(self.run_gate(SCAN_REQUIRED="true").returncode, 0)
 
 
@@ -412,7 +478,13 @@ class WorkflowContractTests(unittest.TestCase):
         source = (ROOT / ".github/workflows/docker-image-scanning.yml").read_text()
         gate = source.split("  release-image-security:\n", 1)[1].split("  required-contexts:\n", 1)[0]
         self.assertIn("if: ${{ always() }}", gate)
-        self.assertIn("needs: [classify, scan-release-images]", gate)
+        self.assertIn("needs: [classify, scan-release-images, scan-upstream-images]", gate)
+        self.assertIn("UPSTREAM_SCAN_RESULT: ${{ needs.scan-upstream-images.result }}", gate)
+        upstream = source.split("  scan-upstream-images:\n", 1)[1].split("  release-image-security:\n", 1)[0]
+        self.assertIn("if: ${{ needs.classify.outputs.scan == 'true' }}", upstream)
+        self.assertIn("image: registry://${{ matrix.reference }}", upstream)
+        self.assertIn('exit-code: "true"', upstream)
+        self.assertNotIn("continue-on-error", upstream)
         for job in ("required-contexts", "legacy-required-context"):
             section = re.search(rf"^  {job}:\n(.*?)(?=^  [\w-]+:|\Z)", source, re.M | re.S).group(1)
             self.assertIn("if: ${{ always() }}", section)

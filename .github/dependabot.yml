@@ -121,6 +121,33 @@ updates:
     cooldown:
       default-days: 7
 
+  # Third-party images the Helm chart pins as `image:` blocks with the digest in
+  # the tag, so Dependabot moves both together (the Cloud SQL Auth Proxy).
+  # Bitnami Secure Images publish only a floating "latest", and a newer digest
+  # can be a new PostgreSQL major that will not start on existing data, so they
+  # move by hand. Main only: release lines keep the proxy digest in its own key,
+  # which Dependabot would leave behind.
+  - package-ecosystem: docker
+    directories:
+      - platform/helm/archestra
+    schedule:
+      interval: daily
+    groups:
+      chart-images:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "bitnamisecure/*"
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+
   # The sandbox base: its uv base image is pinned to sandbox-core's
   # DEFAULT_BASE_IMAGE, so only its other bases are bumped here.
   - package-ecosystem: docker

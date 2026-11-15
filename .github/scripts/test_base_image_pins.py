@@ -14,9 +14,9 @@ SPEC.loader.exec_module(POLICY)
 DOCKERFILES = sorted({image["dockerfile"].removeprefix("./")
                       for image in POLICY.candidate_matrix(ROOT)["include"]})
 FROM = re.compile(r"^FROM\s+(?:--platform=\S+\s+)?(?P<image>\S+)(?:\s+AS\s+(?P<stage>\S+))?\s*$", re.I | re.M)
-# Dependabot reads only literal FROM lines; it needs a version tag to propose
-# bumps and a digest to keep builds reproducible.
-PINNED = re.compile(r"[a-z0-9./-]+:[0-9][\w.-]*@sha256:[0-9a-f]{64}")
+# Dependabot reads only literal FROM lines; it needs a version tag (Dagger's
+# carry a "v") to propose bumps and a digest to keep builds reproducible.
+PINNED = re.compile(r"[a-z0-9./-]+:v?[0-9][\w.-]*@sha256:[0-9a-f]{64}")
 
 
 class BaseImagePinTest(unittest.TestCase):
@@ -58,6 +58,15 @@ class BaseImagePinTest(unittest.TestCase):
                 with self.subTest(target=entry["target"] or "main"):
                     self.assertEqual(entry["directories"], ["platform/docker_images/sandbox_base"])
                     self.assertRegex(entry["body"], r'(?m)^      - dependency-name: "\*uv"\n(?!        update-types:)')
+
+    def test_dependabot_leaves_the_dagger_engine_base_to_the_dagger_updater(self):
+        # The patched engine's base must match DAGGER_VERSION, the vendored SDK
+        # and the CLI (check-dagger-version-sync.sh), so update-dagger.py moves
+        # them together instead.
+        for entry in docker_entries():
+            if "platform" in entry["directories"]:
+                with self.subTest(target=entry["target"] or "main"):
+                    self.assertRegex(entry["body"], r'(?m)^      - dependency-name: "\*dagger\.io/engine"\n(?!        update-types:)')
 
 def docker_entries():
     text = (ROOT / ".github/dependabot.yml").read_text()

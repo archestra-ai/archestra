@@ -111,6 +111,9 @@ updates:
       - dependency-name: "*dotnet/sdk"
         update-types:
           - version-update:semver-minor
+      # The patched Dagger engine's base moves with DAGGER_VERSION and the
+      # vendored SDK, so .github/scripts/update-dagger.py bumps it instead.
+      - dependency-name: "*dagger.io/engine"
     labels:
       - dependencies
     commit-message:
@@ -188,6 +191,9 @@ updates:
       - dependency-name: "*dotnet/sdk"
         update-types:
           - version-update:semver-minor
+      # The patched Dagger engine's base moves with DAGGER_VERSION and the
+      # vendored SDK, so .github/scripts/update-dagger.py bumps it instead.
+      - dependency-name: "*dagger.io/engine"
     labels:
       - dependencies
     commit-message:

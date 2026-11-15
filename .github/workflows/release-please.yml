@@ -530,6 +530,7 @@ jobs:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci

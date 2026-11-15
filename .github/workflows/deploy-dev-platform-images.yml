@@ -190,6 +190,7 @@ jobs:
       contents: read # Required to invoke the reusable Dagger engine image workflow.
       packages: write # Publish development images and build caches to GHCR.
       id-token: write # Required for Workload Identity Federation.
+      attestations: write # Passed to the image build, which attests CI images.
     with:
       image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true

@@ -64,6 +64,7 @@ jobs:
       contents: read # Required to checkout the repository and build the image.
       packages: write # Publish CI images with the repository token.
       id-token: write # Required for Workload Identity Federation when pushing images.
+      attestations: write # Passed to the image build, which attests CI images.
     uses: $/.github/workflows/build-native-multi-arch-image.yml
     with:
       environment: ${{ inputs.environment }}

@@ -143,7 +143,7 @@ class UpdateDaggerTests(unittest.TestCase):
         self.assertEqual((pins.commit, pins.engine_digest, pins.cli_checksum, pins.runc_version, pins.runc_commit),
                          (NEW_COMMIT, self.new_digest, NEW_CLI, NEW_RUNC, NEW_RUNC_COMMIT))
         # The patched engine starts from the new upstream engine, by digest.
-        self.assertIn(f"ARG DAGGER_ENGINE_BASE_IMAGE=registry.dagger.io/engine:v{NEXT}@{self.new_digest}\n",
+        self.assertIn(f"FROM registry.dagger.io/engine:v{NEXT}@{self.new_digest} AS dagger-engine\n",
                       (self.root / UPDATER.DOCKERFILE).read_text())
         for name in UPDATER.VERSION_FILES:
             text = (self.root / name).read_text()

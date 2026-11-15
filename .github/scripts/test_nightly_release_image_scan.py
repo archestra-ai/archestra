@@ -38,10 +38,10 @@ class ScanTargetsTest(unittest.TestCase):
             return [row["image"] for row in rows if row["branch"] == branch]
 
         # The nightly Platform byte scan already covers main's Platform images.
-        self.assertEqual(images("main"), ["mcp-server-base", "p4-shim", "sandbox-base",
+        self.assertEqual(images("main"), ["dagger-engine", "mcp-server-base", "p4-shim", "sandbox-base",
                                           "agent-claude-code", "agent-codex", "agent-hermes"])
-        self.assertEqual(images("release/9.9"), ["platform", "platform-slim", "mcp-server-base", "p4-shim",
-                                                 "sandbox-base", "agent-claude-code"])
+        self.assertEqual(images("release/9.9"), ["platform", "platform-slim", "dagger-engine", "mcp-server-base",
+                                                 "p4-shim", "sandbox-base", "agent-claude-code"])
         for branch in ("main", "release/9.9"):
             head = git(self.origin, "rev-parse", branch)
             self.assertEqual({row["sha"] for row in rows if row["branch"] == branch}, {head})

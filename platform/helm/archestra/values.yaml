@@ -116,6 +116,39 @@ archestra:
           memory: 64Mi
         limits:
           memory: 256Mi
+    # Google AlloyDB Auth Proxy, run the same way as cloudSqlProxy: a native
+    # sidecar in the web, worker, and migration Job pods that connects over
+    # the instance's private IP and, with --auto-iam-authn, logs in as the
+    # pod's Google service account. Enable at most one of the two proxies.
+    # Google publishes this image for linux/amd64 only.
+    #
+    # Point postgresql.external_database_url at the proxy and the IAM user:
+    #   postgresql://<sa-name>%40<project>.iam@127.0.0.1:5432/<database>?sslmode=disable
+    # set postgresql.enabled=false, and annotate the platform ServiceAccount
+    # with iam.gke.io/gcp-service-account.
+    alloyDbProxy:
+      enabled: false
+      # projects/PROJECT/locations/REGION/clusters/CLUSTER/instances/INSTANCE
+      instanceUri: ""
+      image:
+        repository: gcr.io/alloydb-connectors/alloydb-auth-proxy
+        tag: "1.17.2"
+        digest: "sha256:a6ca5f3f344dd8c8bd5e5d81661bf395e78cdff2265e9dddeaadc8c2ffcd66dd"
+      # Local port the application connects to on 127.0.0.1.
+      port: 5432
+      # Port of the proxy's health endpoints, used by the startup probe.
+      healthPort: 9801
+      # Extra flags. The proxy connects over private IP by default; add --psc
+      # for a Private Service Connect instance.
+      args:
+        - --auto-iam-authn
+        - --structured-logs
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
 
   # Annotations to add to the web and worker pods (the worker always points
   # prometheus.io/port and prometheus.io/path at its own metrics endpoint)

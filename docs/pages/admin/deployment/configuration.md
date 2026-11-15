@@ -987,7 +987,7 @@ Archestra creates one Dagger engine per organization and per environment. Each e
 
 - **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_IMAGE`** - Image of the Dagger engine Archestra runs for each organization. Set it to run the engine from your own registry mirror.
   - Default: `ghcr.io/archestra-ai/dagger-engine:<platform version>`, pinned by digest on a released chart (see [`ARCHESTRA_RELEASE_IMAGE_DIGESTS`](/docs/admin/deployment/configuration#ARCHESTRA_RELEASE_IMAGE_DIGESTS)). That build is Dagger's engine with its binaries rebuilt against dependencies that fix known CVEs. Without a release digest, such as in the Docker quickstart, the default is the matching upstream `registry.dagger.io/engine` image.
-  - An existing engine keeps its image. Delete its StatefulSet to move it to a new one.
+  - When this image, or any other engine setting, changes, Archestra updates existing engines on its next start. Each engine restarts once and keeps its cache. Sandboxes carry on after the restart, but a command running at that moment is interrupted.
 
 - **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST`** - CPU request for each engine Archestra creates.
   - Default: `2`

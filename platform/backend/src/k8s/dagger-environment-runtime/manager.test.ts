@@ -397,8 +397,8 @@ describe("buildEngineStatefulSet", () => {
       // cgroup controllers this cap depends on and raises the open-file limit.
       expect(script).toContain("exec /usr/local/bin/dagger-entrypoint.sh");
       // A cluster that never delegates the memory controller must end up with
-      // an unbounded engine rather than a crash-looping one, since engine
-      // StatefulSets are created once and never reconciled afterwards.
+      // an unbounded engine rather than a crash-looping one: nothing changes
+      // its spec until the next platform release does.
       expect(script).toContain("archestra: sandbox memory is NOT capped");
       // ...and the retry has to be backgrounded to stay non-fatal: run inline,
       // it holds every engine on such a cluster for 60 sleeps before the

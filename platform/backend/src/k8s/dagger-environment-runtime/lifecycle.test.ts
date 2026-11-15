@@ -206,7 +206,12 @@ describe("Dagger environment lifecycle", () => {
     await manager.teardownEnvironmentEngine(env);
     signalRelease();
     await reconcile;
-    expect([...resources.keys()]).toEqual([]);
+    // The namespace-wide ingress deny selects no pod once the engine is gone.
+    expect(
+      [...resources.keys()].filter(
+        (key) => !key.includes("dagger-engine-deny-ingress"),
+      ),
+    ).toEqual([]);
   });
 
   test("repairs a legacy zombie engine and disk using this database's deletion audit", async ({
@@ -429,6 +434,36 @@ describe("Dagger environment lifecycle", () => {
     failListings = true;
     await manager.reconcileAll();
     expect(engineResources(env.id)).toEqual(before);
+  });
+
+  test("turning on the dedicated engine namespace moves engines out of the MCP namespaces at startup", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const env = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "Moved",
+      namespace: "env-test",
+    });
+    await manager.reconcileEnvironment(env);
+    expect(engineResources(env.id).length).toBeGreaterThan(0);
+    expect(
+      engineResources(env.id).every((id) => id.startsWith("env-test/")),
+    ).toBe(true);
+
+    config.daggerRuntime.namespace = "sandbox";
+    try {
+      await manager.reconcileAll();
+      const moved = engineResources(env.id);
+      expect(moved).toContain(`sandbox/statefulsets/dagger-engine-${env.id}`);
+      // The privileged engine, its cache disk and its policies left env-test.
+      expect(moved.every((id) => id.startsWith("sandbox/"))).toBe(true);
+      expect([...resources.keys()]).toContain(
+        "sandbox/networkpolicies/dagger-engine-deny-ingress",
+      );
+    } finally {
+      config.daggerRuntime.namespace = undefined;
+    }
   });
 });
 

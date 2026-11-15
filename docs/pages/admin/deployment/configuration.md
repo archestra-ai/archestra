@@ -1019,6 +1019,11 @@ Archestra creates one Dagger engine per organization and per environment. Each e
   - Values: comma-separated CIDRs, for example `100.68.0.0/16,34.118.224.0/20`. Invalid entries are ignored and logged.
   - Engines without a [network policy](/docs/admin/environments) already block private, link-local, and cloud-metadata ranges. Add your cluster's Service and Pod CIDRs when they fall outside those ranges.
 
+- **`ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE`** - Runs every code sandbox engine in its own namespace, apart from MCP servers. Engines run privileged, so this lets the MCP namespaces enforce a stricter Pod Security level.
+  - Default: unset (each engine runs in its [environment's](/docs/admin/environments) namespace, or else [`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE))
+  - When set, it wins over environment namespaces. Each environment still gets its own engine and egress policy there. At startup, the platform removes engines from the namespaces they ran in before.
+  - The Helm chart sets it from `archestra.orchestrator.kubernetes.daggerRuntimeNamespace` and grants the platform ServiceAccount access there. Create the namespace first.
+
 - **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_NODE_SELECTOR`** - Schedules engines onto a dedicated node pool.
   - Default: unset (engines use the platform pod's `nodeSelector` and `tolerations`)
   - Values: comma-separated `key=value` pairs, for example `archestra-sandbox=true`. Each pair also adds a matching `NoSchedule` toleration.

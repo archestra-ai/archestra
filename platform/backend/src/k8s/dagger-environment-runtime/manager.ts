@@ -29,6 +29,7 @@ import {
 import { uuidv5 } from "@/utils/uuid";
 import {
   buildDaggerEgressPolicies,
+  buildDaggerEngineIngressPolicy,
   type DaggerEgressPolicyObject,
   daggerEngineDeploymentName,
   daggerEnginePodLabels,
@@ -669,6 +670,12 @@ class DaggerEnvironmentRuntimeManager {
       ...(owner ? { [OWNER_LABEL]: owner } : {}),
     };
 
+    // Before the engine exists, so it is never reachable over the pod network.
+    await this.applyNetworkPolicy(
+      clients.networkingApi,
+      namespace,
+      buildDaggerEngineIngressPolicy(owner ? { [OWNER_LABEL]: owner } : {}),
+    );
     // Must precede the StatefulSet: a new engine pod mounts this ConfigMap and
     // would be stuck in ContainerCreating (failed mount) if it didn't exist yet.
     await this.applyEngineConfig(
@@ -728,10 +735,16 @@ class DaggerEnvironmentRuntimeManager {
     return config.skillsSandbox.enabled && isK8sConfigured();
   }
 
-  // Every namespace an engine may be provisioned in: the release namespace and
-  // the declared environment namespaces (see `engineNamespace`).
+  // Every namespace an engine may be provisioned in: the dedicated engine
+  // namespace, the release namespace and the declared environment namespaces
+  // (see `engineNamespace`). Engines found anywhere but their resolved
+  // namespace are torn down, which is how turning on the dedicated namespace
+  // moves them out of the MCP namespaces.
   private managedNamespaces(): Set<string> {
     return new Set([
+      ...(config.daggerRuntime.namespace
+        ? [config.daggerRuntime.namespace]
+        : []),
       getK8sNamespace(),
       ...config.orchestrator.kubernetes.environmentNamespaces,
     ]);
@@ -749,7 +762,13 @@ class DaggerEnvironmentRuntimeManager {
   // release namespace — the behaviour those installs already had — rather than
   // wedging them. Provisioning and routing both resolve through here, so they
   // cannot disagree about where the engine lives.
+  //
+  // ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE takes every engine, whatever its
+  // Environment's namespace: engines are privileged, and keeping them out of
+  // the MCP namespaces is what lets those enforce a stricter Pod Security
+  // level. Each Environment keeps its own engine and egress policy there.
   private engineNamespace(namespace: string | null | undefined): string {
+    if (config.daggerRuntime.namespace) return config.daggerRuntime.namespace;
     const trimmed = namespace?.trim();
     if (!trimmed) return getK8sNamespace();
     if (!KubernetesNamespaceSchema.safeParse(trimmed).success) {

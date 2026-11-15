@@ -63,9 +63,11 @@ import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import {
   ApiError,
   agentOwner,
+  awsIamConfigConflict,
   InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
   type LocalConfig,
+  mergedAwsIamSettings,
   PartialUpdateInternalMcpCatalogSchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
@@ -1093,6 +1095,10 @@ async function handleEditMcpConfig(
     // then rejecting the edit would leave the bag ahead of the catalog row.
     const validatedUpdate =
       PartialUpdateInternalMcpCatalogSchema.parse(updateData);
+    const awsIamConflict = awsIamConfigConflict(
+      mergedAwsIamSettings({ update: validatedUpdate, current: existing }),
+    );
+    if (awsIamConflict) return errorResult(awsIamConflict);
     await moveCatalogSecretsToBag({
       updateData: validatedUpdate as Record<string, unknown>,
       catalogName: existing.name,

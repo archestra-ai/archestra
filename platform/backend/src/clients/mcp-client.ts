@@ -1094,6 +1094,15 @@ class McpClient {
       if (externalIdpUserId) {
         connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
       }
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // An AWS IAM connection signs as one agent's role session: never share
+      // it with another agent, even without a conversation.
+      if (catalogItem.awsIamConfig) {
+        connectionKey = `${connectionKey}:aws:${owner.type}:${owner.id}`;
+      }
+      // SPDX-SnippetEnd
       if (options?.elicitationHandler) {
         // Elicitation support is declared during MCP initialize. Keep these
         // clients separate so a connection opened without the capability is not
@@ -4850,6 +4859,12 @@ class McpClient {
         undefined,
         options?.tokenAuth,
         enterpriseTransportCredential ?? undefined,
+        undefined,
+        // An AWS IAM server is reached here only as the agent that owns the
+        // call; without one, the transport fails closed.
+        options?.owner?.type === "agent"
+          ? { agentId: options.owner.id }
+          : undefined,
       );
       const client = new Client(
         buildMcpClientInfo(options?.clientName ?? "archestra-app-runner"),
@@ -5837,6 +5852,14 @@ class McpClient {
         if (externalIdpUserId) {
           connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
         }
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Signed as this agent's role session: never shared across agents.
+        if (catalogItem.awsIamConfig) {
+          connectionKey = `${connectionKey}:aws:agent:${agentId}`;
+        }
+        // SPDX-SnippetEnd
         clients.push({
           execute: async <T>(operation: (client: Client) => Promise<T>) => {
             const connectAndRun = async () => {

@@ -1,0 +1,159 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// SPDX-FileCopyrightText: 2026 Archestra Inc.
+import { HttpResponse, http } from "msw";
+import {
+  AgentModel,
+  AgentToolModel,
+  InternalMcpCatalogModel,
+  McpServerModel,
+  ToolModel,
+} from "@/models";
+import { awsIamMcpSigner } from "@/services/aws-iam/aws-iam-mcp-signer";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { useMswServer } from "@/test/msw";
+import { agentOwner } from "@/types";
+import mcpClient from "./mcp-client";
+
+const SERVER_URL = "https://gateway.example.com/mcp";
+const ROLE_ARN = "arn:aws:iam::123456789012:role/archestra-agents";
+
+/** The access key each tool call was signed with, by the call's argument. */
+let signedCalls: { caller: unknown; accessKey: string | undefined }[];
+
+// biome-ignore lint/correctness/useHookAtTopLevel: registers test lifecycle hooks, not a React hook
+useMswServer(
+  // Each role session gets an access key naming the session it belongs to.
+  http.post("https://sts.us-east-1.amazonaws.com/", async ({ request }) => {
+    const session = new URLSearchParams(await request.text()).get(
+      "RoleSessionName",
+    );
+    const expiration = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    return new HttpResponse(
+      `<AssumeRoleWithWebIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/"><AssumeRoleWithWebIdentityResult><Credentials><AccessKeyId>key-${session}</AccessKeyId><SecretAccessKey>secret</SecretAccessKey><SessionToken>token-${session}</SessionToken><Expiration>${expiration}</Expiration></Credentials></AssumeRoleWithWebIdentityResult></AssumeRoleWithWebIdentityResponse>`,
+      { headers: { "content-type": "text/xml" } },
+    );
+  }),
+  http.get(SERVER_URL, () => new HttpResponse(null, { status: 405 })),
+  http.post(SERVER_URL, async ({ request }) => {
+    const message = (await request.json()) as {
+      id?: number;
+      method: string;
+      params?: { arguments?: { caller?: unknown } };
+    };
+    if (message.id === undefined) {
+      return new HttpResponse(null, { status: 202 });
+    }
+    if (message.method === "initialize") {
+      return HttpResponse.json({
+        jsonrpc: "2.0",
+        id: message.id,
+        result: {
+          protocolVersion: "2025-06-18",
+          capabilities: { tools: {} },
+          serverInfo: { name: "gateway", version: "1.0.0" },
+        },
+      });
+    }
+    if (message.method !== "tools/call") {
+      return HttpResponse.json({
+        jsonrpc: "2.0",
+        id: message.id,
+        result: { tools: [] },
+      });
+    }
+    signedCalls.push({
+      caller: message.params?.arguments?.caller,
+      accessKey: request.headers
+        .get("authorization")
+        ?.match(/Credential=([^/]+)\//)?.[1],
+    });
+    return HttpResponse.json({
+      jsonrpc: "2.0",
+      id: message.id,
+      result: { content: [{ type: "text", text: "ok" }] },
+    });
+  }),
+);
+
+describe("tool calls to an AWS IAM MCP server", () => {
+  beforeEach(() => {
+    signedCalls = [];
+    awsIamMcpSigner.clearCache();
+  });
+
+  afterEach(async () => {
+    await mcpClient.disconnectAll();
+  });
+
+  test("each agent's calls are signed with its own role session", async ({
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    const { tool, server } = await installAwsServer(user.id);
+    const agents = await Promise.all(
+      ["first", "second"].map(async (name) => {
+        const agent = await AgentModel.create({
+          name: `${name} agent`,
+          scope: "org",
+          teams: [],
+        });
+        await AgentToolModel.create(agent.id, tool.id, {
+          mcpServerId: server.id,
+        });
+        return agent;
+      }),
+    );
+
+    // Without a conversation, both calls would otherwise share a connection.
+    for (const agent of [...agents, ...agents]) {
+      const result = await mcpClient.executeToolCallForOwner(
+        {
+          id: `call-${agent.id}`,
+          name: tool.name,
+          arguments: { caller: agent.id },
+        },
+        agentOwner(agent.id),
+        {
+          tokenId: "token",
+          teamId: null,
+          isOrganizationToken: false,
+          userId: user.id,
+        },
+      );
+      expect(result.isError).toBeFalsy();
+    }
+
+    expect(signedCalls).toEqual(
+      [...agents, ...agents].map((agent) => ({
+        caller: agent.id,
+        accessKey: `key-agent-${agent.id}`,
+      })),
+    );
+  });
+});
+
+async function installAwsServer(userId: string) {
+  const catalog = await InternalMcpCatalogModel.create({
+    name: "agentcore-gateway",
+    serverType: "remote",
+    serverUrl: SERVER_URL,
+    awsIamConfig: {
+      roleArn: ROLE_ARN,
+      region: "us-east-1",
+      service: "bedrock-agentcore",
+    },
+  });
+  const server = await McpServerModel.create({
+    name: "agentcore-gateway",
+    catalogId: catalog.id,
+    serverType: "remote",
+    ownerId: userId,
+  });
+  const tool = await ToolModel.createToolIfNotExists({
+    name: "agentcore-gateway__lookup",
+    description: "Look something up",
+    parameters: {},
+    catalogId: catalog.id,
+  });
+  return { tool, server };
+}

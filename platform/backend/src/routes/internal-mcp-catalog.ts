@@ -114,6 +114,7 @@ import { transferResourceOwnership } from "@/services/resource-ownership";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
+  awsIamConfigConflict,
   CreateInternalMcpCatalogBodySchema,
   constructResponseSchema,
   createSortingQuerySchema,
@@ -128,6 +129,7 @@ import {
   McpServerDismissibleAlertKindSchema,
   McpServerListEntrySchema,
   MuteMcpServerAlertBodySchema,
+  mergedAwsIamSettings,
   PartialUpdateInternalMcpCatalogSchema,
   RetiredSharingUpdateFieldSchema,
   SelectInternalMcpCatalogSchema,
@@ -1533,6 +1535,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Only a desktop MCP server has a command for devices.",
         );
       }
+
+      const awsIamConflict = awsIamConfigConflict(
+        mergedAwsIamSettings({
+          update: restBody,
+          current: originalCatalogItem,
+        }),
+      );
+      if (awsIamConflict) throw new ApiError(400, awsIamConflict);
 
       const isAppCatalog = originalCatalogItem.serverType === "app";
       const linkedAppId = isAppCatalog

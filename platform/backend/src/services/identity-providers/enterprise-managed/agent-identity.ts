@@ -127,7 +127,7 @@ async function assertBindable(params: {
   if (kind === "spiffe") {
     throw new ApiError(
       400,
-      "This identity provider takes agents' SPIFFE IDs, which Archestra issues every agent: there is nothing to bind.",
+      "This identity provider takes the SPIFFE ID every agent is issued automatically: there is nothing to bind.",
     );
   }
   if (kind === "entra" && !GUID_PATTERN.test(params.binding.externalId)) {

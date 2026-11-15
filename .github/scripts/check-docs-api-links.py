@@ -8,7 +8,9 @@ or `PUT /api/knowledge-files/:fileId/content`. It must be written as a link to
 Mentions inside fenced code blocks, headings, and HTML comments are exempt.
 
 Operations come from docs/openapi.json. A route without an operationId cannot be
-deep-linked; give it one in the backend route schema.
+deep-linked; give it one in the backend route schema. Every tag in the spec must sit in
+exactly one topic of docs/api-reference-groups.json, and every tag listed there must exist
+in the spec: the website's reference build refuses either mismatch.
 
 Run with --fix to link unlinked mentions in place.
 """
@@ -44,6 +46,12 @@ def main() -> int:
     if not OPENAPI.is_file():
         print(f"error: {OPENAPI} not found (run from the repo root)", file=sys.stderr)
         return 2
+    problems = group_problems()
+    if problems:
+        print(f"{GROUPS.as_posix()} does not match the tags in {OPENAPI.as_posix()}:", file=sys.stderr)
+        for problem in problems:
+            print(f"- {problem}", file=sys.stderr)
+        return 1
     operations = load_operations()
     deep_links = {REFERENCE_URL + link for link, _ in operations.values() if link}
 
@@ -88,6 +96,29 @@ def main() -> int:
     for violation in violations:
         print(f"- {violation}", file=sys.stderr)
     return 1
+
+
+def group_problems() -> list[str]:
+    """Tags missing from the topic groups, listed twice, or listed but gone from the spec."""
+    spec = json.loads(OPENAPI.read_text(encoding="utf-8"))
+    groups = json.loads(GROUPS.read_text(encoding="utf-8"))
+    problems: list[str] = []
+    assigned: dict[str, str] = {}
+    for group, tags in groups.items():
+        for tag in tags:
+            if tag in assigned:
+                problems.append(f"tag {tag!r} is in both {assigned[tag]!r} and {group!r}")
+            assigned.setdefault(tag, group)
+    used = {
+        tag
+        for item in spec.get("paths", {}).values()
+        for method, operation in item.items()
+        if method in (*METHODS, "head", "options", "trace") and isinstance(operation, dict)
+        for tag in operation.get("tags") or []
+    }
+    problems += [f"tag {tag!r} is in no topic group" for tag in sorted(used - assigned.keys())]
+    problems += [f"tag {tag!r} ({assigned[tag]}) is no longer in the spec" for tag in sorted(assigned.keys() - used)]
+    return problems
 
 
 def load_operations() -> dict[tuple[str, str], tuple[str | None, str]]:

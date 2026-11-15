@@ -181,6 +181,16 @@ describe("agent identity bindings", () => {
         },
       },
     ],
+    [
+      "SPIFFE agent identities, which need no binding",
+      {
+        clientId: "sso-client",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          agentIdentity: { source: "spiffe" },
+        },
+      },
+    ],
   ] as const)("refuses a provider with %s", async ([, oidcConfig], {
     makeIdentityProvider,
   }) => {
@@ -191,6 +201,35 @@ describe("agent identity bindings", () => {
     ]);
 
     expect(response.statusCode).toBe(400);
+  });
+
+  test("keeps a binding left at a provider that switched to SPIFFE IDs while another changes", async ({
+    makeIdentityProvider,
+  }) => {
+    const spiffeProvider = await makeIdentityProvider(organizationId, {
+      oidcConfig: {
+        clientId: "sso-client",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          agentIdentity: { source: "spiffe" },
+        },
+      },
+    });
+    const leftOver = {
+      identityProviderId: spiffeProvider.id,
+      externalId: "agent-client-before-spiffe",
+    };
+    await AgentIdentityBindingModel.replaceForAgent({
+      agentId,
+      bindings: [leftOver],
+    });
+
+    const response = await replace(admin, agentId, [
+      leftOver,
+      { identityProviderId: oktaProviderId, externalId: "wlp-agent-1" },
+    ]);
+
+    expect(response.statusCode).toBe(200);
   });
 
   test("lets an admin correct the case of an identity", async () => {

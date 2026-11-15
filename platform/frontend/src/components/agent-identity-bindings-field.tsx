@@ -9,6 +9,7 @@ import {
 } from "@archestra/shared";
 import { Plus, X } from "lucide-react";
 import { useId } from "react";
+import { CopyButton } from "@/components/copy-button";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { IdentityProviderIcon } from "@/components/identity-provider-icons";
 import { IdentityProviderSelectItem } from "@/components/identity-provider-select";
@@ -23,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
 type IdentityProvider =
@@ -57,17 +59,21 @@ export function shownAgentIdentityProviders(params: {
  * `identityProvider:update`, the same as the backend's check.
  */
 export function AgentIdentityBindingsField({
+  agentId,
   identityProviders,
   selectedIdentityProviderId,
   value,
   onChange,
 }: {
+  /** Null while the agent is being created. */
+  agentId: string | null;
   identityProviders: IdentityProvider[];
   selectedIdentityProviderId: string | null | undefined;
   value: AgentIdentityBindingDrafts;
   onChange: (value: AgentIdentityBindingDrafts) => void;
 }) {
   const inputIdPrefix = useId();
+  const spiffe = useFeature("agentIdentitySpiffe");
   const docsUrl = getFrontendDocsUrl(DocsPage.PlatformAgentIdentity);
   const { data: canUpdateIdentityProviders } = useHasPermissions({
     identityProvider: ["update"],
@@ -77,11 +83,15 @@ export function AgentIdentityBindingsField({
     selectedIdentityProviderId,
     bindings: value,
   });
-  const addable = identityProviders.filter(
-    (provider) =>
-      agentIdentityKind(provider) !== null &&
-      !shown.some((shownProvider) => shownProvider.id === provider.id),
-  );
+  // A SPIFFE ID needs no adding: the agent has one wherever it is taken.
+  const addable = identityProviders.filter((provider) => {
+    const kind = agentIdentityKind(provider);
+    return (
+      kind !== null &&
+      kind !== "spiffe" &&
+      !shown.some((shownProvider) => shownProvider.id === provider.id)
+    );
+  });
   const canEdit = !!canUpdateIdentityProviders;
 
   return (
@@ -103,7 +113,22 @@ export function AgentIdentityBindingsField({
       </FieldDescription>
       {shown.map((provider) => {
         const inputId = `${inputIdPrefix}-${provider.id}`;
-        const copy = FIELD_COPY[agentIdentityKind(provider) ?? "actor"];
+        const kind = agentIdentityKind(provider) ?? "actor";
+        if (kind === "spiffe") {
+          return (
+            <SpiffeIdentity
+              key={provider.id}
+              provider={provider}
+              spiffeId={
+                spiffe
+                  ? `spiffe://${spiffe.trustDomain}/agent/${agentId ?? "<agent ID>"}`
+                  : null
+              }
+              pending={!agentId}
+            />
+          );
+        }
+        const copy = FIELD_COPY[kind];
         const removable = provider.id !== selectedIdentityProviderId;
         return (
           <div key={provider.id} className="space-y-2">
@@ -205,10 +230,51 @@ export function hasAgentIdentityProviders(
 
 // === internal ===
 
-type AgentIdentityKind = "entra" | "okta" | "actor";
+type AgentIdentityKind = "entra" | "okta" | "actor" | "spiffe";
+
+/**
+ * The agent's SPIFFE ID at a provider that takes those: derived from the
+ * agent, so shown, not entered.
+ */
+function SpiffeIdentity({
+  provider,
+  spiffeId,
+  pending,
+}: {
+  provider: IdentityProvider;
+  spiffeId: string | null;
+  pending: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <span>SPIFFE ID</span>
+        <span className="inline-flex items-center gap-1 font-normal text-muted-foreground">
+          <IdentityProviderIcon
+            providerId={provider.providerId}
+            size={14}
+            className="shrink-0"
+          />
+          {provider.providerId}
+        </span>
+      </div>
+      <div className="flex min-h-9 items-center gap-1 rounded-md border bg-muted/30 px-3 font-mono text-sm">
+        <span className="truncate" title={spiffeId ?? undefined}>
+          {spiffeId ?? "—"}
+        </span>
+        {spiffeId && !pending && <CopyButton text={spiffeId} size={12} />}
+      </div>
+      <FieldDescription>
+        {pending
+          ? "Assigned when the agent is saved. Nothing to register per agent: the identity provider trusts every agent through the SPIFFE issuer."
+          : "Sent as a JWT-SVID with each token exchange. Nothing to register per agent: the identity provider trusts every agent through the SPIFFE issuer."}
+      </FieldDescription>
+    </div>
+  );
+}
 
 const FIELD_COPY: Record<
-  AgentIdentityKind,
+  Exclude<AgentIdentityKind, "spiffe">,
   { label: string; placeholder: string }
 > = {
   entra: {
@@ -227,8 +293,9 @@ const FIELD_COPY: Record<
 
 /**
  * How agents get their own identity at the provider, as the backend decides
- * it: an Entra Agent ID blueprint for Entra On-Behalf-Of, else a stored agent
- * key (redacted on read, so the provider lists it as stored).
+ * it: an Entra Agent ID blueprint for Entra On-Behalf-Of, SPIFFE IDs when an
+ * RFC 8693 provider takes those, else a stored agent key (redacted on read,
+ * so the provider lists it as stored).
  */
 function agentIdentityKind(
   provider: IdentityProvider,
@@ -241,6 +308,12 @@ function agentIdentityKind(
     return enterpriseConfig.entraAgentId?.blueprintClientId?.trim()
       ? "entra"
       : null;
+  }
+  if (
+    strategy === "rfc8693" &&
+    enterpriseConfig.agentIdentity?.source === "spiffe"
+  ) {
+    return "spiffe";
   }
   if (
     !provider.configuredSecretPaths.includes(

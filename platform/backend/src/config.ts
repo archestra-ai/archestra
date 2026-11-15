@@ -143,6 +143,27 @@ const frontendBaseUrl = parseFrontendBaseUrl(
   process.env.ARCHESTRA_FRONTEND_URL,
 );
 
+/**
+ * Parse `ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN`, the SPIFFE trust domain
+ * agents' SPIFFE IDs live in (`spiffe://<trust domain>/agent/<id>`). Defaults
+ * to the frontend's hostname. A trust domain is lowercase letters, digits,
+ * dots, dashes and underscores (SPIFFE ID standard, section 2.1).
+ * @public — exported for testability
+ */
+export function parseSpiffeTrustDomain(params: {
+  rawValue: string | undefined;
+  frontendBaseUrl: string;
+}): string {
+  const trustDomain =
+    params.rawValue?.trim() || new URL(params.frontendBaseUrl).hostname;
+  if (!/^[a-z0-9._-]+$/.test(trustDomain)) {
+    throw new Error(
+      `ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN must be a SPIFFE trust domain: lowercase letters, digits, dots, dashes and underscores (got "${trustDomain}")`,
+    );
+  }
+  return trustDomain;
+}
+
 /** @public — validates an operator-provided webhook base URL. */
 export function parseChatopsWebhookBaseUrl(rawValue: string | undefined) {
   const trimmed = rawValue?.trim();
@@ -2596,6 +2617,12 @@ const config = {
   },
   openappa,
   frontendBaseUrl,
+  agentIdentity: {
+    spiffeTrustDomain: parseSpiffeTrustDomain({
+      rawValue: process.env.ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN,
+      frontendBaseUrl,
+    }),
+  },
   api: {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),

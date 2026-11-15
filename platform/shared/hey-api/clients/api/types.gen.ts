@@ -44877,6 +44877,12 @@ export type GetBootstrapResponses = {
             features: {
                 betaEnabled: boolean;
                 orchestratorK8sRuntime: boolean;
+                agentIdentitySpiffe: {
+                    trustDomain: string;
+                    issuer: string;
+                    jwksUri: string;
+                    bundleUri: string;
+                };
                 mcpIdleHibernationBetaEnabled: boolean;
                 sandbox: boolean;
                 agentRuntime: boolean;
@@ -54662,6 +54668,12 @@ export type GetConfigResponses = {
         features: {
             betaEnabled: boolean;
             orchestratorK8sRuntime: boolean;
+            agentIdentitySpiffe: {
+                trustDomain: string;
+                issuer: string;
+                jwksUri: string;
+                bundleUri: string;
+            };
             mcpIdleHibernationBetaEnabled: boolean;
             sandbox: boolean;
             agentRuntime: boolean;
@@ -154875,6 +154887,8 @@ export type GetIdentityProvidersResponses = {
                     requireAgentIdentity?: boolean;
                 };
                 agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
                     privateKeyPem?: string;
                     privateKeyId?: string;
                     requireAgentIdentity?: boolean;
@@ -155026,6 +155040,8 @@ export type CreateIdentityProviderData = {
                     requireAgentIdentity?: boolean;
                 };
                 agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
                     privateKeyPem?: string;
                     privateKeyId?: string;
                     requireAgentIdentity?: boolean;
@@ -155248,6 +155264,8 @@ export type CreateIdentityProviderResponses = {
                     requireAgentIdentity?: boolean;
                 };
                 agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
                     privateKeyPem?: string;
                     privateKeyId?: string;
                     requireAgentIdentity?: boolean;
@@ -155927,6 +155945,8 @@ export type GetIdentityProviderResponses = {
                     requireAgentIdentity?: boolean;
                 };
                 agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
                     privateKeyPem?: string;
                     privateKeyId?: string;
                     requireAgentIdentity?: boolean;
@@ -156078,6 +156098,8 @@ export type UpdateIdentityProviderData = {
                     requireAgentIdentity?: boolean;
                 };
                 agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
                     privateKeyPem?: string;
                     privateKeyId?: string;
                     requireAgentIdentity?: boolean;
@@ -156301,6 +156323,8 @@ export type UpdateIdentityProviderResponses = {
                     requireAgentIdentity?: boolean;
                 };
                 agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
                     privateKeyPem?: string;
                     privateKeyId?: string;
                     requireAgentIdentity?: boolean;
@@ -157573,6 +157597,273 @@ export type UpdateServiceAccountFederatedCredentialResponses = {
 };
 
 export type UpdateServiceAccountFederatedCredentialResponse = UpdateServiceAccountFederatedCredentialResponses[keyof UpdateServiceAccountFederatedCredentialResponses];
+
+export type GetSpiffeDiscoveryDocumentData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-identity/spiffe/.well-known/openid-configuration';
+};
+
+export type GetSpiffeDiscoveryDocumentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSpiffeDiscoveryDocumentError = GetSpiffeDiscoveryDocumentErrors[keyof GetSpiffeDiscoveryDocumentErrors];
+
+export type GetSpiffeDiscoveryDocumentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        issuer: string;
+        jwks_uri: string;
+        id_token_signing_alg_values_supported: Array<string>;
+        response_types_supported: Array<string>;
+        subject_types_supported: Array<string>;
+    };
+};
+
+export type GetSpiffeDiscoveryDocumentResponse = GetSpiffeDiscoveryDocumentResponses[keyof GetSpiffeDiscoveryDocumentResponses];
+
+export type GetSpiffeJwksData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-identity/spiffe/keys';
+};
+
+export type GetSpiffeJwksErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSpiffeJwksError = GetSpiffeJwksErrors[keyof GetSpiffeJwksErrors];
+
+export type GetSpiffeJwksResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        keys: Array<{
+            [key: string]: unknown;
+        }>;
+    };
+};
+
+export type GetSpiffeJwksResponse = GetSpiffeJwksResponses[keyof GetSpiffeJwksResponses];
+
+export type GetSpiffeTrustBundleData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-identity/spiffe/bundle';
+};
+
+export type GetSpiffeTrustBundleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSpiffeTrustBundleError = GetSpiffeTrustBundleErrors[keyof GetSpiffeTrustBundleErrors];
+
+export type GetSpiffeTrustBundleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        keys: Array<{
+            [key: string]: unknown;
+        }>;
+        spiffe_refresh_hint: number;
+    };
+};
+
+export type GetSpiffeTrustBundleResponse = GetSpiffeTrustBundleResponses[keyof GetSpiffeTrustBundleResponses];
 
 export type ExchangeWorkloadIdentityTokenData = {
     body: {

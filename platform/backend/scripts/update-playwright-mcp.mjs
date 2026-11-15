@@ -12,6 +12,12 @@ const { values } = parseArgs({
         "../src/playwright-mcp-image.json",
       ),
     },
+    // platform/Dockerfile: its patched playwright-mcp target starts from the
+    // same upstream release, so both pins move together.
+    dockerfile: {
+      type: "string",
+      default: path.resolve(import.meta.dirname, "../../Dockerfile"),
+    },
     "cooldown-days": { type: "string", default: "7" },
     // How long an npm release may go without an upstream image before the job
     // fails: Microsoft may have stopped publishing images.
@@ -25,6 +31,7 @@ const digestPattern = /^sha256:[a-f0-9]{64}$/;
 const accept =
   "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json";
 const previous = JSON.parse(await readFile(values.file, "utf8"));
+const dockerfile = await readFile(values.dockerfile, "utf8");
 
 function compare(a, b) {
   const aa = a.split(".").map(Number),
@@ -43,6 +50,17 @@ function validate(metadata) {
     JSON.stringify(metadata.architectures) !== '["amd64","arm64"]'
   )
     throw new Error("Invalid upstream Playwright MCP image metadata");
+}
+// The patched image's base: the same release, by tag and immutable digest.
+function dockerfileBase(metadata) {
+  return `FROM mcr.microsoft.com/playwright/mcp:v${metadata.mcpVersion}@${metadata.image.split("@")[1]} AS playwright-mcp`;
+}
+function checkDockerfile(metadata) {
+  const bases = dockerfile.match(/^FROM \S+ AS playwright-mcp$/gm);
+  if (bases?.length !== 1 || bases[0] !== dockerfileBase(metadata))
+    throw new Error(
+      "The playwright-mcp base in platform/Dockerfile does not match the pinned upstream image",
+    );
 }
 async function request(url) {
   const response = await fetch(url, {
@@ -111,6 +129,7 @@ async function upstreamImage(version) {
 
 try {
   validate(previous);
+  checkDockerfile(previous);
   if (values.check)
     console.log("Upstream Playwright MCP image metadata is valid");
   else {
@@ -187,6 +206,10 @@ try {
     if (JSON.stringify(next) === JSON.stringify(previous))
       console.log("Upstream Playwright MCP image already current");
     else {
+      await writeFile(
+        values.dockerfile,
+        dockerfile.replace(dockerfileBase(previous), dockerfileBase(next)),
+      );
       await writeFile(values.file, `${JSON.stringify(next, null, 2)}\n`);
       console.log(
         `Updated upstream Playwright MCP ${previous.mcpVersion} -> ${next.mcpVersion} (Node ${next.nodeVersion}, immutable image digest)`,

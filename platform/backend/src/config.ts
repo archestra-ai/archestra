@@ -50,6 +50,7 @@ import dotenv from "dotenv";
 import { getAppVersion } from "@/app-version";
 import logger from "@/logging";
 import { parseLogContentMode as parseApplicationLogContentMode } from "@/logging/content-mode";
+import playwrightMcpUpstreamImage from "@/playwright-mcp-image.json";
 import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
   type EmailProviderType,
@@ -1732,6 +1733,23 @@ const daggerEngineImage =
         digests: releaseImageDigests,
       })
     : "registry.dagger.io/engine:v0.21.11");
+
+/**
+ * The image of the built-in browser (Playwright MCP). A released chart ships a
+ * digest for Archestra's patched build (the `playwright-mcp` target of
+ * platform/Dockerfile: upstream's image with Debian's fixed packages and
+ * without the package managers it never runs) and pins it. Without that
+ * digest (local development, CI e2e, the quickstart) it is the same upstream
+ * release, unpatched.
+ */
+const playwrightMcpImage =
+  process.env.ARCHESTRA_ORCHESTRATOR_PLAYWRIGHT_MCP_IMAGE?.trim() ||
+  (releaseImageDigests?.images["playwright-mcp"]
+    ? pinReleaseImage({
+        image: `ghcr.io/archestra-ai/playwright-mcp:${appVersion}`,
+        digests: releaseImageDigests,
+      })
+    : playwrightMcpUpstreamImage.image);
 
 /**
  * Default resource requests/limits applied to generated MCP server
@@ -3546,6 +3564,8 @@ const config = {
      */
     enabled: process.env.ARCHESTRA_ORCHESTRATOR_ENABLED !== "false",
     mcpServerBaseImage,
+    /** The built-in browser's image; see `playwrightMcpImage` above. */
+    playwrightMcpImage,
     mcpServerResources,
     /**
      * How often (in seconds) to sweep Failed/Evicted MCP server pods.

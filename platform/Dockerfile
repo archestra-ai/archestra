@@ -166,6 +166,24 @@ COPY --from=dagger-engine-builder /out/dial-stdio /usr/bin/dial-stdio
 COPY --from=dagger-engine-builder /out/dnsname /opt/cni/bin/dnsname
 COPY --from=runc-builder /runc-binary /usr/local/bin/runc
 
+# The built-in browser (Playwright MCP) the backend runs for every
+# Environment. Upstream's image carries Debian packages with fixed CVEs and
+# npm's own bundled modules, which the server never uses (it runs
+# `node /app/cli.js`): take the Debian fixes and drop the package managers.
+# The base equals backend/src/playwright-mcp-image.json, which the daily
+# playwright-mcp job in update-client-versions.yml moves together with it.
+FROM mcr.microsoft.com/playwright/mcp:v0.0.83@sha256:690763cbb437ee7233f538a953bb5390bf03791eb5c965b471e59d17a6132fcb AS playwright-mcp
+USER root
+RUN test -f /app/cli.js && \
+    apt-get -o Acquire::Retries=3 update && \
+    DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 upgrade -y --no-install-recommends && \
+    apt-get clean && rm -rf /var/lib/apt/lists/* && \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+        /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+        /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-* && \
+    node --version
+USER node
+
 FROM go-builder-base AS kubectl-builder
 ARG TARGETARCH
 ARG KUBECTL_VERSION

@@ -114,6 +114,9 @@ updates:
       # The patched Dagger engine's base moves with DAGGER_VERSION and the
       # vendored SDK, so .github/scripts/update-dagger.py bumps it instead.
       - dependency-name: "*dagger.io/engine"
+      # The patched Playwright MCP's base equals playwright-mcp-image.json, so
+      # the playwright-mcp job in update-client-versions.yml bumps both.
+      - dependency-name: "*playwright/mcp"
     labels:
       - dependencies
     commit-message:
@@ -221,6 +224,9 @@ updates:
       # The patched Dagger engine's base moves with DAGGER_VERSION and the
       # vendored SDK, so .github/scripts/update-dagger.py bumps it instead.
       - dependency-name: "*dagger.io/engine"
+      # The patched Playwright MCP's base equals playwright-mcp-image.json, so
+      # the playwright-mcp job in update-client-versions.yml bumps both.
+      - dependency-name: "*playwright/mcp"
     labels:
       - dependencies
     commit-message:

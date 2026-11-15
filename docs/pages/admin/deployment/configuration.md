@@ -106,7 +106,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
   - Also turns on [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) when it is left blank. Set to `false`, it stays off.
 
-- **`ARCHESTRA_RELEASE_IMAGE_DIGESTS`** - Digests of the images released with this version: the MCP server base, the p4 shim, the Dagger engine, and the maintained agent images. The Helm chart of every release sets it, so those images run exactly as released, pinned by digest instead of a tag that could move. To check their signatures, or admit only those images, see [Verify Archestra Images](/docs/admin/deployment/production#verify-archestra-images).
+- **`ARCHESTRA_RELEASE_IMAGE_DIGESTS`** - Digests of the images released with this version: the MCP server base, the p4 shim, the Dagger engine, the built-in browser (Playwright MCP), and the maintained agent images. The Helm chart of every release sets it, so those images run exactly as released, pinned by digest instead of a tag that could move. To check their signatures, or admit only those images, see [Verify Archestra Images](/docs/admin/deployment/production#verify-archestra-images).
   - Default: unset (the Docker quickstart and charts built outside a release use the version tags)
   - Leave it to the chart. A mirror set with [`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY), or an image set with [`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE) or [`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE), runs exactly as you set it. To pin a mirrored image, set its digest in that value: `registry.example.com/mcp-server-base:1.6.0@sha256:…`.
 
@@ -854,6 +854,10 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`** - Base image for MCP servers that do not set their own image.
   - Default: `ghcr.io/archestra-ai/mcp-server-base:<platform version>`, pinned by digest on a released chart (see [`ARCHESTRA_RELEASE_IMAGE_DIGESTS`](/docs/admin/deployment/configuration#ARCHESTRA_RELEASE_IMAGE_DIGESTS))
+
+- **`ARCHESTRA_ORCHESTRATOR_PLAYWRIGHT_MCP_IMAGE`** - Image of the built-in browser (Playwright MCP) Archestra runs for each Environment. Set it to run the browser from your own registry mirror.
+  - Default: `ghcr.io/archestra-ai/playwright-mcp:<platform version>`, pinned by digest on a released chart (see [`ARCHESTRA_RELEASE_IMAGE_DIGESTS`](/docs/admin/deployment/configuration#ARCHESTRA_RELEASE_IMAGE_DIGESTS)). That build is Microsoft's Playwright MCP image with Debian's security updates applied and its unused package managers removed. Without a release digest, such as in the Docker quickstart, the default is the matching upstream `mcr.microsoft.com/playwright/mcp` image.
+  - Running browsers move to the new image when Archestra restarts.
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST`** - CPU request for each MCP server container.
   - Default: `50m`

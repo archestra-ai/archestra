@@ -39,9 +39,10 @@ later release publication will succeed.
   reconstructed tree for audit.
 
 The matrix derives agents from this branch's catalog and includes Platform full
-and slim, MCP, p4, sandbox and the patched Dagger engine (the `dagger-engine`
+and slim, MCP, p4, sandbox, the patched Dagger engine (the `dagger-engine`
 target of `platform/Dockerfile`, which rebuilds upstream's engine binaries
-against the CVE floors in `platform/docker/dagger-deps.sh`). The publisher-inventory regression follows release
+against the CVE floors in `platform/docker/dagger-deps.sh`) and the patched
+Playwright MCP (its `playwright-mcp` target). The publisher-inventory regression follows release
 workflow callers, including new companion images and catalog targets.
 
 Third-party images a release runs unchanged (`upstream_matrix`) are not

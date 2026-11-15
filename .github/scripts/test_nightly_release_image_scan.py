@@ -40,7 +40,7 @@ class ScanTargetsTest(unittest.TestCase):
 
         # The nightly Platform byte scan already covers main's Platform images.
         upstream = [row["image"] for row in self.policy().upstream_matrix(SCRIPTS.parents[1])["include"]]
-        self.assertEqual(images("main"), ["dagger-engine", "mcp-server-base", "p4-shim", "sandbox-base",
+        self.assertEqual(images("main"), ["dagger-engine", "playwright-mcp", "mcp-server-base", "p4-shim", "sandbox-base",
                                           "agent-claude-code", "agent-codex", "agent-hermes", *upstream])
         # Pinned third-party rows scan the registry reference and build nothing.
         for row in rows:
@@ -49,8 +49,8 @@ class ScanTargetsTest(unittest.TestCase):
                 self.assertRegex(row["reference"], r"@sha256:[0-9a-f]{64}$")
                 self.assertEqual((row["context"], row["dockerfile"], row["target"]), ("", "", ""))
                 self.assertIn(row["severities"], ("critical", "critical,high"))
-        self.assertEqual(images("release/9.9"), ["platform", "platform-slim", "dagger-engine", "mcp-server-base",
-                                                 "p4-shim", "sandbox-base", "agent-claude-code"])
+        self.assertEqual(images("release/9.9"), ["platform", "platform-slim", "dagger-engine", "playwright-mcp",
+                                                 "mcp-server-base", "p4-shim", "sandbox-base", "agent-claude-code"])
         for branch in ("main", "release/9.9"):
             head = git(self.origin, "rev-parse", branch)
             self.assertEqual({row["sha"] for row in rows if row["branch"] == branch}, {head})
@@ -93,7 +93,7 @@ class ScanTargetsTest(unittest.TestCase):
         policy = self.origin / ".github/scripts/release-image-policy.py"
         policy.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(SCRIPTS / "release-image-policy.py", policy)
-        for path in ("platform/helm/archestra/values.yaml", "platform/backend/src/playwright-mcp-image.json"):
+        for path in ("platform/helm/archestra/values.yaml",):
             if upstream:
                 (self.origin / path).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(SCRIPTS.parents[1] / path, self.origin / path)

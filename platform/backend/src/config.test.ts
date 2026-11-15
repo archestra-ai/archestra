@@ -1863,6 +1863,7 @@ describe("release image digests", () => {
       "p4-shim": digest("b"),
       "agent-codex": digest("c"),
       "dagger-engine": digest("d"),
+      "playwright-mcp": digest("e"),
     },
   });
 
@@ -1872,6 +1873,7 @@ describe("release image digests", () => {
     vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG", "");
     vi.stubEnv("ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE", "");
     vi.stubEnv("ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE", "");
+    vi.stubEnv("ARCHESTRA_ORCHESTRATOR_PLAYWRIGHT_MCP_IMAGE", "");
     vi.stubEnv(
       "ARCHESTRA_DATABASE_URL",
       "postgresql://archestra:pass@localhost:5432/archestra",
@@ -1896,6 +1898,10 @@ describe("release image digests", () => {
     expect(cfg.daggerRuntime.engine.image).toBe(
       `ghcr.io/archestra-ai/dagger-engine:1.6.0@${digest("d")}`,
     );
+    // So does the patched built-in browser.
+    expect(cfg.orchestrator.playwrightMcpImage).toBe(
+      `ghcr.io/archestra-ai/playwright-mcp:1.6.0@${digest("e")}`,
+    );
     // No digest shipped for this image: it keeps its version tag.
     expect(cfg.agentRuntime.catalogImages.hermes).toBe(
       "ghcr.io/archestra-ai/agent-hermes:1.6.0",
@@ -1914,7 +1920,15 @@ describe("release image digests", () => {
       "ARCHESTRA_DAGGER_RUNTIME_ENGINE_IMAGE",
       "mirror.example/dagger-engine:1.6.0",
     );
+    vi.stubEnv(
+      "ARCHESTRA_ORCHESTRATOR_PLAYWRIGHT_MCP_IMAGE",
+      "mirror.example/playwright-mcp:1.6.0",
+    );
     const { default: cfg } = await import("./config");
+
+    expect(cfg.orchestrator.playwrightMcpImage).toBe(
+      "mirror.example/playwright-mcp:1.6.0",
+    );
 
     expect(cfg.daggerRuntime.engine.image).toBe(
       "mirror.example/dagger-engine:1.6.0",
@@ -1939,6 +1953,9 @@ describe("release image digests", () => {
     // without its digest keep the upstream engine they can always pull.
     expect(cfg.daggerRuntime.engine.image).toMatch(
       /^registry\.dagger\.io\/engine:v\d+\.\d+\.\d+$/,
+    );
+    expect(cfg.orchestrator.playwrightMcpImage).toMatch(
+      /^mcr\.microsoft\.com\/playwright\/mcp@sha256:[0-9a-f]{64}$/,
     );
 
     vi.resetModules();

@@ -99,7 +99,6 @@ INVENTORY_PATHS = (
     "platform/Dockerfile",
     "platform/docker_images",
     "platform/helm/archestra/values.yaml",
-    "platform/backend/src/playwright-mcp-image.json",
 )
 
 

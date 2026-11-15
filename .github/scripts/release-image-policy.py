@@ -48,6 +48,8 @@ def candidate_matrix(root):
         {"image": "platform-slim", "context": "./platform", "dockerfile": "./platform/Dockerfile", "target": "unified-slim"},
         # The patched Dagger engine the backend provisions per organization.
         {"image": "dagger-engine", "context": "./platform", "dockerfile": "./platform/Dockerfile", "target": "dagger-engine"},
+        # The patched Playwright MCP the backend runs as the built-in browser.
+        {"image": "playwright-mcp", "context": "./platform", "dockerfile": "./platform/Dockerfile", "target": "playwright-mcp"},
     ]
     for image, directory in (("mcp-server-base", "mcp_server"), ("p4-shim", "p4_shim"),
                              ("sandbox-base", "sandbox_base")):
@@ -76,20 +78,19 @@ def candidate_matrix(root):
 def upstream_matrix(root):
     """Third-party images a release runs unchanged, by the exact reference it pins.
 
-    Nothing here builds them, and they never hold a release: the nightly
+    Nothing here builds them (Playwright MCP is patched and released as a
+    candidate instead), and they never hold a release: the nightly
     release image scan scans each pinned reference and alerts on findings of
     the listed severities. test_release_image_security.py fails when a chart
     image default is neither built here nor listed.
     """
     chart = (root / "platform/helm/archestra/values.yaml").read_text()
-    playwright = json.loads((root / "platform/backend/src/playwright-mcp-image.json").read_text())
     images = {
         "busybox": chart_value_pin(chart, "busyboxImage"),
         "busybox-musl": chart_value_pin(chart, "bootstrapImage"),
         "cloud-sql-proxy": chart_block_pin(chart, "gcr.io/cloud-sql-connectors/cloud-sql-proxy"),
         "postgresql": chart_block_pin(chart, "bitnamisecure/postgresql"),
         "postgres-exporter": chart_block_pin(chart, "bitnamisecure/postgres-exporter"),
-        "playwright-mcp": playwright.get("image") if isinstance(playwright, dict) else None,
     }
     for image, reference in images.items():
         if not isinstance(reference, str) or not PINNED_REFERENCE.fullmatch(reference):

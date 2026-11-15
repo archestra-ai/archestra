@@ -86,6 +86,21 @@ class BaseImagePinTest(unittest.TestCase):
                     self.assertEqual(block[4], "")
 
 
+    def test_dependabot_leaves_the_playwright_base_to_its_updater(self):
+        for entry in docker_entries():
+            if "platform" in entry["directories"]:
+                with self.subTest(target=entry["target"] or "main"):
+                    self.assertRegex(entry["body"], r'(?m)^      - dependency-name: "\*playwright/mcp"\n(?!        update-types:)')
+
+    def test_patched_playwright_starts_from_the_pinned_upstream_image(self):
+        # The backend falls back to the upstream image without release digests,
+        # so both must name the same release and the same bytes.
+        pinned = json.loads((ROOT / "platform/backend/src/playwright-mcp-image.json").read_text())
+        image, digest = pinned["image"].split("@")
+        bases = re.findall(r"^FROM (\S+) AS playwright-mcp$", (ROOT / "platform/Dockerfile").read_text(), re.M)
+        self.assertEqual(bases, [f"{image}:v{pinned['mcpVersion']}@{digest}"])
+
+
 def docker_entries():
     text = (ROOT / ".github/dependabot.yml").read_text()
     entries = []

@@ -16,14 +16,24 @@ const initialMetadata = JSON.parse(
     "utf8",
   ),
 );
+const base = (metadata) =>
+  `FROM mcr.microsoft.com/playwright/mcp:v${metadata.mcpVersion}@${metadata.image.split("@")[1]} AS playwright-mcp`;
+const dockerfileFor = (metadata) =>
+  `FROM node AS earlier\n${base(metadata)}\nUSER root\n`;
 const digest = (value) =>
   `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
 
 async function setup(t, options = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "upstream-playwright-"));
   const file = path.join(dir, "image.json");
+  const dockerfile = path.join(dir, "Dockerfile");
   const initial = JSON.stringify({ ...initialMetadata, ...options.previous });
   await writeFile(file, initial);
+  const initialDockerfile = dockerfileFor({
+    ...initialMetadata,
+    ...options.previous,
+  });
+  await writeFile(dockerfile, initialDockerfile);
   t.after(() => rm(dir, { recursive: true, force: true }));
   const routes = new Map();
   const manifests = [];
@@ -95,7 +105,16 @@ async function setup(t, options = {}) {
         status: 0,
         ...(await execute(
           process.execPath,
-          [script, "--file", file, "--now", "2026-10-26T00:00:00Z", ...args],
+          [
+            script,
+            "--file",
+            file,
+            "--dockerfile",
+            dockerfile,
+            "--now",
+            "2026-10-26T00:00:00Z",
+            ...args,
+          ],
           {
             env: {
               ...process.env,
@@ -109,7 +128,7 @@ async function setup(t, options = {}) {
       return { status: error.code, stdout: error.stdout, stderr: error.stderr };
     }
   }
-  return { file, initial, index, run };
+  return { file, dockerfile, initial, initialDockerfile, index, run };
 }
 
 test("pins the mature upstream release and actual runtime metadata, then becomes a no-op", async (t) => {
@@ -124,6 +143,11 @@ test("pins the mature upstream release and actual runtime metadata, then becomes
   );
   assert.equal(next.nodeVersion, "24.21.0"); // Record upstream; do not build a replacement runtime.
   assert.equal(next.playwrightVersion, "1.65.0");
+  // The patched image's base moves to the same release and bytes.
+  assert.equal(
+    await readFile(fixture.dockerfile, "utf8"),
+    dockerfileFor(next),
+  );
   const saved = await readFile(fixture.file, "utf8");
   assert.equal((await fixture.run()).status, 0);
   assert.equal(await readFile(fixture.file, "utf8"), saved);
@@ -143,6 +167,7 @@ test("keeps the pin when the newest mature release has no upstream image yet", a
     2,
   )}\n`;
   await writeFile(fixture.file, pinned);
+  await writeFile(fixture.dockerfile, dockerfileFor(JSON.parse(pinned)));
   const result = await fixture.run();
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Skipping Playwright MCP 0\.0\.84/);
@@ -209,7 +234,25 @@ for (const [name, options, message] of [
     assert.equal(result.status, 1);
     assert.match(result.stderr, message);
     assert.equal(await readFile(fixture.file, "utf8"), fixture.initial);
+    assert.equal(
+      await readFile(fixture.dockerfile, "utf8"),
+      fixture.initialDockerfile,
+    );
   });
+
+test("refuses to move a pin the patched image's base has drifted from", async (t) => {
+  const fixture = await setup(t);
+  await writeFile(
+    fixture.dockerfile,
+    fixture.initialDockerfile.replace(/:v[\d.]+@/, ":v0.0.1@"),
+  );
+  for (const args of [[], ["--check"]]) {
+    const result = await fixture.run(...args);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /does not match the pinned upstream image/);
+    assert.equal(await readFile(fixture.file, "utf8"), fixture.initial);
+  }
+});
 
 test("offline metadata check does not require registry access or Docker", async (t) => {
   const fixture = await setup(t, { failRegistry: true });

@@ -110,33 +110,28 @@ class ReleasePolicyTests(unittest.TestCase):
     def test_every_pinned_upstream_image_is_listed_and_an_unpinned_one_fails_closed(self):
         rows = POLICY.upstream_matrix(ROOT)["include"]
         self.assertEqual([row["image"] for row in rows], ["busybox", "busybox-musl", "cloud-sql-proxy",
-                                                         "postgresql", "postgres-exporter", "playwright-mcp"])
+                                                         "postgresql", "postgres-exporter"])
         for row in rows:
             self.assertRegex(row["reference"], r"@sha256:[0-9a-f]{64}$")
-        # Infrastructure images alert on critical only; anything else, including
-        # a newly listed image, alerts on critical and high.
+        # Infrastructure images alert on critical only; a newly listed image
+        # alerts on critical and high unless it is added there.
         self.assertEqual({row["image"]: row["severities"] for row in rows},
                          {"busybox": "critical", "busybox-musl": "critical", "cloud-sql-proxy": "critical",
-                          "postgresql": "critical", "postgres-exporter": "critical",
-                          "playwright-mcp": "critical,high"})
+                          "postgresql": "critical", "postgres-exporter": "critical"})
         chart = (ROOT / "platform/helm/archestra/values.yaml").read_text()
-        playwright = (ROOT / "platform/backend/src/playwright-mcp-image.json").read_text()
         digest = re.search(r'busyboxImageDigest: "(sha256:[0-9a-f]{64})"', chart).group(1)
         proxy = re.search(r'tag: "(2\.[0-9.]+@sha256:[0-9a-f]{64})"', chart).group(1)
         for name, mutate in (
-            ("unpinned busybox", lambda c, p: (c.replace(digest, ""), p)),
-            ("ambiguous busybox", lambda c, p: (c + f'    busyboxImageDigest: "{digest}"\n', p)),
-            ("proxy tag without digest", lambda c, p: (c.replace(proxy, proxy.split("@")[0]), p)),
-            ("missing database block", lambda c, p: (c.replace("repository: bitnamisecure/postgresql\n", ""), p)),
-            ("floating playwright", lambda c, p: (c, re.sub(r"mcp@sha256:[0-9a-f]{64}", "mcp:latest", p))),
+            ("unpinned busybox", lambda c: c.replace(digest, "")),
+            ("ambiguous busybox", lambda c: c + f'    busyboxImageDigest: "{digest}"\n'),
+            ("proxy tag without digest", lambda c: c.replace(proxy, proxy.split("@")[0])),
+            ("missing database block", lambda c: c.replace("repository: bitnamisecure/postgresql\n", "")),
         ):
             with self.subTest(name), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
-                values, image = mutate(chart, playwright)
-                for path, text in (("platform/helm/archestra/values.yaml", values),
-                                   ("platform/backend/src/playwright-mcp-image.json", image)):
-                    (root / path).parent.mkdir(parents=True, exist_ok=True)
-                    (root / path).write_text(text)
+                values = root / "platform/helm/archestra/values.yaml"
+                values.parent.mkdir(parents=True)
+                values.write_text(mutate(chart))
                 with self.assertRaises(ValueError):
                     POLICY.upstream_matrix(root)
 

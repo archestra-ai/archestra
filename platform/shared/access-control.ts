@@ -1707,6 +1707,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetTelegramChatOpsConfig]: {
     organizationSettings: ["read"],
   },
+  [RouteId.UpdateWhatsAppChatOpsConfig]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.GetWhatsAppChatOpsConfig]: {
+    organizationSettings: ["read"],
+  },
   // Any authenticated user can link or unlink their own Telegram account
   [RouteId.LinkTelegramChatOpsAccount]: {},
   [RouteId.UnlinkTelegramChatOpsAccount]: {},

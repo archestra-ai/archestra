@@ -196,7 +196,9 @@ class ChatOpsChannelBindingModel {
         const binding = bindingsById.get(update.bindingId);
         if (
           update.answerAllMessages !== undefined &&
-          (binding?.isDm || binding?.provider === "telegram")
+          (binding?.isDm ||
+            binding?.provider === "telegram" ||
+            binding?.provider === "whatsapp")
         ) {
           throw new ApiError(
             400,

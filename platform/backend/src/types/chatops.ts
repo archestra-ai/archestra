@@ -11,6 +11,7 @@ export const ChatOpsProviderTypeSchema = z.enum([
   "slack",
   "telegram",
   "jira",
+  "whatsapp",
 ]);
 export type ChatOpsProviderType = z.infer<typeof ChatOpsProviderTypeSchema>;
 
@@ -85,6 +86,19 @@ export const MsTeamsChatOpsConfigViewSchema =
   });
 
 export const TelegramChatOpsConfigViewSchema = ChatOpsStoredConfigBaseSchema;
+
+export const WhatsAppChatOpsConfigViewSchema =
+  ChatOpsStoredConfigBaseSchema.extend({
+    phoneNumberId: z.string().nullable().optional(),
+    phoneEmailMappings: z
+      .array(
+        z.object({
+          phone: z.string(),
+          email: z.string(),
+        }),
+      )
+      .optional(),
+  });
 
 /** Full chatops status response schema */
 export const ChatOpsStatusResponseSchema = z.object({
@@ -868,6 +882,16 @@ export interface TelegramDbConfig {
   enabled: boolean;
   /** Bot token from @BotFather */
   botToken: string;
+}
+
+/** WhatsApp config stored as a DB secret */
+export interface WhatsAppDbConfig {
+  enabled: boolean;
+  phoneNumberId?: string;
+  accessToken?: string;
+  verifyToken?: string;
+  appSecret?: string;
+  phoneEmailMappings?: Array<{ phone: string; email: string }>;
 }
 
 /** ngrok tunnel config stored as a DB secret */

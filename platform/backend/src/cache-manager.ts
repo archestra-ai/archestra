@@ -186,6 +186,8 @@ export const CacheKey = {
   TeamsUnmentionedChannelTraffic: "teams-unmentioned-channel-traffic",
   /** Telegram approval-button payloads (callback_data is capped at 64 bytes) */
   TelegramApprovalCallback: "chatops-telegram-approval",
+  /** WhatsApp approval-button payloads */
+  WhatsAppApprovalCallback: "chatops-whatsapp-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */
   TelegramLinkCode: "chatops-telegram-link",
   /** Positive "this chat session is an encrypted chat" lookups for LLM proxy redaction */

@@ -132,6 +132,7 @@ import {
 } from "./runtime-reply-anchor";
 import SlackProvider from "./slack-provider";
 import TelegramProvider from "./telegram-provider";
+import WhatsAppProvider from "./whatsapp-provider";
 import {
   buildAgentFooter,
   buildChannelDescriptionBlock,
@@ -156,6 +157,7 @@ export class ChatOpsManager {
   /** Additional Slack apps, each pinned to one agent, keyed by agent id. */
   private slackAgentBots = new Map<string, SlackProvider>();
   private telegramProvider: TelegramProvider | null = null;
+  private whatsappProvider: WhatsAppProvider | null = null;
   private jiraAgentBots = new Map<string, JiraProvider>();
   private stopping = false;
   private reinitializing: Promise<void> = Promise.resolve();
@@ -209,6 +211,10 @@ export class ChatOpsManager {
     return this.telegramProvider;
   }
 
+  getWhatsAppProvider(): WhatsAppProvider | null {
+    return this.whatsappProvider;
+  }
+
   getJiraProvider(agentId?: string): JiraProvider | null {
     return agentId
       ? (this.jiraAgentBots.get(agentId) ?? null)
@@ -244,6 +250,8 @@ export class ChatOpsManager {
         return this.getTelegramProvider();
       case "jira":
         return this.getJiraProvider();
+      case "whatsapp":
+        return this.getWhatsAppProvider();
     }
   }
 
@@ -283,6 +291,7 @@ export class ChatOpsManager {
       (this.slackProvider?.isConfigured() ?? false) ||
       [...this.slackAgentBots.values()].some((bot) => bot.isConfigured()) ||
       (this.telegramProvider?.isConfigured() ?? false) ||
+      (this.whatsappProvider?.isConfigured() ?? false) ||
       [...this.jiraAgentBots.values()].some((bot) => bot.isConfigured())
     );
   }
@@ -747,8 +756,13 @@ export class ChatOpsManager {
 
     // Load configs from DB (the single source of truth)
     // Errors are caught individually so a single broken config doesn't prevent other providers from initializing
-    const [msTeamsConfig, slackConfig, telegramConfig, slackAgentBotConfigs] =
-      await Promise.all([
+    const [
+      msTeamsConfig,
+      slackConfig,
+      telegramConfig,
+      whatsappConfig,
+      slackAgentBotConfigs,
+    ] = await Promise.all([
         ChatOpsConfigModel.getMsTeamsConfig().catch((error) => {
           logger.error(
             { error: error instanceof Error ? error.message : String(error) },
@@ -767,6 +781,13 @@ export class ChatOpsManager {
           logger.error(
             { error: error instanceof Error ? error.message : String(error) },
             "[ChatOps] Failed to load Telegram config, skipping",
+          );
+          return null;
+        }),
+        ChatOpsConfigModel.getWhatsAppConfig().catch((error) => {
+          logger.error(
+            { error: error instanceof Error ? error.message : String(error) },
+            "[ChatOps] Failed to load WhatsApp config, skipping",
           );
           return null;
         }),
@@ -841,6 +862,14 @@ export class ChatOpsManager {
       // through the event handler (like Slack socket mode)
       this.telegramProvider.setEventHandler(this);
     }
+    if (
+      whatsappConfig &&
+      config.chatops.whatsappEnabled &&
+      !hiddenChannels.has("whatsapp")
+    ) {
+      this.whatsappProvider = new WhatsAppProvider(whatsappConfig);
+      this.whatsappProvider.setEventHandler(this);
+    }
 
     await this.reloadJiraProviders();
     if (this.stopping) return;
@@ -857,6 +886,7 @@ export class ChatOpsManager {
         provider,
       })),
       { name: "Telegram", provider: this.telegramProvider },
+      { name: "WhatsApp", provider: this.whatsappProvider },
     ];
 
     for (const { name, provider } of providers) {
@@ -4585,6 +4615,8 @@ export class ChatOpsManager {
     this.jiraAgentBots.clear();
     this.telegramProvider?.finishCleanup();
     this.telegramProvider = null;
+    this.whatsappProvider?.cleanup();
+    this.whatsappProvider = null;
     this.stopCleanupInterval();
   }
 }
@@ -4616,6 +4648,7 @@ const CHATOPS_PROVIDER_LABELS: Record<ChatOpsProviderType, string> = {
   "ms-teams": "MS Teams",
   telegram: "Telegram",
   jira: "Jira",
+  whatsapp: "WhatsApp",
 };
 
 /** Interaction-log `source` value per provider. */
@@ -4625,6 +4658,7 @@ const CHATOPS_PROVIDER_SOURCES: Record<ChatOpsProviderType, InteractionSource> =
     "ms-teams": "chatops:ms-teams",
     telegram: "chatops:telegram",
     jira: "chatops:jira",
+    whatsapp: "chatops:whatsapp",
   };
 
 /**

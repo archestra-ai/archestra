@@ -12,6 +12,7 @@ import type {
   SlackAppConfigToken,
   SlackDbConfig,
   TelegramDbConfig,
+  WhatsAppDbConfig,
 } from "@/types";
 import { type JiraDbConfig, JiraDbConfigSchema } from "@/types/chatops-jira";
 import {
@@ -28,6 +29,7 @@ const SLACK_SECRET_NAME = "chatops-slack";
 const SLACK_AGENT_BOTS_SECRET_NAME = "chatops-slack-agent-bots";
 const SLACK_APP_CONFIG_TOKEN_SECRET_NAME = "chatops-slack-app-config-token";
 const TELEGRAM_SECRET_NAME = "chatops-telegram";
+const WHATSAPP_SECRET_NAME = "chatops-whatsapp";
 const NGROK_SECRET_NAME = "chatops-ngrok";
 const JIRA_SECRET_NAME = "chatops-jira";
 const PROVIDER_SECRET_NAMES: Record<ChatOpsProviderType, string> = {
@@ -35,6 +37,7 @@ const PROVIDER_SECRET_NAMES: Record<ChatOpsProviderType, string> = {
   slack: SLACK_SECRET_NAME,
   telegram: TELEGRAM_SECRET_NAME,
   jira: JIRA_SECRET_NAME,
+  whatsapp: WHATSAPP_SECRET_NAME,
 };
 
 interface ProviderDbConfigs {
@@ -42,6 +45,7 @@ interface ProviderDbConfigs {
   slack: SlackDbConfig;
   telegram: TelegramDbConfig;
   jira: JiraDbConfig;
+  whatsapp: WhatsAppDbConfig;
 }
 
 class ChatOpsConfigModel {
@@ -262,6 +266,18 @@ class ChatOpsConfigModel {
       value as unknown as SecretValue,
     );
     logger.info("ChatOpsConfigModel: saved Telegram config to DB");
+  }
+
+  async getWhatsAppConfig(): Promise<WhatsAppDbConfig | null> {
+    return this.getConfig<WhatsAppDbConfig>(WHATSAPP_SECRET_NAME);
+  }
+
+  async saveWhatsAppConfig(value: WhatsAppDbConfig): Promise<void> {
+    await this.saveConfig(
+      WHATSAPP_SECRET_NAME,
+      value as unknown as SecretValue,
+    );
+    logger.info("ChatOpsConfigModel: saved WhatsApp config to DB");
   }
 
   async getNgrokConfig(): Promise<NgrokDbConfig | null> {

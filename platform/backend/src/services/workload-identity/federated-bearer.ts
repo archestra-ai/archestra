@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
+import { createHash } from "node:crypto";
 import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import ServiceAccountModel, {
@@ -68,31 +69,32 @@ async function verifyFederatedBearerToken(params: {
   const accounts = new Map(
     candidates.map(({ account }) => [account.id, account]),
   );
+  const tokenFingerprint = createHash("sha256").update(token).digest("hex");
   const auditEach = (
     ids: Iterable<string>,
     outcome: AuditOutcome,
     details: Record<string, unknown>,
   ) =>
     Promise.all(
-      [...ids].map((id) => {
+      [...ids].map(async (id) => {
         const account = accounts.get(id);
-        // A refusal is audited once per account, subject and reason a while:
+        if (!account) return;
+        // A refusal is audited once per account, token and reason a while:
         // anyone can get a correctly signed token from a shared issuer such
         // as GitHub Actions and send it again and again.
-        if (outcome !== "success") {
-          const key = `${id}:${String(details.subject ?? "")}:${String(details.reason)}`;
-          if (recentRefusals.get(key)) return undefined;
-          recentRefusals.set(key, true);
-        }
-        return account
-          ? recordFederationAudit({
-              account,
-              request: params.request ?? null,
-              outcome,
-              statusCode: outcome === "success" ? 200 : 401,
-              details: { mode: "bearer", ...details },
-            })
-          : undefined;
+        const refusalKey =
+          outcome === "success"
+            ? null
+            : [id, tokenFingerprint, String(details.reason)].join(":");
+        if (refusalKey && recentRefusals.get(refusalKey)) return;
+        const written = await recordFederationAudit({
+          account,
+          request: params.request ?? null,
+          outcome,
+          statusCode: outcome === "success" ? 200 : 401,
+          details: { mode: "bearer", ...details },
+        });
+        if (refusalKey && written) recentRefusals.set(refusalKey, true);
       }),
     );
 

@@ -113,7 +113,7 @@ describe("a workload's OIDC token as a bearer token", () => {
     });
   });
 
-  test("audits a token it keeps refusing only once", async ({
+  test("audits each refused token once, however often it is sent", async ({
     makeOrganization,
     makeServiceAccount,
   }) => {
@@ -125,8 +125,10 @@ describe("a workload's OIDC token as a bearer token", () => {
     for (let attempt = 0; attempt < 3; attempt++) {
       expect(await verifyServiceAccountBearer({ token })).toBeNull();
     }
+    const another = await actorJwt({ sub: "actor/support/replayed" });
+    expect(await verifyServiceAccountBearer({ token: another })).toBeNull();
 
-    expect(await exchangeEvents(org.id)).toHaveLength(1);
+    expect(await exchangeEvents(org.id)).toHaveLength(2);
   });
 
   test("asks an issuer that is down for its keys once for requests arriving together", async ({

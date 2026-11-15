@@ -168,7 +168,7 @@ export async function recordFederationAudit(params: {
   outcome: AuditOutcome;
   statusCode: number;
   details: Record<string, unknown>;
-}): Promise<void> {
+}): Promise<boolean> {
   const { account } = params;
   const request = params.request ?? NO_REQUEST;
   try {
@@ -194,6 +194,7 @@ export async function recordFederationAudit(params: {
       userAgent: request.userAgent,
       occurredAt: new Date(),
     });
+    return true;
   } catch (err) {
     // A failed audit write must not decide the exchange; it is logged so it
     // can be noticed.
@@ -201,6 +202,7 @@ export async function recordFederationAudit(params: {
       { err, serviceAccountId: account.id, outcome: params.outcome },
       "[workload-identity] Failed to write the token exchange audit row",
     );
+    return false;
   }
 }
 

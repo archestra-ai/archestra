@@ -1914,14 +1914,16 @@ export const parseHelmReleaseName = (
 // SPDX-SnippetEnd
 
 /**
- * Parses ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE. A value that is not a valid
- * Kubernetes namespace name (a DNS-1123 label) is ignored with a warning, so
- * runs keep their namespace instead of failing on every launch.
+ * Parses an optional workload namespace setting such as
+ * ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE. A value that is not a valid Kubernetes
+ * namespace name (a DNS-1123 label) is ignored with a warning, so workloads
+ * keep their namespace instead of failing on every launch.
  *
  * @public — exported for testability
  */
-export const parseAgentRuntimeNamespace = (
+export const parseOptionalNamespace = (
   envValue: string | undefined,
+  envName: string,
 ): string | undefined => {
   const namespace = envValue?.trim();
   if (!namespace) return undefined;
@@ -1930,7 +1932,7 @@ export const parseAgentRuntimeNamespace = (
     !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(namespace)
   ) {
     logger.warn(
-      `Ignoring ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE "${namespace}": not a valid Kubernetes namespace name (lowercase alphanumerics and "-", at most 63 characters)`,
+      `Ignoring ${envName} "${namespace}": not a valid Kubernetes namespace name (lowercase alphanumerics and "-", at most 63 characters)`,
     );
     return undefined;
   }
@@ -2798,8 +2800,9 @@ const config = {
      * still wins; unset falls back to the organization's default Environment
      * namespace, then ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE.
      */
-    namespace: parseAgentRuntimeNamespace(
+    namespace: parseOptionalNamespace(
       process.env.ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE,
+      "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
     ),
     /** Ready spare workspaces per compatible runtime configuration. */
     warmPoolSize: parseNonNegativeInt(
@@ -3735,6 +3738,18 @@ const config = {
   daggerRuntime: {
     enabled: daggerRuntimeEnabled,
     runnerHost: daggerRuntimeRunnerHost,
+    /**
+     * Namespace for the code sandbox's Dagger engines, apart from MCP
+     * servers. Engines run privileged, and Pod Security is per namespace, so
+     * sharing one forces the MCP namespace to allow `privileged`. When set,
+     * every engine runs here, whatever its Environment's namespace; each
+     * Environment still gets its own engine and egress policy. Unset keeps
+     * engines in their Environment's namespace (or the orchestrator's).
+     */
+    namespace: parseOptionalNamespace(
+      process.env.ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE,
+      "ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE",
+    ),
     cliBin:
       process.env.ARCHESTRA_DAGGER_RUNTIME_CLI_BIN ||
       process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||

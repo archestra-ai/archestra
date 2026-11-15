@@ -11,12 +11,7 @@ import { requestScope } from "@/auth/request-scope";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
-import {
-  OrganizationModel,
-  ServiceAccountModel,
-  SessionModel,
-  UserModel,
-} from "@/models";
+import { OrganizationModel, SessionModel, UserModel } from "@/models";
 import { getPublicRequestOrigin } from "@/routes/request-origin";
 import {
   AGENT_WORKSPACE_TRANSFER_PREFIX,

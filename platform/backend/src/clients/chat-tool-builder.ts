@@ -43,6 +43,7 @@ import {
 } from "@/archestra-mcp-server";
 import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
 import { resolveRunToolDispatch } from "@/archestra-mcp-server/run-tool-target";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
@@ -624,6 +625,10 @@ async function persistLaunchedRuntimeToolCall(params: {
     ctx.launchedRunIds = new Set();
   }
   ctx.launchedRunIds.add(launchedRunId);
+  const persistedUserId =
+    ctx.userId && ctx.userId !== "system" && !isServiceAccountUserId(ctx.userId)
+      ? ctx.userId
+      : null;
   try {
     await McpToolCallModel.create({
       agentId: ctx.agentId,
@@ -638,7 +643,7 @@ async function persistLaunchedRuntimeToolCall(params: {
           : toolArguments || {},
       },
       toolResult: ctx.suppressContentLogging ? { redacted: true } : response,
-      userId: ctx.userId ?? null,
+      userId: persistedUserId,
       runId: launchedRunId,
       sessionId,
       llmToolCallId: toolCallId ?? null,

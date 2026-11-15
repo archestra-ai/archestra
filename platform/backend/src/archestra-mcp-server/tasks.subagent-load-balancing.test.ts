@@ -49,6 +49,7 @@ import {
   AgentVersionModel,
   AgentWorkspaceModel,
   LlmProviderApiKeyModelLinkModel,
+  McpToolCallModel,
   ModelModel,
   OrganizationModel,
   ToolModel,
@@ -5973,26 +5974,75 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     expect(oauthLbNames).toContain(alphaTool.name);
     expect(oauthLbNames).toContain(betaTool.name);
 
-    // Service-account `start_agent_run` executes under `{ kind: "serviceAccount", id: account.id }`.
-    const sendSpy = await mockDetachedTaskStart();
-    const saStartResult = await executeArchestraTool(
-      TOOL_START_AGENT_RUN_FULL_NAME,
-      { message: "Service account pooled launch" },
-      {
-        agent: { id: lbGateway.id, name: lbGateway.name },
-        agentId: lbGateway.id,
-        userId: serviceAccountUserId(account.id),
-        organizationId,
-        tokenAuth: bareServiceAccountAuth,
+    // Service-account `start_agent_run` and router delegation execute end-to-end
+    // through `buildMcpGatewayTool` and `buildAgentDelegationTool` under
+    // `{ kind: "serviceAccount", id: account.id }`, persisting `McpToolCallModel`
+    // handoff audit rows (`userId: null`) and reconstructing `"push"` moves in
+    // `getSessionHandoffs`.
+    const launchedWorkloads: string[] = [];
+    vi.spyOn(backend, "launch").mockImplementation(async (spec) => {
+      launchedWorkloads.push(spec.frozenName);
+    });
+    vi.spyOn(backend, "stageInputs").mockResolvedValue();
+    vi.spyOn(backend, "waitUntilRunning").mockResolvedValue();
+    vi.spyOn(backend, "streamOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end();
       },
     );
-    expect(saStartResult.isError).toBeFalsy();
-    expect(sendSpy).toHaveBeenCalledTimes(1);
-    expect(sendSpy.mock.calls[0]?.[0]?.actor).toEqual({
-      kind: "serviceAccount",
-      id: account.id,
-      organizationId,
+    vi.spyOn(backend, "snapshotOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end("===ARCHESTRA-FINAL-ANSWER===\nDone");
+      },
+    );
+    vi.spyOn(backend, "waitForCompletion").mockResolvedValue({
+      outcome: "succeeded",
     });
+    vi.spyOn(backend, "steer").mockResolvedValue();
+    vi.spyOn(backend, "teardown").mockResolvedValue();
+    vi.spyOn(backend, "releaseRun").mockResolvedValue();
+    vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
+
+    const saSessionId = `sa-session-${crypto.randomUUID()}`;
+    const saGwToken = {
+      tokenValue: null,
+      tokenId: bareServiceAccountAuth.tokenId,
+      teamId: null,
+      isOrganizationToken: false,
+      serviceAccountId: account.id,
+      isUserToken: false,
+    };
+    const lbGatewayCtx: ChatToolContext = {
+      agentId: lbGateway.id,
+      agentName: lbGateway.name,
+      userId: serviceAccountUserId(account.id),
+      organizationId,
+      sessionId: saSessionId,
+      mcpGwToken: saGwToken,
+      repeatTracker: new ToolCallRepeatTracker(),
+      modelAcceptsImageToolResults: true,
+    };
+    const advertisedStartRun = saLbList.tools.find(
+      (tool) => tool.name === TOOL_START_AGENT_RUN_FULL_NAME,
+    );
+    if (!advertisedStartRun) {
+      throw new Error("Expected advertised start_agent_run on SA LB gateway");
+    }
+    const wrappedSaStartRun = buildMcpGatewayTool({
+      mcpTool: advertisedStartRun,
+      ctx: lbGatewayCtx,
+    });
+    const saStartRaw = await wrappedSaStartRun.execute?.(
+      { message: "Service account pooled launch" },
+      { toolCallId: "sa-start-call-1", messages: [] },
+    );
+    const saStartText =
+      typeof saStartRaw === "string"
+        ? saStartRaw
+        : String((saStartRaw as { content?: unknown })?.content ?? "");
+    const saStartParsed = JSON.parse(saStartText) as {
+      run: { run_id: string };
+    };
 
     // Non-LB Auto-subagents gateway with a bare service-account token resolves
     // Auto delegation targets and enriches an Auto load-balanced router's pool metadata.
@@ -6033,36 +6083,106 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       (tool) => tool.name === autoRouterTool.name,
     );
     expect(advertisedRouter).toBeDefined();
-    expect(advertisedRouter?._meta).toMatchObject({
+    if (!advertisedRouter) {
+      throw new Error("Expected advertised SA Auto router tool");
+    }
+    expect(advertisedRouter._meta).toMatchObject({
       [LOAD_BALANCED_RUNTIME_ROUTER_META_KEY]: true,
     });
-    expect(advertisedRouter?.description).toContain(
+    expect(advertisedRouter.description).toContain(
       "Runs in the background in Agent Runtime and returns a run link, not the answer.",
     );
-    expect(advertisedRouter?.description).toContain("SA Pool Alpha");
-    expect(advertisedRouter?.description).toContain("SA Pool Beta");
+    expect(advertisedRouter.description).toContain("SA Pool Alpha");
+    expect(advertisedRouter.description).toContain("SA Pool Beta");
 
-    const saRouterDelegation = await executeArchestraTool(
-      autoRouterTool.name,
-      { message: "Service account router delegation" },
-      {
-        agent: {
-          id: autoDiscoveryGateway.id,
-          name: autoDiscoveryGateway.name,
-        },
-        agentId: autoDiscoveryGateway.id,
-        userId: serviceAccountUserId(account.id),
-        organizationId,
-        tokenAuth: bareServiceAccountAuth,
-      },
-    );
-    expect(saRouterDelegation.isError).toBeFalsy();
-    expect(sendSpy).toHaveBeenCalledTimes(2);
-    expect(sendSpy.mock.calls[1]?.[0]?.actor).toEqual({
-      kind: "serviceAccount",
-      id: account.id,
+    const autoDiscoveryCtx: ChatToolContext = {
+      agentId: autoDiscoveryGateway.id,
+      agentName: autoDiscoveryGateway.name,
+      userId: serviceAccountUserId(account.id),
       organizationId,
+      sessionId: saSessionId,
+      mcpGwToken: saGwToken,
+      repeatTracker: new ToolCallRepeatTracker(),
+      modelAcceptsImageToolResults: true,
+    };
+    const wrappedSaRouter = buildAgentDelegationTool({
+      agentTool: advertisedRouter,
+      ctx: autoDiscoveryCtx,
     });
+    const saRouterRaw = await wrappedSaRouter.execute?.(
+      { message: "Service account router delegation" },
+      { toolCallId: "sa-router-call-2", messages: [] },
+    );
+    const saRouterParsed = JSON.parse(String(saRouterRaw)) as {
+      run: { run_id: string };
+    };
+
+    await vi.waitFor(() => {
+      expect(launchedWorkloads).toHaveLength(2);
+    });
+
+    const [firstRunRow, secondRunRow] = await Promise.all([
+      AgentRunModel.findByTaskId(saStartParsed.run.run_id),
+      AgentRunModel.findByTaskId(saRouterParsed.run.run_id),
+    ]);
+    expect(firstRunRow).toMatchObject({
+      actorKind: "serviceAccount",
+      actorId: account.id,
+      actorUserId: null,
+      originLlmSessionId: saSessionId,
+    });
+    expect(secondRunRow).toMatchObject({
+      actorKind: "serviceAccount",
+      actorId: account.id,
+      actorUserId: null,
+      originLlmSessionId: saSessionId,
+    });
+
+    const auditCalls = await McpToolCallModel.findArchestraCallsBySession({
+      organizationId,
+      sessionId: saSessionId,
+      toolNames: [TOOL_START_AGENT_RUN_FULL_NAME],
+      includeAgentDelegations: true,
+      limit: 20,
+    });
+    expect(auditCalls).toHaveLength(2);
+    const fullAuditRows = await Promise.all(
+      auditCalls.map((call) => McpToolCallModel.findById(call.id)),
+    );
+    expect(fullAuditRows.map((row) => row?.runId)).toEqual(
+      expect.arrayContaining([
+        saStartParsed.run.run_id,
+        saRouterParsed.run.run_id,
+      ]),
+    );
+    for (const row of fullAuditRows) {
+      expect(row).not.toBeNull();
+      expect(row?.userId).toBeNull();
+    }
+
+    const saHandoffs = await getSessionHandoffs({
+      organizationId,
+      sessionId: saSessionId,
+    });
+    expect(saHandoffs.handedTo.map((run) => run.runId)).toEqual(
+      expect.arrayContaining([
+        saStartParsed.run.run_id,
+        saRouterParsed.run.run_id,
+      ]),
+    );
+    expect(saHandoffs.moves).toContainEqual(
+      expect.objectContaining({
+        kind: "push",
+        runId: saStartParsed.run.run_id,
+      }),
+    );
+    expect(saHandoffs.moves).toContainEqual(
+      expect.objectContaining({
+        kind: "push",
+        runId: saRouterParsed.run.run_id,
+      }),
+    );
+    await drainBackgroundWork();
   });
 
   test("keeps load-balanced router delegations in-process and unannotated for system, team-token, and OAuth callers", async ({

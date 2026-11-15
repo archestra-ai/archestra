@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.4.32](https://github.com/archestra-ai/archestra/compare/platform-v1.4.31...platform-v1.4.32) (2026-11-15)
+
+
+### Features
+
+* **agent-runtime:** link people to reconnect a GitHub connection that stopped working (backport release/1.4) ([#10744](https://github.com/archestra-ai/archestra/issues/10744)) ([07d15f7](https://github.com/archestra-ai/archestra/commit/07d15f7058a275c67f2b1b20529088328433c4e8))
+
+
+### Bug Fixes
+
+* **agent-runtime:** run the Playwright driver on the image's Node (backport release/1.4) ([#10709](https://github.com/archestra-ai/archestra/issues/10709)) ([b5ffe48](https://github.com/archestra-ai/archestra/commit/b5ffe48370d60ca35dd3ad196e5323ec9886abbd))
+* **llm-proxy:** accept Google SDK keys and keep v1beta on Gemini routes (backport release/1.4) ([#10747](https://github.com/archestra-ai/archestra/issues/10747)) ([a5b8196](https://github.com/archestra-ai/archestra/commit/a5b81961260c1cfb69b446e28eb74658f5aec824))
+
+
+### Miscellaneous Chores
+
+* **release/1.4:** backport the chart's GHCR notice and release check, and the release image SBOMs ([#10746](https://github.com/archestra-ai/archestra/issues/10746), [#10748](https://github.com/archestra-ai/archestra/issues/10748)) ([#10749](https://github.com/archestra-ai/archestra/issues/10749)) ([090c31c](https://github.com/archestra-ai/archestra/commit/090c31c0104203c0723d8f602df22cf37444d3a8))
+
 ## [1.4.31](https://github.com/archestra-ai/archestra/compare/platform-v1.4.30...platform-v1.4.31) (2026-11-14)
 
 

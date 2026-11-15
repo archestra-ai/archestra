@@ -84,6 +84,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 // biome-ignore lint/style/noRestrictedImports: runtime-gated image prefetch
 import { agentImagePrefetcher } from "@/k8s/agent-runtime/image-prefetch.ee";
 // SPDX-SnippetEnd
+import { agentRuntimeClassDetector } from "@/k8s/agent-runtime/runtime-class";
 import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { agentWarmPoolManager } from "@/k8s/agent-runtime/warm-pool";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
@@ -1156,6 +1157,9 @@ const startWebServer = async () => {
     // API. The loops below start regardless and idle until it does, so
     // installing the controller later needs no restart.
     void agentSandboxApi.refresh();
+    // A missing RuntimeClass would leave every unprivileged run waiting for a
+    // pod Kubernetes refuses to create; say so at startup, not per run.
+    void agentRuntimeClassDetector.checkAtStartup();
     agentRunReconciler.start();
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

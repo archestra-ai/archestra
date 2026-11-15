@@ -39,6 +39,7 @@ import {
   type KubernetesAgentRunLaunchSpec,
 } from "./manifests";
 import { AGENT_RUNTIME_WORKSPACE_LABEL, agentRuntimeLabels } from "./naming";
+import { resolveAgentRuntimeNodeSelector } from "./node-placement";
 import { resolveAgentRuntimeNamespace } from "./runtime-namespace";
 import { AGENT_SANDBOX_EXTENSIONS_API, agentSandboxApi } from "./sandbox-api";
 import { warmPoolTemplate } from "./warm-pool-template";
@@ -239,7 +240,9 @@ class AgentWarmPoolManager {
           warmTiers: [],
           workspaceStorageSize: resolveRunWorkspaceStorageSize(tier, tiers),
           workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
-          nodeSelector: config.agentRuntime.nodeSelector,
+          nodeSelector: resolveAgentRuntimeNodeSelector({
+            privileged: runtime.privileged,
+          }),
           runtimeClassName: config.agentRuntime.runtimeClassName,
           imagePullSecrets: [],
           effectiveNetworkPolicy,

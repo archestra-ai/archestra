@@ -462,6 +462,134 @@ test("pools spares in the Agent Runtime namespace unless the Agent's Environment
   expect(pooledIn.sort()).toEqual(["agent-runtimes", "env-team"]);
 });
 
+test("pools privileged spares on the privileged node pool and the rest on the runtime pool", async () => {
+  const candidate = (id: string, privileged: boolean) => ({
+    id,
+    organizationId: "org",
+    environmentId: null,
+    runtime: {
+      image: "runtime:v1",
+      command: null,
+      inferenceProtocol: "anthropic" as const,
+      backend: "kubernetes" as const,
+      steerMode: "tmux_keys" as const,
+      privileged,
+      resources: null,
+      tier: "M" as const,
+      environment: null,
+      credentials: null,
+      ttlHours: null,
+      idleTimeoutMinutes: null,
+    },
+    namespace: null,
+    defaultNamespace: null,
+    agentPolicy: null,
+    environmentPolicy: null,
+    defaultPolicy: null,
+    agentRuntimeTiers: null,
+  });
+  vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
+  vi.spyOn(AgentModel, "listWarmPoolCandidates").mockResolvedValue([
+    candidate("unprivileged", false),
+    candidate("privileged", true),
+  ] as Awaited<ReturnType<typeof AgentModel.listWarmPoolCandidates>>);
+  vi.spyOn(EnvironmentModel, "listAll").mockResolvedValue([]);
+  vi.spyOn(OrganizationModel, "listDefaultEngineTargets").mockResolvedValue([
+    { id: "org", defaultEnvironmentNamespace: null },
+  ] as Awaited<ReturnType<typeof OrganizationModel.listDefaultEngineTargets>>);
+  const kubeConfig = new KubeConfig();
+  kubeConfig.loadFromOptions({
+    clusters: [{ name: "test", server: ORIGIN }],
+    users: [{ name: "test" }],
+    contexts: [{ name: "test", cluster: "test", user: "test" }],
+    currentContext: "test",
+  });
+  Object.assign(agentWarmPoolManager, {
+    clients: createK8sClients(kubeConfig, "test"),
+  });
+  const base = `${ORIGIN}/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/:namespace`;
+  const placements: Array<{
+    privileged: boolean;
+    nodeSelector: unknown;
+    tolerations: unknown;
+  }> = [];
+  server.use(
+    http.get(`${base}/sandboxtemplates`, () =>
+      HttpResponse.json({ items: [] }),
+    ),
+    http.delete(
+      `${ORIGIN}/apis/networking.k8s.io/v1/namespaces/:namespace/networkpolicies/:name`,
+      () => HttpResponse.json({ code: 404 }, { status: 404 }),
+    ),
+    http.get(`${base}/sandboxwarmpools`, () =>
+      HttpResponse.json({ items: [] }),
+    ),
+    http.get(`${base}/sandboxclaims`, () => HttpResponse.json({ items: [] })),
+    http.post(
+      `${ORIGIN}/apis/networking.k8s.io/v1/namespaces/:namespace/networkpolicies`,
+      async ({ request }) =>
+        HttpResponse.json(await request.json(), { status: 201 }),
+    ),
+    http.post(`${base}/sandboxtemplates`, async ({ request }) => {
+      const body = (await request.json()) as {
+        spec: {
+          podTemplate: {
+            spec: {
+              nodeSelector?: unknown;
+              tolerations?: unknown;
+              containers: Array<{ securityContext?: { privileged?: boolean } }>;
+            };
+          };
+        };
+      };
+      const pod = body.spec.podTemplate.spec;
+      placements.push({
+        privileged: pod.containers.some(
+          (container) => container.securityContext?.privileged,
+        ),
+        nodeSelector: pod.nodeSelector,
+        tolerations: pod.tolerations,
+      });
+      return HttpResponse.json(body, { status: 201 });
+    }),
+    http.post(`${base}/sandboxwarmpools`, async ({ request }) =>
+      HttpResponse.json(await request.json(), { status: 201 }),
+    ),
+  );
+  const previous = { ...config.agentRuntime };
+  config.agentRuntime.warmPoolSize = 1;
+  config.agentRuntime.warmPoolMaxPools = 2;
+  config.agentRuntime.allowPrivileged = true;
+  config.agentRuntime.namespace = "agent-runtimes";
+  config.agentRuntime.nodeSelector = { "archestra-agent-runtime": "true" };
+  config.agentRuntime.privilegedNodeSelector = {
+    "archestra-agent-runtime-privileged": "true",
+  };
+  try {
+    await agentWarmPoolManager.reconcile();
+  } finally {
+    config.agentRuntime.allowPrivileged = previous.allowPrivileged;
+    config.agentRuntime.namespace = previous.namespace;
+    config.agentRuntime.nodeSelector = previous.nodeSelector;
+    config.agentRuntime.privilegedNodeSelector =
+      previous.privilegedNodeSelector;
+  }
+  const toleration = (key: string) => [
+    { key, operator: "Equal", value: "true", effect: "NoSchedule" },
+  ];
+  expect(placements).toHaveLength(2);
+  expect(placements.find((p) => p.privileged)).toEqual({
+    privileged: true,
+    nodeSelector: { "archestra-agent-runtime-privileged": "true" },
+    tolerations: toleration("archestra-agent-runtime-privileged"),
+  });
+  expect(placements.find((p) => !p.privileged)).toEqual({
+    privileged: false,
+    nodeSelector: { "archestra-agent-runtime": "true" },
+    tolerations: toleration("archestra-agent-runtime"),
+  });
+});
+
 test("removes templates and the warm-workspace policy a moved pool left behind", async () => {
   const candidate = {
     id: "agent",

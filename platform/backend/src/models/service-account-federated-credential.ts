@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq, getTableColumns } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type {
   FederatedCredentialClaimConditions,
@@ -95,6 +95,40 @@ class ServiceAccountFederatedCredentialModel {
           eq(table.issuer, params.issuer),
         ),
       )
+      .orderBy(asc(table.createdAt));
+  }
+
+  /**
+   * Every account's credentials for one issuer, with their account. A bearer
+   * token names no account, so its issuer picks the candidates.
+   */
+  static async findForIssuerAcrossAccounts(issuer: string): Promise<
+    {
+      credential: SelectServiceAccountFederatedCredential;
+      account: {
+        id: string;
+        name: string;
+        organizationId: string;
+        disabled: boolean;
+      };
+    }[]
+  > {
+    return db
+      .select({
+        credential: getTableColumns(table),
+        account: {
+          id: schema.serviceAccountsTable.id,
+          name: schema.serviceAccountsTable.name,
+          organizationId: schema.serviceAccountsTable.organizationId,
+          disabled: schema.serviceAccountsTable.disabled,
+        },
+      })
+      .from(table)
+      .innerJoin(
+        schema.serviceAccountsTable,
+        eq(schema.serviceAccountsTable.id, table.serviceAccountId),
+      )
+      .where(eq(table.issuer, issuer))
       .orderBy(asc(table.createdAt));
   }
 

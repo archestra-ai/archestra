@@ -818,6 +818,14 @@ archestra:
       # permissions there.
       agentRuntimeNamespace: ""
 
+      # Namespace for the code sandbox's Dagger engines
+      # (ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE). Engines run privileged, so
+      # keeping them here lets the MCP namespaces enforce a stricter Pod
+      # Security level. When set, every engine runs here, whatever its
+      # Environment's namespace. Create this namespace before installing; the
+      # chart grants its platform ServiceAccount the same permissions there.
+      daggerRuntimeNamespace: ""
+
       # Kubernetes cluster DNS domain for internal service URL construction (streamable-http MCP servers)
       # If not set, defaults to cluster.local
       clusterDomain: ""

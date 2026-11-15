@@ -118,6 +118,7 @@ import {
   classifyAgentRuntimePodFailure,
   describeAgentRuntimePodFailure,
 } from "./pod-failure";
+import { agentRuntimeClassDetector } from "./runtime-class";
 import { agentSandboxApi } from "./sandbox-api";
 import {
   type AgentRuntimeStartupProgress,
@@ -178,6 +179,9 @@ class AgentRuntimeManager {
    */
   async launch(spec: AgentRunLaunchSpec): Promise<void> {
     await this.assertSandboxApiInstalled();
+    await agentRuntimeClassDetector.assertUsable({
+      privileged: spec.privileged,
+    });
     const clients = this.requireClients();
     const names = agentRuntimeNames(spec.frozenName);
     const { runtimeScope, ...runtimeSpec } = spec;

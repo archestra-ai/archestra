@@ -37,10 +37,6 @@ import config, {
   k8sMemoryQuantityToBytes,
   parseActiveChatRunPollIntervalMs,
   parseActiveUsersRefreshIntervalMs,
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  parseAgentRuntimeNamespace,
   parseAnthropicWifConfig,
   parseBodyLimit,
   parseChatMaxOutputTokens,
@@ -77,6 +73,10 @@ import config, {
   parseNonNegativeInt,
   parseOpenAppaConfig,
   parseOpenAppaPolicyCheckName,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  parseOptionalNamespace,
   parseOptionalPort,
   parseOtelCaptureContent,
   parseProcessType,
@@ -3099,24 +3099,59 @@ describe("parseMcpIdleHibernationSeconds", () => {
 });
 // SPDX-SnippetEnd
 
-describe("parseAgentRuntimeNamespace", () => {
+describe("parseOptionalNamespace", () => {
   test("takes a valid namespace name", () => {
-    expect(parseAgentRuntimeNamespace("agent-runtimes")).toBe("agent-runtimes");
-    expect(parseAgentRuntimeNamespace("  agent-runtimes  ")).toBe(
-      "agent-runtimes",
-    );
+    expect(
+      parseOptionalNamespace(
+        "agent-runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBe("agent-runtimes");
+    expect(
+      parseOptionalNamespace(
+        "  agent-runtimes  ",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBe("agent-runtimes");
   });
 
   test("unset or blank leaves runs in their fallback namespace", () => {
-    expect(parseAgentRuntimeNamespace(undefined)).toBeUndefined();
-    expect(parseAgentRuntimeNamespace("   ")).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        undefined,
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace("   ", "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE"),
+    ).toBeUndefined();
   });
 
   test("ignores a name Kubernetes would reject", () => {
-    expect(parseAgentRuntimeNamespace("Agent-Runtimes")).toBeUndefined();
-    expect(parseAgentRuntimeNamespace("agent_runtimes")).toBeUndefined();
-    expect(parseAgentRuntimeNamespace("-agent-runtimes")).toBeUndefined();
-    expect(parseAgentRuntimeNamespace("a".repeat(64))).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "Agent-Runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "agent_runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "-agent-runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "a".repeat(64),
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
   });
 });
 

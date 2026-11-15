@@ -101,7 +101,9 @@ import {
   UserTokenModel,
 } from "@/models";
 import { findAgentAccessContextById } from "@/models/agent-access-context";
-import ServiceAccountModel from "@/models/service-account";
+import ServiceAccountModel, {
+  type VerifiedServiceAccountToken,
+} from "@/models/service-account";
 import { metrics } from "@/observability";
 import {
   ATTR_MCP_IS_ERROR_RESULT,
@@ -141,6 +143,7 @@ import { describeToolsForCaller } from "@/services/mcp-install-tool-descriptions
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
+import { verifyServiceAccountBearer } from "@/services/workload-identity/federated-bearer";
 import { isPlatformSkillUri } from "@/skills/skill-uri";
 import {
   type AgentAccessContext,
@@ -2334,16 +2337,7 @@ async function authenticateUngated(
       return { result: null, reason: "invalid_token" };
     }
     if (resolvedToken.type === "serviceAccount") {
-      const result = await validateServiceAccountGatewayAccess({
-        profileId,
-        serviceAccountId: resolvedToken.serviceAccount.id,
-        organizationId: resolvedToken.serviceAccount.organizationId,
-        teamId: resolvedToken.serviceAccount.teamId,
-        tokenId: resolvedToken.token.id,
-      });
-      return result
-        ? { result, reason: null }
-        : { result: null, reason: "no_gateway_access" };
+      return authenticateServiceAccountToken({ profileId, ...resolvedToken });
     }
     const { userId } = resolvedToken.token;
     const member = lookups
@@ -2359,6 +2353,22 @@ async function authenticateUngated(
     return userTokenResult
       ? { result: userTokenResult, reason: null }
       : { result: null, reason: "no_gateway_access" };
+  }
+
+  // A workload's own OIDC token, trusted by a service account's federated
+  // credential (an Agent Substrate actor's JWT, for one).
+  if (isJwtShaped(tokenValue)) {
+    const federated = await verifyServiceAccountBearer({ token: tokenValue });
+    if (federated) {
+      const context = await getAgentAccessContext();
+      if (
+        !context ||
+        context.organizationId !== federated.serviceAccount.organizationId
+      ) {
+        return { result: null, reason: "invalid_token" };
+      }
+      return authenticateServiceAccountToken({ profileId, ...federated });
+    }
   }
 
   // Try OAuth token validation (for MCP clients like Open WebUI)
@@ -2665,6 +2675,21 @@ function buildTokenHashes(profileId: string, tokenValue: string): TokenHashes {
 
 function buildOAuthTokenHash(tokenValue: string): string {
   return createHash("sha256").update(tokenValue).digest("base64url");
+}
+
+async function authenticateServiceAccountToken(
+  params: { profileId: string } & VerifiedServiceAccountToken,
+): Promise<GatewayAuthOutcome> {
+  const result = await validateServiceAccountGatewayAccess({
+    profileId: params.profileId,
+    serviceAccountId: params.serviceAccount.id,
+    organizationId: params.serviceAccount.organizationId,
+    teamId: params.serviceAccount.teamId,
+    tokenId: params.token.id,
+  });
+  return result
+    ? { result, reason: null }
+    : { result: null, reason: "no_gateway_access" };
 }
 
 async function resolveArchestraToken(

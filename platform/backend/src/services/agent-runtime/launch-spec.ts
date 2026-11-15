@@ -21,6 +21,7 @@ import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { getBedrockRegion } from "@/clients/bedrock-credentials";
 import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import config from "@/config";
+import { resolveAgentRuntimeNodeSelector } from "@/k8s/agent-runtime/node-placement";
 import {
   AgentModel,
   AgentWorkspaceModel,
@@ -590,7 +591,9 @@ export async function buildAgentRunLaunchSpec(params: {
         tiers,
       ),
       workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
-      nodeSelector: config.agentRuntime.nodeSelector,
+      nodeSelector: resolveAgentRuntimeNodeSelector({
+        privileged: params.runtime.privileged,
+      }),
       runtimeClassName: config.agentRuntime.runtimeClassName,
       imagePullSecrets: params.imagePullSecrets ?? [],
       effectiveNetworkPolicy: params.effectiveNetworkPolicy,

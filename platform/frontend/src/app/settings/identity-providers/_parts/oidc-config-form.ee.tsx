@@ -594,7 +594,7 @@ function EnterpriseManagedCredentialsForm(props: {
 
   const content = (
     <>
-      <IdentityProviderSectionHeader title="Tool Authentication">
+      <IdentityProviderSectionHeader title="Token Exchange">
         Let MCP tools act as the signed-in user through{" "}
         <ExternalDocsLink
           href="https://modelcontextprotocol.io/extensions/auth/enterprise-managed-authorization"
@@ -819,6 +819,8 @@ function EnterpriseManagedCredentialsForm(props: {
           </FormItem>
         )}
       />
+
+      <Separator />
 
       {exchangeType === "entra_obo" ? (
         <EntraAgentIdFields form={form} isSecretStored={isSecretStored} />

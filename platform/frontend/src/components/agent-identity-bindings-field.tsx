@@ -1,12 +1,27 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
-import { type archestraApiTypes, DocsPage } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  isEntraHostname,
+  isOktaHostname,
+} from "@archestra/shared";
+import { Plus, X } from "lucide-react";
 import { useId } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { IdentityProviderIcon } from "@/components/identity-provider-icons";
+import { IdentityProviderSelectItem } from "@/components/identity-provider-select";
+import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
@@ -17,31 +32,38 @@ type IdentityProvider =
 export type AgentIdentityBindingDrafts = Record<string, string>;
 
 /**
- * The providers an agent can hold an identity at: those set up for agent
- * identities, and any it is still bound at so the binding can be cleared.
+ * The providers whose identity field the agent form shows: the agent's own
+ * identity provider when it is set up for agent identities, and every
+ * provider the agent holds or is adding an identity at.
  */
-export function agentIdentityProviders(params: {
+export function shownAgentIdentityProviders(params: {
   identityProviders: IdentityProvider[];
+  selectedIdentityProviderId: string | null | undefined;
   bindings: AgentIdentityBindingDrafts;
 }): IdentityProvider[] {
   return params.identityProviders.filter(
     (provider) =>
-      agentIdentityKind(provider) !== null ||
-      !!params.bindings[provider.id]?.trim(),
+      provider.id in params.bindings ||
+      (provider.id === params.selectedIdentityProviderId &&
+        agentIdentityKind(provider) !== null),
   );
 }
 
 /**
- * Binds an agent to its own identity at each identity provider set up for
- * agent identities. Changing one is an identity decision, so it takes
+ * Binds an agent to its own identity at identity providers set up for agent
+ * identities. Tools exchange at the agent's own identity provider unless their
+ * MCP server names another, so that provider's field comes first, and others
+ * are added on demand. Changing one is an identity decision, so it takes
  * `identityProvider:update`, the same as the backend's check.
  */
 export function AgentIdentityBindingsField({
   identityProviders,
+  selectedIdentityProviderId,
   value,
   onChange,
 }: {
   identityProviders: IdentityProvider[];
+  selectedIdentityProviderId: string | null | undefined;
   value: AgentIdentityBindingDrafts;
   onChange: (value: AgentIdentityBindingDrafts) => void;
 }) {
@@ -50,6 +72,17 @@ export function AgentIdentityBindingsField({
   const { data: canUpdateIdentityProviders } = useHasPermissions({
     identityProvider: ["update"],
   });
+  const shown = shownAgentIdentityProviders({
+    identityProviders,
+    selectedIdentityProviderId,
+    bindings: value,
+  });
+  const addable = identityProviders.filter(
+    (provider) =>
+      agentIdentityKind(provider) !== null &&
+      !shown.some((shownProvider) => shownProvider.id === provider.id),
+  );
+  const canEdit = !!canUpdateIdentityProviders;
 
   return (
     <div className="space-y-4">
@@ -57,7 +90,7 @@ export function AgentIdentityBindingsField({
         Tools that exchange the user&apos;s token then run as the user, through
         this agent. Downstream tokens name the agent, so the identity
         provider&apos;s consents, policies and logs apply to this agent alone.
-        Leave a field empty to use the shared client.
+        Leave it empty to use the shared client.
         {docsUrl && (
           <ExternalDocsLink
             href={docsUrl}
@@ -68,28 +101,78 @@ export function AgentIdentityBindingsField({
           </ExternalDocsLink>
         )}
       </FieldDescription>
-      {identityProviders.map((provider) => {
+      {shown.map((provider) => {
         const inputId = `${inputIdPrefix}-${provider.id}`;
-        const copy = FIELD_COPY[agentIdentityKind(provider) ?? "client"];
+        const copy = FIELD_COPY[agentIdentityKind(provider) ?? "actor"];
+        const removable = provider.id !== selectedIdentityProviderId;
         return (
           <div key={provider.id} className="space-y-2">
             <Label htmlFor={inputId}>
-              {provider.providerId}: {copy.label}
+              <span>{copy.label}</span>
+              <span className="inline-flex items-center gap-1 font-normal text-muted-foreground">
+                <IdentityProviderIcon
+                  providerId={provider.providerId}
+                  size={14}
+                  className="shrink-0"
+                />
+                {provider.providerId}
+              </span>
             </Label>
-            <Input
-              id={inputId}
-              value={value[provider.id] ?? ""}
-              onChange={(event) =>
-                onChange({ ...value, [provider.id]: event.target.value })
-              }
-              placeholder={copy.placeholder}
-              className="font-mono"
-              disabled={!canUpdateIdentityProviders}
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                id={inputId}
+                value={value[provider.id] ?? ""}
+                onChange={(event) =>
+                  onChange({ ...value, [provider.id]: event.target.value })
+                }
+                placeholder={copy.placeholder}
+                className="font-mono"
+                disabled={!canEdit}
+              />
+              {removable && canEdit && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Remove the identity at ${provider.providerId}`}
+                  onClick={() => {
+                    const { [provider.id]: _removed, ...rest } = value;
+                    onChange(rest);
+                  }}
+                >
+                  <X />
+                </Button>
+              )}
+            </div>
           </div>
         );
       })}
-      {!canUpdateIdentityProviders && (
+      {canEdit && addable.length > 0 && (
+        <Select
+          value=""
+          onValueChange={(identityProviderId) =>
+            onChange({ ...value, [identityProviderId]: "" })
+          }
+        >
+          <SelectTrigger size="sm" className="w-fit">
+            <Plus />
+            <SelectValue placeholder="Add an identity at another provider" />
+          </SelectTrigger>
+          <SelectContent
+            position="popper"
+            align="start"
+            className="w-[min(32rem,var(--radix-popper-available-width))]"
+          >
+            {addable.map((provider) => (
+              <IdentityProviderSelectItem
+                key={provider.id}
+                provider={provider}
+              />
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      {!canEdit && (
         <FieldDescription>
           Changing them requires permission to update identity providers.
         </FieldDescription>
@@ -111,9 +194,18 @@ export function agentIdentityBindingsToSave(
     .sort((a, b) => a.identityProviderId.localeCompare(b.identityProviderId));
 }
 
+/** Whether any identity provider is set up for agent identities. */
+export function hasAgentIdentityProviders(
+  identityProviders: IdentityProvider[],
+): boolean {
+  return identityProviders.some(
+    (provider) => agentIdentityKind(provider) !== null,
+  );
+}
+
 // === internal ===
 
-type AgentIdentityKind = "entra" | "client";
+type AgentIdentityKind = "entra" | "okta" | "actor";
 
 const FIELD_COPY: Record<
   AgentIdentityKind,
@@ -123,23 +215,53 @@ const FIELD_COPY: Record<
     label: "Entra agent identity app ID",
     placeholder: "00000000-0000-0000-0000-000000000000",
   },
-  client: {
-    label: "agent client ID (Okta AI agent or the agent's own client)",
+  okta: {
+    label: "Okta AI agent client ID",
     placeholder: "wlp8x5q7mvH86KvFJ0g7",
+  },
+  actor: {
+    label: "Agent client ID",
+    placeholder: "support-agent",
   },
 };
 
+/**
+ * How agents get their own identity at the provider, as the backend decides
+ * it: an Entra Agent ID blueprint for Entra On-Behalf-Of, else a stored agent
+ * key (redacted on read, so the provider lists it as stored).
+ */
 function agentIdentityKind(
   provider: IdentityProvider,
 ): AgentIdentityKind | null {
   const enterpriseConfig = provider.oidcConfig?.enterpriseManagedCredentials;
-  if (enterpriseConfig?.entraAgentId?.blueprintClientId?.trim()) {
-    return "entra";
+  if (!enterpriseConfig) return null;
+  const strategy =
+    enterpriseConfig.exchangeStrategy ?? inferExchangeStrategy(provider.issuer);
+  if (strategy === "entra_obo") {
+    return enterpriseConfig.entraAgentId?.blueprintClientId?.trim()
+      ? "entra"
+      : null;
   }
-  // The key is redacted on read; the provider lists it as stored instead.
-  return provider.configuredSecretPaths.includes(
-    "oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem",
-  )
-    ? "client"
-    : null;
+  if (
+    !provider.configuredSecretPaths.includes(
+      "oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem",
+    )
+  ) {
+    return null;
+  }
+  return strategy === "okta_managed" ? "okta" : "actor";
+}
+
+function inferExchangeStrategy(
+  issuer: string,
+): "entra_obo" | "okta_managed" | "rfc8693" {
+  let hostname = "";
+  try {
+    hostname = new URL(issuer).hostname;
+  } catch {
+    return "rfc8693";
+  }
+  if (isEntraHostname(hostname)) return "entra_obo";
+  if (isOktaHostname(hostname)) return "okta_managed";
+  return "rfc8693";
 }

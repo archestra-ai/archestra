@@ -97,7 +97,7 @@ export async function authenticateTokenRequest(params: {
 }
 
 /**
- * The identity provider's own exchange client, from its Tool Authentication
+ * The identity provider's own exchange client, from its Tool Access
  * settings, falling back to the sign-in client.
  */
 export function resolveIdentityProviderClient(params: {
@@ -195,7 +195,7 @@ export function resolveAgentClient(params: {
   if (!privateKeyPem) {
     throw new ApiError(
       400,
-      "This agent is bound to an identity at this identity provider, but the identity provider has no agent identity key. Add one under Tool Authentication → Agent Identities, or remove the agent's binding.",
+      "This agent is bound to an identity at this identity provider, but the identity provider has no agent identity key. Add one under Tool Access → Agent Identities, or remove the agent's binding.",
     );
   }
 

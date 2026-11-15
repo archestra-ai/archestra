@@ -42,7 +42,7 @@ Create one client per Archestra agent at your identity provider. Its client ID i
 
 ## Turn It On in Archestra
 
-1. Go to **Settings → Identity Providers**, click **Edit** on your provider, and open **Tool Authentication**.
+1. Go to **Settings → Identity Providers**, click **Edit** on your provider, and open **Tool Access**.
 2. Under **Agent Identities**, paste the private key into **Agent Private Key** and its key ID into **Key ID**.
 3. To ask for a scope in each agent's own token, set **Actor Token Scope**.
 4. Click **Update Provider**.
@@ -52,9 +52,9 @@ The stored key stays hidden. Leave it blank to keep it.
 ## Bind Agents and Gateways
 
 1. Open an agent's **Advanced** step, or a gateway's **Settings** tab.
-2. Under **Identity**, paste the agent's client ID into the provider's **agent client ID** field, and click **Save changes**.
+2. Under **Identity**, pick your provider under **Identity Provider**, paste the agent's client ID into **Agent client ID**, and click **Save changes**.
 
-To check it works, call a tool on an MCP server that uses IdP token exchange with this provider. Open the call in the [MCP Gateway logs](/docs/admin/logs): **Acting agent** shows the agent's client ID.
+To check it works, call a tool on an MCP server that uses IdP token exchange with this provider. Open the call in the [MCP Gateway logs](/docs/admin/logs): **Token issued to** shows the agent's client ID as the acting agent.
 
 ## Require an Agent Identity
 

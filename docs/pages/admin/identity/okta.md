@@ -73,7 +73,7 @@ To call downstream APIs as the calling user, configure Okta to accept signed tok
 
 ## Enable Token Exchange in Archestra
 
-1. In **Settings → Identity Providers**, click **Edit** on **Okta**, and open **Tool Authentication**.
+1. In **Settings → Identity Providers**, click **Edit** on **Okta**, and open **Tool Access**.
 2. Set **Exchange Token Endpoint** to `https://<org>.okta.com/oauth2/v1/token`.
 3. Set **Exchange Client Authentication** to **Private key JWT**.
 4. Enter your **Signing Key ID** and paste your **Private Key PEM**.

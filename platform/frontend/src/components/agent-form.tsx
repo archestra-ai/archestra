@@ -66,7 +66,7 @@ import {
   type AgentIdentityBindingDrafts,
   AgentIdentityBindingsField,
   agentIdentityBindingsToSave,
-  agentIdentityProviders,
+  hasAgentIdentityProviders,
 } from "@/components/agent-identity-bindings-field";
 import {
   type ProfileLabel,
@@ -1601,13 +1601,12 @@ export function AgentForm({
     isInternalAgent || agentType === "mcp_gateway";
   const supportsIdentityProvider =
     agentType === "mcp_gateway" || agentType === "agent";
-  const bindableIdentityProviders = supportsIdentityProvider
-    ? agentIdentityProviders({
-        identityProviders,
-        bindings: identityBindings,
-      })
-    : [];
-  const showAgentIdentities = bindableIdentityProviders.length > 0;
+  // Shown while any provider is set up for agent identities, or a binding
+  // remains to be cleared.
+  const showAgentIdentities =
+    supportsIdentityProvider &&
+    (hasAgentIdentityProviders(identityProviders) ||
+      Object.keys(identityBindings).length > 0);
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   // The agents page documents this setting for gateways too.
   // Auto pins the behaviour, so the row reports what will happen rather than
@@ -4490,7 +4489,7 @@ export function AgentForm({
                         </Label>
                         <FieldDescription>
                           {agentType === "agent"
-                            ? `Select the OIDC identity provider this agent should trust for direct JWKS JWT authentication over A2A (Webhook). Leave this unset to keep authenticating A2A requests with ${appName} platform tokens.`
+                            ? `Select the OIDC identity provider this agent should trust for direct JWKS JWT authentication over A2A (Webhook). Tools that exchange the user's token use it too, unless their MCP server names another. Leave this unset to keep authenticating A2A requests with ${appName} platform tokens.`
                             : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
                           {mcpAuthDocsUrl ? (
                             <>
@@ -4515,7 +4514,8 @@ export function AgentForm({
                     )}
                     {showAgentIdentities && (
                       <AgentIdentityBindingsField
-                        identityProviders={bindableIdentityProviders}
+                        identityProviders={identityProviders}
+                        selectedIdentityProviderId={identityProviderId}
                         value={identityBindings}
                         onChange={setIdentityBindingDrafts}
                       />

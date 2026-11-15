@@ -6,7 +6,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   AgentIdentityBindingsField,
   agentIdentityBindingsToSave,
-  agentIdentityProviders,
+  shownAgentIdentityProviders,
 } from "./agent-identity-bindings-field";
 
 vi.mock("@/lib/auth/auth.query");
@@ -15,31 +15,58 @@ vi.mock("@/lib/docs/docs", () => ({ getFrontendDocsUrl: () => null }));
 type IdentityProvider =
   archestraApiTypes.GetIdentityProvidersResponses["200"][number];
 
-const ENTRA = makeProvider("entra", {
-  entraAgentId: { blueprintClientId: "blueprint" },
+const AGENT_KEY_PATH =
+  "oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem";
+const ENTRA = makeProvider({
+  id: "entra",
+  issuer: "https://login.microsoftonline.com/tenant/v2.0",
+  enterpriseManagedCredentials: {
+    entraAgentId: { blueprintClientId: "blueprint" },
+  },
 });
-const OKTA = makeProvider("okta", { agentIdentity: {} }, [
-  "oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem",
-]);
-const OKTA_WITHOUT_KEY = makeProvider("okta-without-key", {
-  agentIdentity: { requireAgentIdentity: true },
+const OKTA = makeProvider({
+  id: "okta",
+  issuer: "https://example.okta.com",
+  enterpriseManagedCredentials: { agentIdentity: {} },
+  configuredSecretPaths: [AGENT_KEY_PATH],
 });
-const PLAIN = makeProvider("plain", {});
+const KEYCLOAK = makeProvider({
+  id: "keycloak",
+  issuer: "https://keycloak.example.com/realms/archestra",
+  enterpriseManagedCredentials: { agentIdentity: {} },
+  configuredSecretPaths: [AGENT_KEY_PATH],
+});
+const KEYCLOAK_WITHOUT_KEY = makeProvider({
+  id: "keycloak-without-key",
+  issuer: "https://keycloak.example.com/realms/other",
+  enterpriseManagedCredentials: {
+    agentIdentity: { requireAgentIdentity: true },
+  },
+});
 
-describe("agentIdentityProviders", () => {
-  test("offers providers with a blueprint or a stored agent key, and any still bound so it can be cleared", () => {
+describe("shownAgentIdentityProviders", () => {
+  test("shows the agent's own provider when it takes agent identities, and every provider the agent is bound at", () => {
+    const shown = (params: {
+      selectedIdentityProviderId: string | null;
+      bindings: Record<string, string>;
+    }) =>
+      shownAgentIdentityProviders({
+        identityProviders: [ENTRA, OKTA, KEYCLOAK, KEYCLOAK_WITHOUT_KEY],
+        ...params,
+      }).map((provider) => provider.id);
+
+    expect(shown({ selectedIdentityProviderId: "okta", bindings: {} })).toEqual(
+      ["okta"],
+    );
     expect(
-      agentIdentityProviders({
-        identityProviders: [ENTRA, OKTA, OKTA_WITHOUT_KEY, PLAIN],
+      shown({
+        selectedIdentityProviderId: "keycloak-without-key",
         bindings: {},
-      }).map((provider) => provider.id),
-    ).toEqual(["entra", "okta"]);
+      }),
+    ).toEqual([]);
     expect(
-      agentIdentityProviders({
-        identityProviders: [PLAIN],
-        bindings: { plain: "wlp-agent" },
-      }).map((provider) => provider.id),
-    ).toEqual(["plain"]);
+      shown({ selectedIdentityProviderId: null, bindings: { entra: "id" } }),
+    ).toEqual(["entra"]);
   });
 });
 
@@ -58,17 +85,33 @@ describe("AgentIdentityBindingsField", () => {
     } as ReturnType<typeof useHasPermissions>);
   });
 
-  test("edits the identity at one provider without touching the others", () => {
+  test("names each identity the way its provider does", () => {
+    render(
+      <AgentIdentityBindingsField
+        identityProviders={[ENTRA, OKTA, KEYCLOAK]}
+        selectedIdentityProviderId={null}
+        value={{ entra: "", okta: "", keycloak: "" }}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText(/Entra agent identity app ID/)).toBeVisible();
+    expect(screen.getByLabelText(/Okta AI agent client ID/)).toBeVisible();
+    expect(screen.getByLabelText(/^Agent client ID/)).toBeVisible();
+  });
+
+  test("edits one identity without touching the others", () => {
     const onChange = vi.fn();
     render(
       <AgentIdentityBindingsField
         identityProviders={[ENTRA, OKTA]}
+        selectedIdentityProviderId="okta"
         value={{ entra: "0f1e2d3c-4b5a-4968-8776-a5b4c3d2e1f0" }}
         onChange={onChange}
       />,
     );
 
-    fireEvent.change(screen.getByLabelText(/^okta:/), {
+    fireEvent.change(screen.getByLabelText(/Okta AI agent client ID/), {
       target: { value: "wlp-agent" },
     });
 
@@ -78,34 +121,63 @@ describe("AgentIdentityBindingsField", () => {
     });
   });
 
+  test("removes an identity at a provider other than the agent's own", () => {
+    const onChange = vi.fn();
+    render(
+      <AgentIdentityBindingsField
+        identityProviders={[ENTRA, OKTA]}
+        selectedIdentityProviderId="okta"
+        value={{ entra: "0f1e2d3c-4b5a-4968-8776-a5b4c3d2e1f0", okta: "x" }}
+        onChange={onChange}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove the identity at entra" }),
+    );
+
+    expect(onChange).toHaveBeenCalledWith({ okta: "x" });
+    expect(
+      screen.queryByRole("button", { name: "Remove the identity at okta" }),
+    ).toBeNull();
+  });
+
   test("is read-only without permission to update identity providers", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
     } as ReturnType<typeof useHasPermissions>);
     render(
       <AgentIdentityBindingsField
-        identityProviders={[OKTA]}
+        identityProviders={[OKTA, KEYCLOAK]}
+        selectedIdentityProviderId="okta"
         value={{}}
         onChange={vi.fn()}
       />,
     );
 
-    expect(screen.getByLabelText(/^okta:/)).toBeDisabled();
+    expect(screen.getByLabelText(/Okta AI agent client ID/)).toBeDisabled();
+    expect(
+      screen.queryByText("Add an identity at another provider"),
+    ).toBeNull();
     expect(
       screen.getByText(/requires permission to update identity providers/),
     ).toBeInTheDocument();
   });
 });
 
-function makeProvider(
-  id: string,
-  enterpriseManagedCredentials: Record<string, unknown>,
-  configuredSecretPaths: string[] = [],
-): IdentityProvider {
+function makeProvider(params: {
+  id: string;
+  issuer: string;
+  enterpriseManagedCredentials: Record<string, unknown>;
+  configuredSecretPaths?: string[];
+}): IdentityProvider {
   return {
-    id,
-    providerId: id,
-    oidcConfig: { enterpriseManagedCredentials },
-    configuredSecretPaths,
+    id: params.id,
+    providerId: params.id,
+    issuer: params.issuer,
+    oidcConfig: {
+      enterpriseManagedCredentials: params.enterpriseManagedCredentials,
+    },
+    configuredSecretPaths: params.configuredSecretPaths ?? [],
   } as unknown as IdentityProvider;
 }

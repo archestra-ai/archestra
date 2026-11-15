@@ -71,13 +71,9 @@ export function AgentIdentityFields(props: {
             <FormDescription>
               PKCS#8 PEM key {appName} signs each agent client&apos;s assertions
               with. Register its public key on every agent&apos;s client.
+              {privateKeyStored &&
+                " A key is already stored: leave blank to keep it, or enter a new key to replace it."}
             </FormDescription>
-            {privateKeyStored && (
-              <FormDescription>
-                A key is already stored. Leave blank to keep it, or enter a new
-                key to replace it.
-              </FormDescription>
-            )}
             <FormControl>
               <SecretTextarea
                 placeholder={

@@ -138,7 +138,7 @@ Create one agent identity per Archestra agent, and grant it only the APIs that a
 
 Point Archestra at the blueprint, so it can request a token for each agent identity.
 
-1. Go to **Settings → Identity Providers**, click **Edit** on **Microsoft Entra ID**, and open **Tool Authentication**.
+1. Go to **Settings → Identity Providers**, click **Edit** on **Microsoft Entra ID**, and open **Tool Access**.
 2. Under **Entra Agent ID**, paste `<blueprint-id>` into **Agent Identity Blueprint Client ID**.
 3. Paste the certificate's private key into **Certificate Private Key** and its thumbprint into **Certificate Thumbprint**. To test with a secret, use **Blueprint Client Secret** instead.
 4. Click **Update Provider**.
@@ -147,10 +147,10 @@ Stored secrets stay hidden. Leave a secret blank to keep it.
 
 ## Bind Agents and Gateways
 
-Once a blueprint is set, every agent and MCP Gateway shows an **Entra agent identity app ID** field for your Entra provider under **Identity**.
+Once a blueprint is set, an agent or MCP Gateway whose identity provider is your Entra provider shows **Entra agent identity app ID** under **Identity**.
 
 1. Open an agent's **Advanced** step, or a gateway's **Settings** tab.
-2. Under **Identity**, paste `<agent-identity-id>` into the provider's **Entra agent identity app ID**, and click **Save changes**.
+2. Under **Identity**, pick your Entra provider under **Identity Provider**, paste `<agent-identity-id>` into **Entra agent identity app ID**, and click **Save changes**.
 
 To check it works, call a tool on an MCP server that uses [IdP token exchange](/docs/mcp/authentication/idp-token-exchange). Open the call in the [MCP Gateway logs](/docs/admin/logs): **Token issued to** shows **Entra agent identity** and its ID.
 

@@ -262,7 +262,7 @@ function resolveBlueprintClient(params: {
   if (!agentIdConfig.clientSecret) {
     throw new ApiError(
       400,
-      "The identity provider's Entra agent identity blueprint has no client secret or certificate. Add one under Tool Authentication → Entra Agent ID.",
+      "The identity provider's Entra agent identity blueprint has no client secret or certificate. Add one under Tool Access → Entra Agent ID.",
     );
   }
 

@@ -39,7 +39,7 @@ Pick the guide for your identity provider:
 | Okta | An Okta AI agent, the client of each token | [Okta AI Agents](/docs/agents/identity/okta) |
 | Keycloak, PingOne, ZITADEL, Auth0, and other RFC 8693 providers | Its own client, named as the actor in each token | [Agent Actor Tokens](/docs/agents/identity/actor-tokens) |
 
-Each guide ends with binding: on the agent's **Advanced** step (or a gateway's **Settings** tab), under **Identity**, enter the agent's ID at each provider, and click **Save changes**.
+Each guide ends with binding: on the agent's **Advanced** step (or a gateway's **Settings** tab), under **Identity**, pick the provider under **Identity Provider** and enter the agent's ID there. Tools exchange at that provider unless their MCP server names another. For one that does, add the agent's identity there with **Add an identity at another provider**.
 
 What to know:
 
@@ -49,4 +49,4 @@ What to know:
 
 ## See Who Did What
 
-Every tool call records the person, the agent, and the account it used. Open a call in the [MCP Gateway logs](/docs/admin/logs): **Identity** shows the account, **Token issued to** shows the app a company-identity token was issued to, and **Acting agent** shows the agent's client when the token names it as the actor.
+Every tool call records the person, the agent, and the account it used. Open a call in the [MCP Gateway logs](/docs/admin/logs): **Identity** shows the account, **Token issued to** shows the app a company-identity token was issued to, along with the acting agent when the token names one.

@@ -44,7 +44,7 @@ Register one AI agent per Archestra agent. Its client ID, which starts with `wlp
 
 ## Turn It On in Archestra
 
-1. Go to **Settings → Identity Providers**, click **Edit** on **Okta**, and open **Tool Authentication**.
+1. Go to **Settings → Identity Providers**, click **Edit** on **Okta**, and open **Tool Access**.
 2. Under **Agent Identities**, paste the private key into **Agent Private Key** and its key ID into **Key ID**.
 3. Click **Update Provider**.
 
@@ -53,7 +53,7 @@ The stored key stays hidden. Leave it blank to keep it.
 ## Bind Agents and Gateways
 
 1. Open an agent's **Advanced** step, or a gateway's **Settings** tab.
-2. Under **Identity**, paste the AI agent's client ID into the Okta provider's **agent client ID** field, and click **Save changes**.
+2. Under **Identity**, pick Okta under **Identity Provider**, paste the AI agent's client ID into **Okta AI agent client ID**, and click **Save changes**.
 
 To check it works, call a tool on an MCP server that uses [IdP token exchange](/docs/mcp/authentication/idp-token-exchange) with Okta. Open the call in the [MCP Gateway logs](/docs/admin/logs): **Token issued to** shows **Okta AI agent** and its client ID.
 

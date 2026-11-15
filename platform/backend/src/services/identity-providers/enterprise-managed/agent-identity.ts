@@ -124,7 +124,7 @@ async function assertBindable(params: {
   if (!kind) {
     throw new ApiError(
       400,
-      "This identity provider is not set up for agent identities. Configure an Entra Agent ID blueprint, or an agent private key under Agent Identities, in its Tool Authentication settings first.",
+      "This identity provider is not set up for agent identities. Configure an Entra Agent ID blueprint, or an agent private key under Agent Identities, in its Tool Access settings first.",
     );
   }
 }

@@ -68,7 +68,7 @@ Tell Archestra where to run the exchange, and ask for the app's own scope at sig
 
 1. In **Settings → Identity Providers**, click **Edit** on **Microsoft Entra ID**.
 2. Under **OIDC Settings**, add `api://<client-id>/access_as_user` to **Scopes**.
-3. Open **Tool Authentication** and set:
+3. Open **Tool Access** and set:
    - **Exchange Token Endpoint:** `https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token`
    - **Exchange Client Authentication:** **Client secret POST**
    - **User's Token to Exchange:** **Access token**

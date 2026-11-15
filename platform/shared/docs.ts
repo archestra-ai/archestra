@@ -77,6 +77,7 @@ export const DocsPage = {
   PlatformAgentIdentity: "agents/identity",
   PlatformAgentIdentityActorTokens: "agents/identity/actor-tokens",
   PlatformAgentIdentityOkta: "agents/identity/okta",
+  PlatformAgentIdentitySpiffe: "agents/identity/spiffe",
   PlatformEntraAgentId: "agents/identity/entra",
   PlatformEnvironments: "admin/environments",
   PlatformFoundry: "integrations/ai-clients/foundry",

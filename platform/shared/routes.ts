@@ -627,6 +627,9 @@ export const RouteId = {
   DeleteServiceAccountFederatedCredential:
     "deleteServiceAccountFederatedCredential",
   ExchangeWorkloadIdentityToken: "exchangeWorkloadIdentityToken",
+  GetSpiffeDiscoveryDocument: "getSpiffeDiscoveryDocument",
+  GetSpiffeJwks: "getSpiffeJwks",
+  GetSpiffeTrustBundle: "getSpiffeTrustBundle",
 
   // Agent Runtime
   GetAgentRuntimePreflight: "getAgentRuntimePreflight",

@@ -4,9 +4,10 @@ import {
   OAUTH_CLIENT_ASSERTION_TYPE,
   OAUTH_TOKEN_TYPE,
 } from "@archestra/shared";
-import { jwtVerify } from "jose";
-import { describe, expect, test, vi } from "vitest";
+import { createLocalJWKSet, decodeJwt, jwtVerify } from "jose";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { ExternalIdentityProviderConfig } from "@/services/identity-providers/oidc";
+import { spiffeIdForAgent, spiffeIssuer } from "../spiffe-issuer";
 import { rfc8693TokenExchangeStrategy } from "./rfc8693-token-exchange";
 
 describe("rfc8693TokenExchangeStrategy", () => {
@@ -310,6 +311,67 @@ describe("rfc8693TokenExchangeStrategy with the agent as actor", () => {
       }),
     ).rejects.toMatchObject({ statusCode: 403 });
     expect(fetchMock).not.toHaveBeenCalled();
+    fetchMock.mockRestore();
+  });
+});
+
+describe("rfc8693TokenExchangeStrategy with SPIFFE agent identities", () => {
+  beforeEach(() => {
+    // Each test starts on an empty database, so no key the issuer cached.
+    spiffeIssuer.clearCache();
+  });
+
+  test("sends the agent's JWT-SVID as the actor token, with no request of its own", async () => {
+    const fetchMock = mockKeycloak();
+    const spiffeId = spiffeIdForAgent("agent-spiffe");
+
+    const result = await rfc8693TokenExchangeStrategy.exchangeCredential({
+      identityProvider: makeActorIdentityProvider({ source: "spiffe" }),
+      assertion: "user-access-token",
+      enterpriseManagedConfig: ACTOR_DOWNSTREAM_CONFIG,
+      agentIdentity: { identityProviderId: "idp-1", externalId: spiffeId },
+    });
+
+    expect(result).toMatchObject({ actor: { clientId: spiffeId } });
+    const [exchange, ...others] = requestBodies(fetchMock);
+    expect(others).toEqual([]);
+    expect(exchange).toMatchObject({
+      client_id: "archestra-oidc",
+      subject_token: "user-access-token",
+      actor_token_type: OAUTH_TOKEN_TYPE.Jwt,
+    });
+    const { payload } = await jwtVerify(
+      String(exchange?.actor_token),
+      createLocalJWKSet(await spiffeIssuer.jwks()),
+      {
+        issuer: spiffeIssuer.issuer,
+        audience: "http://localhost:30081/realms/archestra",
+      },
+    );
+    expect(payload.sub).toBe(spiffeId);
+    fetchMock.mockRestore();
+  });
+
+  test("addresses the JWT-SVID to the configured audience", async () => {
+    const fetchMock = mockKeycloak();
+
+    await rfc8693TokenExchangeStrategy.exchangeCredential({
+      identityProvider: makeActorIdentityProvider({
+        source: "spiffe",
+        spiffeAudience: "keycloak-spiffe",
+      }),
+      assertion: "user-access-token",
+      enterpriseManagedConfig: ACTOR_DOWNSTREAM_CONFIG,
+      agentIdentity: {
+        identityProviderId: "idp-1",
+        externalId: spiffeIdForAgent("agent-spiffe"),
+      },
+    });
+
+    const [exchange] = requestBodies(fetchMock);
+    expect(decodeJwt(String(exchange?.actor_token)).aud).toBe(
+      "keycloak-spiffe",
+    );
     fetchMock.mockRestore();
   });
 });

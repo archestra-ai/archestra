@@ -38,6 +38,7 @@ Pick the guide for your identity provider:
 | Microsoft Entra ID | An Entra agent identity, the client of each token | [Microsoft Entra Agent ID](/docs/agents/identity/entra) |
 | Okta | An Okta AI agent, the client of each token | [Okta AI Agents](/docs/agents/identity/okta) |
 | Keycloak, PingOne, ZITADEL, Auth0, and other RFC 8693 providers | Its own client, named as the actor in each token | [Agent Actor Tokens](/docs/agents/identity/actor-tokens) |
+| RFC 8693 providers that trust another issuer's JWTs | A SPIFFE ID Archestra issues, named as the actor; nothing to register per agent | [SPIFFE Agent Identities](/docs/agents/identity/spiffe) |
 
 Each guide ends with binding: on the agent's **Advanced** step (or a gateway's **Settings** tab), under **Identity**, pick the provider under **Identity Provider** and enter the agent's ID there. Tools exchange at that provider unless their MCP server names another. For one that does, add the agent's identity there with **Add an identity at another provider**.
 

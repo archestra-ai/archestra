@@ -34,6 +34,12 @@ export function makeConfig(
     features: {
       betaEnabled: false,
       orchestratorK8sRuntime: false,
+      agentIdentitySpiffe: {
+        trustDomain: "localhost",
+        issuer: "http://localhost:3000/api/agent-identity/spiffe",
+        jwksUri: "http://localhost:3000/api/agent-identity/spiffe/keys",
+        bundleUri: "http://localhost:3000/api/agent-identity/spiffe/bundle",
+      },
       mcpIdleHibernationBetaEnabled: false,
       sandbox: false,
       agentRuntime: false,

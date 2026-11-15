@@ -20,6 +20,7 @@ import {
 } from "@archestra/shared";
 import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { eq } from "drizzle-orm";
+import { decodeJwt } from "jose";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -46,6 +47,7 @@ import { secretManager } from "@/secrets-manager";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { spiffeIdForAgent } from "@/services/identity-providers/enterprise-managed/spiffe-issuer";
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
 import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
@@ -5490,6 +5492,98 @@ describe("McpClient", () => {
             new URLSearchParams(String(init?.body)).get("client_id"),
           ),
         ).toEqual(["wlp-agent-before", "wlp-agent-after"]);
+        fetchMock.mockRestore();
+      });
+
+      test("acts as the agent's SPIFFE ID at a provider that takes JWT-SVIDs, with no binding", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({ email: "spiffe-agent@example.com" });
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "keycloak-spiffe",
+          issuer: "https://keycloak.example.com/realms/acme",
+          oidcConfig: {
+            clientId: "web-client-id",
+            tokenEndpoint:
+              "https://keycloak.example.com/realms/acme/protocol/openid-connect/token",
+            enterpriseManagedCredentials: {
+              exchangeStrategy: "rfc8693",
+              tokenEndpoint:
+                "https://keycloak.example.com/realms/acme/protocol/openid-connect/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              clientSecret: "web-client-secret",
+              subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+              agentIdentity: { source: "spiffe", requireAgentIdentity: true },
+            },
+          },
+        });
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: {
+            requestedCredentialType: "bearer_token",
+            resourceIdentifier: "api://internal-service",
+            tokenInjectionMode: "authorization_bearer",
+          },
+        });
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__spiffe_agent_tool",
+          description: "SPIFFE agent tool",
+          parameters: {},
+          catalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+          async () =>
+            new Response(
+              JSON.stringify({ access_token: "agent-token", expires_in: 300 }),
+              {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              },
+            ),
+        );
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Agent result" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_spiffe_agent",
+            name: "github-mcp-server__spiffe_agent_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "external-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+            isExternalIdp: true,
+            rawToken: "external-idp-jwt",
+          },
+          { conversationId: "spiffe-agent-conv" },
+        );
+
+        expect(result.isError).toBe(false);
+        const [exchange] = fetchMock.mock.calls.map(
+          ([, init]) => new URLSearchParams(String(init?.body)),
+        );
+        expect(exchange?.get("actor_token_type")).toBe(
+          "urn:ietf:params:oauth:token-type:jwt",
+        );
+        expect(decodeJwt(String(exchange?.get("actor_token"))).sub).toBe(
+          spiffeIdForAgent(agentId),
+        );
         fetchMock.mockRestore();
       });
 

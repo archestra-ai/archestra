@@ -5,11 +5,13 @@ import {
   isImplicitOpenAppaReadToolShortName,
   isRequiredOpenAppaToolShortName,
   isRunControlArchestraToolShortName,
+  isSkillTool,
   isYellToolShortName,
   type ModelSelection,
   parseFullToolName,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_FILE_SHORT_NAME,
   TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
@@ -18,6 +20,7 @@ import {
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_START_AGENT_RUN_SHORT_NAME,
   TOOL_STEER_AGENT_RUN_SHORT_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import safeRegex from "safe-regex2";
@@ -580,7 +583,9 @@ async function getSearchableTools(params: {
   ): boolean =>
     shortName === TOOL_START_AGENT_RUN_SHORT_NAME ||
     shortName === TOOL_STEER_AGENT_RUN_SHORT_NAME ||
-    shortName === TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME;
+    shortName === TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME ||
+    shortName === TOOL_POST_AGENT_RUN_FILE_SHORT_NAME ||
+    shortName === TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME;
   // Match tools/list's implicit run-handle controls, including gateways with
   // no assigned tools. They are assignment-exempt at dispatch, but still pass
   // RBAC here and actor/proof checks in their handlers. Internal chat already
@@ -632,9 +637,10 @@ async function getSearchableTools(params: {
       permittedNames.has(tool.name) &&
       !(
         suppressContentLogging &&
-        isEncryptedBlockedRuntimeToolShortName(
+        (isEncryptedBlockedRuntimeToolShortName(
           archestraMcpBranding.getToolShortName(tool.name),
-        )
+        ) ||
+          isSkillTool(tool.name))
       ) &&
       !isExcludedFromSearchResults({
         toolName: tool.name,
@@ -646,6 +652,8 @@ async function getSearchableTools(params: {
 
   // Agent-designated skills are searchable through their skill__<slug>
   // delegation tools, resolved per calling user like agent delegations.
+  // Encrypted chats omit them: a child run would log content outside the
+  // parent's suppression scope.
   const skillDelegationTools =
     organizationId != null && !suppressContentLogging
       ? await getSkillDelegationTools({ agentId, organizationId, userId })

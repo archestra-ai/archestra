@@ -2,14 +2,17 @@ import {
   ApiError,
   isAgentTool,
   isBrowserMcpTool,
+  isSkillTool,
   LOOPBACK_HOST,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   type ModelSelection,
   SOURCE_HEADER,
   TimeInMs,
+  TOOL_POST_AGENT_RUN_FILE_SHORT_NAME,
   TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
   TOOL_START_AGENT_RUN_SHORT_NAME,
   TOOL_STEER_AGENT_RUN_SHORT_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import type {
   McpUiResourceCsp,
@@ -1095,13 +1098,15 @@ export async function getChatMcpTools({
     const delegatedRun =
       !appaSubagent && isAppaDelegatedRun(agentId, delegationChain);
     const filteredMcpTools = mcpTools.filter((tool) => {
-      if (isAgentTool(tool.name)) return false;
+      if (isAgentTool(tool.name) || isSkillTool(tool.name)) return false;
       const shortName = archestraMcpBranding.getToolShortName(tool.name);
       if (
         suppressContentLogging &&
         (shortName === TOOL_START_AGENT_RUN_SHORT_NAME ||
           shortName === TOOL_STEER_AGENT_RUN_SHORT_NAME ||
-          shortName === TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME)
+          shortName === TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME ||
+          shortName === TOOL_POST_AGENT_RUN_FILE_SHORT_NAME ||
+          shortName === TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME)
       ) {
         return false;
       }

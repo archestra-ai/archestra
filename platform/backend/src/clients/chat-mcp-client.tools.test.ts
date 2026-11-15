@@ -9,17 +9,24 @@
 import {
   getArchestraToolFullName,
   MCP_EXECUTED_AS_META_KEY,
+  SKILL_TOOL_PREFIX,
+  TOOL_GET_AGENT_RUN_FULL_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
+  TOOL_START_AGENT_RUN_FULL_NAME,
+  TOOL_STEER_AGENT_RUN_FULL_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Tool } from "ai";
 import { afterEach, vi } from "vitest";
 import { getArchestraToolInputSchema } from "@/archestra-mcp-server";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
-import { ToolModel } from "@/models";
+import { AgentModel, SkillModel, ToolModel } from "@/models";
 import { metrics } from "@/observability";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
-import { beforeEach, describe, expect, test } from "@/test";
+import { accessGrants, beforeEach, describe, expect, test } from "@/test";
 import {
   MAX_TOOL_RESULT_CONTEXT_BYTES,
   readCappedToolResult,
@@ -1472,5 +1479,100 @@ describe("getChatMcpTools OpenAPPA delegated runs", () => {
     });
     expect(Object.keys(delegated)).toContain("extsrv__fetch_data");
     expect(Object.keys(delegated)).not.toContain(policyTool);
+  });
+
+  test("encrypted chats omit start_agent_run, steer_agent_run, post_agent_run_message, post_agent_run_file, write_workspace_file, and agent/skill delegation tools and isolate tool cache entries", async () => {
+    const writeWorkspaceFileTool = getArchestraToolFullName(
+      TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
+    );
+    const skillToolName = `${SKILL_TOOL_PREFIX}designated_helper`;
+    const { org, agent, conversation, baseParams } = await setupChatToolEnv({
+      gatewayTools: [
+        externalTool(TOOL_START_AGENT_RUN_FULL_NAME),
+        externalTool(TOOL_STEER_AGENT_RUN_FULL_NAME),
+        externalTool(TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME),
+        externalTool(TOOL_POST_AGENT_RUN_FILE_FULL_NAME),
+        externalTool(writeWorkspaceFileTool),
+        externalTool(TOOL_GET_AGENT_RUN_FULL_NAME),
+        externalTool(skillToolName),
+        externalTool("extsrv__fetch_data"),
+      ],
+    });
+    const { targetAgent, delegationTool } = await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Helper Subagent",
+    });
+    await AgentModel.update(targetAgent.id, { agentType: "agent" });
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        name: "designated-helper",
+        description: "Delegates to Helper Subagent.",
+        content: "Run designated helper work.",
+        agentName: targetAgent.name,
+        metadata: {},
+        sourceType: "manual",
+      },
+      files: [],
+      ...accessGrants("org"),
+    });
+
+    const standardTools = await chatClient.getChatMcpTools(baseParams);
+    expect(Object.keys(standardTools)).toEqual(
+      expect.arrayContaining([
+        TOOL_START_AGENT_RUN_FULL_NAME,
+        TOOL_STEER_AGENT_RUN_FULL_NAME,
+        TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
+        TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
+        writeWorkspaceFileTool,
+        TOOL_GET_AGENT_RUN_FULL_NAME,
+        "extsrv__fetch_data",
+        delegationTool.name,
+        skillToolName,
+      ]),
+    );
+    expect(standardTools[skillToolName]?.toModelOutput).toBeUndefined();
+
+    const encryptedTools = await chatClient.getChatMcpTools({
+      ...baseParams,
+      suppressContentLogging: true,
+    });
+    expect(Object.keys(encryptedTools)).toEqual(
+      expect.arrayContaining([
+        TOOL_GET_AGENT_RUN_FULL_NAME,
+        "extsrv__fetch_data",
+      ]),
+    );
+    expect(Object.keys(encryptedTools)).not.toContain(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+    );
+    expect(Object.keys(encryptedTools)).not.toContain(
+      TOOL_STEER_AGENT_RUN_FULL_NAME,
+    );
+    expect(Object.keys(encryptedTools)).not.toContain(
+      TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
+    );
+    expect(Object.keys(encryptedTools)).not.toContain(
+      TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
+    );
+    expect(Object.keys(encryptedTools)).not.toContain(writeWorkspaceFileTool);
+    expect(Object.keys(encryptedTools)).not.toContain(delegationTool.name);
+    expect(Object.keys(encryptedTools)).not.toContain(skillToolName);
+
+    const unencryptedCacheKey = chatClient.__test.getToolCacheKey({
+      agentId: baseParams.agentId,
+      userId: baseParams.userId,
+      isolationKey: conversation?.id,
+      suppressContentLogging: false,
+    });
+    const encryptedCacheKey = chatClient.__test.getToolCacheKey({
+      agentId: baseParams.agentId,
+      userId: baseParams.userId,
+      isolationKey: conversation?.id,
+      suppressContentLogging: true,
+    });
+    expect(encryptedCacheKey).not.toBe(unencryptedCacheKey);
+    expect(encryptedCacheKey).toContain(":encrypted");
   });
 });

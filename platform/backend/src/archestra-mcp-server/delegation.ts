@@ -151,6 +151,11 @@ export async function getAgentTools(context: {
   // per-environment network-policy runtime. Fail closed for environment-bound
   // agents until connections can be bound to and dialed through that runtime.
   const realUserId = userId && userId !== "system" ? userId : undefined;
+  const runtimeCapableActor = hasRuntimeCapableDelegationActor({
+    realUserId,
+    oauthExecution: context.oauthExecution,
+    disallowOAuthApp: context.disallowOAuthApp,
+  });
   // Hide individual `agent__<runtime_worker>` schemas only when the canonical
   // `start_agent_run` pooled starter is actually exposed and RBAC-permitted for
   // this caller (load balancing enabled, acting user has `agent:read`,
@@ -160,8 +165,7 @@ export async function getAgentTools(context: {
   // launch runtime work.
   const hideRuntimeWorkerTools =
     callerGatewayAgent != null &&
-    !context.oauthExecution &&
-    !context.disallowOAuthApp &&
+    runtimeCapableActor &&
     (await callerUsesImplicitLoadBalancedRunStarter({
       agent: callerGatewayAgent,
       actorUserId: realUserId,
@@ -203,6 +207,7 @@ export async function getAgentTools(context: {
       environmentId,
       attestable,
       hideRuntimeWorkerTools,
+      runtimeCapableActor,
     });
     return finishDelegationTools(
       context,
@@ -261,21 +266,24 @@ export async function getAgentTools(context: {
   const visibleTools = hideRuntimeWorkerTools
     ? accessibleTools.filter((t) => !t.targetAgent.hasRuntime)
     : accessibleTools;
-  const routerMetadata = await resolveLoadBalancedRouterPools({
-    callerAgentId: agentId,
-    organizationId,
-    actorUserId: realUserId,
-    actorIsAgentAdmin:
-      realUserId && realUserId === userId ? resolvedIsAgentAdmin : undefined,
-    skipAccessCheck,
-    targets: visibleTools.map((t) => ({
-      id: t.targetAgent.id,
-      name: t.targetAgent.name,
-      toolName: t.tool.name,
-      hasRuntime: t.targetAgent.hasRuntime,
-      hasSubagentLoadBalancing: t.targetAgent.hasSubagentLoadBalancing,
-    })),
-  });
+  const routerMetadata =
+    runtimeCapableActor && realUserId
+      ? await resolveLoadBalancedRouterPools({
+          callerAgentId: agentId,
+          organizationId,
+          actorUserId: realUserId,
+          actorIsAgentAdmin:
+            realUserId === userId ? resolvedIsAgentAdmin : undefined,
+          skipAccessCheck,
+          targets: visibleTools.map((t) => ({
+            id: t.targetAgent.id,
+            name: t.targetAgent.name,
+            toolName: t.tool.name,
+            hasRuntime: t.targetAgent.hasRuntime,
+            hasSubagentLoadBalancing: t.targetAgent.hasSubagentLoadBalancing,
+          })),
+        })
+      : EMPTY_ROUTER_POOL_METADATA;
 
   // Convert DB tools to MCP Tool format
   const localTools = visibleTools.map((t) =>
@@ -418,12 +426,21 @@ export async function handleDelegation(
   // conversation with the same Agent never enters this path and stays in the
   // foreground loop.
   // A fork is a copy of the running caller, so it always runs in this process.
+  const disallowOAuthApp = Boolean(
+    tokenAuth?.oauthClientId && !tokenAuth.isUserToken,
+  );
+  const runtimeCapableActor = hasRuntimeCapableDelegationActor({
+    realUserId,
+    oauthExecution: tokenAuth?.oauthExecution,
+    disallowOAuthApp,
+  });
   const targetAgent = await AgentModel.findById(target.id);
   const targetHasRuntime = Boolean(
     targetAgent && resolveAgentRuntime(targetAgent),
   );
   const targetRouterCandidateIds =
     !selfFork &&
+    runtimeCapableActor &&
     targetAgent &&
     !targetHasRuntime &&
     normalizeSubagentLoadBalancingConfig(targetAgent.subagentLoadBalancing)
@@ -696,6 +713,7 @@ async function buildAutoDelegationTools(params: {
   environmentId: string | null;
   attestable: boolean;
   hideRuntimeWorkerTools: boolean;
+  runtimeCapableActor: boolean;
 }): Promise<Tool[]> {
   const {
     agentId,
@@ -704,6 +722,7 @@ async function buildAutoDelegationTools(params: {
     environmentId,
     attestable,
     hideRuntimeWorkerTools,
+    runtimeCapableActor,
   } = params;
 
   const isAgentAdmin = await ResourcePermissions.allows({
@@ -750,20 +769,22 @@ async function buildAutoDelegationTools(params: {
     dedupedTargets.push({ name, targetAgent });
   }
 
-  const routerMetadata = await resolveLoadBalancedRouterPools({
-    callerAgentId: agentId,
-    organizationId,
-    actorUserId: userId,
-    actorIsAgentAdmin: isAgentAdmin,
-    callerExcludedIds: excluded,
-    targets: dedupedTargets.map(({ name, targetAgent }) => ({
-      id: targetAgent.id,
-      name: targetAgent.name,
-      toolName: name,
-      hasRuntime: targetAgent.hasRuntime,
-      hasSubagentLoadBalancing: targetAgent.hasSubagentLoadBalancing,
-    })),
-  });
+  const routerMetadata = runtimeCapableActor
+    ? await resolveLoadBalancedRouterPools({
+        callerAgentId: agentId,
+        organizationId,
+        actorUserId: userId,
+        actorIsAgentAdmin: isAgentAdmin,
+        callerExcludedIds: excluded,
+        targets: dedupedTargets.map(({ name, targetAgent }) => ({
+          id: targetAgent.id,
+          name: targetAgent.name,
+          toolName: name,
+          hasRuntime: targetAgent.hasRuntime,
+          hasSubagentLoadBalancing: targetAgent.hasSubagentLoadBalancing,
+        })),
+      })
+    : EMPTY_ROUTER_POOL_METADATA;
 
   const tools = dedupedTargets.map(({ name, targetAgent }) =>
     buildDelegationToolDescriptor({
@@ -932,10 +953,31 @@ const EMPTY_ROUTER_POOL_METADATA: RouterPoolMetadata = {
   managingRoutersByWorkerId: new Map(),
 };
 
+/**
+ * Agent Runtime launches require a real user or service-account actor and are
+ * disallowed for OAuth applications. Callers without a runtime-capable actor
+ * (`"system"` sentinel turns, org/team gateway tokens without `userId`, and
+ * OAuth application tokens) cannot launch runtime pools via `startDelegatedTask`,
+ * so load-balanced router targets (`hasRuntime === false`) must stay on
+ * synchronous in-process delegation (`executeA2AMessage`) and must not be
+ * advertised as background runtime routers.
+ */
+function hasRuntimeCapableDelegationActor(params: {
+  realUserId?: string;
+  oauthExecution?: A2AOAuthExecution;
+  disallowOAuthApp?: boolean;
+}): boolean {
+  return (
+    Boolean(params.realUserId) &&
+    !params.oauthExecution &&
+    !params.disallowOAuthApp
+  );
+}
+
 async function resolveLoadBalancedRouterPools(params: {
   callerAgentId: string;
   organizationId: string;
-  actorUserId?: string;
+  actorUserId: string;
   actorIsAgentAdmin?: boolean;
   skipAccessCheck?: boolean;
   callerExcludedIds?: ReadonlySet<string>;
@@ -983,10 +1025,6 @@ async function resolveLoadBalancedRouterPools(params: {
   const nameByAgentId = new Map(
     params.targets.map((target) => [target.id, target.name] as const),
   );
-  const realActorUserId =
-    params.actorUserId && params.actorUserId !== "system"
-      ? params.actorUserId
-      : undefined;
   const autoRouterIds: string[] = [];
   const manualRouterIds: string[] = [];
 
@@ -1001,37 +1039,28 @@ async function resolveLoadBalancedRouterPools(params: {
   }
 
   const needsActorAccessLookup =
-    realActorUserId !== undefined &&
-    (autoRouterIds.length > 0 ||
-      (!params.skipAccessCheck && manualRouterIds.length > 0));
+    autoRouterIds.length > 0 ||
+    (!params.skipAccessCheck && manualRouterIds.length > 0);
   const isAgentAdmin = needsActorAccessLookup
     ? (params.actorIsAgentAdmin ??
       (await ResourcePermissions.allows({
-        userId: realActorUserId,
+        userId: params.actorUserId,
         organizationId: params.organizationId,
         resource: "agent",
         scope: "*",
         action: "update",
       })))
     : false;
-  const filterManualByActorAccess =
-    realActorUserId !== undefined && !params.skipAccessCheck && !isAgentAdmin;
+  const filterManualByActorAccess = !params.skipAccessCheck && !isAgentAdmin;
 
   const accessibleEnvironmentKeys = new Map<string, string | null>();
-  const structuralAutoEnvironmentKeys = new Map<string, string | null>();
   for (const router of routerTargets) {
     const cfg = routerConfigById.get(router.id);
     if (!cfg) continue;
-    const envKey = cfg.environmentId ?? "__default__";
-    if (realActorUserId !== undefined) {
-      if (cfg.accessAllSubagents || filterManualByActorAccess) {
-        if (!accessibleEnvironmentKeys.has(envKey)) {
-          accessibleEnvironmentKeys.set(envKey, cfg.environmentId);
-        }
-      }
-    } else if (cfg.accessAllSubagents) {
-      if (!structuralAutoEnvironmentKeys.has(envKey)) {
-        structuralAutoEnvironmentKeys.set(envKey, cfg.environmentId);
+    if (cfg.accessAllSubagents || filterManualByActorAccess) {
+      const envKey = cfg.environmentId ?? "__default__";
+      if (!accessibleEnvironmentKeys.has(envKey)) {
+        accessibleEnvironmentKeys.set(envKey, cfg.environmentId);
       }
     }
   }
@@ -1040,7 +1069,6 @@ async function resolveLoadBalancedRouterPools(params: {
     assignedByManualRouter,
     autoExcludedByRouter,
     accessibleTargetsByEnvKey,
-    structuralTargetsByEnvKey,
   ] = await Promise.all([
     manualRouterIds.length > 0
       ? AgentModel.findAssignedRuntimeSubagentIdsByAgents(manualRouterIds)
@@ -1048,14 +1076,14 @@ async function resolveLoadBalancedRouterPools(params: {
     autoRouterIds.length > 0
       ? AgentExcludedSubagentModel.findTargetAgentIdsByAgents(autoRouterIds)
       : Promise.resolve(new Map<string, Set<string>>()),
-    accessibleEnvironmentKeys.size > 0 && realActorUserId
+    accessibleEnvironmentKeys.size > 0
       ? (async () => {
           const entries = await Promise.all(
             [...accessibleEnvironmentKeys.entries()].map(
               async ([envKey, environmentId]) => {
                 const targets =
                   await AgentModel.findAccessibleDelegationTargets({
-                    userId: realActorUserId,
+                    userId: params.actorUserId,
                     isAdmin: isAgentAdmin,
                     organizationId: params.organizationId,
                     includeDetails: false,
@@ -1083,26 +1111,6 @@ async function resolveLoadBalancedRouterPools(params: {
       : Promise.resolve(
           new Map<string, { sortedIds: string[]; idSet: Set<string> }>(),
         ),
-    structuralAutoEnvironmentKeys.size > 0 && !realActorUserId
-      ? (async () => {
-          const entries = await Promise.all(
-            [...structuralAutoEnvironmentKeys.entries()].map(
-              async ([envKey, environmentId]) => {
-                const targets =
-                  await AgentModel.findStructuralRuntimeDelegationTargets({
-                    organizationId: params.organizationId,
-                    environmentId,
-                  });
-                for (const target of targets) {
-                  nameByAgentId.set(target.id, target.name);
-                }
-                return [envKey, targets.map((target) => target.id)] as const;
-              },
-            ),
-          );
-          return new Map(entries);
-        })()
-      : Promise.resolve(new Map<string, string[]>()),
   ]);
 
   const candidateIdsByRouter = routerTargets.map((router) => {
@@ -1112,9 +1120,8 @@ async function resolveLoadBalancedRouterPools(params: {
     }
     const envKey = cfg.environmentId ?? "__default__";
     if (cfg.accessAllSubagents) {
-      const envRuntimeIds = realActorUserId
-        ? (accessibleTargetsByEnvKey.get(envKey)?.sortedIds ?? [])
-        : (structuralTargetsByEnvKey.get(envKey) ?? []);
+      const envRuntimeIds =
+        accessibleTargetsByEnvKey.get(envKey)?.sortedIds ?? [];
       const routerExcluded = autoExcludedByRouter.get(router.id);
       const candidateIds = envRuntimeIds.filter(
         (id) =>

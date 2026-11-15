@@ -5351,7 +5351,8 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       "Confidential Team B Worker",
     );
 
-    // Admin and system flows see both workers
+    // Admin and elevated real-user (`skipAccessCheck: true`) flows see both workers;
+    // non-user `"system"` turns execute routers in-process and omit runtime-pool metadata.
     const adminCustomTools = await getAgentTools({
       agentId: customCaller.id,
       organizationId,
@@ -5359,6 +5360,18 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     });
     expect(
       adminCustomTools.find((t) => t.name === manualRouterTool.name)
+        ?.description,
+    ).toContain(
+      "across its runtime pool (Confidential Team B Worker, Shared Team A Worker)",
+    );
+    const elevatedUserTools = await getAgentTools({
+      agentId: customCaller.id,
+      organizationId,
+      userId: memberUser.id,
+      skipAccessCheck: true,
+    });
+    expect(
+      elevatedUserTools.find((t) => t.name === manualRouterTool.name)
         ?.description,
     ).toContain(
       "across its runtime pool (Confidential Team B Worker, Shared Team A Worker)",
@@ -5372,9 +5385,7 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     expect(
       systemCustomTools.find((t) => t.name === manualRouterTool.name)
         ?.description,
-    ).toContain(
-      "across its runtime pool (Confidential Team B Worker, Shared Team A Worker)",
-    );
+    ).not.toContain("Runs in the background in Agent Runtime");
 
     // Even with fallbackEnabled: false and privateTeamWorker listed first,
     // memberUser's delegation dispatches cleanly to sharedTeamWorker.
@@ -6030,29 +6041,74 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     );
     expect(advertisedRouter?.description).toContain("SA Pool Alpha");
     expect(advertisedRouter?.description).toContain("SA Pool Beta");
+
+    const saRouterDelegation = await executeArchestraTool(
+      autoRouterTool.name,
+      { message: "Service account router delegation" },
+      {
+        agent: {
+          id: autoDiscoveryGateway.id,
+          name: autoDiscoveryGateway.name,
+        },
+        agentId: autoDiscoveryGateway.id,
+        userId: serviceAccountUserId(account.id),
+        organizationId,
+        tokenAuth: bareServiceAccountAuth,
+      },
+    );
+    expect(saRouterDelegation.isError).toBeFalsy();
+    expect(sendSpy).toHaveBeenCalledTimes(2);
+    expect(sendSpy.mock.calls[1]?.[0]?.actor).toEqual({
+      kind: "serviceAccount",
+      id: account.id,
+      organizationId,
+    });
   });
 
-  test("resolves Auto load-balanced router pool metadata structurally for system and org/team-token callers", async ({
+  test("keeps load-balanced router delegations in-process and unannotated for system, team-token, and OAuth callers", async ({
     makeAgent,
+    makeCustomRole,
+    makeServiceAccount,
   }) => {
     const workerOne = await createRuntimeSubagent(
       makeAgent,
-      "Structural Worker One",
+      "Non-User Pool Worker One",
       false,
     );
     const workerTwo = await createRuntimeSubagent(
       makeAgent,
-      "Structural Worker Two",
+      "Non-User Pool Worker Two",
       false,
     );
-    const excludedWorker = await createRuntimeSubagent(
-      makeAgent,
-      "Structural Excluded Worker",
-      false,
+    const workerOneTool = await ToolModel.findOrCreateDelegationTool(
+      workerOne.id,
+    );
+    const workerTwoTool = await ToolModel.findOrCreateDelegationTool(
+      workerTwo.id,
+    );
+
+    const manualRouter = await makeAgent({
+      name: "Non-User Manual Router",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      access: "org",
+      accessAllSubagents: false,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await AgentToolModel.create(manualRouter.id, workerOneTool.id);
+    await AgentToolModel.create(manualRouter.id, workerTwoTool.id);
+    const manualRouterTool = await ToolModel.findOrCreateDelegationTool(
+      manualRouter.id,
     );
 
     const autoRouter = await makeAgent({
-      name: "Unassigned Auto Router",
+      name: "Non-User Auto Router",
       organizationId,
       authorId: actorId,
       agentType: "agent",
@@ -6065,9 +6121,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         fallbackEnabled: true,
       },
     });
-    await AgentExcludedSubagentModel.replaceForAgent(autoRouter.id, [
-      excludedWorker.id,
-    ]);
     const autoRouterTool = await ToolModel.findOrCreateDelegationTool(
       autoRouter.id,
     );
@@ -6081,48 +6134,160 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       access: "org",
       accessAllSubagents: false,
     });
+    await AgentToolModel.create(customCaller.id, manualRouterTool.id);
     await AgentToolModel.create(customCaller.id, autoRouterTool.id);
 
+    const sendSpy = await mockDetachedTaskStart();
+    let callSeq = 0;
+    const executeA2ASpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockImplementation(async (params) => {
+        callSeq += 1;
+        const text = `In-process router reply #${callSeq} from ${params.agentId}`;
+        return {
+          messageId: `msg-non-user-router-${callSeq}`,
+          text,
+          finishReason: "stop",
+          responseUiMessage: {
+            id: `msg-non-user-router-${callSeq}`,
+            role: "assistant",
+            parts: [{ type: "text", text }],
+          },
+        };
+      });
+
+    // 1. `"system"` sentinel turns (incoming email, schedule, external A2A v2):
+    //    listing omits runtime-router metadata and dispatch runs in-process.
     const systemTools = await getAgentTools({
       agentId: customCaller.id,
       organizationId,
       userId: "system",
       skipAccessCheck: true,
     });
-    const systemRouter = systemTools.find(
-      (tool) => tool.name === autoRouterTool.name,
-    );
-    expect(systemRouter?._meta).toMatchObject({
-      [LOAD_BALANCED_RUNTIME_ROUTER_META_KEY]: true,
-    });
-    expect(systemRouter?.description).toContain(
-      "Runs in the background in Agent Runtime and returns a run link, not the answer.",
-    );
-    expect(systemRouter?.description).toContain(workerOne.name);
-    expect(systemRouter?.description).toContain(workerTwo.name);
-    expect(systemRouter?.description).not.toContain(excludedWorker.name);
+    for (const routerToolName of [manualRouterTool.name, autoRouterTool.name]) {
+      const advertised = systemTools.find(
+        (tool) => tool.name === routerToolName,
+      );
+      expect(advertised).toBeDefined();
+      expect(
+        advertised?._meta?.[LOAD_BALANCED_RUNTIME_ROUTER_META_KEY],
+      ).toBeUndefined();
+      expect(advertised?.description).not.toContain(
+        "Runs in the background in Agent Runtime",
+      );
+      expect(advertised?.description).not.toContain("across its runtime pool");
 
+      const dispatched = await executeArchestraTool(
+        routerToolName,
+        { message: `System delegation to ${routerToolName}` },
+        {
+          agent: { id: customCaller.id, name: customCaller.name },
+          agentId: customCaller.id,
+          userId: "system",
+          organizationId,
+        },
+      );
+      expect(dispatched.isError).toBeFalsy();
+      expect(dispatched.content[0]).toMatchObject({
+        type: "text",
+        text: expect.stringContaining("In-process router reply #"),
+      });
+    }
+
+    // 2. Team-scoped MCP gateway token (`isUserToken: false`, no `userId`):
+    //    listing omits runtime-router metadata and `tools/call` runs in-process.
+    const teamTokenAuth = {
+      tokenId: crypto.randomUUID(),
+      teamId: crypto.randomUUID(),
+      isOrganizationToken: false,
+      organizationId,
+      isUserToken: false,
+    };
     const teamTokenGatewayList = await buildAgentMcpToolList({
       agent: customCaller,
-      tokenAuth: {
-        tokenId: crypto.randomUUID(),
-        teamId: crypto.randomUUID(),
-        isOrganizationToken: false,
-        organizationId,
-        isUserToken: false,
+      tokenAuth: teamTokenAuth,
+    });
+    for (const routerToolName of [manualRouterTool.name, autoRouterTool.name]) {
+      const advertised = teamTokenGatewayList.tools.find(
+        (tool) => tool.name === routerToolName,
+      );
+      expect(advertised).toBeDefined();
+      expect(
+        advertised?._meta?.[LOAD_BALANCED_RUNTIME_ROUTER_META_KEY],
+      ).toBeUndefined();
+      expect(advertised?.description).not.toContain(
+        "Runs in the background in Agent Runtime",
+      );
+
+      const dispatched = await executeArchestraTool(
+        routerToolName,
+        { message: `Team-token delegation to ${routerToolName}` },
+        {
+          agent: { id: customCaller.id, name: customCaller.name },
+          agentId: customCaller.id,
+          organizationId,
+          tokenAuth: teamTokenAuth,
+        },
+      );
+      expect(dispatched.isError).toBeFalsy();
+      expect(dispatched.content[0]).toMatchObject({
+        type: "text",
+        text: expect.stringContaining("In-process router reply #"),
+      });
+    }
+
+    // 3. Machine OAuth `client_credentials` gateway token (`oauthClientId` set,
+    //    `isUserToken: false`): barred from Agent Runtime, so load-balanced
+    //    routers remain in-process on both listing and dispatch.
+    const oauthRole = await makeCustomRole(organizationId, {
+      permission: {
+        agent: ["read", "use"],
       },
     });
-    const teamTokenRouter = teamTokenGatewayList.tools.find(
-      (tool) => tool.name === autoRouterTool.name,
-    );
-    expect(teamTokenRouter?._meta).toMatchObject({
-      [LOAD_BALANCED_RUNTIME_ROUTER_META_KEY]: true,
+    const oauthAccount = await makeServiceAccount(organizationId, {
+      role: oauthRole.role,
     });
-    expect(teamTokenRouter?.description).toContain(
-      "Runs in the background in Agent Runtime and returns a run link, not the answer.",
+    const oauthMachineAuth = {
+      tokenId: crypto.randomUUID(),
+      teamId: null,
+      isOrganizationToken: false,
+      serviceAccountId: oauthAccount.id,
+      organizationId,
+      oauthClientId: "oauth-machine-app",
+      isUserToken: false,
+    };
+    const oauthGatewayList = await buildAgentMcpToolList({
+      agent: customCaller,
+      tokenAuth: oauthMachineAuth,
+    });
+    const oauthManualRouter = oauthGatewayList.tools.find(
+      (tool) => tool.name === manualRouterTool.name,
     );
-    expect(teamTokenRouter?.description).toContain(workerOne.name);
-    expect(teamTokenRouter?.description).toContain(workerTwo.name);
-    expect(teamTokenRouter?.description).not.toContain(excludedWorker.name);
+    expect(oauthManualRouter).toBeDefined();
+    expect(
+      oauthManualRouter?._meta?.[LOAD_BALANCED_RUNTIME_ROUTER_META_KEY],
+    ).toBeUndefined();
+    expect(oauthManualRouter?.description).not.toContain(
+      "Runs in the background in Agent Runtime",
+    );
+    const oauthDispatched = await executeArchestraTool(
+      manualRouterTool.name,
+      { message: "OAuth machine delegation to manual router" },
+      {
+        agent: { id: customCaller.id, name: customCaller.name },
+        agentId: customCaller.id,
+        userId: serviceAccountUserId(oauthMachineAuth.serviceAccountId),
+        organizationId,
+        tokenAuth: oauthMachineAuth,
+      },
+    );
+    expect(oauthDispatched.isError).toBeFalsy();
+    expect(oauthDispatched.content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining(`from ${manualRouter.id}`),
+    });
+
+    expect(executeA2ASpy).toHaveBeenCalledTimes(5);
+    expect(sendSpy).not.toHaveBeenCalled();
   });
 });

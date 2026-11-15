@@ -71,7 +71,7 @@ Azure Database for PostgreSQL flexible server fits every size. Use the General P
 
 ## Connect a Database
 
-On AWS and Google Cloud, Archestra's pods sign in to the database with their cloud identity, so no database password exists to leak or rotate. On every cloud, keep the database on a private network with no public endpoint, connect as a user that owns only the Archestra database, and verify TLS.
+On AWS, Google Cloud, and Azure, Archestra's pods sign in to the database with their cloud identity, so no database password exists to leak or rotate. On every cloud, keep the database on a private network with no public endpoint, connect as a user that owns only the Archestra database, and verify TLS.
 
 :::tabs
 @tab AWS
@@ -164,18 +164,65 @@ Before you start, give the instance a private IP in the cluster's VPC, turn on i
 - **The IAM user cannot sign in** (`Cloud SQL IAM service account authentication failed` on Cloud SQL): the service account lacks its database user role, the database user is missing, or the IAM authentication flag is off.
 - **`permission denied for schema public`:** run the grants as the `postgres` user.
 @tab Azure
-Archestra signs in to Azure Database for PostgreSQL flexible server with a password; it does not support Microsoft Entra ID sign-in. Keep the password in a Kubernetes Secret, and keep the server off the internet:
+Use Microsoft Entra ID authentication: each new connection signs in with an Entra access token for the pod's managed identity, through AKS Workload Identity. Archestra renews the token before it expires.
 
-- **Network:** create the server with private access (VNet integration), or turn off public access and add a private endpoint in the cluster's VNet.
-- **User:** as the server admin, create the extensions in the `archestra` database, then create a dedicated user that owns that database. Do not connect Archestra as the server admin.
-- **TLS:** add `sslmode=verify-full` to the URL. Azure's certificates chain to roots Archestra already trusts, so no CA bundle is needed.
+Before you start, give the server private access (VNet integration) or a private endpoint in the cluster's VNet, set its authentication to include Microsoft Entra, and add yourself as a Microsoft Entra admin. AKS needs the OIDC issuer and Workload Identity on; [On AKS](/docs/llm-proxy/providers/azure#on-aks) has the commands.
 
-Then follow [Connect with a Password](#connect-with-a-password).
+1. Create a user-assigned managed identity and let Archestra's Kubernetes ServiceAccount use it. In the [installation example](/docs/admin/deployment/helm), that is `archestra-platform` in the `archestra` namespace. Pods have one Azure identity, so if Archestra already uses one for Azure OpenAI, grant that one instead.
+
+   ```bash
+   az identity create --name archestra-db --resource-group RESOURCE_GROUP
+   az identity federated-credential create \
+     --name archestra-platform \
+     --identity-name archestra-db \
+     --resource-group RESOURCE_GROUP \
+     --issuer "$(az aks show --name CLUSTER --resource-group RESOURCE_GROUP --query oidcIssuerProfile.issuerUrl -o tsv)" \
+     --subject system:serviceaccount:archestra:archestra-platform \
+     --audiences api://AzureADTokenExchange
+   ```
+
+2. Sign in as the Entra admin, connect to the `postgres` database, and create a role for the identity:
+
+   ```sql
+   SELECT * FROM pgaadauth_create_principal('archestra-db', false, false);
+   ```
+
+3. Connect to the `archestra` database as the Entra admin, create the extensions, and grant the role access:
+
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS vector;
+   CREATE EXTENSION IF NOT EXISTS pg_trgm;
+   GRANT ALL PRIVILEGES ON DATABASE archestra TO "archestra-db";
+   GRANT ALL ON SCHEMA public TO "archestra-db";
+   ```
+
+   If Archestra's tables already exist under another user, such as `archestra`, also run `GRANT archestra TO "archestra-db";` so migrations can still change them.
+
+4. Turn on Entra authentication and point Archestra at the server. `clientId` is the output of `az identity show --name archestra-db --resource-group RESOURCE_GROUP --query clientId -o tsv`:
+
+   ```yaml
+   postgresql:
+     enabled: false
+     external_database_url: "postgresql://archestra-db@SERVER.postgres.database.azure.com:5432/archestra?sslmode=verify-full"
+   archestra:
+     database:
+       entraAuth:
+         enabled: true
+         clientId: CLIENT_ID
+   ```
+
+   The URL names the identity and holds no secret. The chart adds the Workload Identity annotation and pod label for that client ID. Archestra always verifies the server certificate and refuses `sslmode=disable`.
+
+5. Run the Helm upgrade. It worked when the migration Job completes and the web pods turn ready.
+
+- **The migration Job gets no token** (a `DefaultAzureCredential` error): the federated credential's subject does not match the ServiceAccount, or the cluster's Workload Identity is off.
+- **`password authentication failed`:** the role is missing or has another name. Create it in the `postgres` database with the identity's exact name.
+- **`permission denied for schema public`:** run the grants as the Entra admin.
 :::
 
 ### Connect with a Password
 
-Use a password for Azure and any other PostgreSQL. The application and the migration Job read the same URL.
+Use a password for any other PostgreSQL. The application and the migration Job read the same URL.
 
 1. In the Helm release namespace (`archestra` in the installation example), create a Kubernetes Secret named `archestra-database` with the complete connection URL in its `url` key.
 2. Reference it in the shared application settings:

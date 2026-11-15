@@ -407,6 +407,7 @@
     "src/k8s/agent-runtime/network-policy.ts",
     "src/k8s/agent-runtime/platform-service.ts",
     "src/k8s/agent-runtime/pod-failure.ts",
+    "src/k8s/agent-runtime/runtime-class.ts",
     "src/k8s/agent-runtime/runtime-namespace.ts",
     "src/k8s/agent-runtime/sandbox-api.ts",
     "src/k8s/agent-runtime/sandbox-supervisor.ts",

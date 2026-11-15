@@ -1176,7 +1176,7 @@ export async function processProxyResults(params: {
   /** How a client-side spawn launch ended. */
   classifySpawnResult?: (
     result: CommonToolResult,
-  ) => "pending" | "failed" | undefined;
+  ) => "pending" | "detached" | "failed" | undefined;
 }) {
   // One policy and membership snapshot serve this ordered result batch.
   // Nothing persists across batches: the next one sees membership revocation.
@@ -1254,7 +1254,7 @@ export async function processProxyResults(params: {
       const error =
         extractMcpToolError(result) ?? extractMcpToolError(result.content);
       const outcome: ExecutionOutcome =
-        error?.type === "cancelled"
+        error?.type === "cancelled" || spawn === "detached"
           ? "unknown"
           : spawn === "failed" || result.isError
             ? "failure"

@@ -9,12 +9,16 @@ import {
   parseFullToolName,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_POST_RUN_FILE_SHORT_NAME,
+  TOOL_POST_RUN_MESSAGE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_START_RUN_SHORT_NAME,
+  TOOL_STEER_RUN_SHORT_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import safeRegex from "safe-regex2";
@@ -239,6 +243,7 @@ const registry = defineArchestraTools([
         conversationId: context.conversationId,
         delegationChain: context.delegationChain,
         tokenAuth: context.tokenAuth,
+        suppressContentLogging: context.suppressContentLogging,
       });
 
       let matches: SearchCandidate[];
@@ -414,8 +419,15 @@ async function getSearchableTools(params: {
   conversationId?: string;
   delegationChain?: string;
   tokenAuth?: TargetInstallCaller;
+  suppressContentLogging?: boolean;
 }): Promise<SearchCandidate[]> {
-  const { agentId, conversationId, organizationId, userId } = params;
+  const {
+    agentId,
+    conversationId,
+    organizationId,
+    suppressContentLogging,
+    userId,
+  } = params;
   const delegatedRun = isAppaDelegatedRun(agentId, params.delegationChain);
   const agent = await AgentModel.findGatewayAgentById(agentId);
   // Per-agent exclusions (Auto-tool mode): loaded once per search and applied
@@ -462,7 +474,7 @@ async function getSearchableTools(params: {
     injectedOpenappaTools.map((tool) => tool.name),
   );
   const delegationTools =
-    organizationId != null
+    organizationId != null && !suppressContentLogging
       ? await getAgentTools({
           agentId,
           organizationId,
@@ -471,12 +483,21 @@ async function getSearchableTools(params: {
         })
       : [];
   const hasTaskStarter =
-    delegationTools.length > 0 ||
-    assignedTools.some(
-      (tool) =>
-        archestraMcpBranding.getToolShortName(tool.name) ===
-        TOOL_START_RUN_SHORT_NAME,
-    );
+    !suppressContentLogging &&
+    (delegationTools.length > 0 ||
+      assignedTools.some(
+        (tool) =>
+          archestraMcpBranding.getToolShortName(tool.name) ===
+          TOOL_START_RUN_SHORT_NAME,
+      ));
+  const isEncryptedBlockedRuntimeToolShortName = (
+    shortName: string | null | undefined,
+  ): boolean =>
+    shortName === TOOL_START_RUN_SHORT_NAME ||
+    shortName === TOOL_STEER_RUN_SHORT_NAME ||
+    shortName === TOOL_POST_RUN_MESSAGE_SHORT_NAME ||
+    shortName === TOOL_POST_RUN_FILE_SHORT_NAME ||
+    shortName === TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME;
   // Match tools/list's implicit run-handle controls, including gateways with
   // no assigned tools. They are assignment-exempt at dispatch, but still pass
   // RBAC here and actor/proof checks in their handlers. Internal chat already
@@ -486,7 +507,12 @@ async function getSearchableTools(params: {
     (isAnyAgentRuntimeBackendDriverEnabled() || hasTaskStarter)
       ? runtimeMcpTools.flatMap((tool) => {
           const shortName = archestraMcpBranding.getToolShortName(tool.name);
-          return shortName && isRunControlArchestraToolShortName(shortName)
+          return shortName &&
+            !(
+              suppressContentLogging &&
+              isEncryptedBlockedRuntimeToolShortName(shortName)
+            ) &&
+            isRunControlArchestraToolShortName(shortName)
             ? [
                 {
                   name: archestraMcpBranding.getToolName(shortName),
@@ -519,6 +545,12 @@ async function getSearchableTools(params: {
   const filteredTools = searchSpace.filter(
     (tool) =>
       permittedNames.has(tool.name) &&
+      !(
+        suppressContentLogging &&
+        isEncryptedBlockedRuntimeToolShortName(
+          archestraMcpBranding.getToolShortName(tool.name),
+        )
+      ) &&
       !isExcludedFromSearchResults({
         toolName: tool.name,
         assignedNames,
@@ -530,7 +562,7 @@ async function getSearchableTools(params: {
   // Agent-designated skills are searchable through their skill__<slug>
   // delegation tools, resolved per calling user like agent delegations.
   const skillDelegationTools =
-    organizationId != null
+    organizationId != null && !suppressContentLogging
       ? await getSkillDelegationTools({ agentId, organizationId, userId })
       : [];
 

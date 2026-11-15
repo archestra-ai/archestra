@@ -133,6 +133,23 @@ describe("a workload's OIDC token as a bearer token", () => {
     ]);
   });
 
+  test("refuses a forged token naming a trusted issuer without auditing it", async ({
+    makeOrganization,
+    makeServiceAccount,
+  }) => {
+    const org = await makeOrganization();
+    const account = await makeServiceAccount(org.id);
+    await trust({ organizationId: org.id, serviceAccountId: account.id });
+    const { privateKey } = await generateKeyPair("ES256");
+
+    const result = await verifyServiceAccountBearer({
+      token: await actorJwt({ sub: ACTOR, key: privateKey as CryptoKey }),
+    });
+
+    expect(result).toBeNull();
+    expect(await exchangeEvents(org.id)).toEqual([]);
+  });
+
   test("never contacts an issuer no credential names", async () => {
     const result = await verifyServiceAccountBearer({
       token: await actorJwt({ sub: ACTOR }),
@@ -178,7 +195,7 @@ function trust(params: { organizationId: string; serviceAccountId: string }) {
 }
 
 /** An Agent Substrate actor JWT: an audience array and a nested actor claim. */
-function actorJwt(params: { sub: string }) {
+function actorJwt(params: { sub: string; key?: CryptoKey }) {
   return new SignJWT({
     "actor.ate.dev": {
       atespace: "support",
@@ -193,7 +210,7 @@ function actorJwt(params: { sub: string }) {
     .setIssuedAt()
     .setExpirationTime("15m")
     .setJti(crypto.randomUUID())
-    .sign(signingKey);
+    .sign(params.key ?? signingKey);
 }
 
 async function exchangeEvents(organizationId: string) {

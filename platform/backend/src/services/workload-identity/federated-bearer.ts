@@ -42,8 +42,8 @@ export async function verifyServiceAccountBearer(params: {
  * The token passes the token exchange's checks, against the federated
  * credentials of every service account that trusts its issuer, and exactly one
  * account must match. Once verified it is stored as a federated token of that
- * account until it expires, an hour at most, so later requests cost one
- * indexed lookup. Returns null for any token that does not act as an account,
+ * account until it expires, five minutes at most, so later requests cost
+ * one indexed lookup. Returns null for any token that does not act as an account,
  * including every JWT whose issuer no credential names.
  */
 async function verifyFederatedBearerToken(params: {
@@ -92,10 +92,19 @@ async function verifyFederatedBearerToken(params: {
     issuer: unverified.issuer,
   });
   if (!verified.ok) {
-    await auditEach(accounts.keys(), "failure", {
-      reason: verified.reason,
-      issuer: unverified.issuer,
-    });
+    // Only a token the issuer really signed is audited: anyone can forge one
+    // that names a trusted issuer, and each audit is a write.
+    if (SIGNED_TOKEN_FAILURES.has(verified.reason)) {
+      await auditEach(accounts.keys(), "failure", {
+        reason: verified.reason,
+        issuer: unverified.issuer,
+      });
+    } else {
+      logger.info(
+        { issuer: unverified.issuer, reason: verified.reason },
+        "[workload-identity] Refused a bearer token that failed verification",
+      );
+    }
     return null;
   }
   const claims = verified.claims;
@@ -186,10 +195,23 @@ async function verifyFederatedBearerToken(params: {
 }
 
 /**
- * How long a verified bearer token is remembered, at most: the lifetime of a
- * token the exchange issues, so a changed credential takes effect as quickly.
+ * How long a verified bearer token is remembered, at most. A changed or
+ * deleted credential revokes it at once; a credential added on another
+ * account, which makes the token ambiguous, takes effect within this time.
  */
-const MAX_STORED_LIFETIME_MS = 60 * 60 * 1000;
+const MAX_STORED_LIFETIME_MS = 5 * 60 * 1000;
+
+/**
+ * Failures that only a correctly signed token reaches: jose checks the
+ * signature before the claims, and the rest are checked after it.
+ */
+const SIGNED_TOKEN_FAILURES = new Set([
+  "ERR_JWT_EXPIRED",
+  "ERR_JWT_CLAIM_VALIDATION_FAILED",
+  "claims_malformed",
+  "issued_in_the_future",
+  "lifetime_too_long",
+]);
 
 /** Three base64url segments: a JWS in compact form. */
 const JWT_SHAPE = /^[\w-]+\.[\w-]+\.[\w-]+$/;

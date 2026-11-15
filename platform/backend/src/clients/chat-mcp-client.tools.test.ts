@@ -9,6 +9,7 @@
 import {
   getArchestraToolFullName,
   MCP_EXECUTED_AS_META_KEY,
+  SKILL_TOOL_PREFIX,
   TOOL_GET_AGENT_SHORT_NAME,
 } from "@archestra/shared";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -16,10 +17,10 @@ import type { Tool } from "ai";
 import { afterEach, vi } from "vitest";
 import { getArchestraToolInputSchema } from "@/archestra-mcp-server";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
-import { ToolModel } from "@/models";
+import { AgentModel, SkillModel, ToolModel } from "@/models";
 import { metrics } from "@/observability";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
-import { beforeEach, describe, expect, test } from "@/test";
+import { accessGrants, beforeEach, describe, expect, test } from "@/test";
 import {
   MAX_TOOL_RESULT_CONTEXT_BYTES,
   readCappedToolResult,
@@ -1446,24 +1447,40 @@ describe("getChatMcpTools OpenAPPA delegated runs", () => {
     expect(Object.keys(delegated)).not.toContain(policyTool);
   });
 
-  test("encrypted chats omit start_run, steer_run, post_run_message, and delegation tools and isolate tool cache entries", async () => {
+  test("encrypted chats omit start_run, steer_run, post_run_message, and agent/skill delegation tools and isolate tool cache entries", async () => {
     const startRunTool = getArchestraToolFullName("start_run");
     const steerRunTool = getArchestraToolFullName("steer_run");
     const postRunMessageTool = getArchestraToolFullName("post_run_message");
     const getRunTool = getArchestraToolFullName("get_run");
+    const skillToolName = `${SKILL_TOOL_PREFIX}designated_helper`;
     const { org, agent, baseParams } = await setupChatToolEnv({
       gatewayTools: [
         externalTool(startRunTool),
         externalTool(steerRunTool),
         externalTool(postRunMessageTool),
         externalTool(getRunTool),
+        externalTool(skillToolName),
         externalTool("extsrv__fetch_data"),
       ],
     });
-    const { delegationTool } = await makeAssignedDelegationTool({
+    const { targetAgent, delegationTool } = await makeAssignedDelegationTool({
       agentId: agent.id,
       organizationId: org.id,
       childName: "Helper Subagent",
+    });
+    await AgentModel.update(targetAgent.id, { agentType: "agent" });
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        name: "designated-helper",
+        description: "Delegates to Helper Subagent.",
+        content: "Run designated helper work.",
+        agentName: targetAgent.name,
+        metadata: {},
+        sourceType: "manual",
+      },
+      files: [],
+      ...accessGrants("org"),
     });
 
     const standardTools = await chatClient.getChatMcpTools(baseParams);
@@ -1475,8 +1492,10 @@ describe("getChatMcpTools OpenAPPA delegated runs", () => {
         getRunTool,
         "extsrv__fetch_data",
         delegationTool.name,
+        skillToolName,
       ]),
     );
+    expect(standardTools[skillToolName]?.toModelOutput).toBeUndefined();
 
     const encryptedTools = await chatClient.getChatMcpTools({
       ...baseParams,
@@ -1489,5 +1508,6 @@ describe("getChatMcpTools OpenAPPA delegated runs", () => {
     expect(Object.keys(encryptedTools)).not.toContain(steerRunTool);
     expect(Object.keys(encryptedTools)).not.toContain(postRunMessageTool);
     expect(Object.keys(encryptedTools)).not.toContain(delegationTool.name);
+    expect(Object.keys(encryptedTools)).not.toContain(skillToolName);
   });
 });

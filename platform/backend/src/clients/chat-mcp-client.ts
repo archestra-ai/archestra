@@ -2,6 +2,7 @@ import {
   ApiError,
   isAgentTool,
   isBrowserMcpTool,
+  isSkillTool,
   LOOPBACK_HOST,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   SOURCE_HEADER,
@@ -1055,7 +1056,7 @@ export async function getChatMcpTools({
     const delegatedRun =
       !appaSubagent && isAppaDelegatedRun(agentId, delegationChain);
     const filteredMcpTools = mcpTools.filter((tool) => {
-      if (isAgentTool(tool.name)) return false;
+      if (isAgentTool(tool.name) || isSkillTool(tool.name)) return false;
       const shortName = archestraMcpBranding.getToolShortName(tool.name);
       if (
         suppressContentLogging &&

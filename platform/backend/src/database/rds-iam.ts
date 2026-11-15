@@ -5,6 +5,11 @@ import tls, { type ConnectionOptions } from "node:tls";
 import { fileURLToPath } from "node:url";
 import { Sha256 } from "@aws-crypto/sha256-js";
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
+import {
+  DefaultAzureCredential,
+  getBearerTokenProvider,
+  type TokenCredential,
+} from "@azure/identity";
 import { SignatureV4 } from "@smithy/signature-v4";
 import pg, { type ClientConfig, type PoolConfig } from "pg";
 
@@ -46,17 +51,44 @@ interface CreateRdsIamPasswordCallbackOptions {
 
 export interface RdsIamConnectionOptions {
   iamAuthEnabled?: boolean;
+  entraAuthEnabled?: boolean;
   awsRegion?: string;
   credentials?: AwsCredentialsInput;
+  azureCredential?: TokenCredential;
   env?: NodeJS.ProcessEnv;
   handshakeTimeoutMs?: number;
 }
+
+type DatabaseAuthMethod = "password" | "rds-iam" | "entra";
 
 const RDS_HOSTNAME_REGION_PATTERN =
   /\.([a-z]{2}(?:-gov|-iso[a-z]?)?-[a-z]+-\d+)\.rds\.amazonaws\.com(?:\.cn)?\.?$/i;
 
 const RDS_IAM_TOKEN_EXPIRES_IN_SECONDS = 900;
 const CREDENTIAL_PROVIDER_MAX_AGE_MS = 60_000;
+
+// Entra token scope per Azure cloud, keyed by the flexible server hostname
+// suffix (`az cloud show --query endpoints.ossrdbmsResourceId`).
+const ENTRA_POSTGRES_SCOPES: Array<[suffix: string, scope: string]> = [
+  [
+    ".postgres.database.usgovcloudapi.net",
+    "https://ossrdbms-aad.database.usgovcloudapi.net/.default",
+  ],
+  [
+    ".postgres.database.chinacloudapi.cn",
+    "https://ossrdbms-aad.database.chinacloudapi.cn/.default",
+  ],
+];
+const ENTRA_POSTGRES_DEFAULT_SCOPE =
+  "https://ossrdbms-aad.database.windows.net/.default";
+const AUTH_METHOD_LABELS: Record<
+  Exclude<DatabaseAuthMethod, "password">,
+  string
+> = {
+  "rds-iam": "RDS IAM database authentication",
+  entra: "Microsoft Entra ID database authentication",
+};
+const entraTokenProviders = new Map<string, () => Promise<string>>();
 
 function safeFileMtimeMs(filePath: string | undefined): number {
   if (!filePath) {
@@ -170,6 +202,61 @@ export function isRdsIamAuthEnabled(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   return env.ARCHESTRA_DATABASE_IAM_AUTH_ENABLED === "true";
+}
+
+/**
+ * Returns true when Microsoft Entra ID database authentication is enabled in
+ * the environment.
+ * @public — exported for unit tests
+ */
+export function isEntraDatabaseAuthEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return env.ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED === "true";
+}
+
+/**
+ * Returns the Entra token scope for an Azure Database for PostgreSQL hostname:
+ * the Azure Government or Azure China scope for those clouds' hostnames, and
+ * the public cloud scope for every other hostname.
+ * @public — exported for unit tests
+ */
+export function entraTokenScopeForHostname(
+  hostname: string | undefined | null,
+): string {
+  const normalized = (hostname ?? "").trim().replace(/\.$/, "").toLowerCase();
+  for (const [suffix, scope] of ENTRA_POSTGRES_SCOPES) {
+    if (normalized.endsWith(suffix)) {
+      return scope;
+    }
+  }
+  return ENTRA_POSTGRES_DEFAULT_SCOPE;
+}
+
+/**
+ * Creates a node-postgres dynamic `password` callback that returns a Microsoft
+ * Entra ID access token for the server's cloud. Tokens are cached and renewed
+ * before they expire; the default credential is `DefaultAzureCredential`
+ * (AKS Workload Identity, a managed identity, or `AZURE_*` variables).
+ * @public — exported for unit tests
+ */
+export function createEntraPasswordCallback({
+  hostname,
+  credential,
+}: {
+  hostname: string;
+  credential?: TokenCredential;
+}): () => Promise<string> {
+  const scope = entraTokenScopeForHostname(hostname);
+  if (credential) {
+    return getBearerTokenProvider(credential, scope);
+  }
+  let provider = entraTokenProviders.get(scope);
+  if (!provider) {
+    provider = getBearerTokenProvider(new DefaultAzureCredential(), scope);
+    entraTokenProviders.set(scope, provider);
+  }
+  return provider;
 }
 
 /**
@@ -326,6 +413,24 @@ export function createRdsIamPasswordCallback({
     });
 }
 
+function resolveDatabaseAuthMethod(
+  options: Pick<RdsIamConnectionOptions, "iamAuthEnabled" | "entraAuthEnabled">,
+  env: NodeJS.ProcessEnv,
+): DatabaseAuthMethod {
+  const iamAuthEnabled = options.iamAuthEnabled ?? isRdsIamAuthEnabled(env);
+  const entraAuthEnabled =
+    options.entraAuthEnabled ?? isEntraDatabaseAuthEnabled(env);
+  if (iamAuthEnabled && entraAuthEnabled) {
+    throw new Error(
+      "Enable only one of ARCHESTRA_DATABASE_IAM_AUTH_ENABLED and ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED.",
+    );
+  }
+  if (iamAuthEnabled) {
+    return "rds-iam";
+  }
+  return entraAuthEnabled ? "entra" : "password";
+}
+
 function parseDatabaseUrl(
   connectionString: string,
   env: NodeJS.ProcessEnv = process.env,
@@ -413,8 +518,13 @@ export function resolvePgSslConfig(
   connectionString: string,
   {
     iamAuthEnabled = true,
+    authLabel = AUTH_METHOD_LABELS["rds-iam"],
     env = process.env,
-  }: { iamAuthEnabled?: boolean; env?: NodeJS.ProcessEnv } = {},
+  }: {
+    iamAuthEnabled?: boolean;
+    authLabel?: string;
+    env?: NodeJS.ProcessEnv;
+  } = {},
 ): boolean | ConnectionOptions | undefined {
   if (!iamAuthEnabled) {
     return undefined;
@@ -433,7 +543,7 @@ export function resolvePgSslConfig(
     sslParam === "no-verify"
   ) {
     throw new Error(
-      "TLS must stay enabled when RDS IAM database authentication is enabled; sslmode=disable and sslmode=no-verify are not permitted. Use the bundled RDS CA bundle or set sslrootcert / PGSSLROOTCERT.",
+      `TLS must stay enabled when ${authLabel} is enabled; sslmode=disable and sslmode=no-verify are not permitted. Use the bundled CA certificates or set sslrootcert / PGSSLROOTCERT.`,
     );
   }
 
@@ -474,14 +584,15 @@ export function resolvePgSslConfig(
 /**
  * Builds a node-postgres Pool or Client configuration object.
  *
- * When RDS IAM auth is disabled (default), returns `{ connectionString, ...extraConfig }`
+ * With password authentication (default), returns `{ connectionString, ...extraConfig }`
  * unchanged.
  *
- * When RDS IAM auth is enabled, omits `connectionString` (because node-postgres
- * overwrites a `password` callback with `""` when `connectionString` is present)
- * and supplies parsed host/port/user/database, TLS verification with the RDS CA
- * bundle, and a dynamic `password` callback that signs a fresh token per new
- * connection.
+ * When RDS IAM or Microsoft Entra ID auth is enabled, omits `connectionString`
+ * (because node-postgres overwrites a `password` callback with `""` when
+ * `connectionString` is present) and supplies parsed host/port/user/database,
+ * TLS verification with the bundled CA certificates, and a dynamic `password`
+ * callback: a freshly signed RDS IAM token, or a cached Entra access token,
+ * for each new connection.
  */
 export function buildPgConnectionConfig<
   TExtra extends PoolConfig | ClientConfig = PoolConfig,
@@ -491,44 +602,53 @@ export function buildPgConnectionConfig<
   options: RdsIamConnectionOptions = {},
 ): TExtra & PoolConfig & ClientConfig {
   const env = options.env ?? process.env;
-  const iamAuthEnabled = options.iamAuthEnabled ?? isRdsIamAuthEnabled(env);
+  const authMethod = resolveDatabaseAuthMethod(options, env);
 
-  if (!iamAuthEnabled) {
+  if (authMethod === "password") {
     return {
       connectionString,
       ...extraConfig,
     };
   }
 
+  const authLabel = AUTH_METHOD_LABELS[authMethod];
   const { host, port, user, database, optionalParams } = parseDatabaseUrl(
     connectionString,
     env,
   );
 
   if (!host) {
-    throw new Error(
-      "RDS IAM database authentication requires a host in ARCHESTRA_DATABASE_URL.",
-    );
+    throw new Error(`${authLabel} requires a host in ARCHESTRA_DATABASE_URL.`);
   }
   if (!user) {
     throw new Error(
-      "RDS IAM database authentication requires a username in ARCHESTRA_DATABASE_URL.",
+      `${authLabel} requires a username in ARCHESTRA_DATABASE_URL.`,
     );
   }
 
-  const password = createRdsIamPasswordCallback({
-    hostname: host,
-    port,
-    username: user,
-    awsRegion: options.awsRegion,
-    credentials: options.credentials,
-    env,
-  });
+  const password =
+    authMethod === "entra"
+      ? createEntraPasswordCallback({
+          hostname: host,
+          credential: options.azureCredential,
+        })
+      : createRdsIamPasswordCallback({
+          hostname: host,
+          port,
+          username: user,
+          awsRegion: options.awsRegion,
+          credentials: options.credentials,
+          env,
+        });
 
   const ssl =
     extraConfig.ssl !== undefined
       ? extraConfig.ssl
-      : resolvePgSslConfig(connectionString, { iamAuthEnabled: true, env });
+      : resolvePgSslConfig(connectionString, {
+          iamAuthEnabled: true,
+          authLabel,
+          env,
+        });
 
   return {
     ...optionalParams,
@@ -553,9 +673,8 @@ export function configurePgDefaultsForRdsIam(
   options: RdsIamConnectionOptions = {},
 ): string {
   const env = options.env ?? process.env;
-  const iamAuthEnabled = options.iamAuthEnabled ?? isRdsIamAuthEnabled(env);
 
-  if (!iamAuthEnabled) {
+  if (resolveDatabaseAuthMethod(options, env) === "password") {
     return connectionString;
   }
 
@@ -601,32 +720,33 @@ const nativeBridgeServers = new Set<net.Server>();
  * (`@archestra/openappa-rs` / `rust-postgres`) that accept only a static URL
  * string and cannot invoke a per-connection JS password callback.
  *
- * When RDS IAM auth is disabled (default), returns `connectionString` unchanged.
+ * With password authentication (default), returns `connectionString` unchanged.
  *
- * When RDS IAM auth is enabled, starts an in-process loopback bridge on
- * `127.0.0.1` that opens a verified TLS connection (using the RDS CA bundle
- * and hostname verification) to the upstream RDS instance and injects a fresh
- * presigned RDS IAM token into the PostgreSQL `PasswordMessage` of every new
- * connection opened by the native pool.
+ * When RDS IAM or Microsoft Entra ID auth is enabled, starts an in-process
+ * loopback bridge on `127.0.0.1` that opens a verified TLS connection (using
+ * the bundled CA certificates and hostname verification) to the upstream
+ * server and injects a fresh RDS IAM token, or a current Entra access token,
+ * into the PostgreSQL `PasswordMessage` of every new connection opened by the
+ * native pool.
  */
 export async function resolveNativeDatabaseConnectionString(
   connectionString: string,
   options: RdsIamConnectionOptions = {},
 ): Promise<string> {
   const env = options.env ?? process.env;
-  const iamAuthEnabled = options.iamAuthEnabled ?? isRdsIamAuthEnabled(env);
+  const authMethod = resolveDatabaseAuthMethod(options, env);
 
-  if (!iamAuthEnabled) {
+  if (authMethod === "password") {
     return connectionString;
   }
 
-  const cacheKey = `${connectionString}|${options.awsRegion ?? env.ARCHESTRA_DATABASE_AWS_REGION ?? ""}`;
-  const existing = nativeBridgePromises.get(cacheKey);
-  if (
-    existing &&
+  const cacheKey = `${authMethod}|${connectionString}|${options.awsRegion ?? env.ARCHESTRA_DATABASE_AWS_REGION ?? ""}`;
+  const usesDefaultCredentials =
     options.credentials === undefined &&
-    options.handshakeTimeoutMs === undefined
-  ) {
+    options.azureCredential === undefined &&
+    options.handshakeTimeoutMs === undefined;
+  const existing = nativeBridgePromises.get(cacheKey);
+  if (existing && usesDefaultCredentials) {
     return existing;
   }
 
@@ -946,10 +1066,7 @@ export async function resolveNativeDatabaseConnectionString(
     throw err;
   });
 
-  if (
-    options.credentials === undefined &&
-    options.handshakeTimeoutMs === undefined
-  ) {
+  if (usesDefaultCredentials) {
     nativeBridgePromises.set(cacheKey, createBridgePromise);
   }
   return createBridgePromise;

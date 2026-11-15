@@ -82,6 +82,22 @@ archestra:
       # Expiration (in seconds) for the projected ServiceAccount token when
       # injectWebIdentityTokenVolume is true.
       webIdentityTokenExpirationSeconds: 3600
+    # Microsoft Entra ID database authentication for Azure Database for
+    # PostgreSQL flexible server. Each new connection in the query pool, cache
+    # pool, LISTEN/NOTIFY client, and migration Job signs in with an Entra
+    # access token for the pod's Azure identity (AKS Workload Identity, a
+    # managed identity, or AZURE_* variables), with TLS verification.
+    # Put the managed identity's name as the user in ARCHESTRA_DATABASE_URL.
+    # Enable at most one of iamAuth and entraAuth.
+    entraAuth:
+      enabled: false
+      # Optional client ID of the user-assigned managed identity for AKS
+      # Workload Identity. Sets the `azure.workload.identity/client-id`
+      # annotation on the platform ServiceAccount (unless already set in
+      # `archestra.orchestrator.kubernetes.serviceAccount.annotations`) and
+      # the `azure.workload.identity/use: "true"` label on the web, worker,
+      # and migration Job pods.
+      clientId: ""
     # Google Cloud SQL Auth Proxy, run as a native sidecar (Kubernetes 1.29+)
     # in the web, worker, and migration Job pods. The proxy opens a TLS
     # connection to the instance with an ephemeral client certificate and, with

@@ -67,6 +67,7 @@ const targetPool = new pg.Pool(
     {},
     {
       iamAuthEnabled: config.database.iamAuthEnabled,
+      entraAuthEnabled: config.database.entraAuthEnabled,
       awsRegion: config.database.awsRegion || undefined,
     },
   ),

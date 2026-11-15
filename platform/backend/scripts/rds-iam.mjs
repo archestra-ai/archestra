@@ -3,6 +3,10 @@ import tls from "node:tls";
 import { fileURLToPath } from "node:url";
 import { Sha256 } from "@aws-crypto/sha256-js";
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
+import {
+  DefaultAzureCredential,
+  getBearerTokenProvider,
+} from "@azure/identity";
 import { SignatureV4 } from "@smithy/signature-v4";
 import pg from "pg";
 
@@ -11,6 +15,26 @@ const RDS_HOSTNAME_REGION_PATTERN =
 
 const RDS_IAM_TOKEN_EXPIRES_IN_SECONDS = 900;
 const CREDENTIAL_PROVIDER_MAX_AGE_MS = 60_000;
+
+// Entra token scope per Azure cloud, keyed by the flexible server hostname
+// suffix (`az cloud show --query endpoints.ossrdbmsResourceId`).
+const ENTRA_POSTGRES_SCOPES = [
+  [
+    ".postgres.database.usgovcloudapi.net",
+    "https://ossrdbms-aad.database.usgovcloudapi.net/.default",
+  ],
+  [
+    ".postgres.database.chinacloudapi.cn",
+    "https://ossrdbms-aad.database.chinacloudapi.cn/.default",
+  ],
+];
+const ENTRA_POSTGRES_DEFAULT_SCOPE =
+  "https://ossrdbms-aad.database.windows.net/.default";
+const AUTH_METHOD_LABELS = {
+  "rds-iam": "RDS IAM database authentication",
+  entra: "Microsoft Entra ID database authentication",
+};
+const entraTokenProviders = new Map();
 
 function safeFileMtimeMs(filePath) {
   if (!filePath) {
@@ -120,6 +144,51 @@ function escapeUri(value) {
  */
 export function isRdsIamAuthEnabled(env = process.env) {
   return env.ARCHESTRA_DATABASE_IAM_AUTH_ENABLED === "true";
+}
+
+/**
+ * Returns true when Microsoft Entra ID database authentication is enabled in
+ * the environment.
+ * @public — exported for unit tests
+ */
+export function isEntraDatabaseAuthEnabled(env = process.env) {
+  return env.ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED === "true";
+}
+
+/**
+ * Returns the Entra token scope for an Azure Database for PostgreSQL hostname:
+ * the Azure Government or Azure China scope for those clouds' hostnames, and
+ * the public cloud scope for every other hostname.
+ * @public — exported for unit tests
+ */
+export function entraTokenScopeForHostname(hostname) {
+  const normalized = (hostname ?? "").trim().replace(/\.$/, "").toLowerCase();
+  for (const [suffix, scope] of ENTRA_POSTGRES_SCOPES) {
+    if (normalized.endsWith(suffix)) {
+      return scope;
+    }
+  }
+  return ENTRA_POSTGRES_DEFAULT_SCOPE;
+}
+
+/**
+ * Creates a node-postgres dynamic `password` callback that returns a Microsoft
+ * Entra ID access token for the server's cloud. Tokens are cached and renewed
+ * before they expire; the default credential is `DefaultAzureCredential`
+ * (AKS Workload Identity, a managed identity, or `AZURE_*` variables).
+ * @public — exported for unit tests
+ */
+export function createEntraPasswordCallback({ hostname, credential }) {
+  const scope = entraTokenScopeForHostname(hostname);
+  if (credential) {
+    return getBearerTokenProvider(credential, scope);
+  }
+  let provider = entraTokenProviders.get(scope);
+  if (!provider) {
+    provider = getBearerTokenProvider(new DefaultAzureCredential(), scope);
+    entraTokenProviders.set(scope, provider);
+  }
+  return provider;
 }
 
 /**
@@ -274,6 +343,21 @@ export function createRdsIamPasswordCallback({
     });
 }
 
+function resolveDatabaseAuthMethod(options, env) {
+  const iamAuthEnabled = options.iamAuthEnabled ?? isRdsIamAuthEnabled(env);
+  const entraAuthEnabled =
+    options.entraAuthEnabled ?? isEntraDatabaseAuthEnabled(env);
+  if (iamAuthEnabled && entraAuthEnabled) {
+    throw new Error(
+      "Enable only one of ARCHESTRA_DATABASE_IAM_AUTH_ENABLED and ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED.",
+    );
+  }
+  if (iamAuthEnabled) {
+    return "rds-iam";
+  }
+  return entraAuthEnabled ? "entra" : "password";
+}
+
 function parseDatabaseUrl(connectionString, env = process.env) {
   let parsedUrl;
   try {
@@ -356,7 +440,11 @@ function parseDatabaseUrl(connectionString, env = process.env) {
  */
 export function resolvePgSslConfig(
   connectionString,
-  { iamAuthEnabled = true, env = process.env } = {},
+  {
+    iamAuthEnabled = true,
+    authLabel = AUTH_METHOD_LABELS["rds-iam"],
+    env = process.env,
+  } = {},
 ) {
   if (!iamAuthEnabled) {
     return undefined;
@@ -379,7 +467,7 @@ export function resolvePgSslConfig(
     sslParam === "no-verify"
   ) {
     throw new Error(
-      "TLS must stay enabled when RDS IAM database authentication is enabled; sslmode=disable and sslmode=no-verify are not permitted. Use the bundled RDS CA bundle or set sslrootcert / PGSSLROOTCERT.",
+      `TLS must stay enabled when ${authLabel} is enabled; sslmode=disable and sslmode=no-verify are not permitted. Use the bundled CA certificates or set sslrootcert / PGSSLROOTCERT.`,
     );
   }
 
@@ -420,14 +508,15 @@ export function resolvePgSslConfig(
 /**
  * Builds a node-postgres Pool or Client configuration object.
  *
- * When RDS IAM auth is disabled (default), returns `{ connectionString, ...extraConfig }`
+ * With password authentication (default), returns `{ connectionString, ...extraConfig }`
  * unchanged.
  *
- * When RDS IAM auth is enabled, omits `connectionString` (because node-postgres
- * overwrites a `password` callback with `""` when `connectionString` is present)
- * and supplies parsed host/port/user/database, TLS verification with the RDS CA
- * bundle, and a dynamic `password` callback that signs a fresh token per new
- * connection.
+ * When RDS IAM or Microsoft Entra ID auth is enabled, omits `connectionString`
+ * (because node-postgres overwrites a `password` callback with `""` when
+ * `connectionString` is present) and supplies parsed host/port/user/database,
+ * TLS verification with the bundled CA certificates, and a dynamic `password`
+ * callback: a freshly signed RDS IAM token, or a cached Entra access token,
+ * for each new connection.
  */
 export function buildPgConnectionConfig(
   connectionString,
@@ -435,45 +524,53 @@ export function buildPgConnectionConfig(
   options = {},
 ) {
   const env = options.env ?? process.env;
-  const iamAuthEnabled =
-    options.iamAuthEnabled ?? isRdsIamAuthEnabled(env);
+  const authMethod = resolveDatabaseAuthMethod(options, env);
 
-  if (!iamAuthEnabled) {
+  if (authMethod === "password") {
     return {
       connectionString,
       ...extraConfig,
     };
   }
 
+  const authLabel = AUTH_METHOD_LABELS[authMethod];
   const { host, port, user, database, optionalParams } = parseDatabaseUrl(
     connectionString,
     env,
   );
 
   if (!host) {
-    throw new Error(
-      "RDS IAM database authentication requires a host in ARCHESTRA_DATABASE_URL.",
-    );
+    throw new Error(`${authLabel} requires a host in ARCHESTRA_DATABASE_URL.`);
   }
   if (!user) {
     throw new Error(
-      "RDS IAM database authentication requires a username in ARCHESTRA_DATABASE_URL.",
+      `${authLabel} requires a username in ARCHESTRA_DATABASE_URL.`,
     );
   }
 
-  const password = createRdsIamPasswordCallback({
-    hostname: host,
-    port,
-    username: user,
-    awsRegion: options.awsRegion,
-    credentials: options.credentials,
-    env,
-  });
+  const password =
+    authMethod === "entra"
+      ? createEntraPasswordCallback({
+          hostname: host,
+          credential: options.azureCredential,
+        })
+      : createRdsIamPasswordCallback({
+          hostname: host,
+          port,
+          username: user,
+          awsRegion: options.awsRegion,
+          credentials: options.credentials,
+          env,
+        });
 
   const ssl =
     extraConfig.ssl !== undefined
       ? extraConfig.ssl
-      : resolvePgSslConfig(connectionString, { iamAuthEnabled: true, env });
+      : resolvePgSslConfig(connectionString, {
+          iamAuthEnabled: true,
+          authLabel,
+          env,
+        });
 
   return {
     ...optionalParams,
@@ -499,10 +596,8 @@ export function configurePgDefaultsForRdsIam(
   options = {},
 ) {
   const env = options.env ?? process.env;
-  const iamAuthEnabled =
-    options.iamAuthEnabled ?? isRdsIamAuthEnabled(env);
 
-  if (!iamAuthEnabled) {
+  if (resolveDatabaseAuthMethod(options, env) === "password") {
     return connectionString;
   }
 

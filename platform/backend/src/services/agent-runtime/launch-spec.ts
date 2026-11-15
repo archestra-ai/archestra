@@ -160,6 +160,16 @@ export async function buildAgentRunLaunchSpec(params: {
       "Agent Runtime requires ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL (or ARCHESTRA_INTERNAL_API_BASE_URL) so the run can reach the LLM proxy and MCP gateway",
     );
   }
+  // Saving an Agent checks this too, but an Agent saved while the operator
+  // allowed privileged runs keeps its setting after the flag is turned off.
+  // Every new run and every follow-up turn passes through here, so this is
+  // where the flag holds. It runs before any credential is minted.
+  if (params.runtime.privileged && !config.agentRuntime.allowPrivileged) {
+    throw new ApiError(
+      403,
+      "This Agent's background deployment is privileged, and the deployment operator has disabled privileged background deployments. An Agent administrator must turn off privileged mode on the Agent before it can run.",
+    );
+  }
 
   if (params.actor.kind === "serviceAccount")
     await resolveOauthServiceAccount({

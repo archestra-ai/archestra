@@ -1063,6 +1063,7 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Lets Agent administrators enable privileged runtime pods, which have node-level access.
   - Default: `false`
   - Values: `true`, `false`
+  - Turning it off also stops Agents already set to privileged: their new runs and follow-up turns fail until an Agent administrator turns privileged mode off.
 
 - **`ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL`** - URL a runtime pod uses to reach the LLM proxy and MCP gateway. It must be reachable from inside the cluster.
   - Default: [`ARCHESTRA_INTERNAL_API_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_INTERNAL_API_BASE_URL)

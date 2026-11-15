@@ -41,10 +41,6 @@ Archestra runs code other people wrote: MCP servers, agent runs, and sandboxed c
 - **Audit trail:** export Archestra's [audit log](/docs/admin/observability/audit-logs) over OTLP with [`ARCHESTRA_AUDIT_LOG_OTEL_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_ENABLED), and send your cluster's Kubernetes audit log to the same SIEM.
 - **Deploy access:** with the default values, the chart creates nothing outside its namespaces. The CI identity that runs `helm upgrade` needs write access only to the release namespace, the MCP server namespace, and any environment namespaces you list. Do not give people cluster-admin for day-to-day work.
 
-### Verify Archestra Images
-
-To check an image's provenance and SBOM, or admit only Archestra-released images, see [Verify Releases](/docs/admin/deployment/verify-releases).
-
 ## Cluster Capacity
 
 Size the web pods, workers, and database for your organization with [Sizing and High Availability](/docs/admin/deployment/scaling), which also sets them up to survive a lost node or zone. Validate the size against realistic requests, payloads, and background work in staging before serving production traffic.

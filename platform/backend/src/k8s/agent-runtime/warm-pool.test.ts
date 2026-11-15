@@ -463,33 +463,34 @@ test("pools spares in the Agent Runtime namespace unless the Agent's Environment
 });
 
 test("removes templates and the warm-workspace policy a moved pool left behind", async () => {
+  const candidate = {
+    id: "agent",
+    organizationId: "org",
+    environmentId: null,
+    runtime: {
+      image: "runtime:v1",
+      command: null,
+      inferenceProtocol: "anthropic" as const,
+      backend: "kubernetes" as const,
+      steerMode: "tmux_keys" as const,
+      privileged: false,
+      resources: null,
+      tier: "M" as const,
+      environment: null,
+      credentials: null,
+      ttlHours: null,
+      idleTimeoutMinutes: null,
+    },
+    namespace: null,
+    defaultNamespace: null,
+    agentPolicy: null,
+    environmentPolicy: null,
+    defaultPolicy: null,
+    agentRuntimeTiers: null,
+  };
   vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
   vi.spyOn(AgentModel, "listWarmPoolCandidates").mockResolvedValue([
-    {
-      id: "agent",
-      organizationId: "org",
-      environmentId: null,
-      runtime: {
-        image: "runtime:v1",
-        command: null,
-        inferenceProtocol: "anthropic" as const,
-        backend: "kubernetes" as const,
-        steerMode: "tmux_keys" as const,
-        privileged: false,
-        resources: null,
-        tier: "M" as const,
-        environment: null,
-        credentials: null,
-        ttlHours: null,
-        idleTimeoutMinutes: null,
-      },
-      namespace: null,
-      defaultNamespace: null,
-      agentPolicy: null,
-      environmentPolicy: null,
-      defaultPolicy: null,
-      agentRuntimeTiers: null,
-    },
+    candidate,
   ] as Awaited<ReturnType<typeof AgentModel.listWarmPoolCandidates>>);
   vi.spyOn(EnvironmentModel, "listAll").mockResolvedValue([]);
   vi.spyOn(OrganizationModel, "listDefaultEngineTargets").mockResolvedValue([

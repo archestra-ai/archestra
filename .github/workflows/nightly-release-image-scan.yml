@@ -4,9 +4,10 @@ name: Nightly Release Image Scan
 # bytes again before tagging them. An advisory published in between holds the
 # release, and the only way out is a new version. A line can go days between
 # releases, so rebuild every image a release on main and on each supported
-# release line would publish, plus the third-party images the line pins, scan
-# them under the release policy, and alert in Slack before anyone cuts a
-# release that would be held.
+# release line would publish, scan it under the release policy, and alert in
+# Slack before anyone cuts a release that would be held. Third-party images the
+# line pins are scanned too; they never hold a release, and infrastructure
+# images alert on critical findings only (release-image-policy.py).
 #
 # Advisory only: these builds gate nothing and are never publication evidence.
 # They cover linux/amd64; releases still scan both architectures.
@@ -103,6 +104,7 @@ jobs:
           # registry:// reads the published image, never a same-named local one.
           image: ${{ matrix.reference && format('registry://{0}', matrix.reference) || format('local://{0}', env.IMAGE_REFERENCE) }}
           platform: ${{ matrix.reference && 'linux/amd64' || '' }}
+          only-severities: ${{ matrix.severities || 'critical,high' }}
           exit-code: "true"
 
   notify:

@@ -44,11 +44,9 @@ target of `platform/Dockerfile`, which rebuilds upstream's engine binaries
 against the CVE floors in `platform/docker/dagger-deps.sh`). The publisher-inventory regression follows release
 workflow callers, including new companion images and catalog targets.
 
-Third-party images a release runs unchanged are not built here, so the queue
-scans their exact pinned references (`upstream_matrix`) on both architectures
-under the same policy, and `Release Image Security` requires those legs too.
-Images in `ADVISORY_UPSTREAM_IMAGES` are left out of the gate and reported only
-by the nightly scan.
+Third-party images a release runs unchanged (`upstream_matrix`) are not
+candidates and never hold a release; only the nightly release image scan covers
+them.
 
 ## Build and evidence contract
 

@@ -48,6 +48,7 @@ class ScanTargetsTest(unittest.TestCase):
             if row.get("reference"):
                 self.assertRegex(row["reference"], r"@sha256:[0-9a-f]{64}$")
                 self.assertEqual((row["context"], row["dockerfile"], row["target"]), ("", "", ""))
+                self.assertIn(row["severities"], ("critical", "critical,high"))
         self.assertEqual(images("release/9.9"), ["platform", "platform-slim", "dagger-engine", "mcp-server-base",
                                                  "p4-shim", "sandbox-base", "agent-claude-code"])
         for branch in ("main", "release/9.9"):

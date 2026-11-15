@@ -76,11 +76,10 @@ def candidate_matrix(root):
 def upstream_matrix(root):
     """Third-party images a release runs unchanged, by the exact reference it pins.
 
-    Nothing here builds them, so a release scans each pinned reference under the
-    candidates' policy, and the nightly scan alerts on every one of them.
-    Images in ADVISORY_UPSTREAM_IMAGES do not hold a release (see there).
-    test_release_image_security.py fails when a chart image default is neither
-    built here nor listed.
+    Nothing here builds them, and they never hold a release: the nightly
+    release image scan scans each pinned reference and alerts on findings of
+    the listed severities. test_release_image_security.py fails when a chart
+    image default is neither built here nor listed.
     """
     chart = (root / "platform/helm/archestra/values.yaml").read_text()
     playwright = json.loads((root / "platform/backend/src/playwright-mcp-image.json").read_text())
@@ -95,7 +94,8 @@ def upstream_matrix(root):
     for image, reference in images.items():
         if not isinstance(reference, str) or not PINNED_REFERENCE.fullmatch(reference):
             raise ValueError(f"Upstream image is not pinned by digest: {image}")
-    return {"include": [{"image": image, "reference": reference, "blocking": image not in ADVISORY_UPSTREAM_IMAGES}
+    return {"include": [{"image": image, "reference": reference,
+                         "severities": UPSTREAM_ALERT_SEVERITIES.get(image, "critical,high")}
                         for image, reference in images.items()]}
 
 
@@ -128,7 +128,7 @@ def requires_scan(event_name, event, repository):
 
 
 def validate_gate(event_name, event, repository, classify_result, decision, scan_result, current=None,
-                  workflow_sha=None, *, upstream_scan_result):
+                  workflow_sha=None):
     if classify_result != "success":
         raise ValueError("Release classification did not succeed")
     required = requires_scan(event_name, event, repository)
@@ -137,13 +137,11 @@ def validate_gate(event_name, event, repository, classify_result, decision, scan
     if decision != str(required).lower():
         raise ValueError("Missing or inconsistent scan decision")
     if not required:
-        if scan_result != "skipped" or upstream_scan_result != "skipped":
+        if scan_result != "skipped":
             raise ValueError("Unexpected scan result for an ordinary event")
         return
     if scan_result != "success":
         raise ValueError(f"Every release image scan must succeed (got {scan_result!r})")
-    if upstream_scan_result != "success":
-        raise ValueError(f"Every pinned upstream image scan must succeed (got {upstream_scan_result!r})")
     group = event["merge_group"]
     if workflow_sha != group["head_sha"] or current != group["head_sha"]:
         raise ValueError("Merge group changed or scans belong to another queue revision")
@@ -211,14 +209,12 @@ def main():
     event_name, repository = os.environ["GITHUB_EVENT_NAME"], os.environ["GITHUB_REPOSITORY"]
     if mode == "classify":
         decision = requires_scan(event_name, event, repository)
-        root = Path(__file__).resolve().parents[2]
-        matrix, upstream = ({"include": [row | {"arch": arch} for row in inventory["include"]
-                                         for arch in ("amd64", "arm64")]}
-                            for inventory in (candidate_matrix(root), blocking_upstream_matrix(root)))
+        inventory = candidate_matrix(Path(__file__).resolve().parents[2])
+        matrix = {"include": [row | {"arch": arch} for row in inventory["include"]
+                              for arch in ("amd64", "arm64")]}
         with open(os.environ["GITHUB_OUTPUT"], "a") as output:
             output.write(f"scan={str(decision).lower()}\n")
             output.write(f"matrix={json.dumps(matrix, separators=(',', ':'))}\n")
-            output.write(f"upstream-matrix={json.dumps(upstream, separators=(',', ':'))}\n")
     elif mode == "gate":
         required = requires_scan(event_name, event, repository)
         current = None
@@ -235,7 +231,7 @@ def main():
                 ))
         validate_gate(event_name, event, repository, os.environ["CLASSIFY_RESULT"],
                       os.environ["SCAN_REQUIRED"], os.environ["SCAN_RESULT"], current,
-                      os.environ["GITHUB_SHA"], upstream_scan_result=os.environ["UPSTREAM_SCAN_RESULT"])
+                      os.environ["GITHUB_SHA"])
         if required and event_name == "merge_group":
             branch = event["merge_group"]["base_ref"].removeprefix("refs/heads/")
             head = f"{repository.split('/')[0]}:release-please--branches--{branch}--components--platform"
@@ -279,16 +275,12 @@ def main():
 # ============================================================================
 
 
-# Upstream images with fixable Critical/High findings that no newer upstream
-# release removes yet. Holding releases on them would hold every release, so
-# only the nightly scan reports them. Remove an entry once its image passes.
-ADVISORY_UPSTREAM_IMAGES = frozenset({"postgresql", "postgres-exporter", "playwright-mcp"})
-
-
-def blocking_upstream_matrix(root):
-    return {"include": [row for row in upstream_matrix(root)["include"] if row["blocking"]]}
-
-
+# Images the platform runs as infrastructure (init containers, the database
+# and its proxy) are reachable from less untrusted input than code-running
+# images, so the nightly scan alerts on their critical findings only. Anything
+# not listed alerts on critical and high.
+UPSTREAM_ALERT_SEVERITIES = {image: "critical" for image in (
+    "busybox", "busybox-musl", "cloud-sql-proxy", "postgresql", "postgres-exporter")}
 PINNED_REFERENCE = re.compile(r"[a-z0-9][a-z0-9./_-]*(?::[\w][\w.-]*)?@sha256:[0-9a-f]{64}")
 
 

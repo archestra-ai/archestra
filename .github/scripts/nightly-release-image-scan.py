@@ -61,7 +61,8 @@ def branch_inventory(root, sha):
     """Run the branch's own candidate_matrix against that branch's files.
 
     A line whose policy also pins upstream images (upstream_matrix) adds one
-    row per pinned reference; those rows scan the registry image unbuilt.
+    row per pinned reference; those rows scan the registry image unbuilt, at
+    that image's alert severities.
     """
     present = git(root, "ls-tree", "--name-only", sha, *INVENTORY_PATHS).splitlines()
     archive = subprocess.run(["git", "-C", str(root), "archive", "--format=tar", sha, *present],
@@ -75,8 +76,9 @@ def branch_inventory(root, sha):
         spec.loader.exec_module(policy)
         rows = policy.candidate_matrix(Path(tree))["include"]
         if hasattr(policy, "upstream_matrix"):
-            rows += [{"image": row["image"], "reference": row["reference"], "context": "", "dockerfile": "",
-                      "target": ""} for row in policy.upstream_matrix(Path(tree))["include"]]
+            rows += [{"image": row["image"], "reference": row["reference"], "severities": row["severities"],
+                      "context": "", "dockerfile": "", "target": ""}
+                     for row in policy.upstream_matrix(Path(tree))["include"]]
         return rows
 
 

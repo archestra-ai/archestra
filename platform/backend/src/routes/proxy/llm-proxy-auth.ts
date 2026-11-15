@@ -167,7 +167,7 @@ export async function validateVirtualApiKey(params: {
   /**
    * Organization of the resolved proxy agent the request will be attributed
    * to, or null for pure credential-swap sinks with no agent attribution
-   * (model listing, Gemini query-key rewriting). When set, a key from another
+   * (model listing, Gemini pass-through key swapping). When set, a key from another
    * organization is rejected so its traffic can never be attributed — or
    * limit-checked — against a different organization's proxy.
    */
@@ -1232,8 +1232,11 @@ async function authenticatePassthroughProxyRequest(params: {
   const passthroughToken = getPassthroughVirtualKeyToken(headers);
   // Read from the raw headers so a route-level schema transform cannot strip
   // the "Bearer " prefix out from under us (same reasoning as attemptJwksAuth).
+  // Google's SDKs never send a bearer, so for Gemini a platform token in
+  // x-goog-api-key or ?key= takes the bearer's place.
   const bearerToken =
-    request.raw.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null;
+    request.raw.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ??
+    (provider === "gemini" ? geminiPlatformKey(request) : null);
 
   if (!passthroughToken && !bearerToken) {
     throw unauthenticated;
@@ -1327,6 +1330,8 @@ async function authenticatePassthroughProxyRequest(params: {
             );
           }
         }
+      } else if (provider === "gemini") {
+        providerApiKey = await geminiMappedApiKey(bearerToken);
       }
       return;
     }
@@ -1392,7 +1397,9 @@ function forwardPassthroughProviderApiKey(params: {
     ? ["authorization", `Bearer ${apiKey.slice(7)}`]
     : provider === "anthropic"
       ? ["x-api-key", apiKey]
-      : ["authorization", `Bearer ${apiKey}`];
+      : provider === "gemini"
+        ? ["x-goog-api-key", apiKey]
+        : ["authorization", `Bearer ${apiKey}`];
   if (request.raw.headers[name] !== undefined) return;
   request.headers[name] = value;
   request.raw.headers[name] = value;
@@ -1411,6 +1418,44 @@ function forwardPassthroughProviderApiKey(params: {
       request.raw.headers["anthropic-beta"] = nextBeta;
     }
   }
+}
+
+/**
+ * The Gemini key a standard virtual key maps, or null when it maps none.
+ * Google's SDKs send the virtual key where the Gemini key belongs, so the
+ * catch-all forwards the mapped key in its place, as generateContent does.
+ */
+async function geminiMappedApiKey(tokenValue: string): Promise<string | null> {
+  try {
+    const { apiKey } = await validateVirtualApiKey({
+      tokenValue,
+      expectedProvider: "gemini",
+      expectedOrganizationId: null,
+    });
+    return apiKey ?? null;
+  } catch (error) {
+    // No usable mapping: the request still passes, forwarding no credential.
+    if (error instanceof ApiError && error.statusCode < 500) return null;
+    throw error;
+  }
+}
+
+/**
+ * A platform token a Gemini client put where Google's SDKs put the API key:
+ * the x-goog-api-key header or the ?key= query parameter. A raw Gemini key
+ * there is the caller's own provider credential, not a platform credential.
+ */
+function geminiPlatformKey(request: FastifyRequest): string | null {
+  const header = request.raw.headers["x-goog-api-key"];
+  const url = request.raw.url ?? "";
+  const query = url.includes("?") ? url.slice(url.indexOf("?") + 1) : "";
+  const candidates = [
+    ...(Array.isArray(header) ? header : header ? [header] : []).flatMap(
+      (value) => value.split(","),
+    ),
+    ...new URLSearchParams(query).getAll("key"),
+  ].map((value) => value.trim());
+  return candidates.find((value) => hasArchestraTokenPrefix(value)) ?? null;
 }
 
 const passthroughUpstreamOverrides = new WeakMap<object, string>();

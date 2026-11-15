@@ -1,29 +1,39 @@
 import { randomUUID } from "node:crypto";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { withOpenAppaLease } from "./openappa-leases";
 
 setupTestCacheManager();
 
-/** Work that runs until the test lets it end. */
+/**
+ * Work that runs until the test lets it end. `started` settles when the work
+ * begins. A test waits for that or for the call to settle without running it,
+ * never for a deadline: a claim on a loaded runner can take over a second.
+ */
 function heldWork<T>(value: T) {
   const state = { started: false, end: () => {} };
+  let markStarted = () => {};
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
   const work = async () => {
     state.started = true;
+    markStarted();
     await new Promise<void>((resolve) => {
       state.end = resolve;
     });
     return value;
   };
-  return { state, work };
+  return { state, started, work };
 }
 
 test("a holder whose work outlives its lease ends only its own: the caller that took the lease over keeps it", async () => {
   const key: AllowedCacheKey = `${CacheKey.OpenAppaPolicyCheck}-lease-test-${randomUUID()}`;
   const firstHolder = heldWork("first");
   const first = withOpenAppaLease({ key, ttlMs: 50, work: firstHolder.work });
-  await vi.waitFor(() => expect(firstHolder.state.started).toBe(true));
+  await Promise.race([firstHolder.started, first]);
+  expect(firstHolder.state.started).toBe(true);
   // The first holder's lease lapses while its work still runs, and the next
   // caller takes it over.
   await new Promise((resolve) => setTimeout(resolve, 100));
@@ -33,7 +43,8 @@ test("a holder whose work outlives its lease ends only its own: the caller that 
     ttlMs: 60_000,
     work: secondHolder.work,
   });
-  await vi.waitFor(() => expect(secondHolder.state.started).toBe(true));
+  await Promise.race([secondHolder.started, second]);
+  expect(secondHolder.state.started).toBe(true);
   firstHolder.state.end();
   expect(await first).toEqual({ ran: true, value: "first" });
 

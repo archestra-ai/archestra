@@ -74,7 +74,7 @@ class SpiffeIssuer {
     // It vouches only for its own agents.
     if (!params.spiffeId.startsWith(spiffeIdForAgent(""))) {
       throw new Error(
-        "Archestra issues JWT-SVIDs only for its agents' SPIFFE IDs",
+        "JWT-SVIDs are issued only for this deployment's agent SPIFFE IDs",
       );
     }
     const signingKey = await this.getSigningKey();

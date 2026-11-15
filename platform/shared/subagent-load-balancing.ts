@@ -422,3 +422,46 @@ export function orderSubagentsByLoadBalancing(
     ...tail.slice(0, tailShift),
   ];
 }
+
+/**
+ * Platform-reserved `_meta` key stamped on `agent__*` delegation tool
+ * descriptors whose target is a load-balanced router over Agent Runtime
+ * subagents. Stripped from upstream MCP servers via `RESERVED_PLATFORM_META_KEYS`.
+ */
+export const LOAD_BALANCED_RUNTIME_ROUTER_META_KEY =
+  "archestraLoadBalancedRuntimeRouter";
+
+const loadBalancedRuntimeRouterTools = new WeakSet<object>();
+
+/**
+ * Marks a built tool wrapper (e.g. an AI SDK `Tool`) as delegating to a
+ * load-balanced runtime router subagent without adding enumerable properties
+ * that model provider SDKs serialize.
+ */
+export function markLoadBalancedRuntimeRouterTool<T extends object>(
+  tool: T,
+): T {
+  loadBalancedRuntimeRouterTools.add(tool);
+  return tool;
+}
+
+/**
+ * Returns true when `tool` was marked via {@link markLoadBalancedRuntimeRouterTool}
+ * or is a raw MCP tool descriptor carrying platform-authored
+ * `_meta[LOAD_BALANCED_RUNTIME_ROUTER_META_KEY] === true`.
+ */
+export function isLoadBalancedRuntimeRouterTool(tool: unknown): boolean {
+  if (!tool || typeof tool !== "object") {
+    return false;
+  }
+  if (loadBalancedRuntimeRouterTools.has(tool)) {
+    return true;
+  }
+  const meta = (tool as { _meta?: unknown })._meta;
+  return (
+    Boolean(meta) &&
+    typeof meta === "object" &&
+    (meta as Record<string, unknown>)[LOAD_BALANCED_RUNTIME_ROUTER_META_KEY] ===
+      true
+  );
+}

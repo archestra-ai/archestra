@@ -62835,10 +62835,6 @@
                                     "nullable": true,
                                     "type": "string"
                                   },
-                                  "entraAgentIdentityId": {
-                                    "nullable": true,
-                                    "type": "string"
-                                  },
                                   "environmentId": {
                                     "nullable": true,
                                     "type": "string",
@@ -63613,7 +63609,6 @@
                                   "modelPoolId",
                                   "autoRouterId",
                                   "identityProviderId",
-                                  "entraAgentIdentityId",
                                   "environmentId",
                                   "runtime",
                                   "runtimeSecretId",
@@ -64672,10 +64667,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "entraAgentIdentityId": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "environmentId": {
                             "nullable": true,
                             "type": "string",
@@ -65450,7 +65441,6 @@
                           "modelPoolId",
                           "autoRouterId",
                           "identityProviderId",
-                          "entraAgentIdentityId",
                           "environmentId",
                           "runtime",
                           "runtimeSecretId",
@@ -65863,11 +65853,6 @@
                   "identityProviderId": {
                     "nullable": true,
                     "type": "string"
-                  },
-                  "entraAgentIdentityId": {
-                    "nullable": true,
-                    "type": "string",
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                   },
                   "environmentId": {
                     "nullable": true,
@@ -66778,10 +66763,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "entraAgentIdentityId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "environmentId": {
                       "nullable": true,
                       "type": "string",
@@ -67539,7 +67520,6 @@
                     "modelPoolId",
                     "autoRouterId",
                     "identityProviderId",
-                    "entraAgentIdentityId",
                     "environmentId",
                     "runtime",
                     "runtimeSecretId",
@@ -72163,10 +72143,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "entraAgentIdentityId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "environmentId": {
                       "nullable": true,
                       "type": "string",
@@ -72936,7 +72912,6 @@
                     "modelPoolId",
                     "autoRouterId",
                     "identityProviderId",
-                    "entraAgentIdentityId",
                     "environmentId",
                     "runtime",
                     "runtimeSecretId",
@@ -73686,10 +73661,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "identityProviderId": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "entraAgentIdentityId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -74450,7 +74421,6 @@
                         "modelPoolId",
                         "autoRouterId",
                         "identityProviderId",
-                        "entraAgentIdentityId",
                         "environmentId",
                         "runtime",
                         "runtimeSecretId",
@@ -74885,10 +74855,6 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "identityProviderId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "entraAgentIdentityId": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -75649,7 +75615,6 @@
                     "modelPoolId",
                     "autoRouterId",
                     "identityProviderId",
-                    "entraAgentIdentityId",
                     "environmentId",
                     "runtime",
                     "runtimeSecretId",
@@ -76011,11 +75976,6 @@
                   "identityProviderId": {
                     "nullable": true,
                     "type": "string"
-                  },
-                  "entraAgentIdentityId": {
-                    "nullable": true,
-                    "type": "string",
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                   },
                   "environmentId": {
                     "nullable": true,
@@ -76640,10 +76600,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "entraAgentIdentityId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "environmentId": {
                       "nullable": true,
                       "type": "string",
@@ -77401,7 +77357,6 @@
                     "modelPoolId",
                     "autoRouterId",
                     "identityProviderId",
-                    "entraAgentIdentityId",
                     "environmentId",
                     "runtime",
                     "runtimeSecretId",
@@ -77945,6 +77900,639 @@
         "x-required-permissions": {
           "kind": "dynamic",
           "note": "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`. Additional scope checks may apply.",
+          "permissions": []
+        }
+      }
+    },
+    "/api/agents/{id}/identity-bindings": {
+      "get": {
+        "operationId": "getAgentIdentityBindings",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Get the identities an agent acts as at identity providers\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bindings": {
+                      "maxItems": 50,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "identityProviderId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "externalId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255
+                          }
+                        },
+                        "required": [
+                          "identityProviderId",
+                          "externalId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "bindings"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      },
+      "put": {
+        "operationId": "replaceAgentIdentityBindings",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Replace the identities an agent acts as at identity providers. Changing them requires identityProvider:update.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bindings": {
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "identityProviderId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "externalId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255
+                        }
+                      },
+                      "required": [
+                        "identityProviderId",
+                        "externalId"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "bindings"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bindings": {
+                      "maxItems": 50,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "identityProviderId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "externalId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255
+                          }
+                        },
+                        "required": [
+                          "identityProviderId",
+                          "externalId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "bindings"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
           "permissions": []
         }
       }
@@ -79521,10 +80109,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "entraAgentIdentityId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "environmentId": {
                       "nullable": true,
                       "type": "string",
@@ -80282,7 +80866,6 @@
                     "modelPoolId",
                     "autoRouterId",
                     "identityProviderId",
-                    "entraAgentIdentityId",
                     "environmentId",
                     "runtime",
                     "runtimeSecretId",
@@ -80858,10 +81441,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "entraAgentIdentityId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "environmentId": {
                       "nullable": true,
                       "type": "string",
@@ -81619,7 +82198,6 @@
                     "modelPoolId",
                     "autoRouterId",
                     "identityProviderId",
-                    "entraAgentIdentityId",
                     "environmentId",
                     "runtime",
                     "runtimeSecretId",
@@ -88985,10 +89563,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "entraAgentIdentityId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "environmentId": {
                       "nullable": true,
                       "type": "string",
@@ -89746,7 +90320,6 @@
                     "modelPoolId",
                     "autoRouterId",
                     "identityProviderId",
-                    "entraAgentIdentityId",
                     "environmentId",
                     "runtime",
                     "runtimeSecretId",
@@ -168924,10 +169497,6 @@
                               "nullable": true,
                               "type": "string"
                             },
-                            "entraAgentIdentityId": {
-                              "nullable": true,
-                              "type": "string"
-                            },
                             "environmentId": {
                               "nullable": true,
                               "type": "string",
@@ -169685,7 +170254,6 @@
                             "modelPoolId",
                             "autoRouterId",
                             "identityProviderId",
-                            "entraAgentIdentityId",
                             "environmentId",
                             "runtime",
                             "runtimeSecretId",
@@ -172273,10 +172841,6 @@
                                   "nullable": true,
                                   "type": "string"
                                 },
-                                "entraAgentIdentityId": {
-                                  "nullable": true,
-                                  "type": "string"
-                                },
                                 "environmentId": {
                                   "nullable": true,
                                   "type": "string",
@@ -173034,7 +173598,6 @@
                                 "modelPoolId",
                                 "autoRouterId",
                                 "identityProviderId",
-                                "entraAgentIdentityId",
                                 "environmentId",
                                 "runtime",
                                 "runtimeSecretId",
@@ -435262,8 +435825,13 @@
                             "enum": [
                               "identity_provider",
                               "mcp_server",
-                              "entra_agent_identity"
+                              "entra_agent_identity",
+                              "okta_ai_agent"
                             ]
+                          },
+                          "credentialActorClientId": {
+                            "nullable": true,
+                            "type": "string"
                           },
                           "durationMs": {
                             "nullable": true,
@@ -435302,6 +435870,7 @@
                           "source",
                           "credentialClientId",
                           "credentialClientType",
+                          "credentialActorClientId",
                           "durationMs",
                           "createdAt",
                           "userName",
@@ -435766,8 +436335,13 @@
                       "enum": [
                         "identity_provider",
                         "mcp_server",
-                        "entra_agent_identity"
+                        "entra_agent_identity",
+                        "okta_ai_agent"
                       ]
+                    },
+                    "credentialActorClientId": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "durationMs": {
                       "nullable": true,
@@ -435806,6 +436380,7 @@
                     "source",
                     "credentialClientId",
                     "credentialClientType",
+                    "credentialActorClientId",
                     "durationMs",
                     "createdAt",
                     "userName",
@@ -595087,6 +595662,24 @@
                                   "blueprintClientId"
                                 ],
                                 "additionalProperties": false
+                              },
+                              "agentIdentity": {
+                                "type": "object",
+                                "properties": {
+                                  "privateKeyPem": {
+                                    "type": "string"
+                                  },
+                                  "privateKeyId": {
+                                    "type": "string"
+                                  },
+                                  "requireAgentIdentity": {
+                                    "type": "boolean"
+                                  },
+                                  "actorTokenScope": {
+                                    "type": "string"
+                                  }
+                                },
+                                "additionalProperties": false
                               }
                             },
                             "additionalProperties": false
@@ -595378,6 +595971,7 @@
                             "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
                             "oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret",
                             "oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem",
+                            "oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem",
                             "samlConfig.privateKey",
                             "samlConfig.decryptionPvk",
                             "samlConfig.spMetadata.privateKey",
@@ -595791,6 +596385,23 @@
                             "required": [
                               "blueprintClientId"
                             ]
+                          },
+                          "agentIdentity": {
+                            "type": "object",
+                            "properties": {
+                              "privateKeyPem": {
+                                "type": "string"
+                              },
+                              "privateKeyId": {
+                                "type": "string"
+                              },
+                              "requireAgentIdentity": {
+                                "type": "boolean"
+                              },
+                              "actorTokenScope": {
+                                "type": "string"
+                              }
+                            }
                           }
                         }
                       },
@@ -596209,6 +596820,24 @@
                                 "blueprintClientId"
                               ],
                               "additionalProperties": false
+                            },
+                            "agentIdentity": {
+                              "type": "object",
+                              "properties": {
+                                "privateKeyPem": {
+                                  "type": "string"
+                                },
+                                "privateKeyId": {
+                                  "type": "string"
+                                },
+                                "requireAgentIdentity": {
+                                  "type": "boolean"
+                                },
+                                "actorTokenScope": {
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": false
                             }
                           },
                           "additionalProperties": false
@@ -596500,6 +597129,7 @@
                           "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
                           "oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret",
                           "oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem",
+                          "oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem",
                           "samlConfig.privateKey",
                           "samlConfig.decryptionPvk",
                           "samlConfig.spMetadata.privateKey",
@@ -598061,6 +598691,24 @@
                                 "blueprintClientId"
                               ],
                               "additionalProperties": false
+                            },
+                            "agentIdentity": {
+                              "type": "object",
+                              "properties": {
+                                "privateKeyPem": {
+                                  "type": "string"
+                                },
+                                "privateKeyId": {
+                                  "type": "string"
+                                },
+                                "requireAgentIdentity": {
+                                  "type": "boolean"
+                                },
+                                "actorTokenScope": {
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": false
                             }
                           },
                           "additionalProperties": false
@@ -598352,6 +599000,7 @@
                           "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
                           "oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret",
                           "oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem",
+                          "oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem",
                           "samlConfig.privateKey",
                           "samlConfig.decryptionPvk",
                           "samlConfig.spMetadata.privateKey",
@@ -598764,6 +599413,23 @@
                             "required": [
                               "blueprintClientId"
                             ]
+                          },
+                          "agentIdentity": {
+                            "type": "object",
+                            "properties": {
+                              "privateKeyPem": {
+                                "type": "string"
+                              },
+                              "privateKeyId": {
+                                "type": "string"
+                              },
+                              "requireAgentIdentity": {
+                                "type": "boolean"
+                              },
+                              "actorTokenScope": {
+                                "type": "string"
+                              }
+                            }
                           }
                         }
                       },
@@ -599182,6 +599848,24 @@
                                 "blueprintClientId"
                               ],
                               "additionalProperties": false
+                            },
+                            "agentIdentity": {
+                              "type": "object",
+                              "properties": {
+                                "privateKeyPem": {
+                                  "type": "string"
+                                },
+                                "privateKeyId": {
+                                  "type": "string"
+                                },
+                                "requireAgentIdentity": {
+                                  "type": "boolean"
+                                },
+                                "actorTokenScope": {
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": false
                             }
                           },
                           "additionalProperties": false
@@ -599473,6 +600157,7 @@
                           "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
                           "oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret",
                           "oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem",
+                          "oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem",
                           "samlConfig.privateKey",
                           "samlConfig.decryptionPvk",
                           "samlConfig.spMetadata.privateKey",

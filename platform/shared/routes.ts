@@ -56,6 +56,8 @@ export const RouteId = {
   CloneAgent: "cloneAgent",
   GetAgent: "getAgent",
   GetAgentDefaultSuggestedPrompts: "getAgentDefaultSuggestedPrompts",
+  GetAgentIdentityBindings: "getAgentIdentityBindings",
+  ReplaceAgentIdentityBindings: "replaceAgentIdentityBindings",
   PinAgent: "pinAgent",
   UnpinAgent: "unpinAgent",
   GetDefaultMcpGateway: "getDefaultMcpGateway",

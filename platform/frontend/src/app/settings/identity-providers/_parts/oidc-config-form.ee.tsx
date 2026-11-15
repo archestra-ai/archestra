@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { AgentIdentityFields } from "./agent-identity-fields.ee";
 import { AllowedEmailDomainsField } from "./allowed-email-domains-field.ee";
 import { EntraAgentIdFields } from "./entra-agent-id-fields.ee";
 import {
@@ -545,7 +546,7 @@ export function OidcConfigForm({
           subjectTokenTypeDefault={subjectTokenTypeDefault}
           embedded={!!activeSection}
           isSecretStored={isSecretStored}
-          showEntraAgentId={inferredEnterpriseExchangeType === "entra_obo"}
+          exchangeType={inferredEnterpriseExchangeType}
         />
       )}
 
@@ -578,8 +579,8 @@ function EnterpriseManagedCredentialsForm(props: {
   embedded?: boolean;
   /** See `OidcConfigForm`'s `configuredSecretPaths`. */
   isSecretStored: (path: IdentityProviderSecretPath) => boolean;
-  /** Microsoft Entra issuers also configure per-agent identities. */
-  showEntraAgentId: boolean;
+  /** Decides which per-agent identity settings the provider offers. */
+  exchangeType: "okta_managed" | "rfc8693" | "entra_obo";
 }) {
   const {
     authenticationDefault,
@@ -587,13 +588,13 @@ function EnterpriseManagedCredentialsForm(props: {
     subjectTokenTypeDefault,
     embedded = false,
     isSecretStored,
-    showEntraAgentId,
+    exchangeType,
   } = props;
   const appName = useAppName();
 
   const content = (
     <>
-      <IdentityProviderSectionHeader title="Tool Authentication">
+      <IdentityProviderSectionHeader title="Token Exchange">
         Let MCP tools act as the signed-in user through{" "}
         <ExternalDocsLink
           href="https://modelcontextprotocol.io/extensions/auth/enterprise-managed-authorization"
@@ -819,8 +820,16 @@ function EnterpriseManagedCredentialsForm(props: {
         )}
       />
 
-      {showEntraAgentId && (
+      <Separator />
+
+      {exchangeType === "entra_obo" ? (
         <EntraAgentIdFields form={form} isSecretStored={isSecretStored} />
+      ) : (
+        <AgentIdentityFields
+          form={form}
+          isSecretStored={isSecretStored}
+          exchangeType={exchangeType}
+        />
       )}
     </>
   );

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
@@ -24,6 +24,7 @@ import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
+  AgentIdentityBindingModel,
   AgentModel,
   AgentToolModel,
   AppToolModel,
@@ -5371,6 +5372,231 @@ describe("McpClient", () => {
         expect(secondResult.isError).toBe(false);
         expect(fetchMock).toHaveBeenCalledTimes(1);
 
+        fetchMock.mockRestore();
+      });
+
+      test("exchanges again as the new agent identity after the agent is rebound", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({ email: "rebound-agent@example.com" });
+        const agentKey = generateKeyPairSync("rsa", { modulusLength: 2048 });
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "okta-agent-rebind",
+          issuer: "https://example.okta.com",
+          oidcConfig: {
+            clientId: "web-client-id",
+            tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            enterpriseManagedCredentials: {
+              exchangeStrategy: "okta_managed",
+              tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              clientSecret: "web-client-secret",
+              agentIdentity: {
+                privateKeyPem: agentKey.privateKey
+                  .export({ format: "pem", type: "pkcs8" })
+                  .toString(),
+                privateKeyId: "archestra-agents",
+              },
+            },
+          },
+        });
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+        await AgentIdentityBindingModel.replaceForAgent({
+          agentId,
+          bindings: [
+            {
+              identityProviderId: identityProvider.id,
+              externalId: "wlp-agent-before",
+            },
+          ],
+        });
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: {
+            requestedCredentialType: "bearer_token",
+            resourceIdentifier: "api://internal-service",
+            tokenInjectionMode: "authorization_bearer",
+          },
+        });
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__rebound_agent_tool",
+          description: "Rebound agent tool",
+          parameters: {},
+          catalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+        await db.insert(schema.accountsTable).values({
+          id: randomUUID(),
+          accountId: "acct-rebound-agent",
+          providerId: identityProvider.providerId,
+          userId: user.id,
+          idToken: createJwt({ exp: futureExpSeconds() }),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+          async () =>
+            new Response(
+              JSON.stringify({ access_token: "agent-token", expires_in: 300 }),
+              {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              },
+            ),
+        );
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Agent result" }],
+          isError: false,
+        });
+        const callTool = (id: string) =>
+          mcpClient.executeToolCallForOwner(
+            {
+              id,
+              name: "github-mcp-server__rebound_agent_tool",
+              arguments: {},
+            },
+            agentOwner(agentId),
+            {
+              tokenId: "session-token",
+              teamId: null,
+              isOrganizationToken: false,
+              userId: user.id,
+            },
+            { conversationId: "rebound-agent-conv" },
+          );
+
+        await callTool("call_rebound_agent_1");
+        await AgentIdentityBindingModel.replaceForAgent({
+          agentId,
+          bindings: [
+            {
+              identityProviderId: identityProvider.id,
+              externalId: "wlp-agent-after",
+            },
+          ],
+        });
+        await callTool("call_rebound_agent_2");
+
+        expect(
+          fetchMock.mock.calls.map(([, init]) =>
+            new URLSearchParams(String(init?.body)).get("client_id"),
+          ),
+        ).toEqual(["wlp-agent-before", "wlp-agent-after"]);
+        fetchMock.mockRestore();
+      });
+
+      test("refuses an unbound agent's cached credential once the provider requires agent identities", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({
+          email: "require-after-cache@example.com",
+        });
+        const oidcConfig = {
+          clientId: "web-client-id",
+          tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+          enterpriseManagedCredentials: {
+            exchangeStrategy: "okta_managed",
+            tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            tokenEndpointAuthentication: "client_secret_post",
+            clientSecret: "web-client-secret",
+          },
+        };
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "okta-require-after-cache",
+          issuer: "https://example.okta.com",
+          oidcConfig,
+        });
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: {
+            requestedCredentialType: "bearer_token",
+            resourceIdentifier: "api://internal-service",
+            tokenInjectionMode: "authorization_bearer",
+          },
+        });
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__require_after_cache_tool",
+          description: "Require after cache tool",
+          parameters: {},
+          catalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+        await db.insert(schema.accountsTable).values({
+          id: randomUUID(),
+          accountId: "acct-require-after-cache",
+          providerId: identityProvider.providerId,
+          userId: user.id,
+          idToken: createJwt({ exp: futureExpSeconds() }),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+          async () =>
+            new Response(
+              JSON.stringify({ access_token: "shared-token", expires_in: 300 }),
+              {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              },
+            ),
+        );
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Shared result" }],
+          isError: false,
+        });
+        const callTool = (id: string) =>
+          mcpClient.executeToolCallForOwner(
+            {
+              id,
+              name: "github-mcp-server__require_after_cache_tool",
+              arguments: {},
+            },
+            agentOwner(agentId),
+            {
+              tokenId: "session-token",
+              teamId: null,
+              isOrganizationToken: false,
+              userId: user.id,
+            },
+            { conversationId: "require-after-cache-conv" },
+          );
+
+        const before = await callTool("call_require_after_cache_1");
+        await db
+          .update(schema.identityProvidersTable)
+          .set({
+            oidcConfig: JSON.stringify({
+              ...oidcConfig,
+              enterpriseManagedCredentials: {
+                ...oidcConfig.enterpriseManagedCredentials,
+                agentIdentity: { requireAgentIdentity: true },
+              },
+            }) as unknown as undefined,
+          })
+          .where(eq(schema.identityProvidersTable.id, identityProvider.id));
+
+        expect(before.isError).toBe(false);
+        await expect(
+          callTool("call_require_after_cache_2"),
+        ).rejects.toMatchObject({ statusCode: 403 });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
         fetchMock.mockRestore();
       });
 

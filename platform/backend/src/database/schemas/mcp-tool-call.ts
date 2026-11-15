@@ -116,6 +116,12 @@ const mcpToolCallsTable = pgTable(
     credentialClientType: varchar("credential_client_type", {
       length: 32,
     }).$type<EnterpriseCredentialClientType>(),
+    /**
+     * For an RFC 8693 exchange that named the calling agent as the actor: the
+     * agent's client ID at the identity provider, which the issued token
+     * carries in its `act` claim. Null otherwise.
+     */
+    credentialActorClientId: text("credential_actor_client_id"),
     /** Elapsed request-processing time, excluding audit persistence. */
     durationMs: integer("duration_ms"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

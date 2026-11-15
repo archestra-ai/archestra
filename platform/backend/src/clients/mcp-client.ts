@@ -72,6 +72,7 @@ import {
 } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
+  AgentIdentityBindingModel,
   AgentModel,
   AppModel,
   InternalMcpCatalogModel,
@@ -102,10 +103,16 @@ import {
   isToolCatalogAccessible,
 } from "@/services/caller-catalog-access";
 import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "@/services/environments/remote-server-network-policy";
+import { resolveExchangeIdentityProviderId } from "@/services/identity-providers/enterprise-managed/assertion-resolver";
 import {
   type ResolvedEnterpriseTransportCredential,
   resolveEnterpriseTransportCredential,
 } from "@/services/identity-providers/enterprise-managed/broker";
+import {
+  type AgentIdentityContext,
+  assertAgentIdentityRequirement,
+  identityProviderRequiresAgentIdentity,
+} from "@/services/identity-providers/enterprise-managed/exchange";
 import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -447,6 +454,8 @@ type ToolCallAuthInfo = {
   /** Client the call's enterprise-managed credential was issued to. */
   credentialClientId?: string;
   credentialClientType?: EnterpriseCredentialClientType;
+  /** Agent the credential exchange named as the actor (RFC 8693 `act`). */
+  credentialActorClientId?: string;
   serviceAccountId?: string;
   userId?: string;
   authMethod?: MCPGatewayAuthMethod;
@@ -932,6 +941,12 @@ class McpClient {
           credentialClientId: enterpriseTransportCredential.issuedTo.clientId,
           credentialClientType:
             enterpriseTransportCredential.issuedTo.clientType,
+        };
+      }
+      if (enterpriseTransportCredential?.actor) {
+        authInfo = {
+          ...authInfo,
+          credentialActorClientId: enterpriseTransportCredential.actor.clientId,
         };
       }
 
@@ -4329,6 +4344,7 @@ class McpClient {
           source: authInfo?.source ?? null,
           credentialClientId: authInfo?.credentialClientId ?? null,
           credentialClientType: authInfo?.credentialClientType ?? null,
+          credentialActorClientId: authInfo?.credentialActorClientId ?? null,
         },
         audit,
       );
@@ -5957,17 +5973,20 @@ class McpClient {
     tokenAuth?: TokenAuthContext;
     enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
   }): Promise<ResolvedEnterpriseTransportCredential | null> {
-    // Read before the cache key, so rebinding an agent to another Entra agent
-    // identity takes effect on its next call rather than when tokens expire.
-    // `null` for an app or an unbound agent: both are callers, so an identity
-    // provider that requires agent identities refuses them.
-    const entraAgentIdentityId =
-      params.enterpriseManagedConfig && params.owner.type === "agent"
-        ? await AgentModel.findEntraAgentIdentityId(params.owner.id)
-        : null;
+    // Read before the cache key, and checked before the cache, so rebinding
+    // the agent or turning on "require an agent identity" takes effect on the
+    // next call rather than when tokens expire. `null` for an app or an
+    // unbound agent: both are callers, so a provider that requires agent
+    // identities refuses them.
+    const agentIdentity = params.enterpriseManagedConfig
+      ? await this.resolveCallerAgentIdentity({
+          owner: params.owner,
+          enterpriseManagedConfig: params.enterpriseManagedConfig,
+        })
+      : null;
     const cacheKey = this.buildEnterpriseCredentialCacheKey({
       ...params,
-      entraAgentIdentityId,
+      agentIdentity,
     });
     if (cacheKey) {
       const cachedCredential = this.enterpriseCredentialCache.get(cacheKey);
@@ -5978,7 +5997,7 @@ class McpClient {
 
     const credential = await resolveEnterpriseTransportCredential({
       ...params,
-      entraAgentIdentityId,
+      agentIdentity,
     });
     if (cacheKey && credential) {
       this.enterpriseCredentialCache.set(
@@ -5991,11 +6010,54 @@ class McpClient {
     return credential;
   }
 
+  /**
+   * The calling agent's binding at the identity provider this tool's token
+   * exchange runs at, or null for an app or an agent bound to none there.
+   * Refuses a caller without one when the provider requires it.
+   */
+  private async resolveCallerAgentIdentity(params: {
+    owner: ToolOwner;
+    enterpriseManagedConfig: EnterpriseManagedCredentialConfig;
+  }): Promise<AgentIdentityContext | null> {
+    const identityProviderId = await resolveExchangeIdentityProviderId({
+      owner: params.owner,
+      identityProviderId: params.enterpriseManagedConfig.identityProviderId,
+    });
+    if (!identityProviderId) {
+      return null;
+    }
+    const externalId =
+      params.owner.type === "agent"
+        ? await AgentIdentityBindingModel.findExternalId({
+            agentId: params.owner.id,
+            identityProviderId,
+          })
+        : null;
+    const agentIdentity = externalId
+      ? { identityProviderId, externalId }
+      : null;
+    // Passthrough forwards the person's own token: no shared client acts.
+    if (
+      !agentIdentity &&
+      params.enterpriseManagedConfig.assertionMode !== "passthrough"
+    ) {
+      const identityProvider =
+        await findExternalIdentityProviderById(identityProviderId);
+      assertAgentIdentityRequirement({
+        agentIdentity,
+        requireAgentIdentity:
+          !!identityProvider &&
+          identityProviderRequiresAgentIdentity(identityProvider),
+      });
+    }
+    return agentIdentity;
+  }
+
   private buildEnterpriseCredentialCacheKey(params: {
     owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
-    entraAgentIdentityId: string | null;
+    agentIdentity: AgentIdentityContext | null;
   }): string | null {
     if (!params.enterpriseManagedConfig || !params.tokenAuth) {
       return null;
@@ -6015,7 +6077,7 @@ class McpClient {
       audience: params.enterpriseManagedConfig.audience,
       scopes: params.enterpriseManagedConfig.scopes ?? [],
       clientIdOverride: params.enterpriseManagedConfig.clientIdOverride ?? null,
-      entraAgentIdentityId: params.entraAgentIdentityId,
+      agentIdentity: params.agentIdentity,
       tokenId: params.tokenAuth.tokenId,
       userId: params.tokenAuth.userId ?? null,
       teamId: params.tokenAuth.teamId,

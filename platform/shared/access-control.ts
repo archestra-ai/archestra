@@ -686,6 +686,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgent]: {},
   // Agent read access is checked in the handler (requireReadableAgent).
   [RouteId.GetAgentDefaultSuggestedPrompts]: {},
+  // Agent read access is checked in the handler (requireReadableAgent); a
+  // change also takes identityProvider:update, checked by the binding guard.
+  [RouteId.GetAgentIdentityBindings]: {},
+  [RouteId.ReplaceAgentIdentityBindings]: {},
   // Agent type and instance visibility are dynamic and checked by PinAgent's
   // handler. Unpin is deliberately ungated beyond authentication so a stale
   // pin can be cleared after access is lost.

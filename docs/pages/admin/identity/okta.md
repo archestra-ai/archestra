@@ -2,7 +2,7 @@
 title: "Okta"
 description: "Configure Okta for SSO sign-in and RFC 8693 token exchange for MCP tools"
 order: 4
-lastUpdated: 2026-11-09
+lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -73,12 +73,14 @@ To call downstream APIs as the calling user, configure Okta to accept signed tok
 
 ## Enable Token Exchange in Archestra
 
-1. In **Settings → Identity Providers**, click **Edit** on **Okta**, and open **Tool Authentication**.
+1. In **Settings → Identity Providers**, click **Edit** on **Okta**, and open **Tool Access**.
 2. Set **Exchange Token Endpoint** to `https://<org>.okta.com/oauth2/v1/token`.
 3. Set **Exchange Client Authentication** to **Private key JWT**.
 4. Enter your **Signing Key ID** and paste your **Private Key PEM**.
 5. Set **User's Token to Exchange** to **ID token**.
 6. Click **Update Provider**.
+
+Every agent's calls then reach downstream APIs as the Archestra app. To have Okta tell your agents apart, give each one its own identity with [Okta AI Agents](/docs/agents/identity/okta).
 
 <span id="6-configure-mcp-server-multitenant-auth"></span><span id="configure-mcp-server-multitenant-auth"></span>
 

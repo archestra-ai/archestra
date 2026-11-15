@@ -2,6 +2,7 @@
 import {
   type archestraApiTypes,
   type IdentityProviderFormValues,
+  type IdentityProviderSecretPath,
   isEntraHostname,
   isOktaHostname,
   OAUTH_TOKEN_TYPE,
@@ -17,15 +18,24 @@ export type EnterpriseSubjectTokenType = NonNullable<
 
 export function normalizeIdentityProviderFormValues(
   data: IdentityProviderFormValues,
+  options?: {
+    /** Secrets the provider already stores, which come back blank. */
+    storedSecretPaths?: readonly IdentityProviderSecretPath[];
+  },
 ): IdentityProviderFormValues {
   if (data.providerType !== "oidc" || !data.oidcConfig) {
     return data;
   }
 
   const issuerNormalizedConfig = normalizeOidcIssuerFields(data);
-  const enterpriseManagedCredentials = withoutBlankEntraAgentId(
-    issuerNormalizedConfig.enterpriseManagedCredentials,
-  );
+  const enterpriseManagedCredentials = withoutBlankAgentIdentity({
+    credentials: withoutBlankEntraAgentId(
+      issuerNormalizedConfig.enterpriseManagedCredentials,
+    ),
+    privateKeyStored:
+      options?.storedSecretPaths?.includes(AGENT_IDENTITY_PRIVATE_KEY_PATH) ??
+      false,
+  });
   const oidcConfig = {
     ...issuerNormalizedConfig,
     enterpriseManagedCredentials,
@@ -221,6 +231,37 @@ function withoutBlankEntraAgentId(
       .filter(([, value]) => value !== "" && value !== undefined),
   ) as typeof entraAgentId;
   return { ...rest, entraAgentId: { ...cleaned, blueprintClientId } };
+}
+
+const AGENT_IDENTITY_PRIVATE_KEY_PATH =
+  "oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem";
+
+/**
+ * Drops an Agent Identities block left untouched, and its blank fields. A
+ * stored key keeps the block: the backend restores the key into it, and
+ * would have nowhere to restore it without one.
+ */
+function withoutBlankAgentIdentity(params: {
+  credentials: EnterpriseManagedCredentialsFormValues | undefined;
+  privateKeyStored: boolean;
+}): EnterpriseManagedCredentialsFormValues | undefined {
+  const { credentials } = params;
+  if (!credentials?.agentIdentity) return credentials;
+  const { agentIdentity, ...rest } = credentials;
+  const cleaned = Object.fromEntries(
+    Object.entries(agentIdentity)
+      .map(([key, value]) => [
+        key,
+        typeof value === "string" ? value.trim() : value,
+      ])
+      .filter(
+        ([, value]) => value !== "" && value !== undefined && value !== false,
+      ),
+  ) as typeof agentIdentity;
+  if (Object.keys(cleaned).length === 0 && !params.privateKeyStored) {
+    return Object.keys(rest).length > 0 ? rest : undefined;
+  }
+  return { ...rest, agentIdentity: cleaned };
 }
 
 function normalizeOidcConfigForEnterpriseExchange(params: {

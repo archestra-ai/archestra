@@ -235,6 +235,70 @@ describe("normalizeIdentityProviderFormValues", () => {
     });
   });
 
+  it("drops an Agent Identities section left untouched", () => {
+    const normalized = normalizeIdentityProviderFormValues(
+      makeOidcFormValues({
+        oidcConfig: {
+          ...makeOidcFormValues().oidcConfig!,
+          enterpriseManagedCredentials: {
+            agentIdentity: {
+              privateKeyPem: "",
+              privateKeyId: " ",
+              requireAgentIdentity: false,
+            },
+          },
+        },
+      }),
+    );
+
+    expect(normalized.oidcConfig?.enterpriseManagedCredentials).toBeUndefined();
+  });
+
+  it("keeps the Agent Identities section of a stored key left blank, so the key is kept", () => {
+    const normalized = normalizeIdentityProviderFormValues(
+      makeOidcFormValues({
+        oidcConfig: {
+          ...makeOidcFormValues().oidcConfig!,
+          enterpriseManagedCredentials: {
+            exchangeStrategy: "okta_managed",
+            agentIdentity: { privateKeyPem: "", requireAgentIdentity: false },
+          },
+        },
+      }),
+      {
+        storedSecretPaths: [
+          "oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem",
+        ],
+      },
+    );
+
+    expect(
+      normalized.oidcConfig?.enterpriseManagedCredentials?.agentIdentity,
+    ).toEqual({});
+  });
+
+  it("keeps a configured Agent Identities section, trimmed and without blank fields", () => {
+    const normalized = normalizeIdentityProviderFormValues(
+      makeOidcFormValues({
+        oidcConfig: {
+          ...makeOidcFormValues().oidcConfig!,
+          enterpriseManagedCredentials: {
+            agentIdentity: {
+              privateKeyPem: "",
+              privateKeyId: " archestra-agents ",
+              actorTokenScope: "",
+              requireAgentIdentity: true,
+            },
+          },
+        },
+      }),
+    );
+
+    expect(
+      normalized.oidcConfig?.enterpriseManagedCredentials?.agentIdentity,
+    ).toEqual({ privateKeyId: "archestra-agents", requireAgentIdentity: true });
+  });
+
   it("does not create enterprise-managed defaults when the section is unused", () => {
     const normalized = normalizeIdentityProviderFormValues(
       makeOidcFormValues({

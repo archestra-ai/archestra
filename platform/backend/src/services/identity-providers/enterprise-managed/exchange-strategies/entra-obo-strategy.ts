@@ -1,17 +1,22 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { createPrivateKey, randomUUID } from "node:crypto";
 import {
   type EntraAgentIdConfig,
-  OAUTH_CLIENT_ASSERTION_TYPE,
   OAUTH_GRANT_TYPE,
   OAUTH_TOKEN_TYPE,
 } from "@archestra/shared";
-import { decodeJwt, importPKCS8, SignJWT } from "jose";
+import { decodeJwt } from "jose";
 import { LRUCacheManager } from "@/in-memory-lru-cache";
 import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
 import { ApiError } from "@/types";
 import {
+  authenticateTokenRequest,
+  resolveIdentityProviderClient,
+  resolveServerOverrideClient,
+  type TokenEndpointClient,
+} from "../client-authentication";
+import {
+  assertAgentIdentityRequirement,
   type EnterpriseCredentialExchangeParams,
   type EnterpriseCredentialExchangeStrategy,
   type EnterpriseCredentialIssuedTo,
@@ -39,7 +44,6 @@ import {
 const AGENT_EXCHANGE_TOKEN_SCOPE = "api://AzureADTokenExchange/.default";
 const EXCHANGE_TOKEN_EXPIRY_MARGIN_SECONDS = 300;
 const EXCHANGE_TOKEN_FALLBACK_TTL_MS = 5 * 60 * 1000;
-const SHA1_THUMBPRINT_PATTERN = /^[0-9a-f]{40}$/i;
 
 class EntraOboStrategy implements EnterpriseCredentialExchangeStrategy {
   private exchangeTokenCache = new LRUCacheManager<string>({
@@ -62,20 +66,17 @@ class EntraOboStrategy implements EnterpriseCredentialExchangeStrategy {
     const agentIdConfig = enterpriseConfig.entraAgentId?.blueprintClientId
       ? enterpriseConfig.entraAgentId
       : undefined;
-    const agentIdentityId = params.entraAgentIdentityId?.trim() || null;
+    const agentIdentityId = params.agentIdentity?.externalId ?? null;
     if (agentIdentityId && !agentIdConfig) {
       throw new ApiError(
         400,
         "This agent is bound to a Microsoft Entra agent identity, but the identity provider has no agent identity blueprint configured. Configure Entra Agent ID on the identity provider, or remove the agent's binding.",
       );
     }
-    const hasCaller = params.entraAgentIdentityId !== undefined;
-    if (hasCaller && !agentIdentityId && agentIdConfig?.requireAgentIdentity) {
-      throw new ApiError(
-        403,
-        "This identity provider requires every agent to act through its own Microsoft Entra agent identity, and this agent has none. Bind an agent identity in the agent's settings.",
-      );
-    }
+    assertAgentIdentityRequirement({
+      agentIdentity: params.agentIdentity,
+      requireAgentIdentity: agentIdConfig?.requireAgentIdentity,
+    });
 
     const tokenEndpoint =
       enterpriseConfig.tokenEndpoint ??
@@ -86,8 +87,9 @@ class EntraOboStrategy implements EnterpriseCredentialExchangeStrategy {
     }
 
     const identityProviderClient = resolveIdentityProviderClient({
-      params,
+      identityProvider: params.identityProvider,
       tokenEndpoint,
+      defaultMethod: "client_secret_post",
     });
 
     if (agentIdentityId && agentIdConfig) {
@@ -102,7 +104,11 @@ class EntraOboStrategy implements EnterpriseCredentialExchangeStrategy {
       });
     }
 
-    const overrideClient = resolveOverrideClient({ params, tokenEndpoint });
+    const overrideClient = resolveServerOverrideClient({
+      enterpriseManagedConfig: params.enterpriseManagedConfig,
+      tokenEndpoint,
+      secretMethod: "client_secret_post",
+    });
     if (overrideClient) {
       const assertion = await addressAssertionTo({
         assertion: params.assertion,
@@ -142,7 +148,7 @@ class EntraOboStrategy implements EnterpriseCredentialExchangeStrategy {
     agentIdConfig: EntraAgentIdConfig;
     agentIdentityId: string;
     assertion: string;
-    identityProviderClient: EntraClient;
+    identityProviderClient: TokenEndpointClient;
     identityProviderId: string;
     scope: string;
     tokenEndpoint: string;
@@ -191,7 +197,7 @@ class EntraOboStrategy implements EnterpriseCredentialExchangeStrategy {
 
   private async getAgentExchangeToken(params: {
     agentIdentityId: string;
-    blueprintClient: EntraClient;
+    blueprintClient: TokenEndpointClient;
     identityProviderId: string;
     tokenEndpoint: string;
   }): Promise<string> {
@@ -236,100 +242,10 @@ export const entraOboStrategy = new EntraOboStrategy();
 
 // === Internal helpers ===
 
-type EntraClientAuth =
-  | {
-      method: "client_secret_post" | "client_secret_basic";
-      clientSecret?: string;
-    }
-  | {
-      method: "private_key_jwt";
-      privateKeyPem?: string;
-      privateKeyId?: string;
-      clientAssertionAudience: string;
-    }
-  | { method: "client_assertion"; clientAssertion: string };
-
-type EntraClient = { clientId: string; auth: EntraClientAuth };
-
-function resolveIdentityProviderClient(params: {
-  params: EnterpriseCredentialExchangeParams;
-  tokenEndpoint: string;
-}): EntraClient {
-  const oidcConfig = params.params.identityProvider.oidcConfig;
-  const enterpriseConfig = oidcConfig?.enterpriseManagedCredentials;
-  const clientId = enterpriseConfig?.clientId ?? oidcConfig?.clientId;
-  if (!clientId) {
-    throw new Error(
-      "Enterprise-managed credential exchange client ID is missing",
-    );
-  }
-
-  const method =
-    enterpriseConfig?.tokenEndpointAuthentication ?? "client_secret_post";
-  if (method === "private_key_jwt") {
-    return {
-      clientId,
-      auth: {
-        method,
-        privateKeyPem: enterpriseConfig?.privateKeyPem,
-        privateKeyId: enterpriseConfig?.privateKeyId,
-        clientAssertionAudience:
-          enterpriseConfig?.clientAssertionAudience ?? params.tokenEndpoint,
-      },
-    };
-  }
-
-  return {
-    clientId,
-    auth: {
-      method,
-      clientSecret: enterpriseConfig?.clientSecret ?? oidcConfig?.clientSecret,
-    },
-  };
-}
-
-function resolveOverrideClient(params: {
-  params: EnterpriseCredentialExchangeParams;
-  tokenEndpoint: string;
-}): EntraClient | null {
-  const config = params.params.enterpriseManagedConfig;
-  const clientId = config.clientIdOverride?.trim();
-  if (!clientId) {
-    return null;
-  }
-
-  if (config.privateKeyPemOverride) {
-    return {
-      clientId,
-      auth: {
-        method: "private_key_jwt",
-        privateKeyPem: config.privateKeyPemOverride,
-        privateKeyId: config.privateKeyIdOverride,
-        clientAssertionAudience: params.tokenEndpoint,
-      },
-    };
-  }
-
-  if (!config.clientSecretOverride) {
-    throw new ApiError(
-      400,
-      "This MCP server overrides the token exchange client, but has no client secret or private key for it. Add one under the server's Exchange Client settings.",
-    );
-  }
-
-  return {
-    clientId,
-    auth: {
-      method: "client_secret_post",
-      clientSecret: config.clientSecretOverride,
-    },
-  };
-}
-
 function resolveBlueprintClient(params: {
   agentIdConfig: EntraAgentIdConfig;
   tokenEndpoint: string;
-}): EntraClient {
+}): TokenEndpointClient {
   const { agentIdConfig } = params;
   if (agentIdConfig.privateKeyPem) {
     return {
@@ -346,7 +262,7 @@ function resolveBlueprintClient(params: {
   if (!agentIdConfig.clientSecret) {
     throw new ApiError(
       400,
-      "The identity provider's Entra agent identity blueprint has no client secret or certificate. Add one under Tool Authentication → Entra Agent ID.",
+      "The identity provider's Entra agent identity blueprint has no client secret or certificate. Add one under Tool Access → Entra Agent ID.",
     );
   }
 
@@ -369,7 +285,7 @@ async function addressAssertionTo(params: {
   assertion: string;
   audienceClientId: string;
   scope: string;
-  identityProviderClient: EntraClient;
+  identityProviderClient: TokenEndpointClient;
   identityProviderId: string;
   tokenEndpoint: string;
 }): Promise<string> {
@@ -404,7 +320,7 @@ async function addressAssertionTo(params: {
 
 async function requestOnBehalfOf(params: {
   assertion: string;
-  client: EntraClient;
+  client: TokenEndpointClient;
   identityProviderId: string;
   issuedTo: EnterpriseCredentialIssuedTo;
   scope: string;
@@ -436,7 +352,7 @@ async function requestOnBehalfOf(params: {
 }
 
 async function postTokenRequest(params: {
-  client: EntraClient;
+  client: TokenEndpointClient;
   failureLog: string;
   identityProviderId: string;
   requestBody: URLSearchParams;
@@ -446,7 +362,7 @@ async function postTokenRequest(params: {
   expiresInSeconds: number | null;
   issuedTokenType: string | null;
 }> {
-  const headers = await buildAuthenticatedHeaders({
+  const headers = await authenticateTokenRequest({
     client: params.client,
     requestBody: params.requestBody,
   });
@@ -466,7 +382,8 @@ async function postTokenRequest(params: {
     logger.warn(
       {
         status: response.status,
-        body: responseBody,
+        error: responseBody?.error,
+        errorDescription: responseBody?.error_description,
         identityProviderId: params.identityProviderId,
         clientId: params.client.clientId,
       },
@@ -502,96 +419,6 @@ async function postTokenRequest(params: {
         ? responseBody.issued_token_type
         : null,
   };
-}
-
-async function buildAuthenticatedHeaders(params: {
-  client: EntraClient;
-  requestBody: URLSearchParams;
-}): Promise<Headers> {
-  const headers = new Headers({
-    "Content-Type": "application/x-www-form-urlencoded",
-  });
-  const { auth, clientId } = params.client;
-
-  switch (auth.method) {
-    case "client_secret_basic":
-      if (!auth.clientSecret) {
-        throw new Error(
-          "Enterprise-managed credential exchange client secret is missing",
-        );
-      }
-      headers.set(
-        "Authorization",
-        `Basic ${Buffer.from(`${clientId}:${auth.clientSecret}`).toString("base64")}`,
-      );
-      return headers;
-    case "client_secret_post":
-      if (!auth.clientSecret) {
-        throw new Error(
-          "Enterprise-managed credential exchange client secret is missing",
-        );
-      }
-      params.requestBody.set("client_secret", auth.clientSecret);
-      return headers;
-    case "client_assertion":
-      params.requestBody.set(
-        "client_assertion_type",
-        OAUTH_CLIENT_ASSERTION_TYPE.JwtBearer,
-      );
-      params.requestBody.set("client_assertion", auth.clientAssertion);
-      return headers;
-    case "private_key_jwt":
-      if (!auth.privateKeyPem) {
-        throw new Error(
-          "Enterprise-managed credential exchange private key is missing",
-        );
-      }
-      params.requestBody.set(
-        "client_assertion_type",
-        OAUTH_CLIENT_ASSERTION_TYPE.JwtBearer,
-      );
-      params.requestBody.set(
-        "client_assertion",
-        await signClientAssertion({
-          clientId,
-          privateKeyPem: auth.privateKeyPem,
-          privateKeyId: auth.privateKeyId,
-          audience: auth.clientAssertionAudience,
-        }),
-      );
-      return headers;
-    default:
-      throw new Error(
-        `Unsupported enterprise-managed token endpoint auth method: ${(auth as { method: string }).method}`,
-      );
-  }
-}
-
-async function signClientAssertion(params: {
-  clientId: string;
-  privateKeyPem: string;
-  privateKeyId?: string;
-  audience: string;
-}): Promise<string> {
-  const algorithm = inferPrivateKeyAlgorithm(params.privateKeyPem);
-  const keyId = params.privateKeyId?.trim();
-  return new SignJWT({})
-    .setProtectedHeader({
-      alg: algorithm,
-      ...(keyId ? { kid: keyId } : {}),
-      // Entra identifies a certificate credential by its SHA-1 thumbprint in
-      // `x5t`; the portal shows the thumbprint as 40 hex characters.
-      ...(keyId && SHA1_THUMBPRINT_PATTERN.test(keyId)
-        ? { x5t: Buffer.from(keyId, "hex").toString("base64url") }
-        : {}),
-    })
-    .setIssuer(params.clientId)
-    .setSubject(params.clientId)
-    .setAudience(params.audience)
-    .setIssuedAt()
-    .setJti(randomUUID())
-    .setExpirationTime("5m")
-    .sign(await importPKCS8(params.privateKeyPem, algorithm));
 }
 
 function readAssertionAudiences(assertion: string): string[] | null {
@@ -663,13 +490,4 @@ function resolveScope(
   }
 
   return `${resource.replace(/\/$/, "")}/.default`;
-}
-
-function inferPrivateKeyAlgorithm(privateKeyPem: string): "RS256" | "ES256" {
-  const keyObject = createPrivateKey(privateKeyPem);
-  if (keyObject.asymmetricKeyType === "rsa") {
-    return "RS256";
-  }
-
-  return "ES256";
 }

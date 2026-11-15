@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { createPrivateKey, randomUUID } from "node:crypto";
-import {
-  OAUTH_CLIENT_ASSERTION_TYPE,
-  OAUTH_GRANT_TYPE,
-  OAUTH_TOKEN_TYPE,
-} from "@archestra/shared";
-import { importPKCS8, SignJWT } from "jose";
+import { OAUTH_GRANT_TYPE, OAUTH_TOKEN_TYPE } from "@archestra/shared";
 import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
 import type { EnterpriseManagedCredentialType } from "@/types";
 import {
+  authenticateTokenRequest,
+  resolveAgentClient,
+  resolveIdentityProviderClient,
+} from "../client-authentication";
+import {
+  assertAgentIdentityRequirement,
   type EnterpriseCredentialExchangeParams,
   type EnterpriseCredentialExchangeStrategy,
   type EnterpriseManagedCredentialResult,
@@ -34,6 +34,12 @@ class OktaManagedCredentialExchangeStrategy
       );
     }
 
+    assertAgentIdentityRequirement({
+      agentIdentity: params.agentIdentity,
+      requireAgentIdentity:
+        enterpriseConfig.agentIdentity?.requireAgentIdentity,
+    });
+
     const tokenEndpoint =
       enterpriseConfig.tokenEndpoint ??
       params.identityProvider.oidcConfig?.tokenEndpoint ??
@@ -42,14 +48,6 @@ class OktaManagedCredentialExchangeStrategy
     if (!tokenEndpoint) {
       throw new Error(
         "Unable to determine managed-resource token exchange endpoint",
-      );
-    }
-
-    const clientId =
-      enterpriseConfig.clientId ?? params.identityProvider.oidcConfig?.clientId;
-    if (!clientId) {
-      throw new Error(
-        "Enterprise-managed credential exchange client ID is missing",
       );
     }
 
@@ -78,16 +76,28 @@ class OktaManagedCredentialExchangeStrategy
       requestBody.set("scope", params.enterpriseManagedConfig.scopes.join(" "));
     }
 
-    const requestInit = await this.buildAuthenticatedRequest({
-      clientId,
-      tokenEndpoint,
+    // An Okta AI agent is its own OAuth client: the exchange runs as the
+    // agent, so Okta checks the agent's delegation link and connections and
+    // names the agent in what it issues.
+    const agentClientId = params.agentIdentity?.externalId ?? null;
+    const headers = await authenticateTokenRequest({
+      client: agentClientId
+        ? resolveAgentClient({
+            agentIdentityConfig: enterpriseConfig.agentIdentity,
+            agentClientId,
+            tokenEndpoint,
+          })
+        : resolveIdentityProviderClient({
+            identityProvider: params.identityProvider,
+            tokenEndpoint,
+            defaultMethod: "private_key_jwt",
+          }),
       requestBody,
-      enterpriseConfig,
     });
 
     const response = await fetch(tokenEndpoint, {
       method: "POST",
-      headers: requestInit.headers,
+      headers,
       body: requestBody.toString(),
       signal: AbortSignal.timeout(10_000),
     });
@@ -112,126 +122,23 @@ class OktaManagedCredentialExchangeStrategy
       );
     }
 
-    return normalizeOktaCredentialResponse({
+    const credential = normalizeOktaCredentialResponse({
       responseBody,
       requestedCredentialType:
         params.enterpriseManagedConfig.requestedCredentialType ??
         "bearer_token",
     });
-  }
-
-  private async buildAuthenticatedRequest(params: {
-    clientId: string;
-    tokenEndpoint: string;
-    requestBody: URLSearchParams;
-    enterpriseConfig: NonNullable<
-      NonNullable<
-        EnterpriseCredentialExchangeParams["identityProvider"]["oidcConfig"]
-      >["enterpriseManagedCredentials"]
-    >;
-  }): Promise<{ headers: Headers }> {
-    const tokenEndpointAuthentication =
-      params.enterpriseConfig.tokenEndpointAuthentication ?? "private_key_jwt";
-    const headers = new Headers({
-      "Content-Type": "application/x-www-form-urlencoded",
-    });
-
-    if (tokenEndpointAuthentication === "client_secret_basic") {
-      const clientSecret = params.enterpriseConfig.clientSecret;
-      if (!clientSecret) {
-        throw new Error(
-          "Enterprise-managed credential exchange client secret is missing",
-        );
-      }
-      headers.set(
-        "Authorization",
-        `Basic ${Buffer.from(`${params.clientId}:${clientSecret}`).toString("base64")}`,
-      );
-      return { headers };
-    }
-
-    if (tokenEndpointAuthentication === "client_secret_post") {
-      const clientSecret = params.enterpriseConfig.clientSecret;
-      if (!clientSecret) {
-        throw new Error(
-          "Enterprise-managed credential exchange client secret is missing",
-        );
-      }
-      params.requestBody.set("client_id", params.clientId);
-      params.requestBody.set("client_secret", clientSecret);
-      return { headers };
-    }
-
-    if (tokenEndpointAuthentication !== "private_key_jwt") {
-      throw new Error(
-        `Unsupported enterprise-managed token endpoint auth method: ${tokenEndpointAuthentication}`,
-      );
-    }
-
-    const privateKeyPem = params.enterpriseConfig.privateKeyPem;
-    if (!privateKeyPem) {
-      throw new Error(
-        "Enterprise-managed credential exchange private key is missing",
-      );
-    }
-
-    params.requestBody.set("client_id", params.clientId);
-    params.requestBody.set(
-      "client_assertion_type",
-      OAUTH_CLIENT_ASSERTION_TYPE.JwtBearer,
-    );
-    params.requestBody.set(
-      "client_assertion",
-      await buildClientAssertion({
-        clientId: params.clientId,
-        tokenEndpoint: params.tokenEndpoint,
-        privateKeyPem,
-        privateKeyId: params.enterpriseConfig.privateKeyId,
-        audience:
-          params.enterpriseConfig.clientAssertionAudience ??
-          params.tokenEndpoint,
-      }),
-    );
-
-    return { headers };
+    return agentClientId
+      ? {
+          ...credential,
+          issuedTo: { clientId: agentClientId, clientType: "okta_ai_agent" },
+        }
+      : credential;
   }
 }
 
 export const oktaManagedCredentialExchangeStrategy =
   new OktaManagedCredentialExchangeStrategy();
-
-async function buildClientAssertion(params: {
-  clientId: string;
-  tokenEndpoint: string;
-  privateKeyPem: string;
-  privateKeyId?: string;
-  audience: string;
-}): Promise<string> {
-  const algorithm = inferPrivateKeyAlgorithm(params.privateKeyPem);
-  const key = await importPKCS8(params.privateKeyPem, algorithm);
-
-  return new SignJWT({})
-    .setProtectedHeader({
-      alg: algorithm,
-      ...(params.privateKeyId ? { kid: params.privateKeyId } : {}),
-    })
-    .setIssuer(params.clientId)
-    .setSubject(params.clientId)
-    .setAudience(params.audience)
-    .setIssuedAt()
-    .setJti(randomUUID())
-    .setExpirationTime("5m")
-    .sign(key);
-}
-
-function inferPrivateKeyAlgorithm(privateKeyPem: string): "RS256" | "ES256" {
-  const keyObject = createPrivateKey(privateKeyPem);
-  if (keyObject.asymmetricKeyType === "rsa") {
-    return "RS256";
-  }
-
-  return "ES256";
-}
 
 function buildDefaultOktaTokenEndpoint(issuer: string): string | null {
   try {

@@ -25,8 +25,8 @@ export function getIdentityProviderDialogNavItems(
     { id: "team-sync", label: "Team Sync" },
     {
       id: "enterprise-managed-credentials",
-      label: "Tool Authentication",
-      status: "ID-JAG & token exchange",
+      label: "Tool Access",
+      status: "Token exchange & agent identities",
     },
   ];
 }

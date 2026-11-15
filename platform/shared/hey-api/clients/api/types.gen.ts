@@ -17204,7 +17204,6 @@ export type GetAgentCatalogResponses = {
                 modelPoolId: string | null;
                 autoRouterId: string | null;
                 identityProviderId: string | null;
-                entraAgentIdentityId: string | null;
                 environmentId: string | null;
                 networkPolicy?: {
                     egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -17606,7 +17605,6 @@ export type GetAgentsResponses = {
             modelPoolId: string | null;
             autoRouterId: string | null;
             identityProviderId: string | null;
-            entraAgentIdentityId: string | null;
             environmentId: string | null;
             networkPolicy?: {
                 egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -17775,7 +17773,6 @@ export type CreateAgentData = {
         modelPoolId?: string | null;
         autoRouterId?: string | null;
         identityProviderId?: string | null;
-        entraAgentIdentityId?: string | null;
         environmentId?: string | null;
         networkPolicy?: {
             egressMode?: 'off' | 'restricted' | 'unrestricted';
@@ -18059,7 +18056,6 @@ export type CreateAgentResponses = {
         modelPoolId: string | null;
         autoRouterId: string | null;
         identityProviderId: string | null;
-        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -19338,7 +19334,6 @@ export type GetDefaultMcpGatewayResponses = {
         modelPoolId: string | null;
         autoRouterId: string | null;
         identityProviderId: string | null;
-        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -19659,7 +19654,6 @@ export type ImportAgentResponses = {
             modelPoolId: string | null;
             autoRouterId: string | null;
             identityProviderId: string | null;
-            entraAgentIdentityId: string | null;
             environmentId: string | null;
             networkPolicy?: {
                 egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -19989,7 +19983,6 @@ export type GetAgentResponses = {
         modelPoolId: string | null;
         autoRouterId: string | null;
         identityProviderId: string | null;
-        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -20140,7 +20133,6 @@ export type UpdateAgentData = {
         modelPoolId?: string | null;
         autoRouterId?: string | null;
         identityProviderId?: string | null;
-        entraAgentIdentityId?: string | null;
         environmentId?: string | null;
         networkPolicy?: {
             egressMode?: 'off' | 'restricted' | 'unrestricted';
@@ -20330,7 +20322,6 @@ export type UpdateAgentResponses = {
         modelPoolId: string | null;
         autoRouterId: string | null;
         identityProviderId: string | null;
-        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -20461,6 +20452,193 @@ export type UpdateAgentResponses = {
 };
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
+
+export type GetAgentIdentityBindingsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/identity-bindings';
+};
+
+export type GetAgentIdentityBindingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentIdentityBindingsError = GetAgentIdentityBindingsErrors[keyof GetAgentIdentityBindingsErrors];
+
+export type GetAgentIdentityBindingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        bindings: Array<{
+            identityProviderId: string;
+            externalId: string;
+        }>;
+    };
+};
+
+export type GetAgentIdentityBindingsResponse = GetAgentIdentityBindingsResponses[keyof GetAgentIdentityBindingsResponses];
+
+export type ReplaceAgentIdentityBindingsData = {
+    body: {
+        bindings: Array<{
+            identityProviderId: string;
+            externalId: string;
+        }>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/identity-bindings';
+};
+
+export type ReplaceAgentIdentityBindingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ReplaceAgentIdentityBindingsError = ReplaceAgentIdentityBindingsErrors[keyof ReplaceAgentIdentityBindingsErrors];
+
+export type ReplaceAgentIdentityBindingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        bindings: Array<{
+            identityProviderId: string;
+            externalId: string;
+        }>;
+    };
+};
+
+export type ReplaceAgentIdentityBindingsResponse = ReplaceAgentIdentityBindingsResponses[keyof ReplaceAgentIdentityBindingsResponses];
 
 export type GetAgentDefaultSuggestedPromptsData = {
     body?: never;
@@ -20941,7 +21119,6 @@ export type RestoreAgentVersionResponses = {
         modelPoolId: string | null;
         autoRouterId: string | null;
         identityProviderId: string | null;
-        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -21203,7 +21380,6 @@ export type CloneAgentResponses = {
         modelPoolId: string | null;
         autoRouterId: string | null;
         identityProviderId: string | null;
-        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -23701,7 +23877,6 @@ export type RestoreAgentResponses = {
         modelPoolId: string | null;
         autoRouterId: string | null;
         identityProviderId: string | null;
-        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -45097,7 +45272,6 @@ export type GetNewChatBootstrapResponses = {
                 modelPoolId: string | null;
                 autoRouterId: string | null;
                 identityProviderId: string | null;
-                entraAgentIdentityId: string | null;
                 environmentId: string | null;
                 networkPolicy?: {
                     egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -45696,7 +45870,6 @@ export type GetConversationBootstrapResponses = {
                     modelPoolId: string | null;
                     autoRouterId: string | null;
                     identityProviderId: string | null;
-                    entraAgentIdentityId: string | null;
                     environmentId: string | null;
                     networkPolicy?: {
                         egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -111211,7 +111384,8 @@ export type GetMcpToolCallsResponses = {
             oauthClientId: string | null;
             source: 'api' | 'chat';
             credentialClientId: string | null;
-            credentialClientType: 'identity_provider' | 'mcp_server' | 'entra_agent_identity';
+            credentialClientType: 'identity_provider' | 'mcp_server' | 'entra_agent_identity' | 'okta_ai_agent';
+            credentialActorClientId: string | null;
             durationMs: number | null;
             createdAt: string;
             userName: string | null;
@@ -111337,7 +111511,8 @@ export type GetMcpToolCallResponses = {
         oauthClientId: string | null;
         source: 'api' | 'chat';
         credentialClientId: string | null;
-        credentialClientType: 'identity_provider' | 'mcp_server' | 'entra_agent_identity';
+        credentialClientType: 'identity_provider' | 'mcp_server' | 'entra_agent_identity' | 'okta_ai_agent';
+        credentialActorClientId: string | null;
         durationMs: number | null;
         createdAt: string;
         userName: string | null;
@@ -154699,6 +154874,12 @@ export type GetIdentityProvidersResponses = {
                     blueprintScope?: string;
                     requireAgentIdentity?: boolean;
                 };
+                agentIdentity?: {
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -154798,7 +154979,7 @@ export type GetIdentityProvidersResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
-        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     }>;
 };
 
@@ -154843,6 +155024,12 @@ export type CreateIdentityProviderData = {
                     certificateThumbprint?: string;
                     blueprintScope?: string;
                     requireAgentIdentity?: boolean;
+                };
+                agentIdentity?: {
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
                 };
             };
             /**
@@ -155060,6 +155247,12 @@ export type CreateIdentityProviderResponses = {
                     blueprintScope?: string;
                     requireAgentIdentity?: boolean;
                 };
+                agentIdentity?: {
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -155159,7 +155352,7 @@ export type CreateIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
-        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 
@@ -155733,6 +155926,12 @@ export type GetIdentityProviderResponses = {
                     blueprintScope?: string;
                     requireAgentIdentity?: boolean;
                 };
+                agentIdentity?: {
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -155832,7 +156031,7 @@ export type GetIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
-        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 
@@ -155877,6 +156076,12 @@ export type UpdateIdentityProviderData = {
                     certificateThumbprint?: string;
                     blueprintScope?: string;
                     requireAgentIdentity?: boolean;
+                };
+                agentIdentity?: {
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
                 };
             };
             /**
@@ -156095,6 +156300,12 @@ export type UpdateIdentityProviderResponses = {
                     blueprintScope?: string;
                     requireAgentIdentity?: boolean;
                 };
+                agentIdentity?: {
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -156194,7 +156405,7 @@ export type UpdateIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
-        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 

@@ -111,6 +111,29 @@ export const EntraAgentIdConfigSchema = z.object({
 
 export type EntraAgentIdConfig = z.infer<typeof EntraAgentIdConfigSchema>;
 
+/**
+ * Agent identities at an Okta or RFC 8693 identity provider: each agent is its
+ * own OAuth client there (an Okta AI agent, or a client with a service account
+ * for RFC 8693 actor tokens), and Archestra authenticates as it with
+ * `private_key_jwt`. One key signs for every agent; the admin registers its
+ * public key on each agent's client. Off while no private key is stored.
+ */
+export const AgentIdentityConfigSchema = z.object({
+  /** PKCS#8 private key Archestra signs each agent client's assertions with. */
+  privateKeyPem: z.string().optional(),
+  /** Key ID (`kid`) the identity provider knows the public key by. */
+  privateKeyId: z.string().trim().optional(),
+  /**
+   * Fail closed for agents without a bound identity, instead of falling back
+   * to the identity provider's shared client.
+   */
+  requireAgentIdentity: z.boolean().optional(),
+  /** RFC 8693 only: scope Archestra asks for in the agent's actor token. */
+  actorTokenScope: z.string().trim().optional(),
+});
+
+export type AgentIdentityConfig = z.infer<typeof AgentIdentityConfigSchema>;
+
 export const IdentityProviderOidcConfigSchema = z
   .object({
     issuer: z.string(),
@@ -157,6 +180,7 @@ export const IdentityProviderOidcConfigSchema = z
         clientAssertionAudience: z.string().optional(),
         subjectTokenType: z.enum(ENTERPRISE_SUBJECT_TOKEN_TYPES).optional(),
         entraAgentId: EntraAgentIdConfigSchema.optional(),
+        agentIdentity: AgentIdentityConfigSchema.optional(),
       })
       .optional(),
     mapping: z
@@ -264,6 +288,7 @@ export const IDENTITY_PROVIDER_SECRET_PATHS = [
   "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
   "oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret",
   "oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem",
+  "oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem",
   "samlConfig.privateKey",
   "samlConfig.decryptionPvk",
   "samlConfig.spMetadata.privateKey",

@@ -192,7 +192,7 @@ function ClientKeyFields(props: {
         )}
       />
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid items-start gap-4 md:grid-cols-2">
         <FormField
           control={form.control}
           name="oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyId"

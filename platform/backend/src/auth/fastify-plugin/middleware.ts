@@ -54,6 +54,7 @@ import {
   appIdFromConnectorPath,
   connectorWwwAuthenticate,
 } from "@/services/apps/app-connector-resource";
+import { verifyServiceAccountBearer } from "@/services/workload-identity/federated-bearer";
 import { ApiError } from "@/types";
 
 /**
@@ -552,9 +553,17 @@ export class Authnz {
     try {
       // RFC 6750 clients send `Bearer <token>`; the API has always taken the
       // bare token. Both name the same service-account token.
-      const result = await ServiceAccountModel.verifyToken(
-        authHeader.replace(/^Bearer\s+/i, ""),
-      );
+      const result = await verifyServiceAccountBearer({
+        token: authHeader.replace(/^Bearer\s+/i, ""),
+        request: {
+          method: request.method,
+          path: request.url.split("?")[0],
+          route: request.routeOptions.url ?? null,
+          requestId: request.id,
+          sourceIp: request.ip,
+          userAgent: request.headers["user-agent"] ?? null,
+        },
+      });
       if (result) {
         request.serviceAccountAuthResult = result;
       }

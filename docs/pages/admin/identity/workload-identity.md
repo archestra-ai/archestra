@@ -2,7 +2,7 @@
 title: Workload Identity Federation
 description: Let CI jobs and workloads sign in as a service account with their own OIDC token instead of a stored API key
 order: 6
-lastUpdated: 2026-11-07
+lastUpdated: 2026-11-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -15,7 +15,7 @@ Workload identity federation is an [Enterprise feature](/docs/get-started/pricin
 
 Use a federated credential when the workload can get an OIDC token from its platform. Use an [API key](/docs/reference/api#service-accounts) for everything else.
 
-- **GitHub Actions, GitLab CI, Google Cloud, and Kubernetes** issue OIDC tokens. Federate them.
+- **GitHub Actions, GitLab CI, Google Cloud, Kubernetes, and Agent Substrate** issue OIDC tokens. Federate them.
 - **A laptop script, a cron job on a plain VM, or a third-party tool** has no OIDC issuer. Give it an API key.
 
 A federated job leaves nothing to rotate or leak: each token it gets expires after one hour, and deleting the credential stops it at once.
@@ -42,6 +42,7 @@ Every value matches exactly. There are no wildcards: to trust two branches or tw
 | GitLab.com | `https://gitlab.com` | `project_path:acme/infra:ref_type:branch:ref:main` |
 | Google Cloud | `https://accounts.google.com` | The numeric unique ID of the Google service account |
 | Kubernetes | Your cluster's service account issuer | `system:serviceaccount:ci:deployer` |
+| Agent Substrate | Your installation's public actor JWT issuer | `actor/support/triage` |
 
 A GitHub Actions job that names an `environment:` gets the environment subject, so require the environment instead of the branch when you deploy through one.
 
@@ -79,6 +80,40 @@ jobs:
 
 The token acts as the service account, with the account's roles, wherever its API keys work. Send it the way you send an API key. When the exchange works, the credential's **Last used** time updates.
 
+## Send the OIDC Token Itself
+
+A workload that cannot run the exchange can send its OIDC token as the Bearer token, to the MCP Gateway, A2A, and the API. Agent Substrate is the usual case: its egress gateway writes the actor's JWT into the actor's requests, so the actor never holds a token to trade.
+
+The token passes the same checks as an exchange. Exactly one service account may trust it: a token that matches credentials on two accounts acts as neither.
+
+What to know:
+
+- The LLM Proxy does not take service account tokens. Give the workload a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) instead.
+- Each actor needs its own credential, since every value matches exactly. A service account holds up to 20.
+
+### Agent Substrate
+
+1. Expose your Substrate installation's actor JWT issuer at a public https host, as Substrate's [actor JWT federation guide](https://github.com/agent-substrate/substrate/blob/main/docs/guides/actor-jwt-federation.md) describes.
+2. Add a federated credential: pick **Agent Substrate**, set **Issuer URL** to that issuer, and set **Subject** to the actor, such as `actor/support/triage`.
+3. In the actor's egress policy, write its JWT into requests to Archestra, with your Archestra URL as the audience:
+
+   ```yaml
+   rules:
+   - https:
+       hostnames: ["archestra.example.com"]
+       effects:
+         replaceHeaders:
+         - header: Authorization
+           prefix: "Bearer "
+           actorJwt:
+             audiences: ["https://archestra.example.com"]
+             expirationSeconds: 900
+   ```
+
+4. Have the actor send `Authorization: placeholder` to the MCP Gateway or A2A endpoint. The egress gateway replaces it, and skips requests without the header.
+
+To check it works, call a tool through the gateway from the actor. The credential's **Last used** time updates.
+
 ## What Gets Checked
 
 Each exchange checks the token, then the account's credentials. Any failure refuses the exchange.
@@ -104,3 +139,4 @@ A refused exchange answers `400` with an `error` code. The **Audit** tab of [Log
 | `lifetime_too_long` | The issuer minted a token valid for more than a day. On Kubernetes, use a projected token with `expirationSeconds` of a day or less. |
 | `issuer_keys_unavailable` | Archestra could not read the issuer's discovery document or keys. The issuer must be reachable over https at a public address. |
 | `service_account_disabled` | Enable the account under **Settings → Service Accounts**. |
+| `matches_several_service_accounts` | A token sent as the Bearer token matched credentials on more than one account. Keep one account's credential for that subject. |

@@ -4,12 +4,23 @@ import type { TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import { resolveEnterpriseAssertion } from "@/services/identity-providers/enterprise-managed/assertion-resolver";
 import {
+  authenticateTokenRequest,
+  resolveAgentClient,
+  resolveIdentityProviderClient,
+  resolveServerOverrideClient,
+  type TokenEndpointClient,
+} from "@/services/identity-providers/enterprise-managed/client-authentication";
+import {
+  type AgentIdentityContext,
   type EnterpriseCredentialIssuedTo,
   type EnterpriseManagedCredentialResult,
   exchangeEnterpriseManagedCredential,
   extractProviderErrorMessage,
 } from "@/services/identity-providers/enterprise-managed/exchange";
-import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
+import {
+  type ExternalIdentityProviderConfig,
+  findExternalIdentityProviderById,
+} from "@/services/identity-providers/oidc";
 import type { EnterpriseManagedCredentialConfig, ToolOwner } from "@/types";
 
 export type ResolvedEnterpriseTransportCredential = {
@@ -18,6 +29,8 @@ export type ResolvedEnterpriseTransportCredential = {
   expiresInSeconds: number | null;
   /** The client the exchanged credential was issued to, when known. */
   issuedTo?: EnterpriseCredentialIssuedTo;
+  /** The agent the exchange named as the actor, when it named one. */
+  actor?: { clientId: string };
 };
 
 /**
@@ -62,8 +75,11 @@ export async function resolveEnterpriseTransportCredential(params: {
   owner: ToolOwner;
   tokenAuth?: TokenAuthContext;
   enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
-  /** The calling agent's Entra agent identity, when it is bound to one. */
-  entraAgentIdentityId?: string | null;
+  /**
+   * The calling agent's binding at the identity provider the exchange runs
+   * at: `null` when it has none, `undefined` when no agent is calling.
+   */
+  agentIdentity?: AgentIdentityContext | null;
 }): Promise<ResolvedEnterpriseTransportCredential | null> {
   const config = params.enterpriseManagedConfig;
   if (!config) {
@@ -96,15 +112,19 @@ export async function resolveEnterpriseTransportCredential(params: {
   }
 
   if (shouldExchangeIdJagAtProtectedResource(config)) {
-    const idJagAssertion = params.tokenAuth?.isExternalIdp
-      ? assertion.assertion
+    // An ID-JAG the caller brought was requested by a client we do not know;
+    // one we request names the client it was issued to.
+    const idJag = params.tokenAuth?.isExternalIdp
+      ? { assertion: assertion.assertion, issuedTo: undefined }
       : await exchangeSessionAssertionForIdJag({
           assertion: assertion.assertion,
           identityProviderId: assertion.identityProviderId,
           enterpriseManagedConfig: config,
+          agentIdentity: params.agentIdentity,
         });
     const credential = await exchangeIdJagAtProtectedResource({
-      assertion: idJagAssertion,
+      assertion: idJag.assertion,
+      idJagIssuedTo: idJag.issuedTo,
       identityProviderId: assertion.identityProviderId,
       enterpriseManagedConfig: config,
     });
@@ -119,7 +139,7 @@ export async function resolveEnterpriseTransportCredential(params: {
     identityProviderId: assertion.identityProviderId,
     assertion: assertion.assertion,
     enterpriseManagedConfig: config,
-    entraAgentIdentityId: params.entraAgentIdentityId,
+    agentIdentity: params.agentIdentity,
   });
 
   return normalizeEnterpriseTransportCredential({
@@ -132,21 +152,35 @@ async function exchangeSessionAssertionForIdJag(params: {
   assertion: string;
   identityProviderId: string;
   enterpriseManagedConfig: EnterpriseManagedCredentialConfig;
-}): Promise<string> {
+  agentIdentity: AgentIdentityContext | null | undefined;
+}): Promise<{
+  assertion: string;
+  issuedTo: EnterpriseCredentialIssuedTo | undefined;
+}> {
   const credential = await exchangeEnterpriseManagedCredential({
     identityProviderId: params.identityProviderId,
     assertion: params.assertion,
     enterpriseManagedConfig: params.enterpriseManagedConfig,
+    agentIdentity: params.agentIdentity,
   });
 
-  return extractInjectionValue({
-    value: credential.value,
-    responseFieldPath: params.enterpriseManagedConfig.responseFieldPath,
-  });
+  return {
+    assertion: extractInjectionValue({
+      value: credential.value,
+      responseFieldPath: params.enterpriseManagedConfig.responseFieldPath,
+    }),
+    issuedTo: credential.issuedTo,
+  };
 }
 
 export async function exchangeIdJagAtProtectedResource(params: {
   assertion: string;
+  /**
+   * The client the ID-JAG was issued to, when Archestra requested it. The
+   * resource's authorization server only accepts an ID-JAG from the client it
+   * names, so an ID-JAG issued to an Okta AI agent is presented as that agent.
+   */
+  idJagIssuedTo?: EnterpriseCredentialIssuedTo;
   identityProviderId: string;
   enterpriseManagedConfig: EnterpriseManagedCredentialConfig;
 }): Promise<EnterpriseManagedCredentialResult> {
@@ -160,18 +194,18 @@ export async function exchangeIdJagAtProtectedResource(params: {
   const identityProvider = await findExternalIdentityProviderById(
     params.identityProviderId,
   );
-  const enterpriseConfig =
-    identityProvider?.oidcConfig?.enterpriseManagedCredentials;
-  const clientId =
-    params.enterpriseManagedConfig.clientIdOverride ??
-    enterpriseConfig?.clientId ??
-    identityProvider?.oidcConfig?.clientId;
-  if (!clientId) {
-    throw new Error("ID-JAG protected resource exchange client ID is missing");
+  if (!identityProvider) {
+    throw new Error("Enterprise identity provider not found");
   }
 
   const tokenEndpoint =
     await discoverProtectedResourceTokenEndpoint(resourceIdentifier);
+  const { client, clientType } = resolveProtectedResourceClient({
+    idJagIssuedTo: params.idJagIssuedTo,
+    identityProvider,
+    enterpriseManagedConfig: params.enterpriseManagedConfig,
+    tokenEndpoint,
+  });
   const requestBody = new URLSearchParams({
     grant_type: OAUTH_GRANT_TYPE.JwtBearer,
     assertion: params.assertion,
@@ -179,16 +213,7 @@ export async function exchangeIdJagAtProtectedResource(params: {
   if (params.enterpriseManagedConfig.scopes?.length) {
     requestBody.set("scope", params.enterpriseManagedConfig.scopes.join(" "));
   }
-  const headers = buildProtectedResourceTokenHeaders({
-    clientId,
-    clientSecret:
-      params.enterpriseManagedConfig.clientSecretOverride ??
-      enterpriseConfig?.clientSecret ??
-      identityProvider?.oidcConfig?.clientSecret,
-    tokenEndpointAuthentication:
-      enterpriseConfig?.tokenEndpointAuthentication ?? "client_secret_basic",
-    requestBody,
-  });
+  const headers = await authenticateTokenRequest({ client, requestBody });
 
   const response = await fetch(tokenEndpoint, {
     method: "POST",
@@ -204,7 +229,8 @@ export async function exchangeIdJagAtProtectedResource(params: {
     logger.warn(
       {
         status: response.status,
-        body: responseBody,
+        error: responseBody?.error,
+        errorDescription: responseBody?.error_description,
         resourceIdentifier,
       },
       "ID-JAG protected resource access-token exchange failed",
@@ -231,12 +257,7 @@ export async function exchangeIdJagAtProtectedResource(params: {
       typeof responseBody.issued_token_type === "string"
         ? responseBody.issued_token_type
         : OAUTH_TOKEN_TYPE.AccessToken,
-    issuedTo: {
-      clientId,
-      clientType: params.enterpriseManagedConfig.clientIdOverride
-        ? "mcp_server"
-        : "identity_provider",
-    },
+    issuedTo: { clientId: client.clientId, clientType },
   };
 }
 
@@ -292,46 +313,67 @@ function buildProtectedResourceMetadataUrl(resourceIdentifier: string): string {
   return `${url.origin}/.well-known/oauth-protected-resource${pathname}`;
 }
 
-function buildProtectedResourceTokenHeaders(params: {
-  clientId: string;
-  clientSecret?: string;
-  tokenEndpointAuthentication:
-    | "client_secret_post"
-    | "client_secret_basic"
-    | "private_key_jwt";
-  requestBody: URLSearchParams;
-}): Headers {
-  const headers = new Headers({
-    "Content-Type": "application/x-www-form-urlencoded",
+/**
+ * The client that presents the ID-JAG at the resource's authorization server:
+ * the Okta AI agent it was issued to, else the MCP server's override client,
+ * else the identity provider's client. A signed client assertion is addressed
+ * to that authorization server's token endpoint.
+ */
+function resolveProtectedResourceClient(params: {
+  idJagIssuedTo: EnterpriseCredentialIssuedTo | undefined;
+  identityProvider: ExternalIdentityProviderConfig;
+  enterpriseManagedConfig: EnterpriseManagedCredentialConfig;
+  tokenEndpoint: string;
+}): {
+  client: TokenEndpointClient;
+  clientType: EnterpriseCredentialIssuedTo["clientType"];
+} {
+  if (params.idJagIssuedTo?.clientType === "okta_ai_agent") {
+    return {
+      client: resolveAgentClient({
+        agentIdentityConfig:
+          params.identityProvider.oidcConfig?.enterpriseManagedCredentials
+            ?.agentIdentity,
+        agentClientId: params.idJagIssuedTo.clientId,
+        tokenEndpoint: params.tokenEndpoint,
+      }),
+      clientType: "okta_ai_agent",
+    };
+  }
+
+  const overrideClient = resolveServerOverrideClient({
+    enterpriseManagedConfig: params.enterpriseManagedConfig,
+    tokenEndpoint: params.tokenEndpoint,
+    // Resource authorization servers commonly expect Basic; Post when the
+    // identity provider's exchange is configured for it.
+    secretMethod:
+      params.identityProvider.oidcConfig?.enterpriseManagedCredentials
+        ?.tokenEndpointAuthentication === "client_secret_post"
+        ? "client_secret_post"
+        : "client_secret_basic",
   });
-
-  if (params.tokenEndpointAuthentication === "client_secret_basic") {
-    if (!params.clientSecret) {
-      throw new Error(
-        "ID-JAG protected resource exchange client secret is missing",
-      );
-    }
-    headers.set(
-      "Authorization",
-      `Basic ${Buffer.from(`${params.clientId}:${params.clientSecret}`).toString("base64")}`,
-    );
-    return headers;
+  if (overrideClient) {
+    return { client: overrideClient, clientType: "mcp_server" };
   }
 
-  if (params.tokenEndpointAuthentication === "client_secret_post") {
-    if (!params.clientSecret) {
-      throw new Error(
-        "ID-JAG protected resource exchange client secret is missing",
-      );
-    }
-    params.requestBody.set("client_id", params.clientId);
-    params.requestBody.set("client_secret", params.clientSecret);
-    return headers;
-  }
-
-  throw new Error(
-    "ID-JAG protected resource exchange does not support private_key_jwt in this implementation",
-  );
+  const client = resolveIdentityProviderClient({
+    identityProvider: params.identityProvider,
+    tokenEndpoint: params.tokenEndpoint,
+    defaultMethod: "client_secret_basic",
+  });
+  return {
+    client:
+      client.auth.method === "private_key_jwt"
+        ? {
+            ...client,
+            auth: {
+              ...client.auth,
+              clientAssertionAudience: params.tokenEndpoint,
+            },
+          }
+        : client,
+    clientType: "identity_provider",
+  };
 }
 
 function shouldExchangeIdJagAtProtectedResource(
@@ -357,6 +399,7 @@ function normalizeEnterpriseTransportCredential(params: {
     ...buildEnterpriseCredentialHeader({ config, value: scalarValue }),
     expiresInSeconds: credential.expiresInSeconds,
     ...(credential.issuedTo ? { issuedTo: credential.issuedTo } : {}),
+    ...(credential.actor ? { actor: credential.actor } : {}),
   };
 }
 

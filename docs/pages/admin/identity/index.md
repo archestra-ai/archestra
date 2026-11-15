@@ -11,7 +11,7 @@ lastUpdated: 2026-11-09
 Connect your identity provider for either or both:
 
 - **Workplace sign-in:** let people sign in with their company accounts. [Single Sign-On](/docs/admin/identity/sso) maps directory claims to Archestra roles and teams.
-- **Tools acting as each person:** exchange the person's company token for a token to a downstream API. See [IdP Token Exchange](/docs/mcp/authentication/idp-token-exchange), and the setup for [Microsoft Entra ID](/docs/admin/identity/entra-obo) or [Okta](/docs/admin/identity/okta). With Entra, give each agent its own identity with [Entra Agent ID](/docs/admin/identity/entra-agent-id).
+- **Tools acting as each person:** exchange the person's company token for a token to a downstream API. See [IdP Token Exchange](/docs/mcp/authentication/idp-token-exchange), and the setup for [Microsoft Entra ID](/docs/admin/identity/entra-obo) or [Okta](/docs/admin/identity/okta). To give each agent its own identity there, see [Agent Identity](/docs/agents/identity#give-each-agent-its-own-identity).
 
 Identity providers are an [Enterprise feature](/docs/get-started/pricing-model). Setup requires admin access in your provider and [`identityProvider:create`](/docs/reference/permissions#identityProvider:create) in Archestra.
 

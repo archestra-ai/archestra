@@ -725,6 +725,7 @@ function sessionToolCall(
     oauthClientId: null,
     credentialClientId: null,
     credentialClientType: "identity_provider",
+    credentialActorClientId: null,
     source: "chat",
     durationMs: 1_500,
     createdAt: "2026-09-19T10:00:09.000Z",

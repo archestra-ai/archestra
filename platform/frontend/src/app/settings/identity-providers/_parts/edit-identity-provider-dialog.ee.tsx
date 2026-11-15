@@ -145,7 +145,9 @@ export function EditIdentityProviderDialog({
       if (!provider) return;
       const result = await updateIdentityProvider.mutateAsync({
         id: provider.id,
-        data: normalizeIdentityProviderFormValues(data),
+        data: normalizeIdentityProviderFormValues(data, {
+          storedSecretPaths: provider.configuredSecretPaths,
+        }),
       });
       // Only close the dialog if update succeeded (result is not null)
       if (result) {

@@ -84,7 +84,7 @@ Pick **IdP token exchange** on the server, and set **Managed Resource Identifier
 
 To check it works, call one of the server's tools, then open the call in the [MCP Gateway logs](/docs/admin/logs): **Token issued to** shows **Identity provider's client**.
 
-Every agent's calls reach the API as that one app. To have Entra tell your agents apart, give each one its own identity with [Microsoft Entra Agent ID](/docs/admin/identity/entra-agent-id). To give one server its own app, see [Give a Server Its Own Exchange Client](/docs/mcp/authentication/idp-token-exchange#give-a-server-its-own-exchange-client).
+Every agent's calls reach the API as that one app. To have Entra tell your agents apart, give each one its own identity with [Microsoft Entra Agent ID](/docs/agents/identity/entra). To give one server its own app, see [Give a Server Its Own Exchange Client](/docs/mcp/authentication/idp-token-exchange#give-a-server-its-own-exchange-client).
 
 ## Troubleshooting
 

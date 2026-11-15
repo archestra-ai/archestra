@@ -83,6 +83,7 @@ function toolCall(id: string, endOffsetMs: number): SessionToolCall {
     oauthClientId: null,
     credentialClientId: null,
     credentialClientType: "identity_provider",
+    credentialActorClientId: null,
     source: "api",
     durationMs: 500,
     createdAt: new Date(BASE + endOffsetMs).toISOString(),

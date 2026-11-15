@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Entra Agent ID"
 description: "Give each agent its own Microsoft Entra identity, so consent and sign-in logs apply per agent"
-order: 3
-lastUpdated: 2026-11-09
+order: 1
+lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -147,18 +147,14 @@ Stored secrets stay hidden. Leave a secret blank to keep it.
 
 ## Bind Agents and Gateways
 
-Once a blueprint is set, every agent and MCP Gateway shows **Entra agent identity app ID** under **Identity**. For what an agent acts as overall, see [Agent Identity](/docs/agents/identity).
+Once a blueprint is set, every agent and MCP Gateway shows an **Entra agent identity app ID** field for your Entra provider under **Identity**.
 
 1. Open an agent's **Advanced** step, or a gateway's **Settings** tab.
-2. Under **Identity**, paste `<agent-identity-id>` into **Entra agent identity app ID**, and click **Save changes**.
+2. Under **Identity**, paste `<agent-identity-id>` into the provider's **Entra agent identity app ID**, and click **Save changes**.
 
 To check it works, call a tool on an MCP server that uses [IdP token exchange](/docs/mcp/authentication/idp-token-exchange). Open the call in the [MCP Gateway logs](/docs/admin/logs): **Token issued to** shows **Entra agent identity** and its ID.
 
-What to know:
-
-- Changing a binding takes [`identityProvider:update`](/docs/reference/permissions#identityProvider:update), because it decides which Entra consents the tool calls run under.
-- Each agent identity binds to one agent or gateway only.
-- Cloning or importing an agent does not copy its binding.
+Who may bind an agent, and what binding does not do, is on [Agent Identity](/docs/agents/identity#give-each-agent-its-own-identity).
 
 ## Require an Agent Identity
 
@@ -178,5 +174,5 @@ By default, a tool call from an agent without an agent identity runs as the iden
 | `AADSTS700027` (certificate not registered) | Check the thumbprint matches the blueprint's certificate. A new certificate can take a few minutes to work. |
 | "…blueprint has no client secret or certificate" | Set **Certificate Private Key** or **Blueprint Client Secret** under **Entra Agent ID** |
 | "This agent is bound to a Microsoft Entra agent identity, but…" | Set **Agent Identity Blueprint Client ID** on the identity provider |
-| "This identity provider requires every agent to act through its own Microsoft Entra agent identity" | Bind the agent, or uncheck **Require an agent identity** |
+| "This identity provider requires every agent to act through its own identity" | Bind the agent, or uncheck **Require an agent identity** |
 | An Entra error that names no agent identity of yours | Check **Entra agent identity app ID** is the agent identity's ID. A wrong ID can fail with an unrelated error, such as `AADSTS50076`. |

@@ -521,6 +521,14 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
 
 vi.mock("sonner");
 
+vi.mock("@/lib/agent-identity-bindings.query", () => ({
+  useAgentIdentityBindings: () => ({ data: [], isSuccess: true }),
+  useReplaceAgentIdentityBindings: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+}));
+
 vi.mock("@/lib/agent-subagent-exclusions.query", () => ({
   useAgentSubagentExclusions: useAgentSubagentExclusionsMock,
   useUpdateAgentSubagentExclusions: useUpdateAgentSubagentExclusionsMock,
@@ -1263,7 +1271,6 @@ const baseAgent = {
   modelPoolId: null,
   autoRouterId: null,
   identityProviderId: null,
-  entraAgentIdentityId: null,
   environmentId: null,
   builtInAgentConfig: null,
   passthroughHeaders: null,

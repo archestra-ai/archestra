@@ -120,6 +120,20 @@ export function ToolCallFacts({
         </Fact>
       ) : null}
 
+      {call.credentialActorClientId ? (
+        <Fact label="Acting agent">
+          <FactValue>Agent&apos;s own client</FactValue>
+          <FactSub>
+            <span className="flex min-w-0 items-center gap-1">
+              <span className="truncate font-mono">
+                {call.credentialActorClientId}
+              </span>
+              <CopyButton text={call.credentialActorClientId} size={12} />
+            </span>
+          </FactSub>
+        </Fact>
+      ) : null}
+
       {executedAs ? (
         <Fact label="Called as">
           <span className="flex min-h-5 items-center">
@@ -144,6 +158,7 @@ const CREDENTIAL_CLIENT_LABEL: Record<
   string
 > = {
   entra_agent_identity: "Entra agent identity",
+  okta_ai_agent: "Okta AI agent",
   mcp_server: "MCP server's client",
   identity_provider: "Identity provider's client",
 };

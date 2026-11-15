@@ -42,9 +42,9 @@ To check it works, call one of the server's tools. The call succeeds, and the se
 
 ## Which App the Token Is Issued To
 
-With Entra, every downstream token names a person and an app, and Entra consent, sign-in logs, and the API's own logs all see that app. Archestra picks the app in this order:
+Every downstream token names a person and an app, and your identity provider's consent, logs, and the API's own logs all see that app. Archestra picks the app in this order:
 
-1. **Entra agent identity:** the calling agent's own identity, when it has one. See [Microsoft Entra Agent ID](/docs/admin/identity/entra-agent-id).
+1. **The agent's own identity:** an Entra agent identity or an Okta AI agent, when the calling agent has one. See [Agent Identity](/docs/agents/identity#give-each-agent-its-own-identity).
 2. **MCP server's client:** the server's exchange client, when it sets one. See [Give a Server Its Own Exchange Client](#give-a-server-its-own-exchange-client).
 3. **Identity provider's client:** the app in your identity provider's settings, otherwise.
 
@@ -74,4 +74,4 @@ The [MCP Gateway](/docs/mcp/authentication/gateway#id-jag) does not accept an ID
 | --- | --- |
 | "Configure a Managed Resource Identifier or scopes…" | Set **Managed Resource Identifier** on the server |
 | "This MCP server overrides the token exchange client, but has no client secret or private key…" | Set **Client Secret** or **Certificate Private Key** under **Exchange Client** |
-| An `AADSTS` error from Entra | See [Microsoft Entra ID troubleshooting](/docs/admin/identity/entra-obo#troubleshooting), or [Entra Agent ID troubleshooting](/docs/admin/identity/entra-agent-id#troubleshooting) for an agent with its own identity |
+| An `AADSTS` error from Entra | See [Microsoft Entra ID troubleshooting](/docs/admin/identity/entra-obo#troubleshooting), or [Entra Agent ID troubleshooting](/docs/agents/identity/entra#troubleshooting) for an agent with its own identity |

@@ -1,8 +1,8 @@
 ---
 title: Agent Identity
-description: Who an agent acts for, whose account each tool call uses, and how to give an agent its own Microsoft Entra identity
+description: Who an agent acts for, whose account each tool call uses, and how to give each agent its own identity at your identity provider
 order: 8
-lastUpdated: 2026-11-09
+lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -29,18 +29,24 @@ With [IdP token exchange](/docs/mcp/authentication/idp-token-exchange), nobody i
 
 Your identity provider can register each agent as an identity of its own, so it can tell your agents apart. Each downstream token then names the person and the agent that acted for them. Revoke one agent's access in your identity provider, and only that agent stops.
 
+<span id="microsoft-entra-agent-id"></span>
+
+Pick the guide for your identity provider:
+
+| Identity provider | What the agent is there | Guide |
+| --- | --- | --- |
+| Microsoft Entra ID | An Entra agent identity, the client of each token | [Microsoft Entra Agent ID](/docs/agents/identity/entra) |
+| Okta | An Okta AI agent, the client of each token | [Okta AI Agents](/docs/agents/identity/okta) |
+| Keycloak, PingOne, ZITADEL, Auth0, and other RFC 8693 providers | Its own client, named as the actor in each token | [Agent Actor Tokens](/docs/agents/identity/actor-tokens) |
+
+Each guide ends with binding: on the agent's **Advanced** step (or a gateway's **Settings** tab), under **Identity**, enter the agent's ID at each provider, and click **Save changes**.
+
 What to know:
 
 - The API still grants the person's access, not less. To limit an agent to part of the data, the API or MCP server must check which agent called.
-- Changing an agent's identity takes [`identityProvider:update`](/docs/reference/permissions#identityProvider:update).
-
-### Microsoft Entra Agent ID
-
-Archestra supports agent identities from Microsoft Entra. Need them from another identity provider? [Open a GitHub issue](https://github.com/archestra-ai/archestra/issues/new?template=create-issue.md) and tell us which one.
-
-1. Set up [Microsoft Entra Agent ID](/docs/admin/identity/entra-agent-id) on your identity provider.
-2. On the agent's **Advanced** step, under **Identity**, paste the agent identity's ID into **Entra agent identity app ID**, and click **Save changes**.
+- Changing an agent's identities takes [`identityProvider:update`](/docs/reference/permissions#identityProvider:update). Each identity binds to one agent only, and cloning or importing an agent does not copy it.
+- An agent without an identity at a provider runs as the provider's shared client, unless the provider requires one.
 
 ## See Who Did What
 
-Every tool call records the person, the agent, and the account it used. Open a call in the [MCP Gateway logs](/docs/admin/logs): **Identity** shows the account, and **Token issued to** shows the app a company-identity token was issued to.
+Every tool call records the person, the agent, and the account it used. Open a call in the [MCP Gateway logs](/docs/admin/logs): **Identity** shows the account, **Token issued to** shows the app a company-identity token was issued to, and **Acting agent** shows the agent's client when the token names it as the actor.

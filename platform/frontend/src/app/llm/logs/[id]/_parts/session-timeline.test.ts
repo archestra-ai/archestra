@@ -297,6 +297,7 @@ function toolCall(overrides: Partial<SessionToolCall> = {}): SessionToolCall {
     oauthClientId: null,
     credentialClientId: null,
     credentialClientType: "identity_provider",
+    credentialActorClientId: null,
     source: "chat",
     durationMs: 500,
     createdAt: at(0),

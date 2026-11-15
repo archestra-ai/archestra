@@ -11,6 +11,7 @@ export * from "./agent-activation-skill-policy";
 export * from "./agent-catalog";
 export * from "./agent-connector-assignment";
 export * from "./agent-export";
+export * from "./agent-identity-binding";
 export * from "./agent-knowledge-base";
 export * from "./agent-knowledge-source-exclusion";
 export * from "./agent-run-input";

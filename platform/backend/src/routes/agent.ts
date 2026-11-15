@@ -43,6 +43,7 @@ import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
+  AgentIdentityBindingModel,
   AgentLabelModel,
   AgentModel,
   AgentPinModel,
@@ -99,7 +100,7 @@ import {
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
 import { assertGitHubActionsAccessChange } from "@/services/github-actions-access";
-import { assertEntraAgentIdentityChange } from "@/services/identity-providers/enterprise-managed/agent-identity";
+import { replaceAgentIdentityBindings } from "@/services/identity-providers/enterprise-managed/agent-identity";
 import { estimateMcpToolTokens } from "@/services/mcp-tool-token-estimate";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -130,6 +131,7 @@ import {
   ImportAgentResponseSchema,
   PaginatedAgentActivationSkillsResponseSchema,
   PatchAgentActivationSkillPolicySchema,
+  ReplaceAgentIdentityBindingsSchema,
   RetiredSharingUpdateFieldSchema,
   SelectAgentSchema,
   SuggestedPromptInputSchema,
@@ -820,17 +822,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         previous: null,
         next: body.runtime,
       });
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      await assertEntraAgentIdentityChange({
-        organizationId,
-        userId: user.id,
-        agentId: null,
-        previous: null,
-        next: body.entraAgentIdentityId,
-      });
-      // SPDX-SnippetEnd
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
@@ -1005,6 +996,65 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(agent);
     },
   );
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  fastify.get(
+    "/api/agents/:id/identity-bindings",
+    {
+      schema: {
+        operationId: RouteId.GetAgentIdentityBindings,
+        description:
+          "Get the identities an agent acts as at identity providers",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(ReplaceAgentIdentityBindingsSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      await requireReadableAgent({ id, userId: user.id, organizationId });
+      return reply.send({
+        bindings: await AgentIdentityBindingModel.findForAgent(id),
+      });
+    },
+  );
+
+  fastify.put(
+    "/api/agents/:id/identity-bindings",
+    {
+      schema: {
+        operationId: RouteId.ReplaceAgentIdentityBindings,
+        description:
+          "Replace the identities an agent acts as at identity providers. Changing them requires identityProvider:update.",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        body: ReplaceAgentIdentityBindingsSchema,
+        response: constructResponseSchema(ReplaceAgentIdentityBindingsSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      const agent = await requireReadableAgent({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      checker.require(agent.agentType, { action: "update", scope: agent.id });
+      return reply.send({
+        bindings: await replaceAgentIdentityBindings({
+          organizationId,
+          userId: user.id,
+          agentId: agent.id,
+          bindings: body.bindings,
+        }),
+      });
+    },
+  );
+  // SPDX-SnippetEnd
 
   fastify.get(
     "/api/agents/:id/default-suggested-prompts",
@@ -2152,17 +2202,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         previous: existingAgent.githubActionsAccess ?? null,
         next: body.githubActionsAccess,
       });
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      await assertEntraAgentIdentityChange({
-        organizationId,
-        userId: user.id,
-        agentId: existingAgent.id,
-        previous: existingAgent.entraAgentIdentityId ?? null,
-        next: body.entraAgentIdentityId,
-      });
-      // SPDX-SnippetEnd
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {

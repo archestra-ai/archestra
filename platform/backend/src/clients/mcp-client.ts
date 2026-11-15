@@ -151,6 +151,7 @@ import type {
 } from "@/types";
 import { agentOwner } from "@/types";
 import type { A2AOAuthExecution } from "@/types/a2a-actor";
+import type { AwsIamMcpAuthConfig } from "@/types/aws-iam-mcp-auth";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
@@ -1100,7 +1101,10 @@ class McpClient {
       // An AWS IAM connection signs as one agent's role session: never share
       // it with another agent, even without a conversation.
       if (catalogItem.awsIamConfig) {
-        connectionKey = `${connectionKey}:aws:${owner.type}:${owner.id}`;
+        connectionKey = `${connectionKey}:${awsIamConnectionSegment({
+          config: catalogItem.awsIamConfig,
+          ownerKey: `${owner.type}:${owner.id}`,
+        })}`;
       }
       // SPDX-SnippetEnd
       if (options?.elicitationHandler) {
@@ -5857,7 +5861,10 @@ class McpClient {
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
         // Signed as this agent's role session: never shared across agents.
         if (catalogItem.awsIamConfig) {
-          connectionKey = `${connectionKey}:aws:agent:${agentId}`;
+          connectionKey = `${connectionKey}:${awsIamConnectionSegment({
+            config: catalogItem.awsIamConfig,
+            ownerKey: `agent:${agentId}`,
+          })}`;
         }
         // SPDX-SnippetEnd
         clients.push({
@@ -7003,6 +7010,23 @@ type AwsIamIdentity = { agentId: string } | "platform";
  * A path that names neither fails closed rather than falling back to the
  * platform's own session.
  */
+/**
+ * The connection-key part for an AWS IAM server: the owner whose role session
+ * signs it, and the signing settings, so an edited role or region never
+ * reuses a connection that signs with the old ones.
+ */
+function awsIamConnectionSegment(params: {
+  config: AwsIamMcpAuthConfig;
+  ownerKey: string;
+}) {
+  const { roleArn, region, service, audience } = params.config;
+  const settings = createHash("sha256")
+    .update(JSON.stringify([roleArn, region, service, audience ?? null]))
+    .digest("hex")
+    .slice(0, 16);
+  return `aws:${params.ownerKey}:${settings}`;
+}
+
 function requireAwsIamIdentity(identity: AwsIamIdentity | undefined) {
   if (!identity) {
     throw new Error(

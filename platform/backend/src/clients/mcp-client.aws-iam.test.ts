@@ -24,9 +24,8 @@ let signedCalls: { caller: unknown; accessKey: string | undefined }[];
 useMswServer(
   // Each role session gets an access key naming the session it belongs to.
   http.post("https://sts.us-east-1.amazonaws.com/", async ({ request }) => {
-    const session = new URLSearchParams(await request.text()).get(
-      "RoleSessionName",
-    );
+    const form = new URLSearchParams(await request.text());
+    const session = `${form.get("RoleArn")?.split("/").pop()}-${form.get("RoleSessionName")}`;
     const expiration = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     return new HttpResponse(
       `<AssumeRoleWithWebIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/"><AssumeRoleWithWebIdentityResult><Credentials><AccessKeyId>key-${session}</AccessKeyId><SecretAccessKey>secret</SecretAccessKey><SessionToken>token-${session}</SessionToken><Expiration>${expiration}</Expiration></Credentials></AssumeRoleWithWebIdentityResult></AssumeRoleWithWebIdentityResponse>`,
@@ -106,31 +105,71 @@ describe("tool calls to an AWS IAM MCP server", () => {
 
     // Without a conversation, both calls would otherwise share a connection.
     for (const agent of [...agents, ...agents]) {
-      const result = await mcpClient.executeToolCallForOwner(
-        {
-          id: `call-${agent.id}`,
-          name: tool.name,
-          arguments: { caller: agent.id },
-        },
-        agentOwner(agent.id),
-        {
-          tokenId: "token",
-          teamId: null,
-          isOrganizationToken: false,
-          userId: user.id,
-        },
-      );
+      const result = await callAs({
+        agentId: agent.id,
+        userId: user.id,
+        toolName: tool.name,
+      });
       expect(result.isError).toBeFalsy();
     }
 
     expect(signedCalls).toEqual(
       [...agents, ...agents].map((agent) => ({
         caller: agent.id,
-        accessKey: `key-agent-${agent.id}`,
+        accessKey: `key-archestra-agents-agent-${agent.id}`,
       })),
     );
   });
+
+  test("a changed role is used from the next call on", async ({ makeUser }) => {
+    const user = await makeUser();
+    const { tool, server, catalog } = await installAwsServer(user.id);
+    const agent = await AgentModel.create({
+      name: "agent",
+      scope: "org",
+      teams: [],
+    });
+    await AgentToolModel.create(agent.id, tool.id, { mcpServerId: server.id });
+    const call = () =>
+      callAs({ agentId: agent.id, userId: user.id, toolName: tool.name });
+
+    await call();
+    await InternalMcpCatalogModel.update(catalog.id, {
+      awsIamConfig: {
+        roleArn: "arn:aws:iam::123456789012:role/restricted-agents",
+        region: "us-east-1",
+        service: "bedrock-agentcore",
+      },
+    });
+    await call();
+
+    expect(signedCalls.map(({ accessKey }) => accessKey)).toEqual([
+      `key-archestra-agents-agent-${agent.id}`,
+      `key-restricted-agents-agent-${agent.id}`,
+    ]);
+  });
 });
+
+async function callAs(params: {
+  agentId: string;
+  userId: string;
+  toolName: string;
+}) {
+  return mcpClient.executeToolCallForOwner(
+    {
+      id: `call-${params.agentId}`,
+      name: params.toolName,
+      arguments: { caller: params.agentId },
+    },
+    agentOwner(params.agentId),
+    {
+      tokenId: "token",
+      teamId: null,
+      isOrganizationToken: false,
+      userId: params.userId,
+    },
+  );
+}
 
 async function installAwsServer(userId: string) {
   const catalog = await InternalMcpCatalogModel.create({
@@ -155,5 +194,5 @@ async function installAwsServer(userId: string) {
     parameters: {},
     catalogId: catalog.id,
   });
-  return { tool, server };
+  return { tool, server, catalog };
 }

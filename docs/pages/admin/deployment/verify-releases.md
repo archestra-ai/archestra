@@ -45,7 +45,7 @@ gh attestation verify "oci://docker.io/archestra/platform@$DIGEST" \
   --predicate-type https://spdx.dev/Document/v2.3
 ```
 
-Each prints `Verification succeeded!` when the image passes. To check without `gh`, use cosign with the issuer `https://token.actions.githubusercontent.com` and the release workflow's identity:
+To check without `gh`, use cosign with the issuer `https://token.actions.githubusercontent.com` and the release workflow's identity:
 
 ```bash
 cosign verify-attestation --new-bundle-format --type slsaprovenance1 \

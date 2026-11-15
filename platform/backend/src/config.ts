@@ -2907,6 +2907,18 @@ const config = {
       "ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR",
     ),
     /**
+     * Node pool for privileged Agent Runtime pods only, in the same key=value
+     * form as `nodeSelector` (each pair also becomes a NoSchedule
+     * toleration). Docker-in-Docker runs have node-level access, so a
+     * dedicated tainted pool keeps them away from unprivileged runs and other
+     * workloads. Empty (the default) places privileged runs with `nodeSelector`.
+     */
+    privilegedNodeSelector: parseLabelSelector(
+      process.env.ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR,
+      {},
+      "ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR",
+    ),
+    /**
      * RuntimeClass for unprivileged Agent Runtime pods, such as `gvisor` on a
      * GKE Sandbox node pool, so a run's processes do not share the node's
      * kernel. Privileged runtimes never receive it: gVisor cannot host a

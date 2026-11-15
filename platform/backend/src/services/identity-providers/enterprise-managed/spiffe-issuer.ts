@@ -29,6 +29,11 @@ const KEY_ROTATION_MS = 30 * 24 * 60 * 60 * 1000;
 const RETIRED_KEY_PUBLISHED_MS = 24 * 60 * 60 * 1000;
 const SIGNING_KEY_CACHE_MS = 5 * 60 * 1000;
 const PUBLISHED_KEYS_CACHE_MS = 60 * 1000;
+/**
+ * How long a new key waits before it signs: past every replica's key set
+ * cache and the key set's HTTP `max-age`, both a minute.
+ */
+const KEY_ACTIVATION_MS = 5 * 60 * 1000;
 const MAX_KEYS_READ = 10;
 
 /** The SPIFFE ID an agent acts as: `spiffe://<trust domain>/agent/<id>`. */
@@ -54,6 +59,7 @@ class SpiffeIssuer {
     maxSize: 1,
     defaultTtl: PUBLISHED_KEYS_CACHE_MS,
   });
+  private minting: Promise<void> | null = null;
 
   /** The issuer identifier, `iss` in every SVID. */
   get issuer(): string {
@@ -152,24 +158,44 @@ class SpiffeIssuer {
   }
 
   /**
-   * The newest key, minted when there is none or it has signed for thirty
-   * days. Replicas rotating at once each mint one; all are published, and
-   * each signs with the newest it read.
+   * The key to sign with: the newest that every replica already publishes.
+   * A new key waits out the key set cache before it signs, so a verifier
+   * never meets a key ID a replica's cached key set lacks; until then its
+   * predecessor signs. The first key signs at once: no key set was cached
+   * without it. A key is minted when there is none or the newest is thirty
+   * days old.
    */
   private async getSigningKey(): Promise<SigningKey> {
     const cached = this.signingKeyCache.get(SIGNING_KEY_CACHE_KEY);
     if (cached) return cached;
-    const [newest] = await SpiffeSigningKeyModel.findNewest(1);
+    let rows = await SpiffeSigningKeyModel.findNewest(2);
+    if (needsNewKey(rows[0])) {
+      // One mint at a time in this process; the model's lock covers replicas.
+      this.minting ??= this.mintKey().finally(() => {
+        this.minting = null;
+      });
+      await this.minting;
+      rows = await SpiffeSigningKeyModel.findNewest(2);
+    }
     const row =
-      newest && newest.createdAt.getTime() > Date.now() - KEY_ROTATION_MS
-        ? newest
-        : await this.mintKey();
+      rows.find(
+        (candidate) =>
+          candidate.createdAt.getTime() <= Date.now() - KEY_ACTIVATION_MS,
+      ) ?? rows[rows.length - 1];
+    if (!row) {
+      throw new Error("No SPIFFE signing key could be read");
+    }
     const signingKey = await this.loadSigningKey(row);
     this.signingKeyCache.set(SIGNING_KEY_CACHE_KEY, signingKey);
     return signingKey;
   }
 
-  private async mintKey(): Promise<SpiffeSigningKey> {
+  /**
+   * Adds a new key unless another replica added one first. The private half
+   * is stored before the lock is taken, outside the transaction holding it,
+   * and deleted again when the key is not needed.
+   */
+  private async mintKey(): Promise<void> {
     const { publicKey, privateKey } = await generateKeyPair(SIGNING_ALGORITHM, {
       extractable: true,
     });
@@ -182,16 +208,22 @@ class SpiffeIssuer {
       `spiffe-signing-key-${kid}`,
       true,
     );
-    const row = await SpiffeSigningKeyModel.create({
-      id: kid,
-      publicJwk,
-      privateKeySecretId: secret.id,
-      // The clock rotation and publication are measured against.
-      createdAt: new Date(),
+    const added = await SpiffeSigningKeyModel.createIfNeeded({
+      needsKey: needsNewKey,
+      key: {
+        id: kid,
+        publicJwk,
+        privateKeySecretId: secret.id,
+        // The clock rotation and publication are measured against.
+        createdAt: new Date(),
+      },
     });
+    if (!added) {
+      await secretManager().deleteSecret(secret.id);
+      return;
+    }
     this.publishedKeysCache.clear();
     logger.info({ kid }, "Minted a SPIFFE JWT-SVID signing key");
-    return row;
   }
 
   private async loadSigningKey(row: SpiffeSigningKey): Promise<SigningKey> {
@@ -212,6 +244,10 @@ class SpiffeIssuer {
 export const spiffeIssuer = new SpiffeIssuer();
 
 // === Internal helpers
+
+function needsNewKey(newest: SpiffeSigningKey | undefined): boolean {
+  return !newest || newest.createdAt.getTime() <= Date.now() - KEY_ROTATION_MS;
+}
 
 type SigningKey = {
   kid: string;

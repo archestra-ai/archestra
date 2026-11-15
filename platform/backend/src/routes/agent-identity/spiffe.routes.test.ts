@@ -7,6 +7,7 @@ import {
 } from "jose";
 import { vi } from "vitest";
 import config from "@/config";
+import { SpiffeSigningKeyModel } from "@/models";
 import {
   SPIFFE_BUNDLE_PATH,
   SPIFFE_DISCOVERY_PATH,
@@ -83,21 +84,38 @@ describe("SPIFFE issuer routes", () => {
     expect(jwks.keys.every((key) => key.use === "sig")).toBe(true);
   });
 
-  test("rotates the signing key after thirty days and keeps the replaced key published for a day", async () => {
+  test("rotates the signing key after thirty days, signs with it once every replica publishes it, and keeps the replaced key published for a day", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const start = Date.now();
     const firstKid = await signingKid();
 
     vi.setSystemTime(start + 31 * DAY_MS);
     spiffeIssuer.clearCache();
-    const secondKid = await signingKid();
+    expect(await signingKid()).toBe(firstKid);
+    const [secondKid, ...rest] = await publishedKids();
+    expect(rest).toEqual([firstKid]);
     expect(secondKid).not.toBe(firstKid);
-    expect(await publishedKids()).toEqual([secondKid, firstKid]);
+
+    vi.setSystemTime(start + 31 * DAY_MS + 6 * 60 * 1000);
+    spiffeIssuer.clearCache();
+    expect(await signingKid()).toBe(secondKid);
 
     vi.setSystemTime(start + 33 * DAY_MS);
     spiffeIssuer.clearCache();
     expect(await signingKid()).toBe(secondKid);
     expect(await publishedKids()).toEqual([secondKid]);
+  });
+
+  test("mints one key however many first requests arrive at once", async () => {
+    const keySets = await Promise.all(
+      Array.from({ length: 5 }, async () => {
+        spiffeIssuer.clearCache();
+        return getKeySet(SPIFFE_JWKS_PATH);
+      }),
+    );
+
+    expect(await SpiffeSigningKeyModel.findNewest(10)).toHaveLength(1);
+    expect(new Set(keySets.map((keySet) => keySet.keys[0]?.kid)).size).toBe(1);
   });
 
   async function getKeySet(url: string): Promise<JSONWebKeySet> {

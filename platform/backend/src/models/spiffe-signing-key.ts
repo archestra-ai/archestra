@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { desc } from "drizzle-orm";
-import db, { schema } from "@/database";
+import { desc, sql } from "drizzle-orm";
+import db, { schema, withDbTransaction } from "@/database";
 import type {
   InsertSpiffeSigningKey,
   SpiffeSigningKey,
@@ -20,13 +20,31 @@ class SpiffeSigningKeyModel {
       .limit(limit);
   }
 
-  static async create(key: InsertSpiffeSigningKey): Promise<SpiffeSigningKey> {
-    const [row] = await db
-      .insert(schema.spiffeSigningKeysTable)
-      .values(key)
-      .returning();
-    return row;
+  /**
+   * Adds `key` unless the newest key, read under a lock replicas share, still
+   * does: replicas deciding at once add one key, not one each. Returns
+   * whether it added it.
+   */
+  static async createIfNeeded(params: {
+    needsKey: (newest: SpiffeSigningKey | undefined) => boolean;
+    key: InsertSpiffeSigningKey;
+  }): Promise<boolean> {
+    return withDbTransaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${MINT_LOCK}, 0))`,
+      );
+      const [newest] = await tx
+        .select()
+        .from(schema.spiffeSigningKeysTable)
+        .orderBy(desc(schema.spiffeSigningKeysTable.createdAt))
+        .limit(1);
+      if (!params.needsKey(newest)) return false;
+      await tx.insert(schema.spiffeSigningKeysTable).values(params.key);
+      return true;
+    });
   }
 }
 
 export default SpiffeSigningKeyModel;
+
+const MINT_LOCK = "spiffe-signing-key-mint";

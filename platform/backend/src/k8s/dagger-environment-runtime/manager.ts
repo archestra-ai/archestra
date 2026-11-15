@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import type * as k8s from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
@@ -85,10 +86,16 @@ interface EngineScheduling {
   tolerations: k8s.V1Toleration[] | null;
 }
 
-const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.11";
 const ENGINE_CONTAINER = "dagger-engine";
 const OWNER_LABEL = "archestra.io/dagger-runtime-owner";
 const ORGANIZATION_LABEL = "archestra.io/dagger-organization";
+// An engine's pod template carries a hash of everything that shapes the running
+// engine (the template itself and its engine.json), and the StatefulSet records
+// the platform version that wrote it. A reconcile whose hash differs updates
+// the template, which restarts the single engine pod; the cache PVC stays.
+const SPEC_HASH_ANNOTATION = "archestra.io/dagger-engine-spec-hash";
+const PLATFORM_VERSION_ANNOTATION =
+  "archestra.io/dagger-engine-platform-version";
 // Engine resources (cpu/memory requests, memory limit, buildkit cache PVC size)
 // come from config so small/local clusters can override the defaults. No CPU
 // limit (build throughput). The memory limit caps the buildkit daemon; the
@@ -818,70 +825,107 @@ class DaggerEnvironmentRuntimeManager {
     scheduling: EngineScheduling,
     ownershipLabels: Record<string, string> = {},
   ): Promise<void> {
+    const desired = this.buildEngineStatefulSet(
+      engineId,
+      namespace,
+      scheduling,
+      ownershipLabels,
+    );
     try {
-      await appsApi.createNamespacedStatefulSet({
-        namespace,
-        body: this.buildEngineStatefulSet(
-          engineId,
-          namespace,
-          scheduling,
-          ownershipLabels,
-        ),
-      });
+      await appsApi.createNamespacedStatefulSet({ namespace, body: desired });
     } catch (error) {
       if (!isConflict(error)) throw error;
-      // Engine already exists — left as-is. Image/resource changes do NOT roll
-      // out on reconcile (a deliberate limitation: the engine is long-lived and
-      // rarely changes; bumping ENGINE_IMAGE needs a manual StatefulSet delete).
-      // The per-reconcile mutation a target actually drives — its egress policy
-      // — is applied below via the NetworkPolicy, not the engine spec.
-      await this.warnIfEngineOutdated(appsApi, engineId, namespace, scheduling);
+      // The engine keeps serving on its old spec if this fails; the egress
+      // policy applied after it must not wait on the update.
+      await this.updateEngineIfChanged(appsApi, namespace, desired).catch(
+        (updateError) =>
+          logger.warn(
+            {
+              err: updateError,
+              namespace,
+              statefulSet: desired.metadata?.name,
+            },
+            "[DaggerEnvRuntime] could not update the engine to the current spec",
+          ),
+      );
     }
   }
 
   /**
-   * An existing engine keeps the spec it was created with for as long as it
-   * lives. One created before the sandbox memory cap goes on running sandboxes
-   * unbounded, and one created before engines inherited the platform's
-   * scheduling can sit Pending or on the wrong nodes. Nothing repairs either on
-   * its own — say so, since the alternative is a silent gap the deployment does
-   * not know it has.
+   * Move an existing engine to the desired spec (image, startup script,
+   * scheduling, resources, engine.json) when its spec hash differs. Only the
+   * pod template changes: Kubernetes restarts the one engine pod, and the cache
+   * PVC (an immutable volumeClaimTemplate) re-attaches. Sandboxes replay from
+   * Postgres, so the restart interrupts only commands running at that moment.
+   *
+   * A platform older than the one that last wrote the engine leaves it alone,
+   * so the old replicas of a rolling upgrade cannot move it back. Another
+   * replica updating the same engine concurrently surfaces as a conflict,
+   * which the next reconcile settles.
    */
-  private async warnIfEngineOutdated(
+  private async updateEngineIfChanged(
     appsApi: k8s.AppsV1Api,
-    engineId: string,
     namespace: string,
-    scheduling: EngineScheduling,
+    desired: k8s.V1StatefulSet,
   ): Promise<void> {
-    const name = daggerEngineDeploymentName(engineId);
+    const name = desired.metadata?.name ?? "";
+    const existing = await appsApi.readNamespacedStatefulSet({
+      name,
+      namespace,
+    });
+    const desiredHash =
+      desired.spec?.template.metadata?.annotations?.[SPEC_HASH_ANNOTATION];
+    const currentHash =
+      existing.spec?.template.metadata?.annotations?.[SPEC_HASH_ANNOTATION];
+    if (!existing.spec || currentHash === desiredHash) return;
+    const writtenBy =
+      existing.metadata?.annotations?.[PLATFORM_VERSION_ANNOTATION];
+    if (
+      writtenBy &&
+      (compareReleaseVersions(config.api.version, writtenBy) ?? 0) < 0
+    ) {
+      logger.info(
+        {
+          namespace,
+          statefulSet: name,
+          writtenBy,
+          version: config.api.version,
+        },
+        "[DaggerEnvRuntime] engine was last updated by a newer platform; leaving it as is",
+      );
+      return;
+    }
+    existing.metadata = {
+      ...existing.metadata,
+      labels: { ...existing.metadata?.labels, ...desired.metadata?.labels },
+      annotations: {
+        ...existing.metadata?.annotations,
+        ...desired.metadata?.annotations,
+      },
+    };
+    existing.spec.template = desired.spec?.template ?? existing.spec.template;
     try {
-      const existing = await appsApi.readNamespacedStatefulSet({
+      await appsApi.replaceNamespacedStatefulSet({
         name,
         namespace,
+        body: existing,
       });
-      const podSpec = existing.spec?.template.spec;
-      const command = podSpec?.containers[0]?.command?.join("\n") ?? "";
-      if (!command.includes(sandboxCgroupName(engineId))) {
-        logger.warn(
-          { engineId, namespace, statefulSet: name },
-          "[DaggerEnvRuntime] engine predates the sandbox memory cap and runs sandboxes unbounded; delete the StatefulSet to recreate it",
-        );
-      }
-      if (
-        schedulingKey(podSpec?.nodeSelector, podSpec?.tolerations) !==
-        schedulingKey(scheduling.nodeSelector, scheduling.tolerations)
-      ) {
-        logger.warn(
-          { engineId, namespace, statefulSet: name },
-          "[DaggerEnvRuntime] engine nodeSelector/tolerations differ from the desired scheduling; delete the StatefulSet to recreate it",
-        );
-      }
     } catch (error) {
-      logger.debug(
-        { err: error, engineId, namespace },
-        "[DaggerEnvRuntime] could not check whether the engine spec is current",
+      if (!isConflict(error)) throw error;
+      logger.info(
+        { namespace, statefulSet: name },
+        "[DaggerEnvRuntime] engine changed while updating it; the next reconcile re-checks it",
       );
+      return;
     }
+    logger.info(
+      {
+        namespace,
+        statefulSet: name,
+        image: desired.spec?.template.spec?.containers[0]?.image,
+      },
+      "[DaggerEnvRuntime] updated engine to the current spec; its pod restarts",
+    );
   }
 
   private async applyEngineConfig(
@@ -916,80 +960,92 @@ class DaggerEnvironmentRuntimeManager {
     const name = daggerEngineDeploymentName(engineId);
     const labels = daggerEnginePodLabels(engineId);
     const engine = config.daggerRuntime.engine;
+    const template: k8s.V1PodTemplateSpec = {
+      metadata: { labels },
+      spec: {
+        terminationGracePeriodSeconds: 30,
+        // The engine is reached via exec/attach (`kube-pod://`), never the k8s
+        // API, so it gets no ServiceAccount token mounted next to the
+        // privileged sandbox workload it runs.
+        automountServiceAccountToken: false,
+        ...(scheduling.nodeSelector &&
+        Object.keys(scheduling.nodeSelector).length > 0
+          ? { nodeSelector: scheduling.nodeSelector }
+          : {}),
+        ...(scheduling.tolerations?.length
+          ? { tolerations: scheduling.tolerations }
+          : {}),
+        containers: [
+          {
+            name: ENGINE_CONTAINER,
+            image: engine.image,
+            command: [
+              "/bin/sh",
+              "-c",
+              engineStartupScript(engineId, engine.sandboxMemoryMaxBytes),
+            ],
+            lifecycle: {
+              // The sandbox cgroup is created in the host's tree, so it
+              // outlives the pod that made it and nothing else reaps it.
+              preStop: {
+                exec: {
+                  command: [
+                    "/bin/sh",
+                    "-c",
+                    `rmdir ${sandboxCgroupPath(engineId)} 2>/dev/null || true`,
+                  ],
+                },
+              },
+            },
+            securityContext: { privileged: true },
+            resources: {
+              requests: {
+                cpu: engine.cpuRequest,
+                memory: engine.memoryRequest,
+              },
+              limits: { memory: engine.memoryLimit },
+            },
+            volumeMounts: [
+              { name: "varlib", mountPath: "/var/lib/dagger" },
+              { name: "run", mountPath: "/run/dagger" },
+              {
+                name: "config",
+                mountPath: "/etc/dagger/engine.json",
+                subPath: "engine.json",
+              },
+            ],
+          },
+        ],
+        volumes: [
+          // /run/dagger is the runtime socket dir — ephemeral by design.
+          { name: "run", emptyDir: { medium: "Memory" } },
+          {
+            name: "config",
+            configMap: { name: engineConfigMapName(engineId) },
+          },
+        ],
+      },
+    };
+    template.metadata = {
+      ...template.metadata,
+      annotations: {
+        [SPEC_HASH_ANNOTATION]: engineSpecHash(template, ENGINE_CONFIG_JSON),
+      },
+    };
     return {
       apiVersion: "apps/v1",
       kind: "StatefulSet",
-      metadata: { name, namespace, labels: { ...labels, ...ownershipLabels } },
+      metadata: {
+        name,
+        namespace,
+        labels: { ...labels, ...ownershipLabels },
+        annotations: { [PLATFORM_VERSION_ANNOTATION]: config.api.version },
+      },
       spec: {
         serviceName: name,
         replicas: 1,
         selector: { matchLabels: labels },
-        template: {
-          metadata: { labels },
-          spec: {
-            terminationGracePeriodSeconds: 30,
-            // The engine is reached via exec/attach (`kube-pod://`), never the k8s
-            // API, so it gets no ServiceAccount token mounted next to the
-            // privileged sandbox workload it runs.
-            automountServiceAccountToken: false,
-            ...(scheduling.nodeSelector &&
-            Object.keys(scheduling.nodeSelector).length > 0
-              ? { nodeSelector: scheduling.nodeSelector }
-              : {}),
-            ...(scheduling.tolerations?.length
-              ? { tolerations: scheduling.tolerations }
-              : {}),
-            containers: [
-              {
-                name: ENGINE_CONTAINER,
-                image: ENGINE_IMAGE,
-                command: [
-                  "/bin/sh",
-                  "-c",
-                  engineStartupScript(engineId, engine.sandboxMemoryMaxBytes),
-                ],
-                lifecycle: {
-                  // The sandbox cgroup is created in the host's tree, so it
-                  // outlives the pod that made it and nothing else reaps it.
-                  preStop: {
-                    exec: {
-                      command: [
-                        "/bin/sh",
-                        "-c",
-                        `rmdir ${sandboxCgroupPath(engineId)} 2>/dev/null || true`,
-                      ],
-                    },
-                  },
-                },
-                securityContext: { privileged: true },
-                resources: {
-                  requests: {
-                    cpu: engine.cpuRequest,
-                    memory: engine.memoryRequest,
-                  },
-                  limits: { memory: engine.memoryLimit },
-                },
-                volumeMounts: [
-                  { name: "varlib", mountPath: "/var/lib/dagger" },
-                  { name: "run", mountPath: "/run/dagger" },
-                  {
-                    name: "config",
-                    mountPath: "/etc/dagger/engine.json",
-                    subPath: "engine.json",
-                  },
-                ],
-              },
-            ],
-            volumes: [
-              // /run/dagger is the runtime socket dir — ephemeral by design.
-              { name: "run", emptyDir: { medium: "Memory" } },
-              {
-                name: "config",
-                configMap: { name: engineConfigMapName(engineId) },
-              },
-            ],
-          },
-        },
+        template,
         // Persistent buildkit cache (warm base + layers): the single replica gets
         // its own PVC that re-attaches across restarts, so the engine reuses its
         // warm base instead of cold-rebuilding.
@@ -1161,8 +1217,7 @@ function engineConfigMapName(engineId: string): string {
  * The cap is applied before the engine starts, and retried in the background
  * where the memory controller is not delegated yet. That retry is detached so a
  * cluster which never delegates it (cgroup v1) leaves the engine serving
- * unbounded sandboxes rather than crash-looping with no repair, since engine
- * StatefulSets are created once and never reconciled.
+ * unbounded sandboxes rather than crash-looping until a later spec update.
  */
 function engineStartupScript(
   engineId: string,
@@ -1196,20 +1251,59 @@ function engineStartupScript(
   ].join("\n");
 }
 
-// Order-insensitive identity of a pod's scheduling, so an engine read back from
-// the API compares equal to the desired spec regardless of key order.
-function schedulingKey(
-  nodeSelector: Record<string, string> | null | undefined,
-  tolerations: k8s.V1Toleration[] | null | undefined,
+// Hash of an engine's pod template and engine.json. Keys are sorted, so a
+// template built from objects in a different key order hashes the same.
+function engineSpecHash(
+  template: k8s.V1PodTemplateSpec,
+  engineConfigJson: string,
 ): string {
-  const sortedEntries = (record: object) =>
-    Object.entries(record)
-      .filter(([, value]) => value !== undefined)
-      .sort(([a], [b]) => a.localeCompare(b));
-  return JSON.stringify({
-    nodeSelector: sortedEntries(nodeSelector ?? {}),
-    tolerations: (tolerations ?? []).map(sortedEntries),
-  });
+  const canonical = (value: unknown): unknown =>
+    Array.isArray(value)
+      ? value.map(canonical)
+      : value && typeof value === "object"
+        ? Object.fromEntries(
+            Object.entries(value)
+              .filter(([, entry]) => entry !== undefined)
+              .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+              .map(([key, entry]) => [key, canonical(entry)]),
+          )
+        : value;
+  return createHash("sha256")
+    .update(JSON.stringify(canonical({ template, engineConfigJson })))
+    .digest("hex");
+}
+
+/**
+ * Semver precedence of two platform versions (`v1.5.0-rc.3`, `1.5.0`), or null
+ * when either is not a release version (a development build).
+ */
+function compareReleaseVersions(a: string, b: string): number | null {
+  const parse = (version: string) =>
+    /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
+      version,
+    );
+  const left = parse(a);
+  const right = parse(b);
+  if (!left || !right) return null;
+  for (const index of [1, 2, 3]) {
+    const difference = Number(left[index]) - Number(right[index]);
+    if (difference !== 0) return Math.sign(difference);
+  }
+  // A prerelease sorts before its release; identifiers compare in turn,
+  // numeric ones numerically and below alphanumeric ones.
+  if (!left[4] || !right[4]) return left[4] ? -1 : right[4] ? 1 : 0;
+  const leftIds = left[4].split(".");
+  const rightIds = right[4].split(".");
+  for (let i = 0; i < Math.max(leftIds.length, rightIds.length); i++) {
+    const [x, y] = [leftIds[i], rightIds[i]];
+    if (x === undefined || y === undefined) return x === undefined ? -1 : 1;
+    if (x === y) continue;
+    const [xNumeric, yNumeric] = [/^\d+$/.test(x), /^\d+$/.test(y)];
+    if (xNumeric && yNumeric) return Math.sign(Number(x) - Number(y));
+    if (xNumeric !== yNumeric) return xNumeric ? -1 : 1;
+    return x < y ? -1 : 1;
+  }
+  return 0;
 }
 
 function sandboxCgroupName(engineId: string): string {

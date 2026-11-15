@@ -52,7 +52,6 @@ import {
 import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
 import { port } from "@/models/ports";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import playwrightMcpImage from "@/playwright-mcp-image.json";
 import { secretManager } from "@/secrets-manager";
 import { verifySecretsEncryptionKey } from "@/secrets-manager/encryption-key-guard";
 import { createAppBacking } from "@/services/apps/app-mcp-backing";
@@ -609,9 +608,9 @@ const APPA_KEEPER_DEFAULT_GRANTS: ResourcePermissionGrant[] = [
 async function seedPlaywrightCatalog(): Promise<void> {
   const LEGACY_PLAYWRIGHT_MCP_SERVER_NAME = "playwright-browser";
   const playwrightLocalConfig = {
-    // Track the upstream MCP image by immutable digest. Its runtime/package
-    // versions are recorded together for the daily client-version updater.
-    dockerImage: playwrightMcpImage.image,
+    // The release's patched image, or the pinned upstream one without release
+    // digests. Re-asserted on every start, so upgrades move existing browsers.
+    dockerImage: config.orchestrator.playwrightMcpImage,
     transportType: "streamable-http" as const,
     // Use an absolute path: upstream images have changed their working directory.
     command: "node",

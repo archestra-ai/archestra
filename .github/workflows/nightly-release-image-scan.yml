@@ -5,7 +5,9 @@ name: Nightly Release Image Scan
 # release, and the only way out is a new version. A line can go days between
 # releases, so rebuild every image a release on main and on each supported
 # release line would publish, scan it under the release policy, and alert in
-# Slack before anyone cuts a release that would be held.
+# Slack before anyone cuts a release that would be held. Third-party images the
+# line pins are scanned too; they never hold a release, and infrastructure
+# images alert on critical findings only (release-image-policy.py).
 #
 # Advisory only: these builds gate nothing and are never publication evidence.
 # They cover linux/amd64; releases still scan both architectures.
@@ -60,8 +62,11 @@ jobs:
       matrix: ${{ fromJSON(needs.targets.outputs.matrix) }}
     env:
       IMAGE_REFERENCE: nightly-scan-${{ matrix.image }}:${{ matrix.sha }}
+    # Rows with a reference are third-party images the line pins: scan the
+    # registry image itself, without building anything.
     steps:
       - name: Reclaim disk space (background)
+        if: ${{ !matrix.reference }}
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
       - name: Checkout line head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,9 +75,11 @@ jobs:
           fetch-depth: 1
           ref: ${{ matrix.sha }}
       - name: Read release version
+        if: ${{ !matrix.reference }}
         id: version
         run: echo "version=$(jq -er .platform .github/release-please/.release-please-manifest.json)" >> "$GITHUB_OUTPUT"
       - name: Build image
+        if: ${{ !matrix.reference }}
         uses: $/.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
@@ -94,7 +101,10 @@ jobs:
       - name: Scan image
         uses: $/.github/actions/scan-docker-image
         with:
-          image: local://${{ env.IMAGE_REFERENCE }}
+          # registry:// reads the published image, never a same-named local one.
+          image: ${{ matrix.reference && format('registry://{0}', matrix.reference) || format('local://{0}', env.IMAGE_REFERENCE) }}
+          platform: ${{ matrix.reference && 'linux/amd64' || '' }}
+          only-severities: ${{ matrix.severities || 'critical,high' }}
           exit-code: "true"
 
   notify:

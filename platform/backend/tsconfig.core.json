@@ -25,6 +25,7 @@
   "include": [
     "src/ambient/*.d.ts",
     "src/config.ts",
+    "src/playwright-mcp-image.json",
     "src/app-version.ts",
     "src/cache-manager.ts",
     "src/in-memory-lru-cache.ts",

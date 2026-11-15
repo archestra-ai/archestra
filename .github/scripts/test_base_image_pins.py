@@ -14,9 +14,11 @@ SPEC.loader.exec_module(POLICY)
 DOCKERFILES = sorted({image["dockerfile"].removeprefix("./")
                       for image in POLICY.candidate_matrix(ROOT)["include"]})
 FROM = re.compile(r"^FROM\s+(?:--platform=\S+\s+)?(?P<image>\S+)(?:\s+AS\s+(?P<stage>\S+))?\s*$", re.I | re.M)
-# Dependabot reads only literal FROM lines; it needs a version tag to propose
-# bumps and a digest to keep builds reproducible.
-PINNED = re.compile(r"[a-z0-9./-]+:[0-9][\w.-]*@sha256:[0-9a-f]{64}")
+# Dependabot reads only literal FROM lines; it needs a version tag (Dagger's
+# carry a "v") to propose bumps and a digest to keep builds reproducible.
+CHART = "platform/helm/archestra"
+PINNED_TAG = re.compile(r"v?[0-9][\w.-]*@sha256:[0-9a-f]{64}")
+PINNED = re.compile(r"[a-z0-9./-]+:v?[0-9][\w.-]*@sha256:[0-9a-f]{64}")
 
 
 class BaseImagePinTest(unittest.TestCase):
@@ -32,7 +34,7 @@ class BaseImagePinTest(unittest.TestCase):
                     stages.add(line["stage"])
 
     def test_dependabot_bumps_those_bases_on_main_and_every_supported_line(self):
-        entries = docker_entries()
+        entries = [entry for entry in docker_entries() if entry["directories"] != [CHART]]
         lines = json.loads((ROOT / ".github/backport-targets.json").read_text())["branches"]
         directories = sorted({str(Path(dockerfile).parent) for dockerfile in DOCKERFILES})
         by_target = {}
@@ -58,6 +60,46 @@ class BaseImagePinTest(unittest.TestCase):
                 with self.subTest(target=entry["target"] or "main"):
                     self.assertEqual(entry["directories"], ["platform/docker_images/sandbox_base"])
                     self.assertRegex(entry["body"], r'(?m)^      - dependency-name: "\*uv"\n(?!        update-types:)')
+
+    def test_dependabot_leaves_the_dagger_engine_base_to_the_dagger_updater(self):
+        # The patched engine's base must match DAGGER_VERSION, the vendored SDK
+        # and the CLI (check-dagger-version-sync.sh), so update-dagger.py moves
+        # them together instead.
+        for entry in docker_entries():
+            if "platform" in entry["directories"]:
+                with self.subTest(target=entry["target"] or "main"):
+                    self.assertRegex(entry["body"], r'(?m)^      - dependency-name: "\*dagger\.io/engine"\n(?!        update-types:)')
+
+    def test_dependabot_moves_chart_image_pins_on_main_but_never_the_bundled_database(self):
+        # A refreshed "latest" digest of the database can be a new PostgreSQL
+        # major that refuses to start on the existing data directory.
+        chart = [entry for entry in docker_entries() if CHART in entry["directories"]]
+        self.assertEqual([(entry["target"], entry["directories"]) for entry in chart], [(None, [CHART])])
+        self.assertRegex(chart[0]["body"], r'(?m)^      - dependency-name: "bitnamisecure/\*"\n(?!        update-types:)')
+        # Dependabot reads a Helm digest only from inside the tag.
+        values = (ROOT / CHART / "values.yaml").read_text()
+        for block in re.finditer(r'(?m)^(\s*)repository: (\S+)\n(?:\1#.*\n)*\1tag: "?([^"\s]+)"?\n'
+                                 r'(?:\1#.*\n)*\1digest: "?([^"\s]*)"?$', values):
+            if not block[2].startswith("bitnamisecure/"):
+                with self.subTest(repository=block[2]):
+                    self.assertRegex(block[3], PINNED_TAG)
+                    self.assertEqual(block[4], "")
+
+
+    def test_dependabot_leaves_the_playwright_base_to_its_updater(self):
+        for entry in docker_entries():
+            if "platform" in entry["directories"]:
+                with self.subTest(target=entry["target"] or "main"):
+                    self.assertRegex(entry["body"], r'(?m)^      - dependency-name: "\*playwright/mcp"\n(?!        update-types:)')
+
+    def test_patched_playwright_starts_from_the_pinned_upstream_image(self):
+        # The backend falls back to the upstream image without release digests,
+        # so both must name the same release and the same bytes.
+        pinned = json.loads((ROOT / "platform/backend/src/playwright-mcp-image.json").read_text())
+        image, digest = pinned["image"].split("@")
+        bases = re.findall(r"^FROM (\S+) AS playwright-mcp$", (ROOT / "platform/Dockerfile").read_text(), re.M)
+        self.assertEqual(bases, [f"{image}:v{pinned['mcpVersion']}@{digest}"])
+
 
 def docker_entries():
     text = (ROOT / ".github/dependabot.yml").read_text()

@@ -28,7 +28,8 @@ class ScanTargetsTest(unittest.TestCase):
     def test_each_line_scans_its_own_inventory(self):
         self.commit(agents=["agent-claude-code", "agent-codex", "agent-hermes"], targets=["release/9.9"])
         git(self.origin, "checkout", "-q", "-b", "release/9.9")
-        self.commit(agents=["agent-claude-code"], targets=["release/9.9"])
+        # An older line: no upstream_matrix in its policy, none of its pin files.
+        self.commit(agents=["agent-claude-code"], targets=["release/9.9"], upstream=False)
         git(self.origin, "checkout", "-q", "main")
         clone = self.clone()
 
@@ -38,10 +39,18 @@ class ScanTargetsTest(unittest.TestCase):
             return [row["image"] for row in rows if row["branch"] == branch]
 
         # The nightly Platform byte scan already covers main's Platform images.
-        self.assertEqual(images("main"), ["mcp-server-base", "p4-shim", "sandbox-base",
-                                          "agent-claude-code", "agent-codex", "agent-hermes"])
-        self.assertEqual(images("release/9.9"), ["platform", "platform-slim", "mcp-server-base", "p4-shim",
-                                                 "sandbox-base", "agent-claude-code"])
+        upstream = [row["image"] for row in self.policy().upstream_matrix(SCRIPTS.parents[1])["include"]]
+        self.assertEqual(images("main"), ["dagger-engine", "playwright-mcp", "mcp-server-base", "p4-shim", "sandbox-base",
+                                          "agent-claude-code", "agent-codex", "agent-hermes", *upstream])
+        # Pinned third-party rows scan the registry reference and build nothing.
+        for row in rows:
+            self.assertEqual(bool(row.get("reference")), row["image"] in upstream)
+            if row.get("reference"):
+                self.assertRegex(row["reference"], r"@sha256:[0-9a-f]{64}$")
+                self.assertEqual((row["context"], row["dockerfile"], row["target"]), ("", "", ""))
+                self.assertIn(row["severities"], ("critical", "critical,high"))
+        self.assertEqual(images("release/9.9"), ["platform", "platform-slim", "dagger-engine", "playwright-mcp",
+                                                 "mcp-server-base", "p4-shim", "sandbox-base", "agent-claude-code"])
         for branch in ("main", "release/9.9"):
             head = git(self.origin, "rev-parse", branch)
             self.assertEqual({row["sha"] for row in rows if row["branch"] == branch}, {head})
@@ -61,7 +70,13 @@ class ScanTargetsTest(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError):
             SCAN.scan_targets(self.clone())
 
-    def commit(self, agents, targets):
+    def policy(self):
+        spec = importlib.util.spec_from_file_location("release_image_policy", SCRIPTS / "release-image-policy.py")
+        policy = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(policy)
+        return policy
+
+    def commit(self, agents, targets, upstream=True):
         files = {
             ".github/backport-targets.json": json.dumps({"branches": targets}),
             "platform/shared/agent-catalog-images.json": json.dumps({name: name for name in agents}),
@@ -78,6 +93,14 @@ class ScanTargetsTest(unittest.TestCase):
         policy = self.origin / ".github/scripts/release-image-policy.py"
         policy.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(SCRIPTS / "release-image-policy.py", policy)
+        for path in ("platform/helm/archestra/values.yaml",):
+            if upstream:
+                (self.origin / path).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(SCRIPTS.parents[1] / path, self.origin / path)
+            else:
+                (self.origin / path).unlink(missing_ok=True)
+        if not upstream:
+            policy.write_text(policy.read_text().replace("def upstream_matrix(", "def _absent_upstream_matrix("))
         git(self.origin, "add", "-A")
         git(self.origin, "commit", "-q", "-m", "fixture")
 

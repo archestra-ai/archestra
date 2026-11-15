@@ -1,0 +1,150 @@
+name: Build Playwright MCP Docker Image
+
+# The patched Playwright MCP (platform/Dockerfile target playwright-mcp) the
+# backend runs as the built-in browser: upstream's image with Debian's fixed
+# packages and without the package managers the server never uses.
+#
+# Reusable via workflow_call (release + dev publishes); also runs a build-only
+# validation (no push) on pull requests that touch its inputs.
+on:
+  workflow_call:
+    inputs:
+      image_registry:
+        description: "Destination registry prefix"
+        type: string
+        default: ghcr.io/archestra-ai
+      push_to_gcr:
+        description: "Whether to push the built image to GCR"
+        required: true
+        type: boolean
+      version:
+        description: "Version tag for the Docker image"
+        required: true
+        type: string
+      checkout_ref:
+        description: "Optional ref to checkout when building the image"
+        required: false
+        type: string
+        default: ""
+      reuse_from_version:
+        description: "Previous main SHA whose image may be reused when inputs are unchanged"
+        required: false
+        type: string
+        default: ""
+      environment:
+        description: "GitHub Environment whose secrets the publishing jobs read (release-publish for releases); empty for none"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
+        required: false
+      GCP_SERVICE_ACCOUNT_NAME:
+        required: false
+  pull_request:
+    paths:
+      - "platform/Dockerfile"
+      - "platform/backend/src/playwright-mcp-image.json"
+      - ".github/workflows/build-playwright-mcp-docker-image.yml"
+
+permissions: {}
+
+concurrency:
+  group: build-playwright-mcp-docker-image-${{ inputs.version || github.event.pull_request.number || github.ref }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # workflow_call path (release-please / deploy-dev): callers always pass a
+  # version, so gate on it — `github.event_name` is the CALLER's event here.
+  build-playwright-mcp-image:
+    name: Build Playwright MCP Image
+    if: ${{ inputs.version != '' }}
+    permissions:
+      contents: read # Required to checkout the repository and build the image.
+      packages: write # Publish CI images with the repository token.
+      id-token: write # Required for Workload Identity Federation when pushing images.
+      attestations: write # Passed to the image build, which attests CI images.
+    uses: $/.github/workflows/build-native-multi-arch-image.yml
+    with:
+      environment: ${{ inputs.environment }}
+      image_directory: ./platform
+      dockerfile: ./platform/Dockerfile
+      target: playwright-mcp
+      image_name: playwright-mcp
+      image_registry: ${{ inputs.image_registry }}
+      version: ${{ inputs.version }}
+      push_image: ${{ inputs.push_to_gcr }}
+      auth_provider: ${{ startsWith(inputs.image_registry, 'ghcr.io/') && 'ghcr' || 'gar' }}
+      checkout_ref: ${{ inputs.checkout_ref }}
+      reuse_from_version: ${{ inputs.reuse_from_version }}
+      reuse_paths: '["platform/Dockerfile", ".github/workflows/build-playwright-mcp-docker-image.yml"]'
+    secrets:
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+  # Direct pull_request path: build-only validation, never pushes. A plain
+  # single-arch build instead of the reusable multi-arch workflow, because that
+  # workflow's jobs request `id-token: write`, which fork PRs are not allowed.
+  validate-playwright-mcp-image:
+    name: Validate Playwright MCP Image Build
+    if: ${{ inputs.version == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to checkout the repository and build the image.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Build Playwright MCP image
+        uses: $/.github/actions/build-docker-image
+        with:
+          context: ./platform
+          dockerfile: ./platform/Dockerfile
+          target: playwright-mcp
+          platforms: linux/amd64
+          push: "false"
+          load: "true"
+          tags: playwright-mcp:${{ github.sha }}
+          # Read-only: the publish paths own cache export for this image.
+          cache-from: type=registry,ref=ghcr.io/archestra-ai/ci/playwright-mcp:buildcache-amd64
+
+      # The server must still start the way the backend runs it and drive
+      # Chromium once the package upgrades and removals are applied.
+      - name: Smoke test Playwright MCP image
+        env:
+          IMAGE: playwright-mcp:${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, subprocess
+          server = subprocess.Popen(
+              ["docker", "run", "--rm", "-i", "--entrypoint", "node", os.environ["IMAGE"],
+               "/app/cli.js", "--headless", "--browser", "chromium", "--no-sandbox", "--isolated"],
+              stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+          def call(request_id, method, params):
+              server.stdin.write(json.dumps({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}) + "\n")
+              server.stdin.flush()
+              while True:
+                  line = server.stdout.readline()
+                  if not line:
+                      raise SystemExit("Playwright MCP exited")
+                  message = json.loads(line)
+                  if message.get("id") == request_id:
+                      if "error" in message or message["result"].get("isError"):
+                          raise SystemExit(f"{method} failed: {message}")
+                      return message["result"]
+          call(1, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                                 "clientInfo": {"name": "smoke", "version": "0"}})
+          server.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
+          tools = call(2, "tools/list", {})["tools"]
+          assert any(tool["name"] == "browser_navigate" for tool in tools), tools
+          page = call(3, "tools/call", {"name": "browser_navigate",
+                                        "arguments": {"url": "data:text/html,<h1>browser-ok</h1>"}})
+          assert "browser-ok" in "".join(part.get("text", "") for part in page["content"]), page
+          server.stdin.close()
+          server.terminate()
+          print(f"Playwright MCP served {len(tools)} tools and rendered a page")
+          PY

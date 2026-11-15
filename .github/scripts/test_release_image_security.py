@@ -107,6 +107,57 @@ class ReleasePolicyTests(unittest.TestCase):
                     catalog.write_text(json.dumps(value))
                     POLICY.candidate_matrix(root)
 
+    def test_every_pinned_upstream_image_is_listed_and_an_unpinned_one_fails_closed(self):
+        rows = POLICY.upstream_matrix(ROOT)["include"]
+        self.assertEqual([row["image"] for row in rows], ["busybox", "busybox-musl", "cloud-sql-proxy",
+                                                         "postgresql", "postgres-exporter"])
+        for row in rows:
+            self.assertRegex(row["reference"], r"@sha256:[0-9a-f]{64}$")
+        # Infrastructure images alert on critical only; a newly listed image
+        # alerts on critical and high unless it is added there.
+        self.assertEqual({row["image"]: row["severities"] for row in rows},
+                         {"busybox": "critical", "busybox-musl": "critical", "cloud-sql-proxy": "critical",
+                          "postgresql": "critical", "postgres-exporter": "critical"})
+        chart = (ROOT / "platform/helm/archestra/values.yaml").read_text()
+        digest = re.search(r'busyboxImageDigest: "(sha256:[0-9a-f]{64})"', chart).group(1)
+        proxy = re.search(r'tag: "(2\.[0-9.]+@sha256:[0-9a-f]{64})"', chart).group(1)
+        for name, mutate in (
+            ("unpinned busybox", lambda c: c.replace(digest, "")),
+            ("ambiguous busybox", lambda c: c + f'    busyboxImageDigest: "{digest}"\n'),
+            ("proxy tag without digest", lambda c: c.replace(proxy, proxy.split("@")[0])),
+            ("missing database block", lambda c: c.replace("repository: bitnamisecure/postgresql\n", "")),
+        ):
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                values = root / "platform/helm/archestra/values.yaml"
+                values.parent.mkdir(parents=True)
+                values.write_text(mutate(chart))
+                with self.assertRaises(ValueError):
+                    POLICY.upstream_matrix(root)
+
+    def test_every_chart_image_default_is_built_here_or_scanned(self):
+        # A new chart image must join upstream_matrix, or it ships unscanned.
+        chart = (ROOT / "platform/helm/archestra/values.yaml").read_text()
+        defaults = re.findall(r'^\s*(?:repository|image|[A-Za-z]+Image): "?([^"\s]+)"?$', chart, re.M)
+        scanned = [row["reference"] for row in POLICY.upstream_matrix(ROOT)["include"]]
+        for image in defaults:
+            with self.subTest(image=image):
+                if image != "archestra/platform":  # Built and scanned as a release candidate.
+                    self.assertTrue(any(reference.startswith(f"{image}:") or reference.startswith(f"{image}@")
+                                        for reference in scanned), image)
+
+    def test_chart_pins_the_busybox_defaults_it_scans(self):
+        # The chart applies a busybox digest only while the image equals its
+        # template default, so a values-only bump would ship that image unpinned.
+        chart = (ROOT / "platform/helm/archestra/values.yaml").read_text()
+        helpers = (ROOT / "platform/helm/archestra/templates/_helpers.tpl").read_text()
+        for key in ("busyboxImage", "bootstrapImage"):
+            with self.subTest(key=key):
+                image = re.search(rf'^\s*{key}: "([^"]+)"$', chart, re.M).group(1)
+                defaults = set(re.findall(rf'\.{key} \| default "([^"]+)"\) .*?"defaultImage" "([^"]+)"',
+                                          helpers))
+                self.assertEqual(defaults, {(image, image)})
+
     def test_classification_emits_complete_matrix_and_ordinary_events_still_skip(self):
         with tempfile.TemporaryDirectory() as directory:
             event, output = Path(directory) / "event", Path(directory) / "output"

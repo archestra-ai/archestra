@@ -46,6 +46,10 @@ def candidate_matrix(root):
     images = [
         {"image": "platform", "context": "./platform", "dockerfile": "./platform/Dockerfile", "target": ""},
         {"image": "platform-slim", "context": "./platform", "dockerfile": "./platform/Dockerfile", "target": "unified-slim"},
+        # The patched Dagger engine the backend provisions per organization.
+        {"image": "dagger-engine", "context": "./platform", "dockerfile": "./platform/Dockerfile", "target": "dagger-engine"},
+        # The patched Playwright MCP the backend runs as the built-in browser.
+        {"image": "playwright-mcp", "context": "./platform", "dockerfile": "./platform/Dockerfile", "target": "playwright-mcp"},
     ]
     for image, directory in (("mcp-server-base", "mcp_server"), ("p4-shim", "p4_shim"),
                              ("sandbox-base", "sandbox_base")):
@@ -69,6 +73,31 @@ def candidate_matrix(root):
         if not (root / image["dockerfile"]).is_file():
             raise ValueError(f"Missing image Dockerfile: {image['dockerfile']}")
     return {"include": images}
+
+
+def upstream_matrix(root):
+    """Third-party images a release runs unchanged, by the exact reference it pins.
+
+    Nothing here builds them (Playwright MCP is patched and released as a
+    candidate instead), and they never hold a release: the nightly
+    release image scan scans each pinned reference and alerts on findings of
+    the listed severities. test_release_image_security.py fails when a chart
+    image default is neither built here nor listed.
+    """
+    chart = (root / "platform/helm/archestra/values.yaml").read_text()
+    images = {
+        "busybox": chart_value_pin(chart, "busyboxImage"),
+        "busybox-musl": chart_value_pin(chart, "bootstrapImage"),
+        "cloud-sql-proxy": chart_block_pin(chart, "gcr.io/cloud-sql-connectors/cloud-sql-proxy"),
+        "postgresql": chart_block_pin(chart, "bitnamisecure/postgresql"),
+        "postgres-exporter": chart_block_pin(chart, "bitnamisecure/postgres-exporter"),
+    }
+    for image, reference in images.items():
+        if not isinstance(reference, str) or not PINNED_REFERENCE.fullmatch(reference):
+            raise ValueError(f"Upstream image is not pinned by digest: {image}")
+    return {"include": [{"image": image, "reference": reference,
+                         "severities": UPSTREAM_ALERT_SEVERITIES.get(image, "critical,high")}
+                        for image, reference in images.items()]}
 
 
 def is_release_pr(pr, repository):
@@ -240,6 +269,40 @@ def main():
               "No release image scan required for this event; publication scans its own artifacts.")
     else:
         raise ValueError(f"Unsupported mode: {mode}")
+
+
+# ============================================================================
+# Internal helpers
+# ============================================================================
+
+
+# Images the platform runs as infrastructure (init containers, the database
+# and its proxy) are reachable from less untrusted input than code-running
+# images, so the nightly scan alerts on their critical findings only. Anything
+# not listed alerts on critical and high.
+UPSTREAM_ALERT_SEVERITIES = {image: "critical" for image in (
+    "busybox", "busybox-musl", "cloud-sql-proxy", "postgresql", "postgres-exporter")}
+PINNED_REFERENCE = re.compile(r"[a-z0-9][a-z0-9./_-]*(?::[\w][\w.-]*)?@sha256:[0-9a-f]{64}")
+
+
+def chart_value_pin(chart, key):
+    """A chart image value and its `<key>Digest` sibling, as one reference."""
+    image = re.findall(rf'^\s*{key}: "([^"\s]+)"$', chart, re.M)
+    digest = re.findall(rf'^\s*{key}Digest: "(sha256:[0-9a-f]{{64}})"$', chart, re.M)
+    if len(image) != 1 or len(digest) != 1:
+        raise ValueError(f"Missing or ambiguous chart image pin: {key}")
+    return f"{image[0]}@{digest[0]}"
+
+
+def chart_block_pin(chart, repository):
+    """A chart `image:` block (repository, tag, optional digest), as one reference."""
+    comments = r"(?:\1#.*\n)*"
+    blocks = re.findall(rf'^(\s*)repository: {re.escape(repository)}\n{comments}\1tag: "?([^"\s]+)"?\n'
+                        rf'{comments}\1digest: "?(sha256:[0-9a-f]{{64}}|)"?$', chart, re.M)
+    if len(blocks) != 1:
+        raise ValueError(f"Missing or ambiguous chart image block: {repository}")
+    _, tag, digest = blocks[0]
+    return f"{repository}:{tag}@{digest}" if digest else f"{repository}:{tag}"
 
 
 if __name__ == "__main__":

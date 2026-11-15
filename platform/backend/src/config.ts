@@ -50,6 +50,7 @@ import dotenv from "dotenv";
 import { getAppVersion } from "@/app-version";
 import logger from "@/logging";
 import { parseLogContentMode as parseApplicationLogContentMode } from "@/logging/content-mode";
+import playwrightMcpUpstreamImage from "@/playwright-mcp-image.json";
 import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
   type EmailProviderType,
@@ -1714,6 +1715,41 @@ const mcpServerBaseImage =
     image: `ghcr.io/archestra-ai/mcp-server-base:${appVersion}`,
     digests: releaseImageDigests,
   });
+
+/**
+ * The engine each organization's Dagger StatefulSet runs. A released chart
+ * ships a digest for Archestra's patched build (the `dagger-engine` target of
+ * platform/Dockerfile: upstream's engine with its binaries rebuilt against
+ * fixed dependencies) and pins it. Without that digest (local development, CI
+ * e2e, the quickstart) the engine is the same upstream release, unpatched.
+ * platform/scripts/check-dagger-version-sync.sh keeps its tag in step with the
+ * CLI and SDK.
+ */
+const daggerEngineImage =
+  process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_IMAGE?.trim() ||
+  (releaseImageDigests?.images["dagger-engine"]
+    ? pinReleaseImage({
+        image: `ghcr.io/archestra-ai/dagger-engine:${appVersion}`,
+        digests: releaseImageDigests,
+      })
+    : "registry.dagger.io/engine:v0.21.11");
+
+/**
+ * The image of the built-in browser (Playwright MCP). A released chart ships a
+ * digest for Archestra's patched build (the `playwright-mcp` target of
+ * platform/Dockerfile: upstream's image with Debian's fixed packages and
+ * without the package managers it never runs) and pins it. Without that
+ * digest (local development, CI e2e, the quickstart) it is the same upstream
+ * release, unpatched.
+ */
+const playwrightMcpImage =
+  process.env.ARCHESTRA_ORCHESTRATOR_PLAYWRIGHT_MCP_IMAGE?.trim() ||
+  (releaseImageDigests?.images["playwright-mcp"]
+    ? pinReleaseImage({
+        image: `ghcr.io/archestra-ai/playwright-mcp:${appVersion}`,
+        digests: releaseImageDigests,
+      })
+    : playwrightMcpUpstreamImage.image);
 
 /**
  * Default resource requests/limits applied to generated MCP server
@@ -3530,6 +3566,8 @@ const config = {
      */
     enabled: process.env.ARCHESTRA_ORCHESTRATOR_ENABLED !== "false",
     mcpServerBaseImage,
+    /** The built-in browser's image; see `playwrightMcpImage` above. */
+    playwrightMcpImage,
     mcpServerResources,
     /**
      * How often (in seconds) to sweep Failed/Evicted MCP server pods.
@@ -3730,6 +3768,7 @@ const config = {
     // requires `request <= limit`, and it stays far above the daemon's own
     // footprint so ordinary sandbox load can never OOM-kill the engine.
     engine: {
+      image: daggerEngineImage,
       cpuRequest:
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST || "2",
       memoryRequest: daggerEngineMemoryRequest,

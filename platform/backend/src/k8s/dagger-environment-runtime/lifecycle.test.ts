@@ -37,11 +37,16 @@ type Resource = {
     labels?: Record<string, string>;
     uid?: string;
     deletionTimestamp?: string;
+    annotations?: Record<string, string>;
   };
   spec?: {
     volumeClaimTemplates?: Array<{
       metadata?: { labels?: Record<string, string> };
     }>;
+    template?: {
+      metadata?: { annotations?: Record<string, string> };
+      spec?: { containers?: Array<{ image?: string }> };
+    };
   };
 };
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
@@ -53,6 +58,8 @@ let holdWorkloadDeletion: boolean;
 let failListings: boolean;
 let policyDeleteFailures: number;
 let onWorkloadRead: (() => void) | undefined;
+let statefulSetUpdates: number;
+let statefulSetUpdateStatus: number | undefined;
 const key = (ns: string, collection: string, name: string) =>
   `${ns}/${collection}/${name}`;
 const absent = () =>
@@ -66,6 +73,8 @@ beforeEach(() => {
   failListings = false;
   policyDeleteFailures = 0;
   onWorkloadRead = undefined;
+  statefulSetUpdates = 0;
+  statefulSetUpdateStatus = undefined;
   config.skillsSandbox.enabled = true;
   config.daggerRuntime.engine.nodeSelector = { pool: "test" };
   config.orchestrator.kubernetes.environmentNamespaces = [
@@ -138,6 +147,14 @@ beforeEach(() => {
         : absent();
     }
     if (request.method === "PUT") {
+      if (collection === "statefulsets") {
+        statefulSetUpdates++;
+        if (statefulSetUpdateStatus)
+          return HttpResponse.json(
+            { code: statefulSetUpdateStatus },
+            { status: statefulSetUpdateStatus },
+          );
+      }
       const body = (await request.json()) as Resource;
       resources.set(key(ns, collection, name), body);
       return HttpResponse.json(body);
@@ -429,6 +446,149 @@ describe("Dagger environment lifecycle", () => {
     failListings = true;
     await manager.reconcileAll();
     expect(engineResources(env.id)).toEqual(before);
+  });
+});
+
+describe("Dagger engine updates", () => {
+  const original = {
+    version: config.api.version,
+    image: config.daggerRuntime.engine.image,
+    memoryLimit: config.daggerRuntime.engine.memoryLimit,
+  };
+  beforeEach(() => {
+    config.api.version = "v1.6.0";
+    config.daggerRuntime.engine.image = "registry.example/engine:new";
+    return () => {
+      config.api.version = original.version;
+      config.daggerRuntime.engine.image = original.image;
+      config.daggerRuntime.engine.memoryLimit = original.memoryLimit;
+    };
+  });
+
+  async function provisioned(makeOrganization: () => Promise<{ id: string }>) {
+    const org = await makeOrganization();
+    const env = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "Updates",
+      namespace: "env-test",
+    });
+    await manager.reconcileEnvironment(env);
+    const id = engineResources(env.id).find((resource) =>
+      resource.includes("/statefulsets/"),
+    );
+    if (!id) throw new Error("engine was not created");
+    return {
+      env,
+      read: () => resources.get(id) as Resource,
+      write: (body: Resource) => resources.set(id, body),
+    };
+  }
+
+  test("moves an engine created by an earlier release to the current spec and keeps its cache", async ({
+    makeOrganization,
+  }) => {
+    const { env, read, write } = await provisioned(makeOrganization);
+    const created = structuredClone(read());
+    // What an earlier release left behind: its own image, and no spec hash or
+    // platform version.
+    const legacy = structuredClone(created);
+    delete legacy.metadata.annotations;
+    delete legacy.spec?.template?.metadata?.annotations;
+    const [container] = legacy.spec?.template?.spec?.containers ?? [];
+    container.image = "registry.example/engine:old";
+    write(legacy);
+
+    await manager.reconcileEnvironment(env);
+
+    expect(statefulSetUpdates).toBe(1);
+    const updated = read();
+    expect(updated.spec?.template?.spec?.containers?.[0].image).toBe(
+      "registry.example/engine:new",
+    );
+    expect(updated.spec?.template).toEqual(created.spec?.template);
+    expect(updated.metadata.annotations).toMatchObject({
+      "archestra.io/dagger-engine-platform-version": "v1.6.0",
+    });
+    // The cache claim is immutable and stays as the engine was created.
+    expect(updated.spec?.volumeClaimTemplates).toEqual(
+      legacy.spec?.volumeClaimTemplates,
+    );
+    expect(
+      engineResources(env.id).some((id) =>
+        id.includes("/persistentvolumeclaims/"),
+      ),
+    ).toBe(true);
+  });
+
+  test("leaves an engine already on the current spec untouched", async ({
+    makeOrganization,
+  }) => {
+    const { env, read } = await provisioned(makeOrganization);
+    const before = structuredClone(read());
+
+    await manager.reconcileEnvironment(env);
+    await manager.reconcileEnvironment(env);
+
+    expect(statefulSetUpdates).toBe(0);
+    expect(read()).toEqual(before);
+  });
+
+  test("restarts the engine when only its resources change", async ({
+    makeOrganization,
+  }) => {
+    const { env, read } = await provisioned(makeOrganization);
+    const before = read().spec?.template?.metadata?.annotations;
+    config.daggerRuntime.engine.memoryLimit = "7Gi";
+
+    await manager.reconcileEnvironment(env);
+
+    expect(statefulSetUpdates).toBe(1);
+    expect(read().spec?.template?.metadata?.annotations).not.toEqual(before);
+  });
+
+  test("an older platform never moves back an engine a newer one updated", async ({
+    makeOrganization,
+  }) => {
+    const { env, read } = await provisioned(makeOrganization);
+    const image = () => read().spec?.template?.spec?.containers?.[0].image;
+    for (const version of ["v1.5.9", "v1.6.0-rc.12"]) {
+      config.api.version = version;
+      config.daggerRuntime.engine.image = "registry.example/engine:older";
+      await manager.reconcileEnvironment(env);
+    }
+    expect(statefulSetUpdates).toBe(0);
+    expect(image()).toBe("registry.example/engine:new");
+
+    // A newer prerelease moves it, and rc.10 sorts after rc.9.
+    config.api.version = "v1.6.1-rc.10";
+    config.daggerRuntime.engine.image = "registry.example/engine:newer";
+    await manager.reconcileEnvironment(env);
+    expect(image()).toBe("registry.example/engine:newer");
+    config.api.version = "v1.6.1-rc.9";
+    config.daggerRuntime.engine.image = "registry.example/engine:older";
+    await manager.reconcileEnvironment(env);
+    expect(image()).toBe("registry.example/engine:newer");
+  });
+
+  test("a failed or conflicting update still applies the engine's egress policy", async ({
+    makeOrganization,
+  }) => {
+    const { env } = await provisioned(makeOrganization);
+    for (const status of [409, 500]) {
+      for (const id of engineResources(env.id).filter((resource) =>
+        resource.includes("/networkpolicies/"),
+      ))
+        resources.delete(id);
+      config.daggerRuntime.engine.image = `registry.example/engine:${status}`;
+      statefulSetUpdateStatus = status;
+
+      await manager.reconcileEnvironment(env);
+
+      expect(
+        engineResources(env.id).some((id) => id.includes("/networkpolicies/")),
+      ).toBe(true);
+    }
+    expect(statefulSetUpdates).toBe(2);
   });
 });
 

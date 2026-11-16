@@ -1620,7 +1620,12 @@ class InteractionModel {
         { entityType: "virtual_key", entityId: interaction.virtualKeyId },
         {
           entityType: "llm_oauth_client",
-          entityId: interaction.authenticatedAppId,
+          // Internal A2A retains the initiating app for audit only; it must
+          // not accrue usage against that app's llm_oauth_client limits.
+          entityId:
+            interaction.authMethod === "internal"
+              ? undefined
+              : interaction.authenticatedAppId,
         },
         {
           entityType: "virtual_key",

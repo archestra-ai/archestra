@@ -4412,6 +4412,7 @@ class McpClient {
           llmToolCallId: authInfo?.llmToolCallId ?? null,
           authMethod: authInfo?.authMethod ?? null,
           oauthClientId: authInfo?.oauthClientId ?? null,
+          serviceAccountId: authInfo?.serviceAccountId ?? null,
           source: authInfo?.source ?? null,
           credentialClientId: authInfo?.credentialClientId ?? null,
           credentialClientType: authInfo?.credentialClientType ?? null,

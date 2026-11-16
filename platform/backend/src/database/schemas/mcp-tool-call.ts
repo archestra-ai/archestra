@@ -19,6 +19,7 @@ import type {
 } from "@/types";
 import agentsTable from "./agent";
 import appsTable from "./app";
+import serviceAccountsTable from "./service-account";
 import usersTable from "./user";
 
 // Note: Additional pg_trgm GIN indexes for search are created in migration 0116_pg_trgm_indexes.sql:
@@ -76,6 +77,10 @@ const mcpToolCallsTable = pgTable(
     userId: text("user_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    serviceAccountId: uuid("service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     /** Agent run or external run that issued this gateway call. */
     runId: varchar("run_id"),
     /**

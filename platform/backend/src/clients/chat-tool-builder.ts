@@ -653,6 +653,7 @@ async function persistLaunchedRuntimeToolCall(params: {
       llmToolCallId: toolCallId ?? null,
       authMethod: null,
       oauthClientId: ctx.mcpGwToken?.oauthClientId ?? null,
+      serviceAccountId: ctx.mcpGwToken?.serviceAccountId ?? null,
       source: "chat",
     });
   } catch (dbError) {
@@ -1275,7 +1276,10 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         oauthClientId: mcpGwToken.oauthClientId,
         oauthExecution: mcpGwToken.oauthExecution,
         organizationId,
-        userId: mcpGwToken.oauthClientId ? undefined : userId,
+        userId:
+          mcpGwToken.oauthClientId || mcpGwToken.serviceAccountId
+            ? undefined
+            : userId,
         // Exact links to the LLM turn: the run's own session id and the
         // model's id for this call (the row's tool_call.id stays our own).
         ...(llmSessionId && { llmSessionId }),

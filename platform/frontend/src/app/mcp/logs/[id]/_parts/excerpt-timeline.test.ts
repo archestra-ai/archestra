@@ -81,6 +81,7 @@ function toolCall(id: string, endOffsetMs: number): SessionToolCall {
     llmToolCallId: null,
     authMethod: "oauth",
     oauthClientId: null,
+    serviceAccountId: null,
     credentialClientId: null,
     credentialClientType: "identity_provider",
     credentialActorClientId: null,

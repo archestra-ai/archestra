@@ -4254,6 +4254,44 @@ describe("InteractionModel", () => {
   });
 
   describe("updateUsageAfterInteraction", () => {
+    test("internal application attribution does not accrue OAuth limits", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent();
+      const appId = crypto.randomUUID();
+      const limit = await LimitModel.create({
+        entityType: "llm_oauth_client",
+        entityId: appId,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+      const write = (authMethod: "internal" | "oauth_client_credentials") =>
+        InteractionModel.create({
+          profileId: agent.id,
+          authenticatedAppId: appId,
+          authenticatedAppName: "Synthetic application",
+          authMethod,
+          model: "gpt-4o",
+          inputTokens: 100,
+          inputTokensEstimated: true,
+          outputTokens: 0,
+          request: { model: "gpt-4o", messages: [] },
+          response: { error: "Synthetic pool member timeout" },
+          type: "openai:chatCompletions",
+        });
+      const internal = await write("internal");
+      await drainBackgroundWork();
+      const usage = async () =>
+        (await LimitModel.getModelUsageBreakdowns([limit.id])).get(limit.id);
+      expect(internal.authenticatedAppId).toBe(appId);
+      expect(await usage()).toMatchObject([{ tokensIn: 0, tokensOut: 0 }]);
+
+      await write("oauth_client_credentials");
+      await drainBackgroundWork();
+      expect(await usage()).toMatchObject([{ tokensIn: 100, tokensOut: 0 }]);
+    });
+
     test("updates user limit usage when interaction has userId", async ({
       makeAgent,
       makeUser,

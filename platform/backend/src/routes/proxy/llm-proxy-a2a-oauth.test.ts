@@ -19,12 +19,14 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import {
+  LimitModel,
   ManagedOauthClientModel,
   ModelPoolModel,
   OAuthAccessTokenModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import { drainBackgroundWork } from "@/utils/background-work";
 import openAiRoutes from "./routes/openai";
 
 describe("A2A OAuth authorization at actual proxy transport attempts", () => {
@@ -33,7 +35,9 @@ describe("A2A OAuth authorization at actual proxy transport attempts", () => {
   let baseUrl: string;
   let app: FastifyInstanceWithZod;
   let requests: IncomingHttpHeaders[];
-  let firstAttempt: (() => Promise<"drop" | "pool" | undefined>) | undefined;
+  let firstAttempt:
+    | (() => Promise<"drop" | "pool" | "timeout" | undefined>)
+    | undefined;
 
   beforeEach(async () => {
     requests = [];
@@ -45,6 +49,7 @@ describe("A2A OAuth authorization at actual proxy transport attempts", () => {
       const body = JSON.parse(Buffer.concat(parts).toString());
       if (requests.length === 1) {
         const failure = await firstAttempt?.();
+        if (failure === "timeout") return;
         if (failure === "drop") {
           req.socket.destroy();
           return;
@@ -98,7 +103,7 @@ describe("A2A OAuth authorization at actual proxy transport attempts", () => {
   });
 
   for (const stream of [false, true]) {
-    for (const failure of ["drop", "pool"] as const) {
+    for (const failure of ["drop", "pool", "timeout"] as const) {
       for (const revoked of [false, true]) {
         test(`${stream ? "stream" : "generate"} ${failure}: ${revoked ? "revocation stops next attempt" : "valid retries succeed"}`, async ({
           makeAgent,
@@ -122,11 +127,14 @@ describe("A2A OAuth authorization at actual proxy transport attempts", () => {
             { provider: "openai", baseUrl },
           );
           const pool =
-            failure === "pool"
+            failure === "pool" || failure === "timeout"
               ? await ModelPoolModel.create({
                   organizationId: agent.organizationId,
                   input: {
                     name: "synthetic-oauth-pool",
+                    ...(failure === "timeout"
+                      ? { timeoutSeconds: 1, streamTimeoutSeconds: 1 }
+                      : {}),
                     members: [key, secondKey].map((row, index) => ({
                       providerApiKeyId: row.id,
                       modelId: "gpt-4o-mini",
@@ -144,6 +152,13 @@ describe("A2A OAuth authorization at actual proxy transport attempts", () => {
             grantType: "client_credentials",
             scopes: ["a2a"],
             allowedGatewayIds: [agent.id],
+          });
+          const appLimit = await LimitModel.create({
+            entityType: "llm_oauth_client",
+            entityId: oauthClient.id,
+            limitType: "token_cost",
+            limitValue: 1000000,
+            model: ["gpt-4o-mini"],
           });
           const tokenHash = OAuthAccessTokenModel.hashTokenForLookup(
             crypto.randomUUID(),
@@ -208,9 +223,39 @@ describe("A2A OAuth authorization at actual proxy transport attempts", () => {
             );
             expect(headers).not.toHaveProperty("x-archestra-internal-call");
           }
-          const persisted = JSON.stringify(
-            await db.select().from(schema.interactionsTable),
-          );
+          await drainBackgroundWork();
+          expect(
+            (await LimitModel.getModelUsageBreakdowns([appLimit.id])).get(
+              appLimit.id,
+            ),
+          ).toMatchObject([{ tokensIn: 0, tokensOut: 0 }]);
+          const interactions = await db.select().from(schema.interactionsTable);
+          if (!revoked) {
+            expect(interactions.length).toBeGreaterThan(0);
+            if (failure === "timeout") {
+              expect(interactions).toContainEqual(
+                expect.objectContaining({
+                  inputTokensEstimated: true,
+                  inputTokens: expect.any(Number),
+                  failureReason: "timeout (408)",
+                }),
+              );
+              expect(
+                interactions.find((row) => row.inputTokensEstimated)
+                  ?.inputTokens,
+              ).toBeGreaterThan(0);
+            }
+            for (const interaction of interactions) {
+              expect(interaction).toMatchObject({
+                authenticatedAppId: oauthClient.id,
+                authenticatedAppName: oauthClient.name,
+                userId: null,
+                serviceAccountId: null,
+                authMethod: "internal",
+              });
+            }
+          }
+          const persisted = JSON.stringify(interactions);
           expect(persisted).not.toContain(token.id);
           expect(persisted).not.toContain(tokenHash);
           expect(persisted).not.toContain("x-archestra-a2a-oauth-execution");

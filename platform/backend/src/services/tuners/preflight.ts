@@ -17,17 +17,20 @@ import { hasTunerAccess } from "./access";
 import { TUNERS } from "./registry";
 
 export type TunerPreflight =
+  /** Another attempt of this run recorded its scan first and owns the run. */
+  | { type: "taken" }
   /** Nothing for the agent to look at; the run succeeds without it. */
   | { type: "settled"; outcome: Exclude<TunerRunOutcome, "agent_ran"> }
   | { type: "run_agent"; message: string };
 
 /**
  * Everything a tuner run does before its agent: recheck who it runs as and
- * what it runs, collect candidates in code, record the scan on the run,
- * resolve what vanished, and drop what history suppresses. A collection error
- * throws before anything is written, so it never resolves a suggestion. A
- * redelivered run (its first attempt died after recording the scan) resumes
- * from the recorded scan instead of scanning again.
+ * what it runs, collect candidates in code, drop what history suppresses,
+ * resolve what vanished, and finally record the scan on the run. A collection
+ * error throws before anything is written, so it never resolves a suggestion.
+ * The record marks the housekeeping done: a redelivered run (its first
+ * attempt died after recording) resumes from it instead of scanning again,
+ * and one that died before redoes the idempotent housekeeping.
  */
 export async function runTunerPreflight(params: {
   runId: string;
@@ -90,15 +93,6 @@ export async function runTunerPreflight(params: {
     candidates: forAgent,
   };
 
-  if (
-    !(await ScheduleTriggerRunModel.claimTunerScan({
-      runId: params.runId,
-      record,
-    }))
-  ) {
-    throw new Error("Another attempt of this tuner run recorded its scan");
-  }
-
   // A scan that hit a read limit cannot tell a vanished issue from an unread one.
   const resolved = scan.complete
     ? await TunerSuggestionModel.resolveVanished({
@@ -109,6 +103,14 @@ export async function runTunerPreflight(params: {
       })
     : 0;
   await tuner.settle({ organizationId, userId: trigger.actorUserId });
+  if (
+    !(await ScheduleTriggerRunModel.claimTunerScan({
+      runId: params.runId,
+      record,
+    }))
+  ) {
+    return { type: "taken" };
+  }
   logger.info(
     {
       runId: params.runId,

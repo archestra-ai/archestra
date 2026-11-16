@@ -6,7 +6,7 @@ import {
   withK8sApiRetry,
 } from "@/k8s/shared";
 import type { TunerCandidateScan } from "@/types/tuner";
-import { type SreClusterSnapshot, sreCandidates } from "./sre-sources";
+import { listWithinBudget, sreCandidates } from "./sre-sources";
 
 class SreClusterNotConfiguredError extends Error {
   constructor() {
@@ -28,37 +28,51 @@ export async function collectSreCandidates(
   const { coreApi, appsApi } = createK8sClients(kubeConfig, namespace);
   const platformNamespace = process.env.POD_NAMESPACE || getK8sNamespace();
   const namespaces = [...new Set([namespace, platformNamespace])];
+  const scan = {
+    namespaces,
+    budget: MAX_OBJECTS_PER_KIND,
+    pageSize: PAGE_SIZE,
+  };
 
-  const snapshots = await Promise.all(
-    namespaces.map(async (ns): Promise<SreClusterSnapshot> => {
-      const [pods, deployments, statefulSets] = await Promise.all([
-        withK8sApiRetry(() => coreApi.listNamespacedPod({ namespace: ns }), {
+  const [pods, deployments, statefulSets] = await Promise.all([
+    listWithinBudget({
+      ...scan,
+      fetchPage: (request) =>
+        withK8sApiRetry(() => coreApi.listNamespacedPod(request), {
           label: "tuner-sre-list-pods",
         }),
-        withK8sApiRetry(
-          () => appsApi.listNamespacedDeployment({ namespace: ns }),
-          { label: "tuner-sre-list-deployments" },
-        ),
-        withK8sApiRetry(
-          () => appsApi.listNamespacedStatefulSet({ namespace: ns }),
-          { label: "tuner-sre-list-statefulsets" },
-        ),
-      ]);
-      return {
-        pods: pods.items,
-        deployments: deployments.items,
-        statefulSets: statefulSets.items,
-      };
     }),
-  );
+    listWithinBudget({
+      ...scan,
+      fetchPage: (request) =>
+        withK8sApiRetry(() => appsApi.listNamespacedDeployment(request), {
+          label: "tuner-sre-list-deployments",
+        }),
+    }),
+    listWithinBudget({
+      ...scan,
+      fetchPage: (request) =>
+        withK8sApiRetry(() => appsApi.listNamespacedStatefulSet(request), {
+          label: "tuner-sre-list-statefulsets",
+        }),
+    }),
+  ]);
 
   const candidates = sreCandidates(
     {
-      pods: snapshots.flatMap((s) => s.pods),
-      deployments: snapshots.flatMap((s) => s.deployments),
-      statefulSets: snapshots.flatMap((s) => s.statefulSets),
+      pods: pods.items,
+      deployments: deployments.items,
+      statefulSets: statefulSets.items,
     },
     now,
   );
-  return { candidates, complete: true };
+  return {
+    candidates,
+    complete: [pods, deployments, statefulSets].every((l) => l.complete),
+  };
 }
+
+// === Internal helpers ===
+
+const PAGE_SIZE = 500;
+const MAX_OBJECTS_PER_KIND = 5000;

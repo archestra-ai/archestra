@@ -132,6 +132,8 @@ export async function handleScheduleTriggerRunExecution(
         now: new Date(),
       });
       switch (preflight.type) {
+        case "taken":
+          return;
         case "settled":
           await ScheduleTriggerRunModel.markCompleted({
             runId: run.id,

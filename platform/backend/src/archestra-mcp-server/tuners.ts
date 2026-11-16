@@ -1,6 +1,7 @@
 import { TOOL_PROPOSE_TUNER_SUGGESTION_SHORT_NAME } from "@archestra/shared";
 import { z } from "zod";
 import { TunerSuggestionModel } from "@/models";
+import { hasTunerAccess } from "@/services/tuners/access";
 import { checkPolicyChange } from "@/services/tuners/policy-gate";
 import { findTunerRun } from "@/services/tuners/tuner-run";
 import { GuardrailsPolicyEditSchema } from "@/types/guardrails-policy-proposal";
@@ -69,6 +70,17 @@ const registry = defineArchestraTools([
       ) {
         return errorResult(
           "propose_tuner_suggestion works only inside this agent's own running tuner run.",
+        );
+      }
+      if (
+        !(await hasTunerAccess({
+          userId: run.actorUserId,
+          organizationId: run.organizationId,
+          access: "update",
+        }))
+      ) {
+        return errorResult(
+          "The user this tuner runs as no longer holds tuner:update and log:admin.",
         );
       }
       const candidate = run.record?.candidates.find(

@@ -6,7 +6,11 @@ import type {
   V1StatefulSet,
 } from "@kubernetes/client-node";
 import { describe, expect, test } from "vitest";
-import { type SreClusterSnapshot, sreCandidates } from "./sre-sources";
+import {
+  listWithinBudget,
+  type SreClusterSnapshot,
+  sreCandidates,
+} from "./sre-sources";
 
 const NOW = new Date("2026-11-16T12:00:00Z");
 const SECOND = 1000;
@@ -617,7 +621,90 @@ describe("aggregation", () => {
   });
 });
 
+describe("listWithinBudget", () => {
+  test("pages through every namespace in order, capping each page at the remaining budget", async () => {
+    const api = fakeListApi({ a: 5, b: 2 });
+    const listing = await listWithinBudget({
+      namespaces: ["a", "b"],
+      budget: 6,
+      pageSize: 2,
+      fetchPage: api.fetchPage,
+    });
+    expect(api.requests).toEqual([
+      { namespace: "a", limit: 2, _continue: undefined },
+      { namespace: "a", limit: 2, _continue: "2" },
+      { namespace: "a", limit: 2, _continue: "4" },
+      { namespace: "b", limit: 1, _continue: undefined },
+    ]);
+    expect(listing).toEqual({
+      items: ["a0", "a1", "a2", "a3", "a4", "b0"],
+      complete: false,
+    });
+  });
+
+  test.each([
+    {
+      name: "under budget",
+      objects: { a: 3, b: 2 },
+      budget: 10,
+      complete: true,
+    },
+    {
+      name: "budget spent by the last page",
+      objects: { a: 2, b: 2 },
+      budget: 4,
+      complete: true,
+    },
+    {
+      name: "budget spent mid-namespace",
+      objects: { a: 5, b: 0 },
+      budget: 4,
+      complete: false,
+    },
+    {
+      name: "budget spent before the next namespace",
+      objects: { a: 4, b: 0 },
+      budget: 4,
+      complete: false,
+    },
+  ])("$name → complete: $complete", async ({ objects, budget, complete }) => {
+    const listing = await listWithinBudget({
+      namespaces: ["a", "b"],
+      budget,
+      pageSize: 2,
+      fetchPage: fakeListApi(objects).fetchPage,
+    });
+    expect(listing.complete).toBe(complete);
+    expect(listing.items.length).toBeLessThanOrEqual(budget);
+  });
+});
+
 // === Fixtures ===
+
+/** A namespaced LIST endpoint whose continue token is the next offset. */
+function fakeListApi(counts: Record<string, number>) {
+  const requests: { namespace: string; limit: number; _continue?: string }[] =
+    [];
+  const fetchPage = async (request: {
+    namespace: string;
+    limit: number;
+    _continue?: string;
+  }) => {
+    requests.push(request);
+    const offset = Number(request._continue ?? 0);
+    const total = counts[request.namespace] ?? 0;
+    const end = Math.min(offset + request.limit, total);
+    const items = Array.from(
+      { length: end - offset },
+      (_, i) => `${request.namespace}${offset + i}`,
+    );
+    return {
+      items,
+      metadata: { _continue: end < total ? String(end) : undefined },
+    };
+  };
+  return { requests, fetchPage };
+}
 
 function run(snapshot: Partial<SreClusterSnapshot>) {
   return sreCandidates(

@@ -6,7 +6,11 @@ import {
   SKILL_TOOL_PREFIX,
 } from "@archestra/shared";
 import config from "@/config";
-import { ScheduleTriggerRunModel, TunerSuggestionModel } from "@/models";
+import {
+  ScheduleTriggerModel,
+  ScheduleTriggerRunModel,
+  TunerSuggestionModel,
+} from "@/models";
 import {
   afterEach,
   beforeEach,
@@ -126,6 +130,38 @@ describe("propose_tuner_suggestion", () => {
       });
       expect(filed.data).toEqual([]);
     }
+  });
+
+  test("refuses once the run's user lost log:admin", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeCustomRole,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const { context, triggerId, organizationId } = await tunerRun({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+    });
+    const demoted = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: { tuner: ["update"] },
+    });
+    await makeMember(demoted.id, organizationId, { role: role.role });
+    await ScheduleTriggerModel.update(triggerId, { actorUserId: demoted.id });
+
+    expect((await propose(context, CANDIDATE.fingerprint)).isError).toBe(true);
+    const filed = await TunerSuggestionModel.list({
+      organizationId,
+      pagination: { limit: 10, offset: 0 },
+    });
+    expect(filed.data).toEqual([]);
   });
 
   test("does not exist outside a tuner run, or with tuners off", async ({
@@ -286,6 +322,7 @@ async function tunerRun(
 ): Promise<{
   context: ArchestraContext;
   runId: string;
+  triggerId: string;
   organizationId: string;
 }> {
   const organization = await params.makeOrganization();
@@ -311,6 +348,7 @@ async function tunerRun(
   });
   return {
     runId: run.id,
+    triggerId: trigger.id,
     organizationId: organization.id,
     context: {
       agent: { id: agent.id, name: agent.name },

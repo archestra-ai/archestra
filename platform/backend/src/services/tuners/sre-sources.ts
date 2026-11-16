@@ -4,6 +4,7 @@ import type {
   V1Deployment,
   V1LabelSelector,
   V1LabelSelectorRequirement,
+  V1ListMeta,
   V1OwnerReference,
   V1Pod,
   V1StatefulSet,
@@ -29,22 +30,60 @@ export function sreCandidates(
   snapshot: SreClusterSnapshot,
   now: Date,
 ): TunerCandidate[] {
+  const deployments = indexDeployments(snapshot.deployments);
   const owned = snapshot.pods.map(
-    (pod): OwnedPod => ({
-      pod,
-      owner: resolvePodOwner(pod, snapshot.deployments),
-    }),
+    (pod): OwnedPod => ({ pod, owner: resolvePodOwner(pod, deployments) }),
   );
+  const podsByWorkload = groupPodsByWorkload(owned);
   const findings = [
     ...owned.flatMap((ownedPod) => podFindings(ownedPod, now)),
     ...snapshot.deployments.flatMap((d) =>
-      replicaFindings({ kind: "Deployment", object: d }, { owned, now }),
+      replicaFindings(
+        { kind: "Deployment", object: d },
+        { podsByWorkload, now },
+      ),
     ),
     ...snapshot.statefulSets.flatMap((s) =>
-      replicaFindings({ kind: "StatefulSet", object: s }, { owned, now }),
+      replicaFindings(
+        { kind: "StatefulSet", object: s },
+        { podsByWorkload, now },
+      ),
     ),
   ];
   return aggregate(findings);
+}
+
+/**
+ * Pages through each namespace in turn, reading at most `budget` objects.
+ * Running out of budget before the last page leaves the listing incomplete.
+ */
+export async function listWithinBudget<T>({
+  namespaces,
+  budget,
+  pageSize,
+  fetchPage,
+}: {
+  namespaces: string[];
+  budget: number;
+  pageSize: number;
+  fetchPage: (request: K8sListPageRequest) => Promise<K8sListPage<T>>;
+}): Promise<{ items: T[]; complete: boolean }> {
+  const items: T[] = [];
+  for (const namespace of namespaces) {
+    let continuation: string | undefined;
+    do {
+      const remaining = budget - items.length;
+      if (remaining <= 0) return { items, complete: false };
+      const page = await fetchPage({
+        namespace,
+        limit: Math.min(pageSize, remaining),
+        _continue: continuation,
+      });
+      items.push(...page.items);
+      continuation = page.metadata?._continue;
+    } while (continuation);
+  }
+  return { items, complete: true };
 }
 
 // === Internal helpers ===
@@ -59,6 +98,22 @@ interface OwnedPod {
   pod: V1Pod;
   owner: IssueOwner;
 }
+
+interface K8sListPageRequest {
+  namespace: string;
+  limit: number;
+  _continue?: string;
+}
+
+interface K8sListPage<T> {
+  items: T[];
+  metadata?: V1ListMeta;
+}
+
+/** namespace → deployment name → deployments */
+type DeploymentIndex = Map<string, Map<string, V1Deployment[]>>;
+
+type WorkloadKey = string & { readonly __brand: "WorkloadKey" };
 
 type StuckReason = "CrashLoopBackOff" | "ImagePullBackOff" | "ErrImagePull";
 
@@ -168,7 +223,10 @@ function podFindings({ pod, owner }: OwnedPod, now: Date): Finding[] {
  */
 function replicaFindings(
   workload: ReplicaWorkload,
-  { owned, now }: { owned: OwnedPod[]; now: Date },
+  {
+    podsByWorkload,
+    now,
+  }: { podsByWorkload: Map<WorkloadKey, V1Pod[]>; now: Date },
 ): Finding[] {
   const { metadata, spec, status } = workload.object;
   const namespace = metadata?.namespace ?? "";
@@ -191,16 +249,10 @@ function replicaFindings(
     return [];
   }
 
-  const unreadyPods = owned
-    .filter(
-      ({ pod, owner }) =>
-        owner.type === "workload" &&
-        owner.kind === workload.kind &&
-        owner.namespace === namespace &&
-        owner.name === name &&
-        !isPodReady(pod),
-    )
-    .map(({ pod }) => pod);
+  const unreadyPods = (
+    podsByWorkload.get(workloadKey({ kind: workload.kind, namespace, name })) ??
+    []
+  ).filter((pod) => !isPodReady(pod));
   const lastChange = Math.max(
     createdAt.getTime(),
     ...(status?.conditions ?? []).flatMap((c) =>
@@ -234,7 +286,8 @@ function aggregate(findings: Finding[]): TunerCandidate[] {
   for (const finding of findings) {
     const key = fingerprintOf(finding);
     const group = groups.get(key);
-    groups.set(key, group ? [...group, finding] : [finding]);
+    if (group) group.push(finding);
+    else groups.set(key, [finding]);
   }
   return [...groups.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -315,7 +368,65 @@ function sourceLabel(source: SreSource): string {
   }
 }
 
-function resolvePodOwner(pod: V1Pod, deployments: V1Deployment[]): IssueOwner {
+function indexDeployments(deployments: V1Deployment[]): DeploymentIndex {
+  const index: DeploymentIndex = new Map();
+  for (const deployment of deployments) {
+    const namespace = deployment.metadata?.namespace;
+    const name = deployment.metadata?.name;
+    if (namespace === undefined || name === undefined) continue;
+    const byName = index.get(namespace) ?? new Map<string, V1Deployment[]>();
+    index.set(namespace, byName);
+    const sameName = byName.get(name);
+    if (sameName) sameName.push(deployment);
+    else byName.set(name, [deployment]);
+  }
+  return index;
+}
+
+/** Deployments in the ReplicaSet's namespace whose `<name>-` prefixes its name. */
+function deploymentsPrefixing(
+  index: DeploymentIndex,
+  replicaSet: { namespace: string; name: string },
+): V1Deployment[] {
+  const byName = index.get(replicaSet.namespace);
+  if (!byName) return [];
+  const { name } = replicaSet;
+  const found: V1Deployment[] = [];
+  for (
+    let dash = name.indexOf("-");
+    dash !== -1;
+    dash = name.indexOf("-", dash + 1)
+  ) {
+    found.push(...(byName.get(name.slice(0, dash)) ?? []));
+  }
+  return found;
+}
+
+function groupPodsByWorkload(owned: OwnedPod[]): Map<WorkloadKey, V1Pod[]> {
+  const groups = new Map<WorkloadKey, V1Pod[]>();
+  for (const { pod, owner } of owned) {
+    if (owner.type !== "workload") continue;
+    const key = workloadKey(owner);
+    const group = groups.get(key);
+    if (group) group.push(pod);
+    else groups.set(key, [pod]);
+  }
+  return groups;
+}
+
+function workloadKey({
+  kind,
+  namespace,
+  name,
+}: {
+  kind: K8sWorkloadKind;
+  namespace: string;
+  name: string;
+}): WorkloadKey {
+  return JSON.stringify([kind, namespace, name]) as WorkloadKey;
+}
+
+function resolvePodOwner(pod: V1Pod, deployments: DeploymentIndex): IssueOwner {
   const namespace = pod.metadata?.namespace ?? "";
   const asPod: IssueOwner = {
     type: "pod",
@@ -334,11 +445,8 @@ function resolvePodOwner(pod: V1Pod, deployments: V1Deployment[]): IssueOwner {
 
   switch (kind) {
     case "ReplicaSet": {
-      const matches = deployments.filter(
-        (d) =>
-          d.metadata?.namespace === namespace &&
-          ref.name.startsWith(`${d.metadata?.name}-`) &&
-          selectorMatches(d.spec?.selector, pod.metadata?.labels ?? {}),
+      const matches = deploymentsPrefixing(deployments, owner).filter((d) =>
+        selectorMatches(d.spec?.selector, pod.metadata?.labels ?? {}),
       );
       const [deployment] = matches;
       return matches.length === 1 && deployment?.metadata?.name

@@ -1,4 +1,4 @@
-import { KubeConfig, NodeV1Api } from "@kubernetes/client-node";
+import { CoreV1Api, KubeConfig } from "@kubernetes/client-node";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import config from "@/config";
@@ -10,26 +10,38 @@ import { agentRuntimeClassDetector } from "./runtime-class";
 const server = useMswServer();
 
 const ORIGIN = "https://kubernetes.example.test";
-const RUNTIME_CLASS_URL = `${ORIGIN}/apis/node.k8s.io/v1/runtimeclasses/:name`;
+const PODS_URL = `${ORIGIN}/api/v1/namespaces/:namespace/pods`;
 let previousRuntimeClassName: string | undefined;
+let previousNamespace: string | undefined;
 
 beforeEach(() => {
   previousRuntimeClassName = config.agentRuntime.runtimeClassName;
+  previousNamespace = config.agentRuntime.namespace;
   config.agentRuntime.runtimeClassName = "gvisor";
-  agentRuntimeClassDetector.reset(nodeApi());
+  config.agentRuntime.namespace = "agent-runtimes";
+  agentRuntimeClassDetector.reset(coreApi());
 });
 
 afterEach(() => {
   config.agentRuntime.runtimeClassName = previousRuntimeClassName;
+  config.agentRuntime.namespace = previousNamespace;
   agentRuntimeClassDetector.reset();
 });
 
 test("refuses an unprivileged launch at once when the RuntimeClass does not exist", async () => {
   server.use(
-    http.get(RUNTIME_CLASS_URL, () =>
+    http.post(PODS_URL, () =>
+      // What the API server's RuntimeClass admission answers.
       HttpResponse.json(
-        { kind: "Status", code: 404, reason: "NotFound" },
-        { status: 404 },
+        {
+          kind: "Status",
+          status: "Failure",
+          code: 403,
+          reason: "Forbidden",
+          message:
+            'pods "archestra-runtime-class-check-" is forbidden: pod rejected: RuntimeClass "gvisor" not found',
+        },
+        { status: 403 },
       ),
     ),
   );
@@ -54,34 +66,49 @@ test("refuses an unprivileged launch at once when the RuntimeClass does not exis
   ).resolves.toBeUndefined();
 });
 
-test("launches when the RuntimeClass exists, and when the platform may not read it", async () => {
-  const seen: string[] = [];
-  let status = 200;
+test("checks with a dry-run pod in the Agent Runtime namespace, and launches when it is admitted", async () => {
+  const seen: Array<{
+    namespace: string;
+    dryRun: string | null;
+    runtimeClassName?: string;
+  }> = [];
   server.use(
-    http.get(RUNTIME_CLASS_URL, ({ params }) => {
-      seen.push(String(params.name));
-      return status === 200
-        ? HttpResponse.json({
-            apiVersion: "node.k8s.io/v1",
-            kind: "RuntimeClass",
-            metadata: { name: params.name },
-            handler: "runsc",
-          })
-        : HttpResponse.json(
-            { kind: "Status", code: status, reason: "Forbidden" },
-            { status },
-          );
+    http.post(PODS_URL, async ({ params, request }) => {
+      const body = (await request.json()) as {
+        spec?: { runtimeClassName?: string };
+      };
+      seen.push({
+        namespace: String(params.namespace),
+        dryRun: new URL(request.url).searchParams.get("dryRun"),
+        runtimeClassName: body.spec?.runtimeClassName,
+      });
+      return HttpResponse.json(body, { status: 201 });
     }),
   );
 
   await expect(
     agentRuntimeClassDetector.assertUsable({ privileged: false }),
   ).resolves.toBeUndefined();
-  expect(seen).toEqual(["gvisor"]);
+  expect(seen).toEqual([
+    { namespace: "agent-runtimes", dryRun: "All", runtimeClassName: "gvisor" },
+  ]);
+});
 
-  // Without RBAC the answer is unknown, which must not block runs.
-  status = 403;
-  agentRuntimeClassDetector.reset(nodeApi());
+test("launches when the check is rejected for another reason", async () => {
+  server.use(
+    http.post(PODS_URL, () =>
+      HttpResponse.json(
+        {
+          kind: "Status",
+          code: 403,
+          reason: "Forbidden",
+          message:
+            'pods is forbidden: User "system:serviceaccount:archestra:platform" cannot create resource "pods"',
+        },
+        { status: 403 },
+      ),
+    ),
+  );
   await expect(
     agentRuntimeClassDetector.assertUsable({ privileged: false }),
   ).resolves.toBeUndefined();
@@ -95,7 +122,7 @@ test("checks nothing when no RuntimeClass is configured", async () => {
   ).resolves.toBeUndefined();
 });
 
-function nodeApi(): NodeV1Api {
+function coreApi(): CoreV1Api {
   const kubeConfig = new KubeConfig();
   kubeConfig.loadFromOptions({
     clusters: [{ name: "test", server: ORIGIN }],
@@ -103,5 +130,5 @@ function nodeApi(): NodeV1Api {
     contexts: [{ name: "test", cluster: "test", user: "test" }],
     currentContext: "test",
   });
-  return kubeConfig.makeApiClient(NodeV1Api);
+  return kubeConfig.makeApiClient(CoreV1Api);
 }

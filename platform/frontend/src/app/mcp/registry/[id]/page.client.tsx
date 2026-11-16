@@ -60,7 +60,7 @@ import {
 } from "@/components/unsaved-changes-guard";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useSavedBrowserLogins } from "@/lib/browser-storage-state.query";
-import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -1042,7 +1042,6 @@ function useMcpServerSpec({
 function useIdleHibernationFact(item: CatalogItem): OverviewFact[] {
   const { data: organization } = useOrganization();
   const enterpriseCoreActive = useEnterpriseFeature("core");
-  const hibernationOffered = useFeature("mcpIdleHibernationBetaEnabled");
   // Only this item's installs, without agents: the fact reads their modes.
   const { data: servers = [] } = useMcpServers({
     includeAssignedAgents: false,
@@ -1051,7 +1050,6 @@ function useIdleHibernationFact(item: CatalogItem): OverviewFact[] {
 
   if (
     item.serverType !== "local" ||
-    !hibernationOffered ||
     !enterpriseCoreActive ||
     !organization?.mcpIdleHibernationEnabled
   ) {

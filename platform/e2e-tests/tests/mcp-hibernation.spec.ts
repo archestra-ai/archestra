@@ -1185,21 +1185,6 @@ test.describe("MCP idle hibernation - on-demand wake", () => {
     test.setTimeout(1_140_000);
     requireRecordedBaseline();
 
-    // Nothing below can happen on a deployment that does not offer the
-    // feature: the sweep timer never starts, and every wait would simply run
-    // out saying nothing about the product.
-    const platformConfig = await (
-      await makeApiRequest({
-        request,
-        method: "get",
-        urlSuffix: "/api/config",
-      })
-    ).json();
-    expect(
-      platformConfig.features?.mcpIdleHibernationBetaEnabled,
-      "this deployment does not offer idle hibernation, so no sweep can run",
-    ).toBe(true);
-
     try {
       // The sweeper re-reads the organization toggle every tick, so assert the
       // value it will read rather than the PATCH beforeAll sent.

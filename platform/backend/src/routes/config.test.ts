@@ -56,23 +56,21 @@ describe("config routes", () => {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  test("offers idle hibernation without ARCHESTRA_BETA unless the kill switch is set", async () => {
+  test("keeps the deprecated hibernation beta field true for older clients", async () => {
     const originalBeta = config.beta;
     const originalHardDisabled =
       config.orchestrator.mcpIdleHibernation.hardDisabled;
     config.beta = false;
     try {
-      config.orchestrator.mcpIdleHibernation.hardDisabled = false;
-      const offered = (
-        await app.inject({ method: "GET", url: "/api/config" })
-      ).json();
-      expect(offered.features.mcpIdleHibernationBetaEnabled).toBe(true);
-
-      config.orchestrator.mcpIdleHibernation.hardDisabled = true;
-      const killed = (
-        await app.inject({ method: "GET", url: "/api/config" })
-      ).json();
-      expect(killed.features.mcpIdleHibernationBetaEnabled).toBe(false);
+      // Neither ARCHESTRA_BETA nor the operator kill switch changes it: the
+      // field only stays in the contract so beta-era clients still parse it.
+      for (const hardDisabled of [false, true]) {
+        config.orchestrator.mcpIdleHibernation.hardDisabled = hardDisabled;
+        const response = (
+          await app.inject({ method: "GET", url: "/api/config" })
+        ).json();
+        expect(response.features.mcpIdleHibernationBetaEnabled).toBe(true);
+      }
     } finally {
       config.beta = originalBeta;
       config.orchestrator.mcpIdleHibernation.hardDisabled =
@@ -205,7 +203,7 @@ describe("config routes", () => {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      mcpIdleHibernationBetaEnabled: expect.any(Boolean),
+      mcpIdleHibernationBetaEnabled: true,
       // SPDX-SnippetEnd
     });
     expect(typeof payload.features.incomingEmail.enabled).toBe("boolean");

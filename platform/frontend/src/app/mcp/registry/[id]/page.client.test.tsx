@@ -17,7 +17,6 @@ import {
   useScopedCapabilities,
   useSession,
 } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
 import { McpCatalogItemPage } from "./page.client";
@@ -693,9 +692,6 @@ describe("McpCatalogItemDetailPage overview", () => {
       new URLSearchParams("tab=credentials&server=srv-1") as ReturnType<
         typeof useSearchParams
       >,
-    );
-    vi.mocked(useFeature).mockReturnValue(
-      false as ReturnType<typeof useFeature>,
     );
     useMcpServers.mockReturnValue({
       data: [

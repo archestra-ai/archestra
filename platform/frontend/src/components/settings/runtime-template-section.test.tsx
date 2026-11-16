@@ -456,7 +456,10 @@ describe("RuntimeTemplateSection", () => {
   it("uses the built-in logo in Add runtime and restores into an empty list", async () => {
     const { AGENT_CATALOG_IDS } = await import("@archestra/shared");
     settings.popularAgentOverrides = Object.fromEntries(
-      AGENT_CATALOG_IDS.map((id) => [id, { hidden: true }]),
+      [...AGENT_CATALOG_IDS, "custom-image"].map((id) => [
+        id,
+        { hidden: true },
+      ]),
     );
     mount();
     const user = userEvent.setup();
@@ -476,6 +479,42 @@ describe("RuntimeTemplateSection", () => {
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(overrides?.opencode?.hidden).toBe(false));
+  });
+
+  it("takes Custom image off the list, keeps that through a reorder, and adds it back", async () => {
+    const view = mount();
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "Actions for Custom image" }),
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "Remove from list" }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Actions for Custom image" }),
+    ).not.toBeInTheDocument();
+    screen.getByRole("button", { name: "Reorder Codex" }).focus();
+    await user.keyboard("{ArrowDown}");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(overrides?.["custom-image"]).toEqual({ hidden: true }),
+    );
+    view.unmount();
+    mount();
+    const add = await screen.findByRole("button", { name: "Add runtime" });
+    await waitFor(() => expect(add).toBeEnabled());
+    expect(
+      screen.queryByRole("button", { name: "Actions for Custom image" }),
+    ).not.toBeInTheDocument();
+    await user.click(add);
+    await user.click(screen.getByRole("menuitem", { name: "Custom image" }));
+    expect(
+      screen.getByRole("button", { name: "Actions for Custom image" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(overrides?.["custom-image"]).toEqual({ hidden: false }),
+    );
   });
 
   it("appends new templates after existing choices when saved positions contain gaps", async () => {

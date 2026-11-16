@@ -381,6 +381,35 @@ describe("AgentCreatePage", () => {
         },
       }),
     );
+
+    // The form seeds itself again whenever its initial values change
+    // identity, so a new object per render would discard every keystroke.
+    const seeded = formProps.mock.lastCall?.[0].initialValues;
+    await user.click(screen.getByRole("button", { name: "make dirty" }));
+    expect(formProps.mock.calls.length).toBeGreaterThan(1);
+    expect(formProps.mock.lastCall?.[0].initialValues).toBe(seeded);
+  });
+
+  it("leaves Custom image out of the catalog once an administrator removes it", () => {
+    vi.mocked(useFeature).mockImplementation((feature) =>
+      feature === "agentRuntime"
+        ? true
+        : feature === "agentRuntimeCatalogImages"
+          ? getAgentCatalogImages({ registry: "archestra.local", tag: "dev" })
+          : undefined,
+    );
+    vi.mocked(useOrganization).mockReturnValue({
+      data: makeOrganization({
+        popularAgentOverrides: { "custom-image": { hidden: true } },
+      }),
+    } as ReturnType<typeof useOrganization>);
+
+    renderAgentCreatePage();
+
+    expect(screen.getByRole("button", { name: /codex/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /custom image/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("prefills OpenCode with its maintained Responses runtime", async () => {

@@ -3,7 +3,7 @@ title: Custom Images
 description: Run your own coding agent image in Agent Runtime
 order: 3
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-13
+lastUpdated: 2026-11-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -35,6 +35,21 @@ Requires [`organizationSettings:update`](/docs/reference/permissions#organizatio
 4. Click **Add runtime**, then **Save**. The runtime appears among the choices when creating an agent.
 
 Drag runtime rows to order the choices, or focus a drag handle and press the arrow keys. Use a runtime’s **… → Remove from list** action to hide it, then **Save**. Choose **Add runtime** to add it back at the end of the list. Built-in configurations cannot be edited; custom templates can be edited from their **…** menu. Existing agents keep their saved configuration when a template changes or disappears.
+
+## Remove the Custom Image Choice
+
+Keep every new agent on a runtime you offer by taking **Custom image** out of the choices.
+
+Requires [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+
+1. Go to **Settings → Agents → Runtimes**.
+2. On the **Custom image** row, choose **… → Remove from list**, then **Save**.
+
+What to know:
+
+- Agents already on a custom image keep their configuration and keep running.
+- This removes the choice from the app. The API and MCP tools still accept an image from someone allowed to configure any runtime.
+- Choose **Add runtime → Custom image** to offer it again.
 
 ## What the Image Needs
 

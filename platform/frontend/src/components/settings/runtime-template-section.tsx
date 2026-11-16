@@ -6,6 +6,8 @@ import {
   type AgentCatalogId,
   agentRuntimePermissionScope,
   type archestraApiTypes,
+  CUSTOM_IMAGE_RUNTIME_ID,
+  isIntegrationHidden,
 } from "@archestra/shared";
 import {
   closestCenter,
@@ -27,6 +29,7 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   Box,
   ChevronDown,
+  Code,
   GripVertical,
   MoreHorizontal,
   Pencil,
@@ -145,6 +148,10 @@ export function RuntimeTemplateSection({
   ].sort((a, b) => position(a.id) - position(b.id));
   const visibleRows = rows.filter((row) => !row.hidden);
   const removedRows = rows.filter((row) => row.hidden);
+  const customImageHidden = isIntegrationHidden(
+    state.popularAgentOverrides,
+    CUSTOM_IMAGE_RUNTIME_ID,
+  );
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, {
@@ -182,6 +189,16 @@ export function RuntimeTemplateSection({
         visibleRows.findIndex((item) => item.id === active.id),
         visibleRows.findIndex((item) => item.id === over.id),
       );
+  }
+  function setCustomImageAvailable(visible: boolean) {
+    if (!editable) return;
+    setDraft({
+      ...state,
+      popularAgentOverrides: {
+        ...state.popularAgentOverrides,
+        [CUSTOM_IMAGE_RUNTIME_ID]: { hidden: !visible },
+      },
+    });
   }
   function setAvailable(row: Row, visible: boolean) {
     if (!editable) return;
@@ -237,7 +254,7 @@ export function RuntimeTemplateSection({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
-              {removedRows.length > 0 && (
+              {(removedRows.length > 0 || customImageHidden) && (
                 <>
                   <DropdownMenuLabel>Removed runtimes</DropdownMenuLabel>
                   {removedRows.map((row) => (
@@ -255,6 +272,17 @@ export function RuntimeTemplateSection({
                       <Plus className="ml-auto size-3.5" />
                     </DropdownMenuItem>
                   ))}
+                  {customImageHidden && (
+                    <DropdownMenuItem
+                      onSelect={() => setCustomImageAvailable(true)}
+                    >
+                      <Code className="size-4 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate">
+                        {CUSTOM_IMAGE_NAME}
+                      </span>
+                      <Plus className="ml-auto size-3.5" />
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                 </>
               )}
@@ -312,7 +340,14 @@ export function RuntimeTemplateSection({
               </ul>
             </SortableContext>
           </DndContext>
-          {!visibleRows.length && (
+          {!customImageHidden && (
+            <CustomImageRow
+              disabled={!editable}
+              bordered={visibleRows.length > 0}
+              onRemove={() => setCustomImageAvailable(false)}
+            />
+          )}
+          {!visibleRows.length && customImageHidden && (
             <p className="px-4 py-8 text-center text-sm text-muted-foreground">
               No runtimes offered. Add a runtime to get started.
             </p>
@@ -486,6 +521,65 @@ function RuntimeTemplateRow({
     </li>
   );
 }
+
+/**
+ * The choice to run an image that is none of the runtimes above. It sits
+ * last in the catalog and has no settings of its own, so it can only be
+ * taken off the list.
+ */
+function CustomImageRow({
+  disabled,
+  bordered,
+  onRemove,
+}: {
+  disabled: boolean;
+  bordered: boolean;
+  onRemove: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 bg-card py-2.5 pl-1.5 pr-2",
+        bordered && "border-t",
+      )}
+    >
+      <span className="size-5 shrink-0" />
+      <span className="flex size-7 shrink-0 items-center justify-center">
+        <Code className="size-4 text-muted-foreground" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <span className="truncate text-sm font-medium">
+          {CUSTOM_IMAGE_NAME}
+        </span>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+          Lets people who can configure any runtime run their own container
+          image and command.
+        </p>
+      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            disabled={disabled}
+            size="icon-xs"
+            variant="ghost"
+            className="text-muted-foreground"
+            aria-label={`Actions for ${CUSTOM_IMAGE_NAME}`}
+          >
+            <MoreHorizontal className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={onRemove}>
+            <X className="size-3.5" />
+            Remove from list
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+const CUSTOM_IMAGE_NAME = "Custom image";
 
 function RuntimeMark({ row }: { row: Row }) {
   if (row.builtIn)

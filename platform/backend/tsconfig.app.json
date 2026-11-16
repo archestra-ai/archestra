@@ -527,6 +527,7 @@
     "src/clients/models-dev-client.ts",
     "src/enterprise-tier.ts",
     "src/k8s/deployment-names.ts",
+    "src/k8s/retired-namespaces.ts",
     "src/knowledge-base/acl-tokens.ts",
     "src/openappa/actor.ts",
     "src/openappa/subagent-binding.ts",

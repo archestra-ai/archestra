@@ -6,6 +6,7 @@ import type * as k8s from "@kubernetes/client-node";
 import { Watch } from "@kubernetes/client-node";
 import config from "@/config";
 import { getK8sCapabilitiesFromApi } from "@/k8s/capabilities";
+import { retiredWorkloadNamespaces } from "@/k8s/retired-namespaces";
 import {
   checkNamespaceDeployAccess,
   createK8sClients,
@@ -3140,11 +3141,15 @@ export class McpServerRuntimeManager {
     if (!k8sAppsApi || !k8sRbacApi) return;
     if (!config.orchestrator.kubernetes.runtimeOwnerRoleName) return;
 
+    // Every server in a retired namespace runs again where it moved to.
+    const retired = new Set(retiredWorkloadNamespaces());
     const namespaces = uniqueStrings([
       this.namespace,
       ...config.orchestrator.kubernetes.environmentNamespaces,
+      ...retired,
     ]);
     for (const namespace of namespaces) {
+      const isRetired = retired.has(namespace);
       try {
         const ownerUid = (
           await resolveRuntimeOwnerReferences(k8sRbacApi, namespace).catch(
@@ -3168,16 +3173,18 @@ export class McpServerRuntimeManager {
           return (
             Boolean(deployment.metadata?.labels?.["mcp-server-id"]) &&
             ownedBy(deployment) &&
-            createdAt !== undefined &&
-            new Date(createdAt).getTime() < createdBefore
+            (isRetired ||
+              (createdAt !== undefined &&
+                new Date(createdAt).getTime() < createdBefore))
           );
         });
-        const missing = await this.findMissingServerIds(
-          deployments.map(
-            (deployment) =>
-              deployment.metadata?.labels?.["mcp-server-id"] as string,
-          ),
+        const serverIds = deployments.map(
+          (deployment) =>
+            deployment.metadata?.labels?.["mcp-server-id"] as string,
         );
+        const missing = isRetired
+          ? new Set(serverIds)
+          : await this.findMissingServerIds(serverIds);
         for (const deployment of deployments) {
           const serverId = deployment.metadata?.labels?.[
             "mcp-server-id"
@@ -3188,6 +3195,7 @@ export class McpServerRuntimeManager {
             deployment,
             serverId,
             ownedBy,
+            reason: isRetired ? "retired-namespace" : "missing-server",
           });
         }
       } catch (err) {
@@ -3223,6 +3231,7 @@ export class McpServerRuntimeManager {
     deployment: k8s.V1Deployment;
     serverId: string;
     ownedBy: (object: k8s.KubernetesObject) => boolean;
+    reason: "missing-server" | "retired-namespace";
   }): Promise<void> {
     const { k8sApi, k8sAppsApi, k8sNetworkingApi } = this;
     if (!k8sApi || !k8sAppsApi) return;
@@ -3238,7 +3247,9 @@ export class McpServerRuntimeManager {
         serverId,
         createdAt: deployment.metadata?.creationTimestamp,
       },
-      "Deleting MCP deployment whose server no longer exists",
+      params.reason === "retired-namespace"
+        ? "Deleting MCP deployment left in a retired workload namespace"
+        : "Deleting MCP deployment whose server no longer exists",
     );
     // The uid precondition keeps a deployment recreated under the same name
     // since the list from being deleted.

@@ -60,6 +60,7 @@
     "src/k8s/network-policy-probe.ts",
     "src/k8s/p4-shim-runtime/manager.ts",
     "src/k8s/p4-shim-runtime/manifests.ts",
+    "src/k8s/retired-namespaces.ts",
     "src/k8s/shared.ts",
     "src/sandbox-runtime/sandbox-runtime-service.ts",
     "src/services/agent-runtime/backends/types.ts",

@@ -16,19 +16,23 @@ const OWNER_UID = "owner-uid";
 const OTHER_INSTALL_UID = "other-install-uid";
 let previousOwnerRole: string | undefined;
 let previousEnvironmentNamespaces: string[];
+let previousRetiredNamespaces: string[];
 
 beforeEach(() => {
   previousOwnerRole = config.orchestrator.kubernetes.runtimeOwnerRoleName;
   previousEnvironmentNamespaces =
     config.orchestrator.kubernetes.environmentNamespaces;
+  previousRetiredNamespaces = config.orchestrator.kubernetes.retiredNamespaces;
   config.orchestrator.kubernetes.runtimeOwnerRoleName = OWNER_ROLE;
   config.orchestrator.kubernetes.environmentNamespaces = [];
+  config.orchestrator.kubernetes.retiredNamespaces = [];
 });
 
 afterEach(() => {
   config.orchestrator.kubernetes.runtimeOwnerRoleName = previousOwnerRole;
   config.orchestrator.kubernetes.environmentNamespaces =
     previousEnvironmentNamespaces;
+  config.orchestrator.kubernetes.retiredNamespaces = previousRetiredNamespaces;
 });
 
 test("removes the objects of a deleted server, and only those this install owns", async ({
@@ -132,6 +136,70 @@ test("removes the objects of a deleted server, and only those this install owns"
       "networkpolicy/mcp-egress-mcp-deleted",
     ].sort(),
   );
+});
+
+test("removes every server this install left in a retired namespace, even live and new ones", async ({
+  makeMcpServer,
+}) => {
+  const live = await makeMcpServer();
+  config.orchestrator.kubernetes.retiredNamespaces = ["old-mcp"];
+  const deployments: Record<string, unknown[]> = {
+    [NAMESPACE]: [],
+    "old-mcp": [
+      // The server now runs in the new namespace; this copy is a duplicate.
+      deployment("mcp-live", live.id, { createdAt: new Date().toISOString() }),
+      deployment("mcp-other-install", crypto.randomUUID(), {
+        createdAt: new Date().toISOString(),
+        ownerUid: OTHER_INSTALL_UID,
+      }),
+    ],
+  };
+  const deleted: string[] = [];
+  server.use(
+    http.get(
+      `${ORIGIN}/apis/rbac.authorization.k8s.io/v1/namespaces/:namespace/roles/${OWNER_ROLE}`,
+      () =>
+        HttpResponse.json({ metadata: { name: OWNER_ROLE, uid: OWNER_UID } }),
+    ),
+    http.get(
+      `${ORIGIN}/apis/apps/v1/namespaces/:namespace/deployments`,
+      ({ params }) =>
+        HttpResponse.json({
+          items: deployments[String(params.namespace)] ?? [],
+        }),
+    ),
+    http.delete(
+      `${ORIGIN}/apis/apps/v1/namespaces/:namespace/deployments/:name`,
+      ({ params }) => {
+        deleted.push(`${params.namespace}/deployment/${params.name}`);
+        return HttpResponse.json({});
+      },
+    ),
+    http.get(`${ORIGIN}/api/v1/namespaces/:namespace/services`, () =>
+      HttpResponse.json({ items: [] }),
+    ),
+    http.get(`${ORIGIN}/api/v1/namespaces/:namespace/secrets`, () =>
+      HttpResponse.json({ items: [owned(`mcp-server-${live.id}-secrets`)] }),
+    ),
+    http.delete(
+      `${ORIGIN}/api/v1/namespaces/:namespace/secrets/:name`,
+      ({ params }) => {
+        deleted.push(`${params.namespace}/secret/${params.name}`);
+        return HttpResponse.json({});
+      },
+    ),
+    http.get(
+      `${ORIGIN}/apis/networking.k8s.io/v1/namespaces/:namespace/networkpolicies/:name`,
+      () => HttpResponse.json({ code: 404 }, { status: 404 }),
+    ),
+  );
+
+  await sweep(managerFor(NAMESPACE));
+
+  expect(deleted.sort()).toEqual([
+    "old-mcp/deployment/mcp-live",
+    `old-mcp/secret/mcp-server-${live.id}-secrets`,
+  ]);
 });
 
 test("deletes nothing when ownership cannot be proven", async () => {

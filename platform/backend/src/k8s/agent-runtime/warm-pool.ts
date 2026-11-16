@@ -6,6 +6,7 @@ import {
 import type { CustomObjectsApi } from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import config from "@/config";
+import { retiredWorkloadNamespaces } from "@/k8s/retired-namespaces";
 import {
   createK8sClients,
   isK8sConflictError,
@@ -189,6 +190,8 @@ class AgentWarmPoolManager {
             ? [organization.defaultEnvironmentNamespace]
             : [],
         ),
+        // No pool is wanted there, so its pools, templates and their disks go.
+        ...retiredWorkloadNamespaces(),
       ]);
       for (const agent of candidates) {
         // Pool the image a launch resolves to, or no claim would ever match.

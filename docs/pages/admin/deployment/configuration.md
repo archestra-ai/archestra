@@ -852,6 +852,12 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Default: unset (the editor takes free text)
   - Values: comma-separated namespaces, for example `staging,production`
 
+- **`ARCHESTRA_ORCHESTRATOR_K8S_RETIRED_NAMESPACES`** - Namespaces workloads ran in before a namespace change. The platform cleans up what it left there.
+  - Default: unset
+  - Values: comma-separated namespaces, for example `archestra-mcp-old`. A namespace that is still in use is ignored.
+  - Removes MCP servers, warm pools, and code sandbox engines with their disks at once. Agent Runtime sessions there keep running until they end. Then it deletes its runtime owner Role there, so Kubernetes removes the rest, and logs that the namespace is clean. Only objects this install created are deleted.
+  - The Helm chart sets it from `archestra.orchestrator.kubernetes.rbac.retiredNamespaces` and keeps the platform's Roles in those namespaces. Remove a namespace from the list after the platform logs that it is clean. See [Cluster Security](/docs/admin/deployment/production#cluster-security).
+
 - **`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS`** - Cluster resolver addresses that [environment](/docs/admin/environments) egress policies allow DNS to.
   - Default: unset (discovery reads the `kube-system/kube-dns` Service when permitted, then falls back to the platform pod's `/etc/resolv.conf` when running in-cluster)
   - Values: comma-separated IP addresses, for example `172.20.0.10`. Helm also accepts a list under `archestra.orchestrator.kubernetes.clusterDnsIps`.

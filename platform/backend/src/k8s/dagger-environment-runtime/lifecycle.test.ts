@@ -465,6 +465,72 @@ describe("Dagger environment lifecycle", () => {
       config.daggerRuntime.namespace = undefined;
     }
   });
+
+  test("an organization's default engine also leaves the namespace it ran in before", async ({
+    makeOrganization,
+  }) => {
+    await makeOrganization();
+    await manager.reconcileAll();
+    const engines = (ns: string) =>
+      [...resources.keys()].filter((id) =>
+        id.startsWith(`${ns}/statefulsets/dagger-engine-`),
+      );
+    expect(engines("release").length).toBeGreaterThan(0);
+
+    config.daggerRuntime.namespace = "sandbox";
+    try {
+      await manager.reconcileAll();
+      expect(engines("release")).toEqual([]);
+      expect(engines("sandbox").length).toBeGreaterThan(0);
+      expect(
+        [...resources.keys()].filter((id) =>
+          id.startsWith("release/persistentvolumeclaims/"),
+        ),
+      ).toEqual([]);
+    } finally {
+      config.daggerRuntime.namespace = undefined;
+    }
+  });
+
+  test("engines left in a retired namespace are removed with their cache disk", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const env = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "Moving",
+      namespace: "env-test",
+    });
+    await manager.reconcileEnvironment(env);
+    expect(engineResources(env.id)).toContain(
+      `env-test/persistentvolumeclaims/varlib-dagger-engine-${env.id}-0`,
+    );
+
+    // The Environment moved to env-new; env-test is no longer granted except
+    // for cleanup.
+    const moved = await EnvironmentModel.update({
+      id: env.id,
+      organizationId: org.id,
+      namespace: "env-new",
+    });
+    config.orchestrator.kubernetes.environmentNamespaces = [
+      "release",
+      "env-new",
+    ];
+    config.orchestrator.kubernetes.retiredNamespaces = ["env-test"];
+    try {
+      await manager.reconcileAll();
+      expect(moved?.namespace).toBe("env-new");
+      expect(
+        engineResources(env.id).filter((id) => id.startsWith("env-test/")),
+      ).toEqual([]);
+      expect(engineResources(env.id)).toContain(
+        `env-new/statefulsets/dagger-engine-${env.id}`,
+      );
+    } finally {
+      config.orchestrator.kubernetes.retiredNamespaces = [];
+    }
+  });
 });
 
 function engineResources(id: string) {

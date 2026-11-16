@@ -27,7 +27,9 @@ def record(image="platform", arch="amd64"):
             "previous_image": "docker.io/archestra/platform@sha256:" + "3" * 64,
             "image_id": "sha256:" + "1" * 64, "archive_digest": "sha256:" + "2" * 64,
             "oci": {"config": "sha256:" + "1" * 64, "runtime_manifest": "sha256:" + "4" * 64,
-                    "attestations": ["sha256:" + "5" * 64], "provenance": ["sha256:" + "6" * 64]}}
+                    "attestations": ["sha256:" + "5" * 64], "provenance": ["sha256:" + "6" * 64],
+                    "root": "sha256:" + "7" * 64,
+                    "descriptors": [{"digest": "sha256:" + "4" * 64}, {"digest": "sha256:" + "5" * 64}]}}
 
 
 class EvidenceTests(unittest.TestCase):
@@ -322,6 +324,17 @@ class GateIntegrationTests(unittest.TestCase):
                 index = json.loads((directory / "release-candidate-index.json").read_text())
                 self.assertEqual(index["source_tree"], tree)
                 self.assertEqual(len(index["records"]), len(policy.candidate_matrix(ROOT)["include"]) * 2)
+                # Each image's multi-arch index, under its public name, and the
+                # subjects the queue run signs for them.
+                images = {row["image"] for row in policy.candidate_matrix(ROOT)["include"]}
+                self.assertEqual(set(index["release_indexes"]), images)
+                self.assertEqual(index["release_indexes"]["platform"]["public_name"], "docker.io/archestra/platform")
+                output = directory / "github-output"
+                output.unlink(missing_ok=True)
+                self.assertEqual(gate({"GITHUB_OUTPUT": str(output)}).returncode, 0)
+                subjects = output.read_text().split("subjects<<SUBJECTS\n", 1)[1].split("SUBJECTS\n", 1)[0]
+                self.assertEqual(sorted(subjects.splitlines()), sorted(
+                    f"{entry['public_name']}@{entry['digest']}" for entry in index["release_indexes"].values()))
                 for scan in ("failure", "skipped", "cancelled", "", "neutral"):
                     self.assertNotEqual(gate({"SCAN_RESULT": scan}).returncode, 0)
                 self.assertNotEqual(gate({"GITHUB_RUN_ATTEMPT": "3"}).returncode, 0)

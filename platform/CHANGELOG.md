@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.5.0-rc.35](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.34...platform-v1.5.0-rc.35) (2026-11-16)
+
+
+### Features
+
+* **agent-runtime:** separate node placement for privileged Agent Runtime runs ([#10764](https://github.com/archestra-ai/archestra/issues/10764)) ([97bf982](https://github.com/archestra-ai/archestra/commit/97bf982021a16bc3e5e5a4e80ba01a68766b21b9))
+* **code-sandbox:** run Dagger engines in their own namespace, closed to inbound traffic ([#10769](https://github.com/archestra-ai/archestra/issues/10769)) ([8c78d67](https://github.com/archestra-ai/archestra/commit/8c78d673e3e6fd81970d593d44e8104d37f6973f))
+* **identity:** SPIFFE agent identities as RFC 8693 actor tokens ([#10761](https://github.com/archestra-ai/archestra/issues/10761)) ([61fff04](https://github.com/archestra-ai/archestra/commit/61fff04dab2a3418dc950ec5b1318cb55e0fd02c))
+* **mcp:** AWS IAM (SigV4) sign-in for remote MCP servers, as each agent's own role session ([#10774](https://github.com/archestra-ai/archestra/issues/10774)) ([7765354](https://github.com/archestra-ai/archestra/commit/7765354e0908a67607727d99265cc88f9cc3c744))
+* **orchestrator:** clean up retired workload namespaces and let their sessions finish ([#10775](https://github.com/archestra-ai/archestra/issues/10775)) ([5efe340](https://github.com/archestra-ai/archestra/commit/5efe3404370c96588a1c0307f276ee79f9c6c56e))
+* **workload-identity:** accept a workload's OIDC token as a service account bearer token ([#10768](https://github.com/archestra-ai/archestra/issues/10768)) ([a0cbb13](https://github.com/archestra-ai/archestra/commit/a0cbb137b0c15affd5dae538fbe3cbfb3c57d776))
+
+
+### Bug Fixes
+
+* **agent-runtime:** fail runs clearly when the configured RuntimeClass does not exist ([#10765](https://github.com/archestra-ai/archestra/issues/10765)) ([4efaa30](https://github.com/archestra-ai/archestra/commit/4efaa30b279f02f63b9617ae9bd75eccae6aeae5))
+* **agent-runtime:** refuse privileged runs at launch when the operator disallows them ([#10762](https://github.com/archestra-ai/archestra/issues/10762)) ([6cac2c1](https://github.com/archestra-ai/archestra/commit/6cac2c1449f577f8e4ae7720ad51935ad244e861))
+* **agent-runtime:** remove warm-pool templates and policies left behind when pools move ([#10770](https://github.com/archestra-ai/archestra/issues/10770)) ([ad60e73](https://github.com/archestra-ai/archestra/commit/ad60e73cc32afadd9455c45a45c1a0e1fd915c75))
+* **chat,proxy:** keep prompt-cache prefixes stable across browser strips and attachments ([#10777](https://github.com/archestra-ai/archestra/issues/10777)) ([cd4e290](https://github.com/archestra-ai/archestra/commit/cd4e2901c39b0f313dfb5a34568c2a99f14f6764))
+* **helm:** make the RuntimeClass reader ClusterRole opt-in so upgrades without cluster RBAC rights succeed ([#10776](https://github.com/archestra-ai/archestra/issues/10776)) ([48cf4f7](https://github.com/archestra-ai/archestra/commit/48cf4f737903632494ebd86e039f0580c72f5672))
+* **mcp:** remove MCP server deployments whose server no longer exists ([#10767](https://github.com/archestra-ai/archestra/issues/10767)) ([9bc330e](https://github.com/archestra-ai/archestra/commit/9bc330ec9eb5669f18b051a2a4ffefd350687151))
+* **run_tool:** dispatch skill delegations, and run hooks and elicitation for the target tool ([#10778](https://github.com/archestra-ai/archestra/issues/10778)) ([c762c76](https://github.com/archestra-ai/archestra/commit/c762c76e3fd0a6cd7d6366416c9ca6f43e5cafd8))
+
 ## [1.5.0-rc.34](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.33...platform-v1.5.0-rc.34) (2026-11-15)
 
 

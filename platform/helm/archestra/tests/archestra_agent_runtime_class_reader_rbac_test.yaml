@@ -10,9 +10,17 @@ tests:
       - hasDocuments:
           count: 0
 
+  - it: creates nothing unless turned on, since helm needs cluster-scoped rights for it
+    set:
+      archestra.env.ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME: gvisor
+    asserts:
+      - hasDocuments:
+          count: 0
+
   - it: grants get on the configured RuntimeClass only
     set:
       archestra.env.ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME: gvisor
+      archestra.orchestrator.kubernetes.rbac.runtimeClassReader.create: true
     asserts:
       - hasDocuments:
           count: 2
@@ -43,6 +51,7 @@ tests:
     set:
       archestra.env.ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME: gvisor
       archestra.orchestrator.kubernetes.rbac.create: false
+      archestra.orchestrator.kubernetes.rbac.runtimeClassReader.create: true
     asserts:
       - hasDocuments:
           count: 0

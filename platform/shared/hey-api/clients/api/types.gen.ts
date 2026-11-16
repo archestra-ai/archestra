@@ -91458,6 +91458,12 @@ export type GetInternalMcpCatalogResponses = {
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
         } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
+        } | null;
         icon: string | null;
         organizationId: string | null;
         authorId: string | null;
@@ -91628,6 +91634,12 @@ export type CreateInternalMcpCatalogItemData = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig?: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon?: string | null;
         clonedFrom?: string | null;
@@ -91856,6 +91868,12 @@ export type CreateInternalMcpCatalogItemResponses = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon: string | null;
         organizationId: string | null;
@@ -92947,6 +92965,12 @@ export type GetInternalMcpCatalogItemResponses = {
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
         } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
+        } | null;
         icon: string | null;
         organizationId: string | null;
         authorId: string | null;
@@ -93105,6 +93129,12 @@ export type UpdateInternalMcpCatalogItemData = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig?: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon?: string | null;
         environmentId?: string | null;
@@ -93314,6 +93344,12 @@ export type UpdateInternalMcpCatalogItemResponses = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon: string | null;
         organizationId: string | null;
@@ -94018,6 +94054,12 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
         } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
+        } | null;
         icon: string | null;
         organizationId: string | null;
         authorId: string | null;
@@ -94252,6 +94294,12 @@ export type ApproveCatalogItemImageResponses = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon: string | null;
         organizationId: string | null;

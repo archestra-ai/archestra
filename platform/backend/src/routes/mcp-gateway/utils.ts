@@ -255,7 +255,7 @@ export function describeGatewayAuthFailure(
 ): string {
   switch (reason) {
     case "idp_not_linked":
-      return `Invalid token for this profile. This gateway has no Identity Provider linked, so it cannot accept an external IdP JWT — link one to the gateway, or authenticate with an ${archestraMcpBranding.appName} token or OAuth.`;
+      return `Invalid token for this profile. This gateway has no Identity Provider linked, so it cannot accept an external IdP JWT — link one to the gateway, or authenticate with an ${archestraMcpBranding.appName} token or OAuth. A workload's own OIDC token works only when exactly one service account's federated credential trusts it.`;
     case "idp_misconfigured":
       return "Invalid token for this profile. The gateway's Identity Provider cannot be used to validate JWTs: it must be an OIDC provider with a client ID and a discoverable JWKS endpoint.";
     case "no_email_claim":

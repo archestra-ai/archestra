@@ -33,6 +33,7 @@ export function makeCatalogItem(
     userConfig: null,
     oauthConfig: null,
     enterpriseManagedConfig: null,
+    awsIamConfig: null,
     icon: null,
     organizationId: null,
     authorId: null,

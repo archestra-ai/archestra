@@ -6,7 +6,11 @@ import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import AuditLogModel from "@/models/audit-log";
 import ServiceAccountFederatedCredentialModel from "@/models/service-account-federated-credential";
-import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
+import {
+  authenticateMCPGatewayRequest,
+  describeGatewayAuthFailure,
+  validateMCPGatewayToken,
+} from "@/routes/mcp-gateway/utils";
 import { beforeAll, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { spyOnLogger } from "@/test/logging";
@@ -154,8 +158,10 @@ describe("a workload's OIDC token as a bearer token", () => {
   test("acts as neither of two service accounts that both trust it", async ({
     makeOrganization,
     makeServiceAccount,
+    makeAgent,
   }) => {
     const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
     for (const account of [
       await makeServiceAccount(org.id),
       await makeServiceAccount(org.id),
@@ -163,15 +169,21 @@ describe("a workload's OIDC token as a bearer token", () => {
       await trust({ organizationId: org.id, serviceAccountId: account.id });
     }
 
-    const result = await verifyServiceAccountBearer({
-      token: await actorJwt({ sub: ACTOR }),
-    });
+    const token = await actorJwt({ sub: ACTOR });
+    const result = await verifyServiceAccountBearer({ token });
 
     expect(result).toBeNull();
     expect((await exchangeEvents(org.id)).map((event) => event.after)).toEqual([
       expect.objectContaining({ reason: "matches_several_service_accounts" }),
       expect.objectContaining({ reason: "matches_several_service_accounts" }),
     ]);
+    // The gateway's answer covers a refused workload token too, without
+    // revealing which issuers a federated credential names.
+    const outcome = await authenticateMCPGatewayRequest(agent.id, token);
+    expect(outcome.result).toBeNull();
+    expect(
+      outcome.reason && describeGatewayAuthFailure(outcome.reason),
+    ).toContain("exactly one service account's federated credential trusts it");
   });
 
   test("refuses a forged token naming a trusted issuer without auditing it", async ({

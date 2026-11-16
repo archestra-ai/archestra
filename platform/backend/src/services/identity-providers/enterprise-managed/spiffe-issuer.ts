@@ -42,6 +42,14 @@ export function spiffeIdForAgent(agentId: string): string {
 }
 
 /**
+ * The SPIFFE ID the platform itself acts as when no agent is calling, such as
+ * when it lists an MCP server's tools: `spiffe://<trust domain>/platform`.
+ */
+export function platformSpiffeId(): string {
+  return `spiffe://${config.agentIdentity.spiffeTrustDomain}/platform`;
+}
+
+/**
  * Archestra as the issuer of its agents' JWT-SVIDs (SPIFFE JWT-SVID standard).
  *
  * Archestra makes tool calls for its agents itself, so it vouches for them:
@@ -71,10 +79,13 @@ class SpiffeIssuer {
     spiffeId: string;
     audience: string;
   }): Promise<string> {
-    // It vouches only for its own agents.
-    if (!params.spiffeId.startsWith(spiffeIdForAgent(""))) {
+    // It vouches only for its own agents and itself.
+    if (
+      params.spiffeId !== platformSpiffeId() &&
+      !params.spiffeId.startsWith(spiffeIdForAgent(""))
+    ) {
       throw new Error(
-        "JWT-SVIDs are issued only for this deployment's agent SPIFFE IDs",
+        "JWT-SVIDs are issued only for this deployment's own SPIFFE IDs",
       );
     }
     const signingKey = await this.getSigningKey();

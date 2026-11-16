@@ -15,6 +15,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database/schema";
+import { AwsIamMcpAuthConfigSchema } from "./aws-iam-mcp-auth";
 import {
   CatalogTeamAccessLevelSchema,
   CatalogTeamInputSchema,
@@ -172,6 +173,7 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
     oauthConfig: OAuthConfigSchema.nullable(),
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigResponseSchema.nullable(),
+    awsIamConfig: AwsIamMcpAuthConfigSchema.nullable(),
     localConfig: LocalConfigSelectSchema.nullable(),
     desktopConfig: DesktopMcpConfigSchema.nullable(),
     clonedFrom: z.string().uuid().nullable(),
@@ -242,6 +244,7 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     oauthConfig: OAuthConfigSchema.nullable().optional(),
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigSchema.nullable().optional(),
+    awsIamConfig: AwsIamMcpAuthConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
     desktopConfig: DesktopMcpConfigSchema.nullable().optional(),
     clonedFrom: z.string().uuid().nullable().optional(),
@@ -316,6 +319,7 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     oauthConfig: OAuthConfigSchema.nullable().optional(),
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigSchema.nullable().optional(),
+    awsIamConfig: AwsIamMcpAuthConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
     desktopConfig: DesktopMcpConfigSchema.nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
@@ -419,6 +423,8 @@ function validateInternalMcpCatalog(
   value: {
     serverType?: InternalMcpCatalogServerType;
     enterpriseManagedConfig?: unknown;
+    oauthConfig?: unknown;
+    awsIamConfig?: unknown;
     localConfig?: {
       transportType?: "stdio" | "streamable-http";
       environment?: Array<{ key: string }>;
@@ -429,8 +435,72 @@ function validateInternalMcpCatalog(
   ctx: z.RefinementCtx,
 ): void {
   validateEnterpriseManagedTransportConfig(value, ctx);
+  validateAwsIamConfig(value, ctx);
   validateHeaderMappedUserConfig(value.userConfig, ctx);
   validateDesktopConfigServerType(value, ctx);
+}
+
+/**
+ * Why an item's AWS IAM sign-in conflicts with the rest of its settings, or
+ * null. AWS IAM signs requests to a remote server and is the server's one
+ * sign-in: OAuth or an enterprise-managed credential would set another
+ * Authorization header on the same request. Updates check the item they
+ * would leave behind, since a partial update names only what changes.
+ */
+export function awsIamConfigConflict(value: {
+  serverType?: InternalMcpCatalogServerType | null;
+  enterpriseManagedConfig?: unknown;
+  oauthConfig?: unknown;
+  awsIamConfig?: unknown;
+}): string | null {
+  if (!value.awsIamConfig) return null;
+  if (value.serverType && value.serverType !== "remote") {
+    return "AWS IAM sign-in is only for remote MCP servers.";
+  }
+  if (value.oauthConfig || value.enterpriseManagedConfig) {
+    return "AWS IAM sign-in replaces OAuth and enterprise-managed credentials; remove them first.";
+  }
+  return null;
+}
+
+/**
+ * Settings an update leaves an item with: each submitted field replaces the
+ * stored one, and fields left out keep theirs.
+ */
+export function mergedAwsIamSettings(params: {
+  update: Partial<Record<AwsIamSettingField, unknown>>;
+  current: Partial<Record<AwsIamSettingField, unknown>>;
+}): Parameters<typeof awsIamConfigConflict>[0] {
+  const pick = (field: AwsIamSettingField) =>
+    params.update[field] !== undefined
+      ? params.update[field]
+      : params.current[field];
+  return {
+    serverType: pick("serverType") as InternalMcpCatalogServerType | null,
+    enterpriseManagedConfig: pick("enterpriseManagedConfig"),
+    oauthConfig: pick("oauthConfig"),
+    awsIamConfig: pick("awsIamConfig"),
+  };
+}
+
+type AwsIamSettingField =
+  | "serverType"
+  | "enterpriseManagedConfig"
+  | "oauthConfig"
+  | "awsIamConfig";
+
+function validateAwsIamConfig(
+  value: Parameters<typeof awsIamConfigConflict>[0],
+  ctx: z.RefinementCtx,
+): void {
+  const conflict = awsIamConfigConflict(value);
+  if (conflict) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["awsIamConfig"],
+      message: conflict,
+    });
+  }
 }
 
 /**

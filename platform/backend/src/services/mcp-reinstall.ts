@@ -293,6 +293,7 @@ export function onlyForwardCompatibleEnvDiff(
       deploymentSpecYaml: cat.deploymentSpecYaml ?? "",
       oauthConfig: cat.oauthConfig ?? null,
       enterpriseManagedConfig: cat.enterpriseManagedConfig ?? null,
+      awsIamConfig: cat.awsIamConfig ?? null,
       // localConfig minus environment (covered by steps 1, 1b, 2 above).
       localConfig: cat.localConfig
         ? {

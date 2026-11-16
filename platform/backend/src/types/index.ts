@@ -27,6 +27,7 @@ export * from "./api-key";
 export * from "./app";
 export * from "./app-diagnostics";
 export * from "./audit-log";
+export * from "./aws-iam-mcp-auth";
 export * from "./blob-provider";
 export * from "./catalog-team-level";
 export * from "./chat";

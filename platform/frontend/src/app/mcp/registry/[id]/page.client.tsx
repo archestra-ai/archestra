@@ -1234,6 +1234,7 @@ const AUTH_METHOD_LABEL: Record<McpCatalogFormValues["authMethod"], string> = {
   oauth_client_credentials: "OAuth client credentials",
   enterprise_managed: "Identity provider exchange",
   idp_jwt: "Identity provider JWT",
+  aws_iam: "AWS IAM (SigV4)",
 };
 
 function _OverviewField({

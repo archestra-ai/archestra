@@ -2,7 +2,7 @@
 title: "SPIFFE Agent Identities"
 description: "Give every agent a SPIFFE ID that Archestra vouches for, so your identity provider can name the agent in each token without a client per agent"
 order: 4
-lastUpdated: 2026-11-15
+lastUpdated: 2026-11-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -19,7 +19,8 @@ Use it when your identity provider's RFC 8693 token exchange can verify an actor
 
 What to know:
 
-- Archestra signs with a key it creates and rotates every 30 days. A replaced key stays published for a day, so verifiers that cache keys keep working.
+- Archestra signs with an ES256 (P-256) key it creates and rotates every 30 days. A replaced key stays published for a day, so verifiers that cache keys keep working.
+- Your identity provider must accept ES256 tokens from another issuer. AWS IAM does. Microsoft Entra workload identity federation takes RS256 only, so it can't verify a JWT-SVID.
 - Whether `act` appears is your identity provider's policy, as with any actor token.
 
 ## Before You Start

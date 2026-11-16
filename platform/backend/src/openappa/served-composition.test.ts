@@ -311,14 +311,20 @@ describe("what a refused composition keeps serving", () => {
   }
 });
 
-/** The acme battery's files; `broken` leaves its helper's annotator undeclared. */
+/**
+ * The acme battery's files; `broken` routes its rule through the helper's
+ * annotator and leaves that annotator undeclared, which the runtime refuses.
+ */
 function acmeFiles(params: { broken?: boolean; note?: string }) {
-  const declaration = params.broken
-    ? ""
-    : `[[policy.annotator]]
+  const [declaration, ruling] = params.broken
+    ? ["", `annotator = "acme.check"`]
+    : [
+        `[[policy.annotator]]
 name = "acme.check"
 
-`;
+`,
+        "delta = {}",
+      ];
   return [
     { path: "appa-package.toml", text: MANIFEST },
     {
@@ -328,7 +334,7 @@ version = 2
 
 ${declaration}[[policy.tool]]
 name = "mcp/acme/list"
-delta = {}
+${ruling}
 
 [externals.annotators."acme.check"]
 command = ["python3", "check.py"]

@@ -23,6 +23,7 @@ import {
   ManagedOauthClientModel,
   ModelPoolModel,
   OAuthAccessTokenModel,
+  VirtualApiKeyModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -103,9 +104,16 @@ describe("A2A OAuth authorization at actual proxy transport attempts", () => {
   });
 
   for (const stream of [false, true]) {
-    for (const failure of ["drop", "pool", "timeout"] as const) {
+    for (const scenario of [
+      "drop",
+      "pool",
+      "timeout",
+      "virtual-key-timeout",
+    ] as const) {
+      const virtualCredential = scenario === "virtual-key-timeout";
+      const failure = virtualCredential ? "timeout" : scenario;
       for (const revoked of [false, true]) {
-        test(`${stream ? "stream" : "generate"} ${failure}: ${revoked ? "revocation stops next attempt" : "valid retries succeed"}`, async ({
+        test(`${stream ? "stream" : "generate"} ${scenario}: ${revoked ? "revocation stops next attempt" : "valid retries succeed"}`, async ({
           makeAgent,
           makeUser,
           makeMember,
@@ -176,6 +184,25 @@ describe("A2A OAuth authorization at actual proxy transport attempts", () => {
               await OAuthAccessTokenModel.deleteByTokenHash(tokenHash);
             return failure;
           };
+          const virtualKey = virtualCredential
+            ? await VirtualApiKeyModel.create({
+                organizationId: agent.organizationId,
+                name: "Synthetic local virtual credential",
+                providerApiKeys: [key, secondKey].map((row) => ({
+                  provider: "openai" as const,
+                  providerApiKeyId: row.id,
+                })),
+              })
+            : undefined;
+          const virtualLimit = virtualKey
+            ? await LimitModel.create({
+                entityType: "virtual_key",
+                entityId: virtualKey.virtualKey.id,
+                limitType: "token_cost",
+                limitValue: 1000000,
+                model: ["gpt-4o-mini"],
+              })
+            : undefined;
           const model = authorizeA2AModel({
             agentId: agent.id,
             organizationId: agent.organizationId,
@@ -185,7 +212,7 @@ describe("A2A OAuth authorization at actual proxy transport attempts", () => {
             },
             model: createLLMModel({
               provider: "openai",
-              apiKey: "sk-synthetic",
+              apiKey: virtualKey?.value ?? "sk-synthetic",
               agentId: agent.id,
               modelName: "gpt-4o-mini",
               baseUrl,
@@ -229,6 +256,12 @@ describe("A2A OAuth authorization at actual proxy transport attempts", () => {
               appLimit.id,
             ),
           ).toMatchObject([{ tokensIn: 0, tokensOut: 0 }]);
+          if (virtualLimit) {
+            const usage = (
+              await LimitModel.getModelUsageBreakdowns([virtualLimit.id])
+            ).get(virtualLimit.id);
+            expect(usage?.[0].tokensIn).toBeGreaterThan(0);
+          }
           const interactions = await db.select().from(schema.interactionsTable);
           if (!revoked) {
             expect(interactions.length).toBeGreaterThan(0);
@@ -251,7 +284,7 @@ describe("A2A OAuth authorization at actual proxy transport attempts", () => {
                 authenticatedAppName: oauthClient.name,
                 userId: null,
                 serviceAccountId: null,
-                authMethod: "internal",
+                authMethod: virtualCredential ? "virtual_key" : "internal",
               });
             }
           }

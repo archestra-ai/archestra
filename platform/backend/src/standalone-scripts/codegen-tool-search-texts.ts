@@ -29,10 +29,10 @@ const OUTPUT_PATH = path.join(
 type Entry = { definitionHash: string; searchText: string };
 
 // No args: generate stale entries with the Anthropic API.
-// `--list-stale <out.json>`: write the stale definitions, for writing their
-// texts by hand (following TOOL_SEARCH_TEXT_SYSTEM_PROMPT) without a key.
-// `--apply <texts.json>`: store a `{ shortName: searchText }` file for stale
-// entries under their current definition hashes.
+// `--list-stale <out.json>`: write the stale definitions with their hashes,
+// for writing texts by hand (following TOOL_SEARCH_TEXT_SYSTEM_PROMPT).
+// `--apply <texts.json>`: store a `{ shortName: { definitionHash, searchText } }`
+// file, refusing an entry whose definition changed since it was listed.
 type Mode =
   | { kind: "generate" }
   | { kind: "list-stale"; outPath: string }
@@ -66,8 +66,9 @@ async function main(): Promise<void> {
   const stale = tools.filter(({ shortName }) => !entries.has(shortName));
 
   if (mode.kind === "list-stale") {
-    const definitions = stale.map(({ shortName, definition }) => ({
+    const definitions = stale.map(({ shortName, definition, hash }) => ({
       shortName,
+      definitionHash: hash,
       definition,
     }));
     fs.writeFileSync(mode.outPath, `${JSON.stringify(definitions, null, 2)}\n`);
@@ -78,17 +79,25 @@ async function main(): Promise<void> {
   let failed = 0;
   if (mode.kind === "apply") {
     const texts = z
-      .record(z.string(), z.string())
+      .record(
+        z.string(),
+        z.object({ definitionHash: z.string(), searchText: z.string() }),
+      )
       .parse(JSON.parse(fs.readFileSync(mode.textsPath, "utf8")));
     const staleByName = new Map<string, (typeof stale)[number]>(
       stale.map((tool) => [tool.shortName, tool]),
     );
-    for (const [shortName, text] of Object.entries(texts)) {
+    for (const [shortName, supplied] of Object.entries(texts)) {
       const tool = staleByName.get(shortName);
       if (!tool) throw new Error(`${shortName} is not a stale entry`);
+      // The text was written for the exported definition; one that changed
+      // since must be listed and written again.
+      if (supplied.definitionHash !== tool.hash) {
+        throw new Error(`${shortName} changed since --list-stale`);
+      }
       entries.set(tool.shortName, {
         definitionHash: tool.hash,
-        searchText: toStoredText(text),
+        searchText: toStoredText(supplied.searchText),
       });
     }
     for (const { shortName } of stale) {

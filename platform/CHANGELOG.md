@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.5.0-rc.37](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.36...platform-v1.5.0-rc.37) (2026-11-16)
+
+
+### Bug Fixes
+
+* **environments:** keep per-kind deploy limits on environment grants ([#10795](https://github.com/archestra-ai/archestra/issues/10795)) ([3e072b7](https://github.com/archestra-ai/archestra/commit/3e072b78db258a5144c72676a43703c0536ac745))
+* **mcp:** check the desktop tunnel device key before reading the body ([#10679](https://github.com/archestra-ai/archestra/issues/10679)) ([d31183a](https://github.com/archestra-ai/archestra/commit/d31183a32650cdc7f7c29b9225d165c06d573f13))
+* **mcp:** make gateway task replies match the Tasks extension ([#10789](https://github.com/archestra-ai/archestra/issues/10789)) ([24327d9](https://github.com/archestra-ai/archestra/commit/24327d9748e5a4ff465af39ff0daaaf74197ff09))
+* **oauth:** preserve metadata discovery failure diagnostics ([#10784](https://github.com/archestra-ai/archestra/issues/10784)) ([3839254](https://github.com/archestra-ai/archestra/commit/383925416c6015ec75ecde8997278520384ae704))
+* **permissions:** give authors of objects shared before the upgrade full access ([#10654](https://github.com/archestra-ai/archestra/issues/10654)) ([2c8e69d](https://github.com/archestra-ai/archestra/commit/2c8e69da3c28c27cedd42e453fc7966c476a47c2))
+* **sandbox:** report base package setup failures accurately ([#10785](https://github.com/archestra-ai/archestra/issues/10785)) ([50ce2b9](https://github.com/archestra-ai/archestra/commit/50ce2b9ea4ec7f8d86ae864fb1634df08b214b09))
+
+
+### Miscellaneous Chores
+
+* **mcp:** take MCP server idle hibernation out of beta ([#10788](https://github.com/archestra-ai/archestra/issues/10788)) ([ee599b5](https://github.com/archestra-ai/archestra/commit/ee599b57d3ecd490bdbc171daebccec7d82c9dab))
+
 ## [1.5.0-rc.36](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.35...platform-v1.5.0-rc.36) (2026-11-16)
 
 

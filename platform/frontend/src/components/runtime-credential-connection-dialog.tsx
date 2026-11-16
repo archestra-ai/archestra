@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ConnectionSignInDialog } from "@/components/connection-sign-in-dialog";
+import { PrivateKeyDrop } from "@/components/github-app-setup/private-key-drop";
 import { GitHubConnectButton } from "@/components/github-connect-button";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { RuntimeCredentialDescription } from "@/components/runtime-credential-row-content";
@@ -18,7 +19,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
+import { SecretInput } from "@/components/ui/secret-input";
 import {
   type RuntimeCredentialDefinition,
   useSetRuntimeCredentialConnection,
@@ -32,6 +33,7 @@ export function RuntimeCredentialConnectionDialog({
   onClose,
   onConnected,
   silent = false,
+  reconnect = false,
   create,
 }: {
   definition: Pick<
@@ -44,6 +46,8 @@ export function RuntimeCredentialConnectionDialog({
   onConnected?: () => void;
   /** Skips the "connected" toast, for a caller that shows the result itself. */
   silent?: boolean;
+  /** The person's earlier connection stopped working; ask to connect again. */
+  reconnect?: boolean;
   /**
    * Makes the credential when the value is submitted, for a definition that
    * does not exist yet, so a dialog closed without a value leaves nothing.
@@ -54,7 +58,7 @@ export function RuntimeCredentialConnectionDialog({
   const [creating, setCreating] = useState(false);
   const startGitHub = useStartGitHubUserConnection();
   const form = useForm<ConnectionFormValues>({
-    resolver: zodResolver(ConnectionFormSchema),
+    resolver: zodResolver(connectionFormSchema(definition.kind)),
     defaultValues: { value: "", clientSecret: "" },
   });
 
@@ -93,15 +97,18 @@ export function RuntimeCredentialConnectionDialog({
         onOpenChange={(open) => {
           if (!open) onClose();
         }}
-        title="Connect GitHub"
+        title={reconnect ? "Reconnect GitHub" : "Connect GitHub"}
         description={
           <span className="whitespace-pre-wrap break-words">
-            {definition.description?.trim() ||
-              "Connect your GitHub account to use it with your agents."}
+            {reconnect
+              ? "Your GitHub connection no longer works, for example because the GitHub App changed. Connect it again to keep using it with your agents."
+              : definition.description?.trim() ||
+                "Connect your GitHub account to use it with your agents."}
           </span>
         }
         action={
           <GitHubConnectButton
+            label={reconnect ? "Reconnect GitHub" : undefined}
             pending={startGitHub.isPending}
             onClick={() => startGitHub.mutate(definition.key)}
           />
@@ -116,6 +123,7 @@ export function RuntimeCredentialConnectionDialog({
         if (!open) onClose();
       }}
       size={definition.kind === "github_app" ? "medium" : "small"}
+      bodyClassName="space-y-4"
       title={
         <span className="flex items-center gap-2">
           <RuntimeCredentialIcon icon={definition.icon} />
@@ -153,32 +161,42 @@ export function RuntimeCredentialConnectionDialog({
         <FormField
           control={form.control}
           name="value"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>
-                {definition.kind === "github_app"
-                  ? "Private key (PEM)"
-                  : "Secret value"}
-              </FormLabel>
-              {definition.kind === "github_app" ? (
-                <p className="text-sm text-muted-foreground">
-                  Paste the PEM file downloaded from your GitHub App settings.
+          render={({ field }) =>
+            definition.kind === "github_app" ? (
+              <FormItem>
+                <PrivateKeyDrop
+                  id={PRIVATE_KEY_INPUT_ID}
+                  describedBy={PRIVATE_KEY_HINT_ID}
+                  onKey={(key) => {
+                    if (!isPemPrivateKey(key)) {
+                      // Without validating, so the resolver's "required"
+                      // message does not replace this one.
+                      form.setValue("value", "");
+                      form.setError("value", {
+                        message: "That file is not a PEM private key",
+                      });
+                      return;
+                    }
+                    field.onChange(key);
+                    form.clearErrors("value");
+                  }}
+                />
+                <p
+                  id={PRIVATE_KEY_HINT_ID}
+                  className="text-sm text-muted-foreground"
+                >
+                  The .pem file downloaded from your GitHub App settings.
                 </p>
-              ) : (
+                <FormMessage />
+              </FormItem>
+            ) : (
+              <FormItem>
+                <FormLabel>Secret value</FormLabel>
                 <RuntimeCredentialDescription
                   definition={definition}
                   className=""
                 />
-              )}
-              <FormControl>
-                {definition.kind === "github_app" ? (
-                  <SecretTextarea
-                    {...field}
-                    autoComplete="off"
-                    placeholder="Paste private key"
-                    className="field-sizing-fixed h-40 max-h-[40vh] resize-y overflow-y-auto font-mono text-xs"
-                  />
-                ) : (
+                <FormControl>
                   <SecretInput
                     {...field}
                     autoFocus
@@ -186,11 +204,11 @@ export function RuntimeCredentialConnectionDialog({
                     autoComplete="off"
                     placeholder="Paste secret"
                   />
-                )}
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )
+          }
         />
         {definition.kind === "github_app" && definition.githubClientId && (
           <FormField
@@ -212,9 +230,28 @@ export function RuntimeCredentialConnectionDialog({
   );
 }
 
-const ConnectionFormSchema = z.object({
-  clientSecret: z.string(),
-  value: z.string().trim().min(1, "Secret value is required").max(20_000),
-});
+function connectionFormSchema(kind: RuntimeCredentialDefinition["kind"]) {
+  return z.object({
+    clientSecret: z.string(),
+    value: z
+      .string()
+      .trim()
+      .min(
+        1,
+        kind === "github_app"
+          ? "Choose the private key file"
+          : "Secret value is required",
+      )
+      .max(20_000),
+  });
+}
 
-type ConnectionFormValues = z.infer<typeof ConnectionFormSchema>;
+type ConnectionFormValues = z.infer<ReturnType<typeof connectionFormSchema>>;
+
+/** GitHub issues PKCS#1 (`RSA PRIVATE KEY`); PKCS#8 also signs App JWTs. */
+function isPemPrivateKey(text: string): boolean {
+  return /-----BEGIN (RSA )?PRIVATE KEY-----/.test(text);
+}
+
+const PRIVATE_KEY_INPUT_ID = "runtime-credential-private-key";
+const PRIVATE_KEY_HINT_ID = "runtime-credential-private-key-hint";

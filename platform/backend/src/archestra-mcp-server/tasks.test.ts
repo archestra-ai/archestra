@@ -411,6 +411,57 @@ describe("run tools", () => {
     ).toEqual([]);
   });
 
+  test("posts the setup link into the chat thread a delegated run was asked from", async ({
+    makeAgent,
+  }) => {
+    const target = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      runtime: {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        environment: null,
+        credentials: [
+          {
+            key: "GITHUB_TOKEN",
+            label: "GitHub token",
+            scope: "per_user",
+            required: true,
+          },
+        ],
+        ttlHours: null,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    const bindingId = crypto.randomUUID();
+    const notify = vi
+      .spyOn(chatOpsManager, "notifyBindingThread")
+      .mockResolvedValue(true);
+    const result = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { agent_id: target.id, message: "Review the example repository" },
+      { ...context, chatOpsBindingId: bindingId, chatOpsThreadId: "thread-1" },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(notify).toHaveBeenCalledOnce();
+    const posted = notify.mock.calls[0][0];
+    expect(posted).toMatchObject({ bindingId, threadId: "thread-1" });
+    expect(posted.text).toContain(
+      `[Set up credentials](${config.frontendBaseUrl}/agents/${target.id}?setup=credentials&keys=GITHUB_TOKEN)`,
+    );
+    // The person already has the link, so the model must not repeat it.
+    expect((result.content[0] as { text: string }).text).toContain(
+      "already posted in the chat thread",
+    );
+  });
+
   test.for([
     false,
     true,

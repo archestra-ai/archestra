@@ -15,6 +15,7 @@ import {
   DOCS_MCP_SERVERS,
   type DocsMcpServer,
 } from "@/services/docs-mcp-servers";
+import { mintCatalogToolNames } from "@/services/mcp-tool-names";
 import type { McpServer } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 
@@ -187,9 +188,16 @@ async function discoverTools(mcpServer: McpServer): Promise<void> {
   const catalogId = mcpServer.catalogId;
   try {
     const tools = await McpServerModel.getToolsFromServer(mcpServer);
+    const toolNameFor = catalogId
+      ? await mintCatalogToolNames({
+          catalogId,
+          rawToolNames: tools.map((tool) => tool.name),
+        })
+      : (rawToolName: string) =>
+          ToolModel.slugifyName(mcpServer.name, rawToolName);
     await ToolModel.bulkCreateToolsIfNotExists(
       tools.map((tool) => ({
-        name: ToolModel.slugifyName(mcpServer.name, tool.name),
+        name: toolNameFor(tool.name),
         rawToolName: tool.name,
         description: tool.description,
         parameters: tool.inputSchema,

@@ -1,6 +1,10 @@
 export const RouteId = {
   ListAgentRuntimeTemplates: "listAgentRuntimeTemplates",
+  ListBuiltInAgentRuntimeSettings: "listBuiltInAgentRuntimeSettings",
   GetAgentRuntimeTemplate: "getAgentRuntimeTemplate",
+  ListAgentRuntimeAccess: "listAgentRuntimeAccess",
+  ApplyAgentRuntimeToAgents: "applyAgentRuntimeToAgents",
+  CountAgentsBehindRuntime: "countAgentsBehindRuntime",
   GetRuntimeTemplateSettings: "getRuntimeTemplateSettings",
   SaveRuntimeTemplateSettings: "saveRuntimeTemplateSettings",
   AzureAudioSpeechWithDefaultAgent: "azureAudioSpeechWithDefaultAgent",
@@ -52,6 +56,8 @@ export const RouteId = {
   CloneAgent: "cloneAgent",
   GetAgent: "getAgent",
   GetAgentDefaultSuggestedPrompts: "getAgentDefaultSuggestedPrompts",
+  GetAgentIdentityBindings: "getAgentIdentityBindings",
+  ReplaceAgentIdentityBindings: "replaceAgentIdentityBindings",
   PinAgent: "pinAgent",
   UnpinAgent: "unpinAgent",
   GetDefaultMcpGateway: "getDefaultMcpGateway",
@@ -206,6 +212,7 @@ export const RouteId = {
   DeleteMcpServer: "deleteMcpServer",
   BulkDeleteMcpServers: "bulkDeleteMcpServers",
   RestoreMcpServer: "restoreMcpServer",
+  UpdateMcpServerDesktopArguments: "updateMcpServerDesktopArguments",
   ReauthenticateMcpServer: "reauthenticateMcpServer",
   ReinstallMcpServer: "reinstallMcpServer",
   HardResetMcpServer: "hardResetMcpServer",
@@ -620,6 +627,9 @@ export const RouteId = {
   DeleteServiceAccountFederatedCredential:
     "deleteServiceAccountFederatedCredential",
   ExchangeWorkloadIdentityToken: "exchangeWorkloadIdentityToken",
+  GetSpiffeDiscoveryDocument: "getSpiffeDiscoveryDocument",
+  GetSpiffeJwks: "getSpiffeJwks",
+  GetSpiffeTrustBundle: "getSpiffeTrustBundle",
 
   // Agent Runtime
   GetAgentRuntimePreflight: "getAgentRuntimePreflight",
@@ -688,25 +698,6 @@ export const RouteId = {
   RotateOauthClientSecret: "rotateOauthClientSecret",
   DeleteOauthClient: "deleteOauthClient",
   BulkDeleteOauthClients: "bulkDeleteOauthClients",
-
-  // LLM OAuth Client Routes
-  GetLlmOauthClients: "getLlmOauthClients",
-  GetLlmOauthClientLabelValues: "llmOauthClientLabelValues",
-  GetLlmOauthClientLabelKeys: "llmOauthClientLabelKeys",
-  CreateLlmOauthClient: "createLlmOauthClient",
-  UpdateLlmOauthClient: "updateLlmOauthClient",
-  RotateLlmOauthClientSecret: "rotateLlmOauthClientSecret",
-  DeleteLlmOauthClient: "deleteLlmOauthClient",
-  BulkDeleteLlmOauthClients: "bulkDeleteLlmOauthClients",
-
-  // MCP OAuth Client Routes
-  GetMcpOauthClients: "getMcpOauthClients",
-  GetMcpOauthClientLabelValues: "mcpOauthClientLabelValues",
-  GetMcpOauthClientLabelKeys: "mcpOauthClientLabelKeys",
-  CreateMcpOauthClient: "createMcpOauthClient",
-  UpdateMcpOauthClient: "updateMcpOauthClient",
-  RotateMcpOauthClientSecret: "rotateMcpOauthClientSecret",
-  DeleteMcpOauthClient: "deleteMcpOauthClient",
 
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",

@@ -4,12 +4,12 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import OpenAppaYellModel from "@/models/openappa-yell";
 import {
   downloadOpenAppaYell,
   getOpenAppaYell,
   listOpenAppaYells,
   resolveOpenAppaYell,
+  summarizeOpenAppaYells,
 } from "@/services/openappa-yells";
 import { constructResponseSchema } from "@/types";
 import {
@@ -52,8 +52,9 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request, reply) =>
       reply.send(
-        await OpenAppaYellModel.summary({
+        await summarizeOpenAppaYells({
           organizationId: request.organizationId,
+          userId: request.user.id,
         }),
       ),
   );

@@ -5,6 +5,7 @@ import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import agentRoutes from "@/routes/agent";
 import { beforeEach, describe, expect, test } from "@/test";
 import {
+  grantRuntime,
   makeTemplate,
   useTemplateRouteTestApp,
 } from "./runtime-template.test-data";
@@ -34,14 +35,17 @@ describe("custom runtime template permission integration", () => {
     });
     const role = await makeCustomRole(ctx.organizationId, {
       permission: {
-        agent: [
-          "read",
-          "create",
-          ...(allowed ? ["configure-runtime" as const] : []),
-        ],
+        agent: ["read", "create"],
       },
     });
     await makeMember(ctx.member.id, ctx.organizationId, { role: role.role });
+    if (allowed)
+      await grantRuntime({
+        organizationId: ctx.organizationId,
+        scope: template.id,
+        userId: ctx.member.id,
+        actions: ["read", "use"],
+      });
     ctx.caller = ctx.member;
     const resolved = await ctx.app.inject({
       url: `/api/agent-runtime-templates/${template.id}`,

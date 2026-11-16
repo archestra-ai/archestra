@@ -21,6 +21,7 @@ import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { getBedrockRegion } from "@/clients/bedrock-credentials";
 import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import config from "@/config";
+import { resolveAgentRuntimeNodeSelector } from "@/k8s/agent-runtime/node-placement";
 import {
   AgentModel,
   AgentWorkspaceModel,
@@ -158,6 +159,16 @@ export async function buildAgentRunLaunchSpec(params: {
     throw new ApiError(
       500,
       "Agent Runtime requires ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL (or ARCHESTRA_INTERNAL_API_BASE_URL) so the run can reach the LLM proxy and MCP gateway",
+    );
+  }
+  // Saving an Agent checks this too, but an Agent saved while the operator
+  // allowed privileged runs keeps its setting after the flag is turned off.
+  // Every new run and every follow-up turn passes through here, so this is
+  // where the flag holds. It runs before any credential is minted.
+  if (params.runtime.privileged && !config.agentRuntime.allowPrivileged) {
+    throw new ApiError(
+      403,
+      "This Agent's background deployment is privileged, and the deployment operator has disabled privileged background deployments. An Agent administrator must turn off privileged mode on the Agent before it can run.",
     );
   }
 
@@ -580,7 +591,9 @@ export async function buildAgentRunLaunchSpec(params: {
         tiers,
       ),
       workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
-      nodeSelector: config.agentRuntime.nodeSelector,
+      nodeSelector: resolveAgentRuntimeNodeSelector({
+        privileged: params.runtime.privileged,
+      }),
       runtimeClassName: config.agentRuntime.runtimeClassName,
       imagePullSecrets: params.imagePullSecrets ?? [],
       effectiveNetworkPolicy: params.effectiveNetworkPolicy,

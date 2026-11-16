@@ -6,6 +6,24 @@ import { findExternalIdentityProviderById } from "@/services/identity-providers/
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type { ToolOwner } from "@/types";
 
+/**
+ * The identity provider a tool call's token exchange runs at: the one the
+ * tool's credential config names, else the calling agent's. Null when neither
+ * names one.
+ */
+export async function resolveExchangeIdentityProviderId(params: {
+  owner: ToolOwner;
+  identityProviderId?: string;
+}): Promise<string | null> {
+  return pickExchangeIdentityProviderId({
+    configIdentityProviderId: params.identityProviderId,
+    ownerBoundIdentityProviderId:
+      params.owner.type === "agent"
+        ? await AgentModel.findIdentityProviderId(params.owner.id)
+        : null,
+  });
+}
+
 interface EnterpriseAssertionResolution {
   assertion: string;
   identityProviderId: string;
@@ -31,8 +49,10 @@ export async function resolveEnterpriseAssertion(params: {
     ownerBoundIdentityProviderId = null;
   }
 
-  const effectiveIdentityProviderId =
-    params.identityProviderId ?? ownerBoundIdentityProviderId;
+  const effectiveIdentityProviderId = pickExchangeIdentityProviderId({
+    configIdentityProviderId: params.identityProviderId,
+    ownerBoundIdentityProviderId,
+  });
   if (!effectiveIdentityProviderId) {
     return null;
   }
@@ -91,4 +111,13 @@ export async function resolveEnterpriseAssertion(params: {
     identityProviderId: sessionToken.identityProviderId,
     providerId: sessionToken.providerId,
   };
+}
+
+// === Internal helpers ===
+
+function pickExchangeIdentityProviderId(params: {
+  configIdentityProviderId: string | undefined;
+  ownerBoundIdentityProviderId: string | null;
+}): string | null {
+  return params.configIdentityProviderId ?? params.ownerBoundIdentityProviderId;
 }

@@ -112,8 +112,7 @@ describe("OidcConfigForm", () => {
   describe("stored secrets", () => {
     // Reads redact the secret, so an edit dialog opens with a blank Client
     // Secret box. Without this hint that reads as "the credential was lost".
-    const storedNote =
-      /A value is already stored\. Leave blank to keep it, or enter a new value to replace\./;
+    const storedNote = /Stored\. Leave blank to keep it\./;
 
     it("says a saved client secret is stored when the field comes back blank", () => {
       render(

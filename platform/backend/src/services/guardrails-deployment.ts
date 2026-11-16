@@ -7,6 +7,7 @@ import AuditLogModel from "@/models/audit-log";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import UserModel from "@/models/user";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
@@ -128,6 +129,9 @@ export async function setGuardrailsDeployment(
   }
   await GuardrailsDeploymentModel.set(update);
   const after = await getGuardrailsDeployment();
+  // Back on: each repository's policy is pulled now, so what merged while
+  // enforcement was off is enforced, not the commit accepted before.
+  if (after.enabled && !before.enabled) await queueGitSyncs();
   // A switch changes what every running session and runtime may do, so the
   // moment it happened must be findable in the backend log, not only in the
   // audit log.
@@ -142,6 +146,22 @@ export async function setGuardrailsDeployment(
       : "Guardrails deployment settings changed",
   );
   return after;
+}
+
+/** Queue a pull for every organization whose policy syncs from a repository. */
+async function queueGitSyncs() {
+  try {
+    for (const {
+      organizationId,
+    } of await OpenAppaGithubSyncModel.findSyncing())
+      await OpenAppaGithubSyncModel.enqueue(organizationId);
+  } catch (error) {
+    // The schedule pulls them anyway; the switch itself has happened.
+    logger.warn(
+      { error },
+      "OpenAPPA could not queue the Git syncs after enforcement turned on",
+    );
+  }
 }
 
 function deploymentSettings(

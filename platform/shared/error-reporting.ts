@@ -1,24 +1,28 @@
 /**
  * Error reporting rules shared by the backend and the frontend.
  *
- * Every deployment reports errors to Archestra's Sentry project unless
- * `ARCHESTRA_ANALYTICS=disabled`, so a report leaves customer infrastructure
- * by default. These rules decide when reporting starts and strip what a
+ * Production deployments without an enterprise license report errors to
+ * Archestra's Sentry project unless `ARCHESTRA_ANALYTICS=disabled`, so a
+ * report leaves customer infrastructure by default. These rules decide when reporting starts and strip what a
  * report must never carry: request content, credentials, personal data, and
  * conversation content.
  */
 
 /**
  * Whether `ARCHESTRA_ANALYTICS` turns analytics and default error reporting
- * on. Unset means on only in production builds, so local development and test
- * runs stay silent. "disabled" turns it off; any other value turns it on.
+ * on. "disabled" turns it off; any other value turns it on. Unset means on
+ * only in production builds without an activated enterprise license, so local
+ * development, test runs, and enterprise deployments stay silent unless they
+ * opt in.
  */
 export function isAnalyticsEnabled(params: {
   analytics: string | undefined;
   nodeEnv: string | undefined;
+  enterpriseLicenseActivated: boolean;
 }): boolean {
   const value = params.analytics?.trim();
   if (value) return value !== "disabled";
+  if (params.enterpriseLicenseActivated) return false;
   return ["production", "prod"].includes(
     params.nodeEnv?.trim().toLowerCase() ?? "",
   );

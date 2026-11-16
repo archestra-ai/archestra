@@ -5,6 +5,7 @@ import db, { schema } from "@/database";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import {
   ActiveChatRunService,
+  ActiveChatRunShutdownError,
   activeChatRunService,
 } from "@/services/active-chat-run";
 import {
@@ -547,6 +548,51 @@ test("failInFlightRuns fails this pod's running runs and clears the set", async 
 
   // The set is cleared, so a second shutdown pass fails nothing.
   expect(await service.failInFlightRuns()).toBe(0);
+});
+
+test("failInFlightRuns aborts the in-flight run so its agent loop stops", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const service = new ActiveChatRunService(
+    new InMemoryActiveChatRunNotifier(),
+    10_000,
+    10_000,
+  );
+  const run = await service.createRun({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const abortController = new AbortController();
+  const stopPolling = service.startStopPolling({
+    runId: run?.id ?? "",
+    conversationId: conversation.id,
+    abortController,
+  });
+
+  try {
+    service.beginShutdown();
+    expect(await service.failInFlightRuns()).toBe(1);
+
+    // Without the abort the run keeps calling this pod's closing API and the
+    // user sees a raw connection error instead of a retryable restart.
+    expect(abortController.signal.aborted).toBe(true);
+    expect(abortController.signal.reason).toBeInstanceOf(
+      ActiveChatRunShutdownError,
+    );
+  } finally {
+    stopPolling();
+  }
 });
 
 test("createRun refuses new runs once shutdown has begun", async ({

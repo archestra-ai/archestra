@@ -6,6 +6,10 @@ import type {
   ImagePullSecretConfig,
 } from "@archestra/shared";
 import {
+  argumentsFromText,
+  argumentsToText,
+} from "@/components/container-deployment-fields.utils";
+import {
   desktopMcpTargetOf,
   desktopMcpTargetToApi,
 } from "@/lib/mcp/desktop-mcp";
@@ -123,12 +127,7 @@ export function transformFormToApiData(
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
     // Parse arguments string into array
-    const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
-          .split("\n")
-          .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
-      : [];
+    const argumentsArray = argumentsFromText(values.localConfig.arguments);
 
     data.localConfig = {
       command: values.localConfig.command || undefined,
@@ -282,6 +281,10 @@ export function transformFormToApiData(
           headerName: values.enterpriseManagedConfig.headerName,
         }
       : null;
+  } else if (values.authMethod === "aws_iam" && values.awsIamConfig) {
+    data.userConfig = buildStaticHeaderUserConfig(values);
+    data.oauthConfig = null;
+    data.enterpriseManagedConfig = null;
   } else if (values.authMethod === "bearer") {
     data.userConfig = buildStaticHeaderUserConfig(values, {
       authFieldName: values.includeBearerPrefix
@@ -298,6 +301,19 @@ export function transformFormToApiData(
     data.oauthConfig = null;
     data.enterpriseManagedConfig = null;
   }
+  data.awsIamConfig =
+    values.serverType === "remote" &&
+    values.authMethod === "aws_iam" &&
+    values.awsIamConfig
+      ? {
+          roleArn: values.awsIamConfig.roleArn.trim(),
+          region: values.awsIamConfig.region.trim(),
+          service: values.awsIamConfig.service.trim(),
+          ...(values.awsIamConfig.audience?.trim() && {
+            audience: values.awsIamConfig.audience.trim(),
+          }),
+        }
+      : null;
 
   // Handle labels
   if (values.labels && values.labels.length > 0) {
@@ -351,6 +367,8 @@ export function transformCatalogItemToFormValues(
   if (item.serverType === "desktop_mcp") {
     // A desktop MCP server has no authentication, whatever its name suggests.
     authMethod = "none";
+  } else if (item.awsIamConfig) {
+    authMethod = "aws_iam";
   } else if (item.enterpriseManagedConfig) {
     authMethod =
       item.enterpriseManagedConfig.assertionMode === "passthrough"
@@ -474,7 +492,7 @@ export function transformCatalogItemToFormValues(
     | undefined;
   if (item.localConfig) {
     // Convert arguments array back to string
-    const argumentsString = item.localConfig.arguments?.join("\n") || "";
+    const argumentsString = argumentsToText(item.localConfig.arguments);
 
     const config = item.localConfig;
 
@@ -557,6 +575,7 @@ export function transformCatalogItemToFormValues(
         : "",
     additionalHeaders,
     enterpriseManagedConfig: item.enterpriseManagedConfig ?? null,
+    awsIamConfig: item.awsIamConfig ?? null,
     oauthConfig,
     localConfig,
     desktopConfig:

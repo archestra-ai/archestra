@@ -7,6 +7,7 @@ import {
 import { z } from "zod";
 import { schema } from "@/database/schema";
 import { AgentTypeSchema } from "./agent";
+import { DesktopMcpArgumentsSchema } from "./desktop-mcp";
 import { InternalMcpCatalogServerTypeSchema } from "./mcp-catalog";
 import { McpServerAlertMuteSchema } from "./mcp-server-alert-mute";
 import { ResourceVisibilityScopeSchema } from "./visibility";
@@ -118,6 +119,11 @@ export const SelectMcpServerSchema = createSelectSchema(
   serverType: InternalMcpCatalogServerTypeSchema,
   scope: ResourceVisibilityScopeSchema,
   reinstallReason: McpServerReinstallReasonSchema.nullable(),
+  /**
+   * The arguments the owner of a desktop MCP installation added to the
+   * command of its catalog item; null with none.
+   */
+  desktopArguments: z.array(z.string()).nullable(),
   ownerEmail: z.string().nullable().optional(),
   catalogName: z.string().nullable().optional(),
   users: z.array(z.string()).optional(),
@@ -188,6 +194,8 @@ export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
     localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),
     userConfigValues: z.record(z.string(), z.string()).optional(),
     environmentValues: z.record(z.string(), z.string()).optional(),
+    // Only for a desktop MCP catalog item with a command.
+    desktopArguments: DesktopMcpArgumentsSchema.nullish(),
   })
   .omit({
     id: true,
@@ -241,6 +249,7 @@ export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)
   .extend({
     localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),
     reinstallReason: McpServerReinstallReasonSchema.nullable().optional(),
+    desktopArguments: DesktopMcpArgumentsSchema.nullable().optional(),
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

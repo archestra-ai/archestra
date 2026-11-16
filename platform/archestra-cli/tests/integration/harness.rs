@@ -76,6 +76,15 @@ impl TestDir {
         )
     }
 
+    /// The stdio test server with none of its options, as an admin writes a
+    /// command that each user adds arguments to.
+    pub fn stdio_command_with_no_options(&self) -> String {
+        format!(
+            "{PYTHON} '{FIXTURES}/files_mcp_server.py' '{}'",
+            self.root().display()
+        )
+    }
+
     /// As [`Self::stdio_command`]. This server writes to stderr when it
     /// starts and for each request.
     pub fn stdio_command_with_log(&self) -> String {
@@ -88,6 +97,7 @@ pub fn command_entry(channel: &str, command: &str) -> CommandEntry {
         channel: channel.to_owned(),
         name: format!("{channel} name"),
         command: command.to_owned(),
+        arguments: Vec::new(),
         enabled: true,
     }
 }
@@ -232,9 +242,14 @@ pub fn free_port() -> u16 {
 /// Reads the process id that the stdio test server wrote. Waits until the
 /// file has an id that is not `previous`.
 pub async fn server_pid(dir: &TestDir, previous: Option<u32>) -> u32 {
+    pid_in(&dir.pid_file(), previous).await
+}
+
+/// As [`server_pid`], for a test server that got another pid file.
+pub async fn pid_in(pid_file: &Path, previous: Option<u32>) -> u32 {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
     loop {
-        let pid = std::fs::read_to_string(dir.pid_file())
+        let pid = std::fs::read_to_string(pid_file)
             .ok()
             .and_then(|text| text.trim().parse::<u32>().ok());
         if let Some(pid) = pid.filter(|pid| Some(*pid) != previous) {

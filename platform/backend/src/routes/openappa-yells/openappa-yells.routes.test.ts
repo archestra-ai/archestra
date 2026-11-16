@@ -311,7 +311,7 @@ describe("OpenAPPA yells", () => {
     ).toEqual({ unresolved: 1, superyells: 0 });
   });
 
-  test("a log reader can read and resolve all organization reports", async ({
+  test("a log reader reads and resolves only their own reports", async ({
     makeUser,
     makeMember,
     makeCustomRole,
@@ -320,8 +320,8 @@ describe("OpenAPPA yells", () => {
     const role = await makeCustomRole(organizationId, {
       permission: { log: ["read"] },
     });
-    const reporter = user;
-    const other = await record("Shared report");
+    const admin = user;
+    const other = await record("Colleague's report", { superyell: true });
     await OpenAppaYellModel.storeArchive({
       id: other.id,
       organizationId,
@@ -330,32 +330,51 @@ describe("OpenAPPA yells", () => {
     user = await makeUser();
     await makeMember(user.id, organizationId, { role: role.role });
     const own = await record("Own report");
+    await OpenAppaYellModel.storeArchive({
+      id: own.id,
+      organizationId,
+      archive: gzipSync("own"),
+    });
+
+    const list = await app.inject({ url: "/api/openappa/yells" });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().data).toEqual([
+      expect.objectContaining({
+        id: own.id,
+        caller: { id: user.id, name: user.name, email: user.email },
+      }),
+    ]);
+    expect(
+      (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
+    ).toEqual({ unresolved: 1, superyells: 0 });
+    expect(
+      (await app.inject({ url: `/api/openappa/yells/${own.id}` })).statusCode,
+    ).toBe(200);
+    expect(
+      (await app.inject({ url: `/api/openappa/yells/${own.id}/archive` }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await app.inject({ url: `/api/openappa/yells/${other.id}` })).statusCode,
+    ).toBe(404);
     expect(
       (await app.inject({ url: `/api/openappa/yells/${other.id}/archive` }))
         .statusCode,
-    ).toBe(200);
-    const list = await app.inject({ url: "/api/openappa/yells" });
-    expect(list.statusCode).toBe(200);
-    expect(list.json().data).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: own.id,
-          caller: { id: user.id, name: user.name, email: user.email },
-        }),
-        expect.objectContaining({
-          id: other.id,
-          caller: {
-            id: reporter.id,
-            name: reporter.name,
-            email: reporter.email,
-          },
-        }),
-      ]),
-    );
-    expect(list.json().data).toHaveLength(2);
-    expect(
-      (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
-    ).toEqual({ unresolved: 2, superyells: 0 });
+    ).toBe(404);
+    const resolveOther = await app.inject({
+      method: "PATCH",
+      url: `/api/openappa/yells/${other.id}`,
+      payload: { resolved: true },
+    });
+    expect(resolveOther.statusCode).toBe(404);
+    const resolved = await app.inject({
+      method: "PATCH",
+      url: `/api/openappa/yells/${own.id}`,
+      payload: { resolved: true },
+    });
+    expect(resolved.statusCode, resolved.body).toBe(200);
+    expect(resolved.json().resolvedBy).toBe(user.id);
+
     const agent = await makeAgent({ organizationId, accessAllTools: true });
     const context = {
       agent,
@@ -363,29 +382,41 @@ describe("OpenAPPA yells", () => {
       organizationId,
       userId: user.id,
     };
-    const toolResult = await executeArchestraTool(
+    const listed = await executeArchestraTool(
+      "archestra__list_openappa_yells",
+      {},
+      context,
+    );
+    expect(JSON.stringify(listed.content)).toContain(own.message);
+    expect(JSON.stringify(listed.content)).not.toContain(other.message);
+    const ownTool = await executeArchestraTool(
       "archestra__get_openappa_yell",
       { id: own.id },
       context,
     );
-    expect(JSON.stringify(toolResult.content)).toContain(own.message);
-    const sharedToolResult = await executeArchestraTool(
+    expect(JSON.stringify(ownTool.content)).toContain(own.message);
+    for (const tool of [
       "archestra__get_openappa_yell",
-      { id: other.id },
-      context,
-    );
-    expect(JSON.stringify(sharedToolResult.content)).toContain(other.message);
-    expect(JSON.stringify(sharedToolResult.content)).toContain(reporter.name);
+      "archestra__resolve_openappa_yell",
+    ]) {
+      await expect(
+        executeArchestraTool(tool, { id: other.id }, context),
+      ).rejects.toMatchObject({ statusCode: 404 });
+    }
     expect(
-      (await app.inject({ url: `/api/openappa/yells/${other.id}` })).statusCode,
-    ).toBe(200);
-    const resolved = await app.inject({
-      method: "PATCH",
-      url: `/api/openappa/yells/${other.id}`,
-      payload: { resolved: true },
-    });
-    expect(resolved.statusCode, resolved.body).toBe(200);
-    expect(resolved.json().resolvedBy).toBe(user.id);
+      await OpenAppaYellModel.find({ id: other.id, organizationId }),
+    ).toMatchObject({ resolvedAt: null });
+
+    user = admin;
+    const all = (
+      await app.inject({ url: "/api/openappa/yells?status=all" })
+    ).json().data;
+    expect(all.map((row: { id: string }) => row.id)).toEqual(
+      expect.arrayContaining([own.id, other.id]),
+    );
+    expect(
+      (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
+    ).toEqual({ unresolved: 1, superyells: 1 });
   });
 
   test("links a yell to the first chat that reads it and shows it only to that chat's owner", async ({

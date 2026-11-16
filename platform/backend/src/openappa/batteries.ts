@@ -28,6 +28,7 @@ import {
   GUARDRAILS_REVISION_CONFLICT,
   guardrailsPolicyService,
 } from "@/services/guardrails-policy";
+import { openappaRepositoryIncludes } from "@/services/openappa-github-access";
 import { ApiError, GITHUB_COM_API_URL, type GitHubUserId } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import type {
@@ -39,6 +40,7 @@ import type {
   BatteryMatchEvidence,
   BatteryMatches,
   BatteryPackageFile,
+  BatteryPolicySource,
   BatteryScope,
   BatterySummary,
   CompositionView,
@@ -284,7 +286,7 @@ class OpenAppaBatteriesService {
   async policyDeclarations(
     organizationId: string,
   ): Promise<PolicyDeclarationsView> {
-    const { policy, batteries, unusedAliases } =
+    const { policy, batteries, unusedAliases, included } =
       await this.current(organizationId);
     const [sync, bindings] = await Promise.all([
       OpenAppaGithubSyncModel.find(organizationId),
@@ -297,6 +299,7 @@ class OpenAppaBatteriesService {
         served: servedOf(composition, battery),
       })),
       unusedAliases,
+      repositoryFiles: (included ?? []).map(({ path }) => ({ path })),
       rootRevision: policy.rootRevision,
       lastError: policy.lastError,
       composition,
@@ -334,7 +337,26 @@ class OpenAppaBatteriesService {
   }
 
   /** Show the exact policy bytes an include currently resolves to. */
-  async policySource(organizationId: string, entry: string) {
+  async policySource(
+    organizationId: string,
+    entry: string,
+  ): Promise<BatteryPolicySource> {
+    // A file of the policy repository: the bytes the composition folds in,
+    // read at the accepted commit.
+    if (openappaRepositoryIncludes.isRepositoryFile(entry)) {
+      const { included } = await this.current(organizationId);
+      const content = included?.some((file) => file.path === entry)
+        ? (
+            await openappaRepositoryIncludes.readAccepted({
+              organizationId,
+              paths: [entry],
+            })
+          ).get(entry)
+        : undefined;
+      if (content === undefined)
+        throw new ApiError(404, "This policy file is no longer included");
+      return { entry, name: entry, kind: "repository", content };
+    }
     const root = await guardrailsPolicyService.get(organizationId);
     const resolution = await openappaDeclarations.resolve({
       organizationId,
@@ -353,6 +375,7 @@ class OpenAppaBatteriesService {
     return {
       entry: included.entry,
       name: included.name,
+      kind: "battery",
       content: deployedSource(deployed),
     };
   }

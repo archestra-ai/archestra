@@ -4,7 +4,7 @@ import { openappaGithubSyncTable } from "@/database/schemas/openappa-github-sync
 import { GitProviderSchema } from "./git-host";
 import { PolicyTestDirectorySchema } from "./openappa-policy-tests";
 
-const AppaSyncIntervalSchema = z.enum(["15m", "1h", "1d"]);
+export const AppaSyncIntervalSchema = z.enum(["5m", "15m", "1h", "1d"]);
 export type AppaSyncInterval = z.infer<typeof AppaSyncIntervalSchema>;
 
 const AppaGithubRefSchema = z
@@ -76,6 +76,12 @@ export const AppaGithubSourceSchema = z
     selfService: z.boolean().default(false),
     /** Where each server's rules file lives, beside the policy file. */
     selfServiceDirectory: SelfServiceDirectorySchema.default("mcp"),
+    /**
+     * Merge each self-served rules pull request once its policy check
+     * passes. GitHub App sources only; ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE,
+     * while set, wins over it.
+     */
+    selfServiceAutoMerge: z.boolean().default(false),
   })
   .strict()
   .refine(
@@ -123,6 +129,8 @@ export const CreateAppaGithubRepositorySchema = z
     selfService: z.boolean().optional(),
     /** Where each server's rules file lives, beside the policy file; mcp unless set. */
     selfServiceDirectory: SelfServiceDirectorySchema.optional(),
+    /** Merge each self-served rules pull request once its check passes; off unless set. */
+    selfServiceAutoMerge: z.boolean().optional(),
   })
   .strict()
   .refine(
@@ -150,7 +158,7 @@ export const AppaGithubAppGrantsSchema = z.object({
   installationUrl: z.string().nullable(),
   permissions: z.array(
     z.object({
-      name: z.enum(["contents", "pull_requests", "checks"]),
+      name: z.enum(["contents", "pull_requests", "checks", "workflows"]),
       granted: z.boolean(),
     }),
   ),
@@ -251,12 +259,79 @@ export const AppaSelfServiceSchema = z.object({
     .optional(),
   /**
    * Off, a branch rule that still requires the policy check: Archestra
-   * posts the check as skipped until the administrator removes the rule.
+   * keeps posting the check, and a move or a stop waits until the
+   * administrator removes the rule.
    */
   leftoverRule: z
     .object({ checkName: z.string(), url: z.string().nullable() })
     .optional(),
+  /**
+   * Whether the GitHub App merges each self-served rules pull request once
+   * its policy check passes, and what decides it.
+   */
+  autoMerge: z.object({
+    /** In force: the environment variable while one is set, else the saved setting. */
+    enabled: z.boolean(),
+    /** The setting saved with the Git sync source. */
+    setting: z.boolean(),
+    /** The environment variable that sets it, while one does, with its value. */
+    environment: z
+      .object({ variable: z.string(), value: SelfServiceChoiceSchema })
+      .optional(),
+  }),
 });
+/**
+ * The files Archestra keeps beside the policy in its repository, from the
+ * bundled template: the validation workflow, the Dependabot configuration and
+ * the READMEs. Read at the accepted commit on each sync; what differs from the
+ * template is proposed as a pull request (a merge request on GitLab).
+ */
+export const AppaTemplateFilesSchema = z.object({
+  /** The template commit the bundled files come from. */
+  templateCommit: z.string(),
+  /**
+   * `current`: every file matches the template. `pull_open`: the pull request
+   * that updates them waits; `withheld` names the files it leaves out for a
+   * permission the GitHub App lacks. `needs_permission`: only such files
+   * differ, so no pull request can open. `not_applicable`: the policy lives
+   * elsewhere than the template's layout, so its files are not compared.
+   * `unavailable`: the files could not be read or proposed for now; `detail`
+   * says why.
+   */
+  state: z.enum([
+    "current",
+    "pull_open",
+    "needs_permission",
+    "not_applicable",
+    "unavailable",
+  ]),
+  /** The files that differ from the template, as repository paths. */
+  paths: z.array(z.string()),
+  /** Of `paths`, the workflow files the pull request leaves out until the App may write workflows. */
+  withheld: z.array(z.string()).optional(),
+  pull: z.object({ number: z.number().int(), url: z.string() }).optional(),
+  detail: z.string().optional(),
+  checkedAt: z.string(),
+});
+export type AppaTemplateFiles = z.infer<typeof AppaTemplateFilesSchema>;
+
+/**
+ * The policy check Archestra posts on the repository's pull requests, whether
+ * the credential may post it, and the ruleset that requires it when
+ * self-service is on.
+ */
+export const AppaPolicyCheckSchema = z.object({
+  name: z.string(),
+  /**
+   * `posted`: the check goes on every pull request. `refused`: the credential
+   * was refused for it, and `detail` says what to grant. `none`: the source has
+   * no credential that posts checks (a token, a public read, or GitLab).
+   */
+  state: z.enum(["posted", "refused", "none"]),
+  detail: z.string().optional(),
+});
+export type AppaPolicyCheck = z.infer<typeof AppaPolicyCheckSchema>;
+
 export const AppaGithubSyncStatusSchema = z.object({
   enabled: z.boolean(),
   source: AppaGithubSyncSchema.nullable(),
@@ -267,6 +342,10 @@ export const AppaGithubSyncStatusSchema = z.object({
   githubWebUrl: z.string(),
   /** Which host the source lives on; links and wording follow it. */
   provider: GitProviderSchema,
+  /** The template files beside the policy, as the last sync found them; absent before the first sync. */
+  templateFiles: AppaTemplateFilesSchema.optional(),
+  /** The policy check on the repository's pull requests; absent without a connected source. */
+  check: AppaPolicyCheckSchema.optional(),
 });
 export const AppaGithubSyncActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("sync") }).strict(),
@@ -281,6 +360,16 @@ export const AppaGithubSyncActionSchema = z.discriminatedUnion("action", [
       enabled: z.boolean(),
       /** The self-service folder to use when turning on; the saved one unless set. */
       directory: SelfServiceDirectorySchema.optional(),
+    })
+    .strict(),
+  /**
+   * Turn auto-merge of self-served pull requests on or off; refused while
+   * the environment variable sets it, and while self-service is off.
+   */
+  z
+    .object({
+      action: z.literal("self_service_auto_merge"),
+      enabled: z.boolean(),
     })
     .strict(),
   /**

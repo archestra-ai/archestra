@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
+  AGENT_CATALOG_NAMES,
+  builtInAgentRuntimeForScope,
   isBuiltInCatalogId,
   ORGANIZATION_WIDE_RESOURCES,
   type ResourcePermissionAction,
@@ -8,6 +10,7 @@ import {
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import db, { schema } from "@/database";
+import AgentRuntimeTemplateModel from "./agent-runtime-template";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
@@ -349,6 +352,25 @@ export default class ResourcePermissionTargetModel {
       // An environment is a place, not a possession: it has no author and no
       // audience of its own. Its whole access story is the grants below.
       return { ...target, authorId: null };
+    }
+    if (params.resource === "agentRuntime") {
+      // A runtime is an organization setting, not a row: a maintained one is
+      // named by its fixed scope, a custom one lives in the runtime settings.
+      const builtIn = builtInAgentRuntimeForScope(params.id);
+      if (builtIn) {
+        return {
+          id: params.id,
+          name: AGENT_CATALOG_NAMES[builtIn],
+          authorId: null,
+        };
+      }
+      const { templates } = await AgentRuntimeTemplateModel.getSettings(
+        params.organizationId,
+      );
+      const template = templates.find(({ id }) => id === params.id);
+      return template
+        ? { id: template.id, name: template.name, authorId: null }
+        : null;
     }
     if (params.resource === "oauthClient") {
       // Both kinds share the OAuth provider's table; the registration's

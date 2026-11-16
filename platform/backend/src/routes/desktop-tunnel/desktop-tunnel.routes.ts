@@ -42,7 +42,7 @@ const desktopTunnelRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetDesktopTunnel,
         description:
-          "Tunnel metadata for the tunnel client, with the desktop MCP catalog items its user installed and the command or URL of each.",
+          "Tunnel metadata for the tunnel client, with the desktop MCP catalog items its user installed, the command or URL of each, and the arguments the user added to the command.",
         tags: ["Desktop Tunnel"],
         params: TunnelParamsSchema,
         response: constructResponseSchema(
@@ -55,6 +55,10 @@ const desktopTunnelRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 id: z.string(),
                 name: z.string(),
                 command: z.string().nullable(),
+                // What the user added for their own installation. The
+                // tunnel client puts them after the arguments of the
+                // command; one that does not know the key ignores them.
+                arguments: z.array(z.string()),
                 url: z.string().nullable(),
                 enabled: z.boolean(),
               }),
@@ -90,6 +94,7 @@ const desktopTunnelRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: server.catalogId,
             name: server.name,
             command: server.command,
+            arguments: server.arguments,
             url: server.url,
             enabled: server.enabled,
           }),
@@ -189,10 +194,15 @@ const desktopTunnelRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // operation; progress is not delivered to the caller yet, so there
         // is nothing to store.
         if (body.channel === DESKTOP_BRIDGE_CHANNEL && body.resp_json) {
-          await desktopBridgeControlService.recordState({
+          const running = await desktopBridgeControlService.recordState({
             device,
             message: body.resp_json,
           });
+          // An installation that waits for one of these MCP servers is
+          // completed now, not at the next poll: after a change of its
+          // config, the report is what says that the MCP server started
+          // again. The report does not wait for it.
+          desktopMcpInstallService.completeReadyChannels(device, running);
         }
         return { status: "ok" };
       }

@@ -25,7 +25,11 @@ const {
   updateServiceAccountToken,
 } = archestraApiSdk;
 
-export function useServiceAccounts(params?: { labels?: string }) {
+export function useServiceAccounts(params?: {
+  labels?: string;
+  /** Defer loading, e.g. until a picker opens. */
+  enabled?: boolean;
+}) {
   const { data: canReadServiceAccounts } = useHasPermissions({
     serviceAccount: ["read"],
   });
@@ -42,7 +46,7 @@ export function useServiceAccounts(params?: { labels?: string }) {
 
       return data ?? [];
     },
-    enabled: !!canReadServiceAccounts,
+    enabled: !!canReadServiceAccounts && (params?.enabled ?? true),
   });
 }
 

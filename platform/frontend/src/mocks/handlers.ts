@@ -2,6 +2,7 @@
 // barrel (`@archestra/shared`) transitively imports a JSON module without an
 // import attribute, which the Playwright integration-test ESM loader rejects.
 // `client.ts` depends only on zod.
+import { AGENT_CATALOG_IDS } from "@archestra/shared";
 import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import {
   type ClientFilter,
@@ -165,11 +166,10 @@ const LABELLED_ENTITY_PATHS = [
   "/api/knowledge-bases",
   "/api/knowledge-files",
   "/api/limits",
-  "/api/llm-oauth-clients",
   "/api/llm-provider-api-keys",
   "/api/llm-provider-models",
   "/api/llm-virtual-keys",
-  "/api/mcp-oauth-clients",
+  "/api/oauth-clients",
   "/api/plugins",
   "/api/service-accounts",
   "/api/skills",
@@ -415,6 +415,15 @@ export const handlers: HttpHandler[] = [
   }),
   ...getJson("/api/organization", organizationSeed),
   ...getJson("/api/agent-runtime-templates", []),
+  ...getJson("/api/agent-runtime-templates/built-ins", []),
+  ...getJson("/api/agent-runtime-templates/access", {
+    runtimes: AGENT_CATALOG_IDS.map((id) => ({
+      id,
+      canUse: true,
+      canConfigure: true,
+    })),
+    canConfigureAny: true,
+  }),
   ...getJson("/api/agent-runtime-templates/settings", {
     revision: 0,
     templates: [],
@@ -686,6 +695,8 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/agents/:id/default-suggested-prompts", []),
   ...getJson("/api/agents/:id/delegations", []),
   ...getJson("/api/agents/:id/a2a-delegations", []),
+  ...getJson("/api/agents/:id/identity-bindings", { bindings: [] }),
+  ...putJson("/api/agents/:id/identity-bindings", { bindings: [] }),
   ...getJson("/api/a2a/remote-agents", []),
   ...getJson("/api/agents/default-mcp-gateway", null),
   // The agents list asks which of the caller's agents is their personal
@@ -744,21 +755,6 @@ export const handlers: HttpHandler[] = [
   ...patchJson("/api/llm-provider-api-keys/:id", makeLlmProviderApiKey()),
   ...deleteJson("/api/llm-provider-api-keys/:id"),
 
-  // MCP OAuth clients (bare array, unlike the LLM half's envelope) — the
-  // unified OAuth Clients page reads both.
-  ...getJson("/api/mcp-oauth-clients", []),
-  // LLM OAuth clients (paginated envelope) — used by the OAuth Clients page.
-  ...getJson("/api/llm-oauth-clients", {
-    data: [],
-    pagination: {
-      currentPage: 1,
-      limit: 20,
-      total: 0,
-      totalPages: 0,
-      hasNext: false,
-      hasPrev: false,
-    },
-  }),
   // Managed OAuth clients (paginated envelope) — the LLM keys delete dialog
   // lists the clients that map the key from here, because this list carries
   // the current-and-future-providers flag the dialog needs.

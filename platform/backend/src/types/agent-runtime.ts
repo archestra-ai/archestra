@@ -239,6 +239,13 @@ export const MissingAgentRuntimeCredentialSchema = z.object({
    * this by connecting anything; an admin has to run the Agent or change it.
    */
   adminOnly: z.boolean().optional(),
+  /**
+   * True when the caller connected this credential before but the stored
+   * connection no longer works (for example the organization's GitHub App
+   * changed), so they must connect it again. Reported whether or not the
+   * declaration is required: they meant to use it.
+   */
+  reconnect: z.boolean().optional(),
 });
 export type MissingAgentRuntimeCredential = z.infer<
   typeof MissingAgentRuntimeCredentialSchema
@@ -265,9 +272,13 @@ export class AgentRuntimeCredentialsRequiredError extends ApiError {
   constructor(agentId: string, missing: MissingAgentRuntimeCredential[]) {
     super(
       409,
-      `This Agent's Agent Runtime needs credentials you have not set up yet: ${missing
-        .map((entry) => entry.label)
-        .join(", ")}`,
+      missing.every((entry) => entry.reconnect)
+        ? `This Agent's Agent Runtime needs you to connect again: ${missing
+            .map((entry) => entry.label)
+            .join(", ")}`
+        : `This Agent's Agent Runtime needs credentials you have not set up yet: ${missing
+            .map((entry) => entry.label)
+            .join(", ")}`,
     );
     this.name = "AgentRuntimeCredentialsRequiredError";
     this.agentId = agentId;

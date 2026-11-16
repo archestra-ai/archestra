@@ -310,6 +310,12 @@ export class GitHostClient {
     sourceBranch: string;
     /** The request's head commit, which outlives its source branch. */
     sha: string | null;
+    /**
+     * The commit a merge left on the target branch: the merge or squash
+     * commit, or the head itself after a fast-forward. Null until merged.
+     */
+    mergeCommitSha: string | null;
+    mergedAt: string | null;
     mergeable: boolean | null;
   }> {
     const request = await this.json<{
@@ -318,12 +324,23 @@ export class GitHostClient {
       state: string;
       source_branch: string;
       sha?: string | null;
+      merge_commit_sha?: string | null;
+      squash_commit_sha?: string | null;
+      merged_at?: string | null;
       detailed_merge_status?: string;
     }>(`${this.repoApi(repo)}/merge_requests/${iid}`);
     return {
       iid: request.iid,
       webUrl: request.web_url,
       sha: request.sha ?? null,
+      mergeCommitSha:
+        request.state === "merged"
+          ? (request.merge_commit_sha ??
+            request.squash_commit_sha ??
+            request.sha ??
+            null)
+          : null,
+      mergedAt: request.merged_at ?? null,
       state:
         request.state === "merged"
           ? "merged"
@@ -336,6 +353,19 @@ export class GitHostClient {
           ? null
           : request.detailed_merge_status === "mergeable",
     };
+  }
+
+  /** Whether `commit` has `ancestor` in its history, on GitLab. */
+  async gitlabContains(
+    repo: string,
+    commit: string,
+    ancestor: string,
+  ): Promise<boolean> {
+    if (commit === ancestor) return true;
+    const base = await this.json<{ id?: string }>(
+      `${this.repoApi(repo)}/repository/merge_base?refs[]=${encodeURIComponent(ancestor)}&refs[]=${encodeURIComponent(commit)}`,
+    );
+    return base.id === ancestor;
   }
 
   /** The commit a GitLab branch points at. */

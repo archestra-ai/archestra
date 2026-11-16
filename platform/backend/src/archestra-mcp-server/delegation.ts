@@ -1,6 +1,8 @@
 import {
   AGENT_TOOL_PREFIX,
+  LOAD_BALANCED_RUNTIME_ROUTER_META_KEY,
   type ModelSelection,
+  normalizeSubagentLoadBalancingConfig,
   SELF_FORK_TOOL_NAME,
   SubagentModelTierSchema,
   slugify,
@@ -43,6 +45,10 @@ import {
   promptWithContract,
   SPAWN_TARGET_MISMATCH,
 } from "@/services/agent-runtime/runtime-crossing";
+import {
+  callerUsesImplicitLoadBalancedRunStarter,
+  resolveRouterRuntimePoolCandidateIds,
+} from "@/services/agent-subagent-exclusions";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { type Agent, ApiError } from "@/types";
@@ -124,16 +130,20 @@ export async function getAgentTools(context: {
   /** The caller's own delegation chain; a fork's ends in its agent twice. */
   delegationChain?: string;
   oauthExecution?: A2AOAuthExecution;
+  /** Whether the caller is a machine OAuth application barred from Agent Runtime. */
+  disallowOAuthApp?: boolean;
 }): Promise<Tool[]> {
   const { agentId, organizationId, userId, skipAccessCheck, lookups } = context;
 
   // Delegation never crosses environment boundaries (null is the Default
   // environment), mirroring tool isolation: in both modes only same-environment
   // targets are advertised.
-  const environmentId = lookups
-    ? await lookups.agentEnvironmentId(agentId)
+  const callerGatewayAgent = lookups
+    ? await lookups.gatewayAgent(agentId)
+    : await AgentModel.findGatewayAgentById(agentId);
+  const environmentId = callerGatewayAgent
+    ? callerGatewayAgent.environmentId
     : await AgentModel.findEnvironmentId(agentId);
-
   // External A2A targets are always explicit, including when local subagents
   // use Auto mode. Assigning an external credential is an egress decision and
   // must never be widened by a dynamic local-agent setting.
@@ -141,6 +151,27 @@ export async function getAgentTools(context: {
   // per-environment network-policy runtime. Fail closed for environment-bound
   // agents until connections can be bound to and dialed through that runtime.
   const realUserId = userId && userId !== "system" ? userId : undefined;
+  const runtimeCapableActor = hasRuntimeCapableDelegationActor({
+    realUserId,
+    oauthExecution: context.oauthExecution,
+    disallowOAuthApp: context.disallowOAuthApp,
+  });
+  // Hide individual `agent__<runtime_worker>` schemas only when the canonical
+  // `start_agent_run` pooled starter is actually exposed and RBAC-permitted for
+  // this caller (load balancing enabled, acting user has `agent:read`,
+  // `start_agent_run` not excluded in Auto-tools mode, and >=1 candidate
+  // runtime subagent). If `start_agent_run` is excluded or RBAC-denied, keep
+  // `agent__<runtime_worker>` tools visible so the caller retains a way to
+  // launch runtime work.
+  const hideRuntimeWorkerTools =
+    callerGatewayAgent != null &&
+    runtimeCapableActor &&
+    (await callerUsesImplicitLoadBalancedRunStarter({
+      agent: callerGatewayAgent,
+      actorUserId: realUserId,
+      lookups,
+      disallowOAuthApp: context.disallowOAuthApp,
+    }));
   const attestable = await isGuardrailsV2Active();
   const outboundTargets = environmentId
     ? []
@@ -165,8 +196,8 @@ export async function getAgentTools(context: {
   // fail-closed gate mirrors the Auto-tool `dynamicAccessContext` gate.
   if (
     realUserId &&
-    (lookups
-      ? await lookups.agentAccessAllSubagents(agentId)
+    (callerGatewayAgent
+      ? callerGatewayAgent.accessAllSubagents
       : await AgentModel.getAccessAllSubagents(agentId))
   ) {
     const localTools = await buildAutoDelegationTools({
@@ -175,6 +206,8 @@ export async function getAgentTools(context: {
       userId: realUserId,
       environmentId,
       attestable,
+      hideRuntimeWorkerTools,
+      runtimeCapableActor,
     });
     return finishDelegationTools(
       context,
@@ -191,6 +224,7 @@ export async function getAgentTools(context: {
 
   // Filter by user access if user ID is provided (skip for A2A/ChatOps flows)
   let accessibleTools = allToolsWithDetails;
+  let resolvedIsAgentAdmin: boolean | undefined;
   if (userId && !skipAccessCheck) {
     // Check if user has agent admin permission directly (don't trust caller)
     const isAgentAdmin = await ResourcePermissions.allows({
@@ -201,6 +235,7 @@ export async function getAgentTools(context: {
       action: "update",
       lookups,
     });
+    resolvedIsAgentAdmin = isAgentAdmin;
 
     const userAccessibleAgentIds =
       await AgentTeamModel.getUserAccessibleAgentIds(
@@ -228,13 +263,39 @@ export async function getAgentTools(context: {
     "Fetched agent delegation tools from database",
   );
 
+  const visibleTools = hideRuntimeWorkerTools
+    ? accessibleTools.filter((t) => !t.targetAgent.hasRuntime)
+    : accessibleTools;
+  const routerMetadata =
+    runtimeCapableActor && realUserId
+      ? await resolveLoadBalancedRouterPools({
+          callerAgentId: agentId,
+          organizationId,
+          actorUserId: realUserId,
+          actorIsAgentAdmin:
+            realUserId === userId ? resolvedIsAgentAdmin : undefined,
+          skipAccessCheck,
+          targets: visibleTools.map((t) => ({
+            id: t.targetAgent.id,
+            name: t.targetAgent.name,
+            toolName: t.tool.name,
+            hasRuntime: t.targetAgent.hasRuntime,
+            hasSubagentLoadBalancing: t.targetAgent.hasSubagentLoadBalancing,
+          })),
+        })
+      : EMPTY_ROUTER_POOL_METADATA;
+
   // Convert DB tools to MCP Tool format
-  const localTools = accessibleTools.map((t) =>
+  const localTools = visibleTools.map((t) =>
     buildDelegationToolDescriptor({
       name: t.tool.name,
       targetAgent: t.targetAgent,
       inputSchema: t.tool.parameters as Tool["inputSchema"],
       attestable,
+      routerPoolNames: routerMetadata.poolNamesByRouterId.get(t.targetAgent.id),
+      managingRouters: routerMetadata.managingRoutersByWorkerId.get(
+        t.targetAgent.id,
+      ),
     }),
   );
   return finishDelegationTools(
@@ -249,6 +310,10 @@ export async function handleDelegation(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
+  if (context.suppressContentLogging) {
+    return errorResult("Agent delegation is not available in encrypted chats.");
+  }
+
   const { agentId, organizationId, tokenAuth } = context;
 
   const message = args?.message as string;
@@ -355,20 +420,53 @@ export async function handleDelegation(
 
   // Agent Runtime is a capability of the target Agent, not a separate
   // invocation syntax. The ordinary agent__* delegation tool therefore turns
-  // into a detached durable task whenever that target has a runtime. A
-  // direct conversation with the same Agent never enters this path and stays
-  // in the foreground loop.
+  // into a detached durable task whenever that target has a runtime or is a
+  // foreground load-balanced router over runtime subagents (binding the
+  // winning runtime child directly to the caller's session). A direct
+  // conversation with the same Agent never enters this path and stays in the
+  // foreground loop.
   // A fork is a copy of the running caller, so it always runs in this process.
+  const disallowOAuthApp = Boolean(
+    tokenAuth?.oauthClientId && !tokenAuth.isUserToken,
+  );
+  const runtimeCapableActor = hasRuntimeCapableDelegationActor({
+    realUserId,
+    oauthExecution: tokenAuth?.oauthExecution,
+    disallowOAuthApp,
+  });
   const targetAgent = await AgentModel.findById(target.id);
-  if (!selfFork && targetAgent && resolveAgentRuntime(targetAgent)) {
+  const targetHasRuntime = Boolean(
+    targetAgent && resolveAgentRuntime(targetAgent),
+  );
+  const targetRouterCandidateIds =
+    !selfFork &&
+    runtimeCapableActor &&
+    targetAgent &&
+    !targetHasRuntime &&
+    normalizeSubagentLoadBalancingConfig(targetAgent.subagentLoadBalancing)
+      ?.enabled === true
+      ? await resolveRouterRuntimePoolCandidateIds({
+          routerAgent: targetAgent,
+          actorUserId: realUserId,
+          callerAgentId: agentId,
+        })
+      : [];
+  const targetIsLoadBalancedRouter = targetRouterCandidateIds.length > 0;
+  if (
+    !selfFork &&
+    targetAgent &&
+    (targetHasRuntime || targetIsLoadBalancedRouter)
+  ) {
     const callerAgent = await AgentModel.findById(agentId);
     const loadBalancingEnabled =
-      callerAgent?.subagentLoadBalancing?.enabled === true;
+      normalizeSubagentLoadBalancingConfig(callerAgent?.subagentLoadBalancing)
+        ?.enabled === true;
     logger.info(
       {
         agentId,
         targetAgentId: target.id,
         targetAgentName: target.name,
+        targetIsLoadBalancedRouter,
         loadBalancingEnabled,
         organizationId,
         userId: userId || "system",
@@ -376,7 +474,9 @@ export async function handleDelegation(
       "Starting background task from agent delegation",
     );
     return startDelegatedTask({
-      ...(loadBalancingEnabled ? {} : { agentId: target.id }),
+      ...(loadBalancingEnabled && !targetIsLoadBalancedRouter
+        ? {}
+        : { agentId: target.id }),
       message,
       context: context.agent
         ? context
@@ -612,8 +712,18 @@ async function buildAutoDelegationTools(params: {
   userId: string;
   environmentId: string | null;
   attestable: boolean;
+  hideRuntimeWorkerTools: boolean;
+  runtimeCapableActor: boolean;
 }): Promise<Tool[]> {
-  const { agentId, organizationId, userId, environmentId, attestable } = params;
+  const {
+    agentId,
+    organizationId,
+    userId,
+    environmentId,
+    attestable,
+    hideRuntimeWorkerTools,
+    runtimeCapableActor,
+  } = params;
 
   const isAgentAdmin = await ResourcePermissions.allows({
     userId: userId,
@@ -636,7 +746,10 @@ async function buildAutoDelegationTools(params: {
 
   const excluded = new Set(excludedIds);
   const seenNames = new Set<string>();
-  const tools: Tool[] = [];
+  const dedupedTargets: Array<{
+    name: string;
+    targetAgent: (typeof targets)[number];
+  }> = [];
 
   for (const targetAgent of sortDelegationTargets(targets)) {
     if (excluded.has(targetAgent.id)) {
@@ -650,15 +763,41 @@ async function buildAutoDelegationTools(params: {
       continue;
     }
     seenNames.add(name);
-    tools.push(
-      buildDelegationToolDescriptor({
-        name,
-        targetAgent,
-        inputSchema: DELEGATION_INPUT_JSON_SCHEMA,
-        attestable,
-      }),
-    );
+    if (hideRuntimeWorkerTools && targetAgent.hasRuntime) {
+      continue;
+    }
+    dedupedTargets.push({ name, targetAgent });
   }
+
+  const routerMetadata = runtimeCapableActor
+    ? await resolveLoadBalancedRouterPools({
+        callerAgentId: agentId,
+        organizationId,
+        actorUserId: userId,
+        actorIsAgentAdmin: isAgentAdmin,
+        callerExcludedIds: excluded,
+        targets: dedupedTargets.map(({ name, targetAgent }) => ({
+          id: targetAgent.id,
+          name: targetAgent.name,
+          toolName: name,
+          hasRuntime: targetAgent.hasRuntime,
+          hasSubagentLoadBalancing: targetAgent.hasSubagentLoadBalancing,
+        })),
+      })
+    : EMPTY_ROUTER_POOL_METADATA;
+
+  const tools = dedupedTargets.map(({ name, targetAgent }) =>
+    buildDelegationToolDescriptor({
+      name,
+      targetAgent,
+      inputSchema: DELEGATION_INPUT_JSON_SCHEMA,
+      attestable,
+      routerPoolNames: routerMetadata.poolNamesByRouterId.get(targetAgent.id),
+      managingRouters: routerMetadata.managingRoutersByWorkerId.get(
+        targetAgent.id,
+      ),
+    }),
+  );
 
   logger.debug(
     {
@@ -799,6 +938,254 @@ function noDelegationConfiguredError(targetAgentSlug: string): CallToolResult {
   );
 }
 
+type RouterPoolReference = {
+  routerName: string;
+  routerToolName: string;
+};
+
+type RouterPoolMetadata = {
+  poolNamesByRouterId: ReadonlyMap<string, string[]>;
+  managingRoutersByWorkerId: ReadonlyMap<string, RouterPoolReference[]>;
+};
+
+const EMPTY_ROUTER_POOL_METADATA: RouterPoolMetadata = {
+  poolNamesByRouterId: new Map(),
+  managingRoutersByWorkerId: new Map(),
+};
+
+/**
+ * Agent Runtime launches require a real user or service-account actor and are
+ * disallowed for OAuth applications. Callers without a runtime-capable actor
+ * (`"system"` sentinel turns, org/team gateway tokens without `userId`, and
+ * OAuth application tokens) cannot launch runtime pools via `startDelegatedTask`,
+ * so load-balanced router targets (`hasRuntime === false`) must stay on
+ * synchronous in-process delegation (`executeA2AMessage`) and must not be
+ * advertised as background runtime routers.
+ */
+function hasRuntimeCapableDelegationActor(params: {
+  realUserId?: string;
+  oauthExecution?: A2AOAuthExecution;
+  disallowOAuthApp?: boolean;
+}): boolean {
+  return (
+    Boolean(params.realUserId) &&
+    !params.oauthExecution &&
+    !params.disallowOAuthApp
+  );
+}
+
+async function resolveLoadBalancedRouterPools(params: {
+  callerAgentId: string;
+  organizationId: string;
+  actorUserId: string;
+  actorIsAgentAdmin?: boolean;
+  skipAccessCheck?: boolean;
+  callerExcludedIds?: ReadonlySet<string>;
+  targets: ReadonlyArray<{
+    id: string;
+    name: string;
+    toolName: string;
+    hasRuntime: boolean;
+    hasSubagentLoadBalancing: boolean;
+  }>;
+}): Promise<RouterPoolMetadata> {
+  const routerTargets = params.targets.filter(
+    (target) => !target.hasRuntime && target.hasSubagentLoadBalancing,
+  );
+  if (routerTargets.length === 0) {
+    return EMPTY_ROUTER_POOL_METADATA;
+  }
+
+  const [callerExcludedIds, routerConfigs] = await Promise.all([
+    params.callerExcludedIds
+      ? Promise.resolve(null)
+      : AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
+          params.callerAgentId,
+        ),
+    AgentModel.findRouterPoolConfigsByOrganizationIdAndIds({
+      organizationId: params.organizationId,
+      agentIds: routerTargets.map((router) => router.id),
+    }),
+  ]);
+  const callerExcludedSet =
+    params.callerExcludedIds ?? new Set(callerExcludedIds ?? []);
+  const routerConfigById = new Map(
+    routerConfigs
+      .filter(
+        (cfg) =>
+          normalizeSubagentLoadBalancingConfig(cfg.subagentLoadBalancing)
+            ?.enabled === true,
+      )
+      .map((cfg) => [cfg.id, cfg] as const),
+  );
+  if (routerConfigById.size === 0) {
+    return EMPTY_ROUTER_POOL_METADATA;
+  }
+
+  const nameByAgentId = new Map(
+    params.targets.map((target) => [target.id, target.name] as const),
+  );
+  const autoRouterIds: string[] = [];
+  const manualRouterIds: string[] = [];
+
+  for (const router of routerTargets) {
+    const cfg = routerConfigById.get(router.id);
+    if (!cfg) continue;
+    if (cfg.accessAllSubagents) {
+      autoRouterIds.push(router.id);
+    } else {
+      manualRouterIds.push(router.id);
+    }
+  }
+
+  const needsActorAccessLookup =
+    autoRouterIds.length > 0 ||
+    (!params.skipAccessCheck && manualRouterIds.length > 0);
+  const isAgentAdmin = needsActorAccessLookup
+    ? (params.actorIsAgentAdmin ??
+      (await ResourcePermissions.allows({
+        userId: params.actorUserId,
+        organizationId: params.organizationId,
+        resource: "agent",
+        scope: "*",
+        action: "update",
+      })))
+    : false;
+  const filterManualByActorAccess = !params.skipAccessCheck && !isAgentAdmin;
+
+  const accessibleEnvironmentKeys = new Map<string, string | null>();
+  for (const router of routerTargets) {
+    const cfg = routerConfigById.get(router.id);
+    if (!cfg) continue;
+    if (cfg.accessAllSubagents || filterManualByActorAccess) {
+      const envKey = cfg.environmentId ?? "__default__";
+      if (!accessibleEnvironmentKeys.has(envKey)) {
+        accessibleEnvironmentKeys.set(envKey, cfg.environmentId);
+      }
+    }
+  }
+
+  const [
+    assignedByManualRouter,
+    autoExcludedByRouter,
+    accessibleTargetsByEnvKey,
+  ] = await Promise.all([
+    manualRouterIds.length > 0
+      ? AgentModel.findAssignedRuntimeSubagentIdsByAgents(manualRouterIds)
+      : Promise.resolve(new Map<string, string[]>()),
+    autoRouterIds.length > 0
+      ? AgentExcludedSubagentModel.findTargetAgentIdsByAgents(autoRouterIds)
+      : Promise.resolve(new Map<string, Set<string>>()),
+    accessibleEnvironmentKeys.size > 0
+      ? (async () => {
+          const entries = await Promise.all(
+            [...accessibleEnvironmentKeys.entries()].map(
+              async ([envKey, environmentId]) => {
+                const targets =
+                  await AgentModel.findAccessibleDelegationTargets({
+                    userId: params.actorUserId,
+                    isAdmin: isAgentAdmin,
+                    organizationId: params.organizationId,
+                    includeDetails: false,
+                    environmentId,
+                  });
+                for (const target of targets) {
+                  nameByAgentId.set(target.id, target.name);
+                }
+                const sortedRuntimeIds = targets
+                  .filter((target) => target.hasRuntime)
+                  .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+                  .map((target) => target.id);
+                return [
+                  envKey,
+                  {
+                    sortedIds: sortedRuntimeIds,
+                    idSet: new Set(sortedRuntimeIds),
+                  },
+                ] as const;
+              },
+            ),
+          );
+          return new Map(entries);
+        })()
+      : Promise.resolve(
+          new Map<string, { sortedIds: string[]; idSet: Set<string> }>(),
+        ),
+  ]);
+
+  const candidateIdsByRouter = routerTargets.map((router) => {
+    const cfg = routerConfigById.get(router.id);
+    if (!cfg) {
+      return { router, candidateIds: [] as string[] };
+    }
+    const envKey = cfg.environmentId ?? "__default__";
+    if (cfg.accessAllSubagents) {
+      const envRuntimeIds =
+        accessibleTargetsByEnvKey.get(envKey)?.sortedIds ?? [];
+      const routerExcluded = autoExcludedByRouter.get(router.id);
+      const candidateIds = envRuntimeIds.filter(
+        (id) =>
+          id !== router.id &&
+          !routerExcluded?.has(id) &&
+          !callerExcludedSet.has(id),
+      );
+      return { router, candidateIds };
+    }
+    const assigned = assignedByManualRouter.get(router.id) ?? [];
+    const accessibleSet = filterManualByActorAccess
+      ? (accessibleTargetsByEnvKey.get(envKey)?.idSet ?? new Set<string>())
+      : null;
+    return {
+      router,
+      candidateIds: assigned.filter(
+        (id) =>
+          (!accessibleSet || accessibleSet.has(id)) &&
+          !callerExcludedSet.has(id),
+      ),
+    };
+  });
+
+  const missingIds = [
+    ...new Set(
+      candidateIdsByRouter.flatMap(({ candidateIds }) =>
+        candidateIds.filter((id) => !nameByAgentId.has(id)),
+      ),
+    ),
+  ];
+  if (missingIds.length > 0) {
+    const basicRows = await AgentModel.findBasicByOrganizationIdAndIds({
+      organizationId: params.organizationId,
+      agentIds: missingIds,
+    });
+    for (const row of basicRows) {
+      nameByAgentId.set(row.id, row.name);
+    }
+  }
+
+  const poolNamesByRouterId = new Map<string, string[]>();
+  const managingRoutersByWorkerId = new Map<string, RouterPoolReference[]>();
+
+  for (const { router, candidateIds } of candidateIdsByRouter) {
+    if (candidateIds.length === 0) continue;
+    const poolNames = candidateIds
+      .map((id) => nameByAgentId.get(id))
+      .filter((name): name is string => Boolean(name));
+    if (poolNames.length === 0) continue;
+    poolNamesByRouterId.set(router.id, poolNames);
+    const ref: RouterPoolReference = {
+      routerName: router.name,
+      routerToolName: router.toolName,
+    };
+    for (const workerId of candidateIds) {
+      const existing = managingRoutersByWorkerId.get(workerId) ?? [];
+      existing.push(ref);
+      managingRoutersByWorkerId.set(workerId, existing);
+    }
+  }
+
+  return { poolNamesByRouterId, managingRoutersByWorkerId };
+}
+
 function buildDelegationToolDescriptor(params: {
   name: string;
   targetAgent: {
@@ -807,28 +1194,67 @@ function buildDelegationToolDescriptor(params: {
     description?: string | null;
     builtInAgentConfig?: Agent["builtInAgentConfig"];
     hasRuntime?: boolean;
+    hasSubagentLoadBalancing?: boolean;
   };
   inputSchema: Tool["inputSchema"];
   externalA2a?: boolean;
   toolId?: string;
   /** Guardrails v2 runs the target as a child that can attest its return. */
   attestable?: boolean;
+  /** Names of pooled runtime subagents when `targetAgent` is a load-balanced router. */
+  routerPoolNames?: readonly string[];
+  /** Accessible load-balanced routers whose pool includes this runtime worker. */
+  managingRouters?: readonly RouterPoolReference[];
 }): Tool {
-  const { name, targetAgent, inputSchema, externalA2a, toolId } = params;
+  const {
+    name,
+    targetAgent,
+    inputSchema,
+    externalA2a,
+    toolId,
+    routerPoolNames,
+    managingRouters,
+  } = params;
   const attestable =
     params.attestable === true &&
     !externalA2a &&
     !targetAgent.builtInAgentConfig;
+  const isLoadBalancedRuntimeRouter =
+    !externalA2a &&
+    !targetAgent.hasRuntime &&
+    Boolean(routerPoolNames && routerPoolNames.length > 0);
+  const runsInRuntime =
+    !externalA2a && (targetAgent.hasRuntime || isLoadBalancedRuntimeRouter);
+  const managingRouterHint =
+    !externalA2a &&
+    targetAgent.hasRuntime &&
+    managingRouters &&
+    managingRouters.length > 0
+      ? `Part of the load-balanced runtime pool of ${managingRouters.map((r) => `${r.routerName} (${r.routerToolName})`).join(", ")}. Prefer delegating to ${managingRouters[0].routerToolName} for automatic runtime selection and failover unless the user explicitly requested ${targetAgent.name}.`
+      : null;
+  const routerPoolNotice =
+    isLoadBalancedRuntimeRouter && routerPoolNames
+      ? `Automatic subagent load balancing and failover are enabled on this agent across its runtime pool (${routerPoolNames.join(", ")}), overriding any manual runtime selection: delegate directly to this agent without asking the user which runtime to use unless the user explicitly requested a specific runtime.`
+      : null;
+  const rawTargetDescription = targetAgent.description
+    ? targetAgent.description.substring(0, 400)
+    : null;
+  const formattedTargetDescription =
+    rawTargetDescription && (routerPoolNotice || managingRouterHint)
+      ? /[.!?]\s*$/.test(rawTargetDescription)
+        ? rawTargetDescription.trimEnd()
+        : `${rawTargetDescription.trimEnd()}.`
+      : rawTargetDescription;
   const description = [
     `Delegate task to ${externalA2a ? "external A2A " : ""}agent: ${targetAgent.name}.`,
-    ...(targetAgent.hasRuntime && !externalA2a
+    ...(runsInRuntime
       ? [
           "Runs in the background in Agent Runtime and returns a run link, not the answer.",
         ]
       : []),
-    ...(targetAgent.description
-      ? [targetAgent.description.substring(0, 400)]
-      : []),
+    ...(formattedTargetDescription ? [formattedTargetDescription] : []),
+    ...(routerPoolNotice ? [routerPoolNotice] : []),
+    ...(managingRouterHint ? [managingRouterHint] : []),
   ].join(" ");
 
   return {
@@ -842,6 +1268,9 @@ function buildDelegationToolDescriptor(params: {
     _meta: {
       targetAgentId: targetAgent.id,
       ...(externalA2a ? { targetType: "external_a2a" } : {}),
+      ...(isLoadBalancedRuntimeRouter
+        ? { [LOAD_BALANCED_RUNTIME_ROUTER_META_KEY]: true }
+        : {}),
       ...(toolId ? { toolId } : {}),
     },
   };

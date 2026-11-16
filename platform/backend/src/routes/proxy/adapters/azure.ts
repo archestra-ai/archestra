@@ -32,6 +32,7 @@ import {
 } from "@/clients/azure-url";
 import config from "@/config";
 import { metrics } from "@/observability";
+import { azureClaudeChatCompletionsGuidance } from "@/services/azure-model-capabilities";
 import type {
   Azure,
   CreateClientOptions,
@@ -407,9 +408,17 @@ export const azureAdapterFactory: LLMProvider<
       stream: false,
     } as unknown as ChatCompletionCreateParamsNonStreaming;
 
-    return (await azureClient.chat.completions.create(
-      azureRequest,
-    )) as unknown as AzureResponse;
+    try {
+      return (await azureClient.chat.completions.create(
+        azureRequest,
+      )) as unknown as AzureResponse;
+    } catch (error) {
+      throw explainUnsupportedChatCompletions({
+        error,
+        deployment: request.model,
+        baseUrl: (client as AzureClient).baseUrl,
+      });
+    }
   },
 
   async executeStream(
@@ -424,9 +433,17 @@ export const azureAdapterFactory: LLMProvider<
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
 
-    return streamChatCompletionChunks<AzureStreamChunk>(
-      azureClient.chat.completions.create(azureRequest),
-    );
+    try {
+      return await streamChatCompletionChunks<AzureStreamChunk>(
+        azureClient.chat.completions.create(azureRequest),
+      );
+    } catch (error) {
+      throw explainUnsupportedChatCompletions({
+        error,
+        deployment: request.model,
+        baseUrl: (client as AzureClient).baseUrl,
+      });
+    }
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
@@ -515,6 +532,28 @@ function defaultAzureReasoningEffort(request: AzureRequest): {
 }
 
 const DEFAULT_AZURE_REASONING_EFFORT: ReasoningEffort = "medium";
+
+/**
+ * Without synced deployment metadata a Claude deployment reaches Foundry's
+ * Chat Completions endpoint, whose `404 api_not_supported` says nothing about
+ * the endpoint being the problem. Replace it with what to do instead.
+ */
+function explainUnsupportedChatCompletions(params: {
+  error: unknown;
+  deployment: string;
+  baseUrl: string | undefined;
+}): unknown {
+  if (get(params.error, "error.code") !== "api_not_supported") {
+    return params.error;
+  }
+  return new ApiError(
+    400,
+    azureClaudeChatCompletionsGuidance({
+      deployment: params.deployment,
+      baseUrl: params.baseUrl,
+    }),
+  );
+}
 
 /**
  * Azure's OpenAI reasoning deployments reject `max_tokens` ("Use

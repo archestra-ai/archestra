@@ -1,5 +1,6 @@
 import {
   hasArchestraTokenPrefix,
+  isAzureAnthropicBackingModel,
   isChatCompletionsOnlyRouterProvider,
   LLM_PROXY_OAUTH_SCOPE,
   lacksOpenAiChatCompletions,
@@ -1065,10 +1066,14 @@ async function getNativeResponsesAdapter({
     });
     // This is an explicit Responses request. Unknown deployment identities are
     // sent to that native surface so Azure validates them; aliases never imply
-    // a backing model or permission to translate across APIs.
+    // a backing model or permission to translate across APIs. Claude is served
+    // over Responses but not Chat Completions, so it must never be translated.
     return evidence.status !== "known" ||
       (evidence.underlyingModelName &&
-        isAzureOpenAiFirstPartyModelName(evidence.underlyingModelName))
+        (isAzureOpenAiFirstPartyModelName(evidence.underlyingModelName) ||
+          isAzureAnthropicBackingModel({
+            underlyingModelName: evidence.underlyingModelName,
+          })))
       ? azureResponsesAdapterFactory
       : null;
   }

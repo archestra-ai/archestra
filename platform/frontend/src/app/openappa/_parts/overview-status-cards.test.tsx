@@ -63,6 +63,7 @@ const source = {
   setupPullRequestNumber: null,
   selfService: false,
   selfServiceDirectory: "mcp",
+  selfServiceAutoMerge: false,
 };
 const validationRun: PolicyTestRun = {
   id: "latest-run",
@@ -110,7 +111,12 @@ beforeEach(() => {
     githubWebUrl: "https://github.com",
     provider: "github",
     source: null,
-    selfService: { enabled: false, setting: false, directory: "mcp" },
+    selfService: {
+      enabled: false,
+      setting: false,
+      directory: "mcp",
+      autoMerge: { enabled: false, setting: false },
+    },
   };
   server.use(
     http.get(`${api}/guardrails-deployment`, () =>
@@ -376,7 +382,7 @@ test("a failed sync says so and links to the sync settings", async () => {
   );
 });
 
-test("shows the initial merge link while sync waits for setup", async () => {
+test("says sync waits for the initial merge, and leaves the merge to the Finish setup notice", async () => {
   sync = {
     ...sync,
     source: { ...source, setupPullRequestNumber: 7, sourceCommit: null },
@@ -384,11 +390,15 @@ test("shows the initial merge link while sync waits for setup", async () => {
   show();
   expect(await screen.findByText("Awaiting initial merge")).toBeVisible();
   expect(
-    screen.getByRole("link", { name: "Review and merge PR" }),
-  ).toHaveAttribute("href", "https://github.com/example/policies/pull/7");
-  expect(
     screen.getByText(/Your current policy stays active until it merges/),
   ).toBeVisible();
+  expect(
+    screen.queryByRole("link", { name: "Review and merge PR" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Sync settings" })).toHaveAttribute(
+    "href",
+    "/settings/guardrails",
+  );
 });
 
 test("a connected sync links to its repository", async () => {

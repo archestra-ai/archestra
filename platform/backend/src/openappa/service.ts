@@ -568,6 +568,7 @@ async function binding() {
         getDatabaseConnectionString(),
         {
           iamAuthEnabled: config.database.iamAuthEnabled,
+          entraAuthEnabled: config.database.entraAuthEnabled,
           awsRegion: config.database.awsRegion || undefined,
         },
       ),
@@ -1210,7 +1211,7 @@ export async function processProxyResults(params: {
   /** How a client-side spawn launch ended. */
   classifySpawnResult?: (
     result: CommonToolResult,
-  ) => "pending" | "failed" | undefined;
+  ) => "pending" | "detached" | "failed" | undefined;
   /** Signed lineage retained with a child session for fork binding at session start. */
   lineage?: { spawnCallId?: string; childNativeId?: string };
 }) {
@@ -1297,7 +1298,7 @@ export async function processProxyResults(params: {
       const error =
         extractMcpToolError(result) ?? extractMcpToolError(result.content);
       const outcome: ExecutionOutcome =
-        error?.type === "cancelled"
+        error?.type === "cancelled" || spawn === "detached"
           ? "unknown"
           : spawn === "failed" || result.isError
             ? "failure"

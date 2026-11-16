@@ -131,7 +131,7 @@ describe("resolveAuditableRouteConfig", () => {
         "scheduleTrigger.triggered",
       ],
       [
-        "/api/mcp-oauth-clients/:id/rotate-secret",
+        "/api/oauth-clients/:id/rotate-secret",
         "oauthClient",
         "oauthClient.rotated",
       ],

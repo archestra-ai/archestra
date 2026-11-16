@@ -107,7 +107,38 @@ vi.mock("@/lib/agent-runtime-templates.query", () => ({
     refetch: vi.fn(),
   }),
   useResolveRuntimeTemplate: () => ({ isPending: false, mutate: vi.fn() }),
+  useBuiltInRuntimeDefaults: () => () => undefined,
+  useAgentRuntimePermissions: () => runtimePermissions.current,
+  useAgentRuntimeAccess: () => ({
+    data: {
+      runtimes: [
+        "claude-code",
+        "codex",
+        "opencode",
+        "hermes",
+        "openclaw",
+        "grok",
+        "kimi",
+        "copilot",
+      ].map((id) => ({ id, canUse: true, canConfigure: true })),
+      canConfigureAny: true,
+    },
+    isPending: false,
+    isFetching: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
 }));
+const runtimePermissions = vi.hoisted(() => ({
+  current: { canChange: true, readOnlyBy: null } as {
+    canChange: boolean | undefined;
+    readOnlyBy: string | null;
+  },
+}));
+// Everyone may use and configure the runtime unless a test says otherwise.
+beforeEach(() => {
+  runtimePermissions.current = { canChange: true, readOnlyBy: null };
+});
 vi.mock("next/navigation");
 
 const {
@@ -489,6 +520,14 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
 }));
 
 vi.mock("sonner");
+
+vi.mock("@/lib/agent-identity-bindings.query", () => ({
+  useAgentIdentityBindings: () => ({ data: [], isSuccess: true }),
+  useReplaceAgentIdentityBindings: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+}));
 
 vi.mock("@/lib/agent-subagent-exclusions.query", () => ({
   useAgentSubagentExclusions: useAgentSubagentExclusionsMock,
@@ -1232,7 +1271,6 @@ const baseAgent = {
   modelPoolId: null,
   autoRouterId: null,
   identityProviderId: null,
-  entraAgentIdentityId: null,
   environmentId: null,
   builtInAgentConfig: null,
   passthroughHeaders: null,
@@ -3247,14 +3285,9 @@ describe("AgentForm save payload and failure handling", () => {
     });
   });
 
-  it("keeps saved runtime settings read-only without Configure runtime", () => {
+  it("keeps saved runtime settings read-only without use of the runtime", () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
-    vi.mocked(useHasPermissions).mockImplementation(
-      (permissions) =>
-        ({
-          data: !permissions.agent?.includes("configure-runtime"),
-        }) as ReturnType<typeof useHasPermissions>,
-    );
+    runtimePermissions.current = { canChange: false, readOnlyBy: null };
     render(
       <AgentForm agentType="agent" agent={baseAgent} activeSection="runtime" />,
     );
@@ -3262,18 +3295,13 @@ describe("AgentForm save payload and failure handling", () => {
       screen.getByRole("button", { name: "Enable runtime" }),
     ).toBeDisabled();
     expect(
-      screen.getByText(/Configure runtime permission is required/),
+      screen.getByText(/You don't have permission to use this agent's runtime/),
     ).toBeInTheDocument();
   });
 
   it("omits the saved runtime when an ordinary editor changes an agent name", async () => {
     const user = userEvent.setup();
-    vi.mocked(useHasPermissions).mockImplementation(
-      (permissions) =>
-        ({
-          data: !permissions.agent?.includes("configure-runtime"),
-        }) as ReturnType<typeof useHasPermissions>,
-    );
+    runtimePermissions.current = { canChange: false, readOnlyBy: null };
     const runtime = {
       ...defaultAgentRuntime(),
       image: "example.test/worker:v1",
@@ -4986,16 +5014,9 @@ describe("AgentForm save payload and failure handling", () => {
     });
   });
 
-  it("omits runtime from the configuration save when the caller lacks configure-runtime permission even if claudeCode.authentication is subscription on a custom command", async () => {
+  it("omits runtime from the configuration save when the caller may not use the agent's runtime even if claudeCode.authentication is subscription on a custom command", async () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
-    vi.mocked(useHasPermissions).mockImplementation((permissions) => {
-      const requested = permissions as { agent?: string[] };
-      const hasConfigureRuntime =
-        requested.agent?.includes("configure-runtime") ?? false;
-      return {
-        data: !hasConfigureRuntime,
-      } as unknown as ReturnType<typeof useHasPermissions>;
-    });
+    runtimePermissions.current = { canChange: false, readOnlyBy: null };
     const user = userEvent.setup();
     render(
       <AgentForm

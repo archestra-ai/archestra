@@ -77,6 +77,7 @@ test("organization deletion removes only its runtime templates and cannot resurr
   expect(await AgentRuntimeTemplateModel.getSettings(organization.id)).toEqual({
     revision: 0,
     templates: [],
+    builtIns: {},
     popularAgentOverrides: null,
   });
 });

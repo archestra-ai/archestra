@@ -6,6 +6,8 @@ import {
   DESKTOP_MCP_NO_TARGET_REASON,
   DESKTOP_MCP_SLOW_AFTER_MS,
   desktopAddAction,
+  desktopAddStartsAtOnce,
+  desktopArgumentsChanged,
   desktopConnectActionLabel,
   desktopInstallStateOfRow,
   desktopMcpAddCase,
@@ -338,6 +340,49 @@ describe("desktopConnectActionLabel", () => {
     ).toBe("Connect");
     expect(desktopConnectActionLabel({ kind: "loading" })).toBe("Connect");
     expect(desktopConnectActionLabel({ kind: "error" })).toBe("Connect");
+  });
+});
+
+describe("desktopAddStartsAtOnce", () => {
+  it("starts an item with no command at once when its button said what it does", () => {
+    expect(desktopAddStartsAtOnce({ startAtOnce: true, command: null })).toBe(
+      true,
+    );
+  });
+
+  it("waits for the button of the dialog when the item has a command: the user can add arguments first", () => {
+    expect(
+      desktopAddStartsAtOnce({ startAtOnce: true, command: "/opt/matlab/mcp" }),
+    ).toBe(false);
+  });
+
+  it("never starts at once from an entry point that shows the intro", () => {
+    expect(desktopAddStartsAtOnce({ startAtOnce: false, command: null })).toBe(
+      false,
+    );
+    expect(
+      desktopAddStartsAtOnce({
+        startAtOnce: false,
+        command: "/opt/matlab/mcp",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("desktopArgumentsChanged", () => {
+  it("sees no change in the stored arguments", () => {
+    expect(desktopArgumentsChanged(["--a", "b c"], ["--a", "b c"])).toBe(false);
+    expect(desktopArgumentsChanged(null, [])).toBe(false);
+    expect(desktopArgumentsChanged(undefined, [])).toBe(false);
+    expect(desktopArgumentsChanged([], [])).toBe(false);
+  });
+
+  it("sees an added, a removed, a changed and a moved argument", () => {
+    expect(desktopArgumentsChanged(null, ["--a"])).toBe(true);
+    expect(desktopArgumentsChanged(["--a"], [])).toBe(true);
+    expect(desktopArgumentsChanged(["--a"], ["--b"])).toBe(true);
+    expect(desktopArgumentsChanged(["--a", "--b"], ["--b", "--a"])).toBe(true);
+    expect(desktopArgumentsChanged(["--a"], ["--a", "--b"])).toBe(true);
   });
 });
 

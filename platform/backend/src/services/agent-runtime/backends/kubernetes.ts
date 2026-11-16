@@ -2,6 +2,7 @@ import type { Readable, Writable } from "node:stream";
 import type WebSocket from "ws";
 import config from "@/config";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
+import { resolveAgentRuntimeNamespace } from "@/k8s/agent-runtime/runtime-namespace";
 import { hasAgentRuntimeImagePullFailure } from "@/k8s/agent-runtime/startup-phase";
 import type {
   AgentRunInput,
@@ -36,11 +37,10 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
     environmentScope?: string | null;
     organizationScope?: string | null;
   }): string {
-    return (
-      params.environmentScope ??
-      params.organizationScope ??
-      config.orchestrator.kubernetes.namespace
-    );
+    return resolveAgentRuntimeNamespace({
+      environmentNamespace: params.environmentScope,
+      organizationNamespace: params.organizationScope,
+    });
   }
 
   async assertReady(): Promise<void> {
@@ -75,8 +75,8 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
     await agentRuntimeManager.recoverRun(session);
   }
 
-  async refreshCredentials(session: AgentRunRecord): Promise<void> {
-    await agentRuntimeManager.refreshCredentials(session);
+  async refreshCredentials(session: AgentRunRecord) {
+    return agentRuntimeManager.refreshCredentials(session);
   }
 
   async stopRun(session: AgentRunRecord): Promise<"suspended" | undefined> {

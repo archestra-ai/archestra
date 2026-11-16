@@ -4,7 +4,7 @@ sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-09
+lastUpdated: 2026-11-13
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
@@ -35,7 +35,7 @@ kubectl rollout restart deployment/agent-sandbox-controller -n agent-sandbox-sys
 kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s
 ```
 
-Give Archestra access to the cluster. When Archestra runs in that cluster, set [`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=true`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER). Otherwise, set [`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_KUBECONFIG). Agent Runtime turns on when Archestra finds the controller in the cluster. You do not need to restart Archestra after you install the controller. Check **Settings → Agents → Runtime Backend**. Create an agent with a dedicated runtime and start a run to check image access and storage provisioning.
+Give Archestra access to the cluster. When Archestra runs in that cluster, set [`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=true`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER). Otherwise, set [`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_KUBECONFIG). Agent Runtime turns on when Archestra finds the controller in the cluster. You do not need to restart Archestra after you install the controller. Check **Settings → Agents → Runtimes → Runtime backend**. Create an agent with a dedicated runtime and start a run to check image access and storage provisioning.
 
 The controller does not install a container isolation runtime. Check image architecture and admission policies before starting workloads.
 
@@ -84,7 +84,7 @@ kubectl get pods -n <namespace> -l archestra.io/agent-workspace \
   -o custom-columns=NAME:.metadata.name,RUNTIME:.spec.runtimeClassName
 ```
 
-- Archestra does not check that the RuntimeClass exists. A misspelled name stops Kubernetes from creating the run's pod, and the run never starts.
+- Archestra checks that the RuntimeClass exists, at startup and before each run, by asking Kubernetes to admit a test pod as a dry run (nothing is created). If the class is missing, the platform logs an error and runs fail at once with a reason that names it. If the test pod is rejected for another reason, such as an admission policy, Archestra logs that it cannot check and runs start unchecked.
 - With [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR) set, give the sandbox nodes that label too.
 - [Privileged runs](#privileged-containers) ignore the RuntimeClass and share the node's kernel. Keep [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED) off unless runs need Docker.
 
@@ -102,7 +102,7 @@ Keep Archestra on Fargate and place runtime containers on EC2 nodes:
 
 ## Runtime Tiers
 
-Runtime tiers allocate CPU, memory, and workspace storage to agent runtimes so every run receives predictable resources. Configure your organization's tiers under **Settings → Agents → Runtime tiers**.
+Runtime tiers allocate CPU, memory, and workspace storage to agent runtimes so every run receives predictable resources. Configure your organization's tiers under **Settings → Agents → Runtimes → Runtime tiers**.
 
 ![The Runtime tiers table in Settings](/docs/automated_screenshots/agents-runtime-setup_runtime-tiers.webp)
 
@@ -126,7 +126,7 @@ After installing the controller extensions above, set [`ARCHESTRA_AGENT_RUNTIME_
 
 Pools go to the Agents with the most recent runs. Agents with no run in the last 7 days get no spare, so idle Agents don't hold cluster capacity.
 
-Each runtime tier is pooled or not, under **Pools** in **Settings → Agents → Runtime tiers**. A pooled tier keeps [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE) spares per group; a tier that is not pooled starts every run in a new container. A new organization pools `S` and `M` but not `L`: a large run is rare and an idle spare holds its full size.
+Each runtime tier is pooled or not, under **Pools** in **Settings → Agents → Runtimes → Runtime tiers**. A pooled tier keeps [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE) spares per group; a tier that is not pooled starts every run in a new container. A new organization pools `S` and `M` but not `L`: a large run is rare and an idle spare holds its full size.
 
 Assigned containers never return to the pool. Without a spare, a run starts a new container. Setting the size to `0` removes unused spares and preserves assigned runs.
 
@@ -134,7 +134,7 @@ Archestra maintains the configured pool replica count. An HPA targeting these po
 
 ## Privileged Containers
 
-Ordinary coding agents do not need privilege. Docker-in-Docker and nested Kubernetes workloads may need it. Set [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED), enable elevated permissions on the agent, and use nodes whose runtime and admission policy permit privileged containers. Use a dedicated namespace and node pool.
+Ordinary coding agents do not need privilege. Docker-in-Docker and nested Kubernetes workloads may need it. Set [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED), enable elevated permissions on the agent, and use nodes whose runtime and admission policy permit privileged containers. Use a dedicated namespace, and put privileged runs on their own tainted node pool with [`ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR).
 
 Privileged runs ignore the [sandboxed runtime](#sandboxed-runtime). After resuming a run, restart Docker and development services. The deployment setting does not override cloud-provider restrictions.
 
@@ -163,7 +163,7 @@ A custom image, or a maintained image you pinned by digest alone (`…/agent-cod
 
 When runs do not start:
 
-- **Runtime unavailable:** check **Settings → Agents → Runtime Backend**, and confirm the Agent Sandbox controller is healthy.
+- **Runtime unavailable:** check **Settings → Agents → Runtimes → Runtime backend**, and confirm the Agent Sandbox controller is healthy.
 - **Run waits on storage:** check the storage class and its capacity.
 - **Image pull fails:** check the image name, registry access, and pull credentials.
 

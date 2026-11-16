@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-11
+lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -18,7 +18,7 @@ A run uses the agent's instructions, tools, skills, and permissions. Its model c
 
 ## Create an Agent With a Dedicated Runtime
 
-Creating, cloning, changing, or removing a dedicated runtime requires **Configure runtime** ([`agent:configure-runtime`](/docs/reference/permissions#agent:configure-runtime)), in addition to access to create or edit the agent. Admin and Platform Admin roles include it; Editor, Member, and existing custom roles do not. Grant it explicitly to custom roles that need runtime configuration. Ordinary edits preserve an existing runtime, and read and run access is unchanged.
+You can pick the runtimes an administrator lets you use, in addition to needing access to create or edit the agent. See [who can use each runtime](#choose-who-can-use-each-runtime). Ordinary edits preserve an existing runtime, and read and run access is unchanged.
 
 1. Go to **Agents** and click **Add Agent**.
 2. Under **Agent Runtimes**, pick **Claude Code**, **Codex**, **OpenCode**, **Hermes**, **OpenClaw**, **Grok Build**, or **Kimi Code**. The agent opens prefilled.
@@ -33,13 +33,39 @@ From a connected client, ask your agent to create one. [`create_agent`](/docs/re
 
 ### Choose and Order Agent Runtimes
 
-With [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), go to **Settings → Agents → Agent Runtimes** to choose the agents offered during creation.
+With [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), go to **Settings → Agents → Runtimes** to choose the agents offered during creation.
 
 1. Click **+** to add a choice, or remove one with its **Remove** button.
 2. Drag the agent chips into your preferred order. You can also focus an agent's reorder handle and use the arrow keys.
 3. Click **Save**. The Create Agent cards and Configuration runtime choices follow the saved order.
 
 Removing a choice preserves existing agents and their runtime configuration.
+
+### Set a Runtime's Settings
+
+Decide once how a runtime's agents start, such as whether Claude Code bills each person's Claude subscription or a company API key. This uses [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+
+1. Go to **Settings → Agents → Runtimes**, open a runtime's **⋯** menu, and click **Edit runtime**.
+2. Under **Runtime settings**, set its defaults. A built-in runtime has **Claude account** (Claude Code only), run limits, and tiers. A custom runtime also has its image, protocol, and follow-up delivery.
+3. Click **Save runtime**, then click **Save**.
+
+Saved settings apply to agents created afterwards. To bring existing agents up to date, reopen the runtime: **Existing agents** shows how many still use older settings, and **Update** gives them the saved ones.
+
+- Each agent keeps its own environment, credentials, ports, and model.
+- An update is refused, naming the agents, when the new settings would no longer work with an agent's model. Change that agent's model first.
+
+### Choose Who Can Use Each Runtime
+
+Try a runtime with a pilot team before offering it to everyone, and decide who may change its settings on their agents. Open the runtime's **Edit runtime** dialog and set **Who can use it** under **General**:
+
+- **Can use:** create agents on the runtime. They take its settings and can't change them.
+- **Can use and configure:** create agents on it and change its settings on those agents.
+- **Full access:** also change who can use it.
+
+Admin and Platform Admin have full access to every runtime, and a new custom runtime starts with only them. To set access for all runtimes at once, use **Permissions** on the Runtimes page.
+
+- Running an image that isn't one of your runtimes needs **Can use and configure** on every runtime.
+- Running or chatting with an existing agent is decided by the agent's own permissions, not the runtime's.
 
 ### Update the Image
 

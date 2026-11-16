@@ -241,11 +241,15 @@ async function fixture(mode: string, force = false) {
   );
   let callbackPort: number | null = null;
   for (let attempt = 0; attempt < 150 && child.exitCode === null; attempt++) {
-    if (!existsSync(browserUrl)) {
+    // The fake browser creates the file before it writes the address.
+    const opened = existsSync(browserUrl)
+      ? readFileSync(browserUrl, "utf8")
+      : "";
+    if (!opened) {
       await new Promise((resolve) => setTimeout(resolve, 10));
       continue;
     }
-    const authorization = new URL(readFileSync(browserUrl, "utf8"));
+    const authorization = new URL(opened);
     challenge = authorization.searchParams.get("code_challenge") ?? "";
     expect(authorization.searchParams.get("code_challenge_method")).toBe(
       "S256",

@@ -121,7 +121,8 @@ function AgentEditor({ agent }: { agent: Agent }) {
   const steps = getAgentSetupSteps({
     agentType: agent.agentType,
     builtIn: isBuiltIn,
-  }).filter((entry) => entry.id !== "messaging" || !!canReadAgentTriggers);
+    canReadTriggers: !!canReadAgentTriggers,
+  });
   const stepParam = searchParams.get("step");
   const step = steps.find((entry) => entry.id === stepParam)?.id ?? steps[0].id;
   const stepIndex = steps.findIndex((entry) => entry.id === step);

@@ -129,7 +129,7 @@ pub enum BridgeError {
     LocalHttpClient(#[source] reqwest::Error),
     #[error("no config file at {path}: give the address of Archestra with --url")]
     UrlRequired { path: PathBuf },
-    #[error("--url must be an http:// or https:// address")]
+    #[error("--url must be an https:// address (http:// works only for localhost)")]
     InvalidUrl,
 }
 
@@ -195,7 +195,7 @@ pub async fn prepare(options: &StartOptions) -> Result<Prepared, BridgeError> {
                     path: path.to_owned(),
                 })?;
             let base_url = config::normalize_base_url(url);
-            if !config::is_http_url(&base_url) {
+            if !config::is_secure_base_url(&base_url) {
                 return Err(BridgeError::InvalidUrl);
             }
             let control_plane =

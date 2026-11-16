@@ -94,12 +94,7 @@ export function useCreateOauthClient() {
     },
     onSuccess: () => {
       toast.success("OAuth client created");
-      for (const key of [
-        "oauth-clients",
-        "mcp-oauth-clients",
-        "llm-oauth-clients",
-      ])
-        queryClient.invalidateQueries({ queryKey: [key] });
+      queryClient.invalidateQueries({ queryKey: ["oauth-clients"] });
     },
   });
 }
@@ -126,12 +121,7 @@ export function useUpdateOauthClient() {
     },
     onSuccess: () => {
       toast.success("OAuth client updated");
-      for (const key of [
-        "oauth-clients",
-        "mcp-oauth-clients",
-        "llm-oauth-clients",
-      ])
-        queryClient.invalidateQueries({ queryKey: [key] });
+      queryClient.invalidateQueries({ queryKey: ["oauth-clients"] });
     },
   });
 }
@@ -151,12 +141,7 @@ export function useRotateOauthClientSecret() {
     },
     onSuccess: () => {
       toast.success("OAuth client secret rotated");
-      for (const key of [
-        "oauth-clients",
-        "mcp-oauth-clients",
-        "llm-oauth-clients",
-      ])
-        queryClient.invalidateQueries({ queryKey: [key] });
+      queryClient.invalidateQueries({ queryKey: ["oauth-clients"] });
     },
   });
 }
@@ -174,12 +159,7 @@ export function useDeleteOauthClient() {
     },
     onSuccess: () => {
       toast.success("OAuth client deleted");
-      for (const key of [
-        "oauth-clients",
-        "mcp-oauth-clients",
-        "llm-oauth-clients",
-      ])
-        queryClient.invalidateQueries({ queryKey: [key] });
+      queryClient.invalidateQueries({ queryKey: ["oauth-clients"] });
     },
   });
 }
@@ -200,12 +180,7 @@ export function useBulkDeleteOauthClients() {
       }),
     // Settled rather than success: a partly applied batch still moved rows.
     onSettled: () => {
-      for (const key of [
-        "oauth-clients",
-        "mcp-oauth-clients",
-        "llm-oauth-clients",
-      ])
-        queryClient.invalidateQueries({ queryKey: [key] });
+      queryClient.invalidateQueries({ queryKey: ["oauth-clients"] });
     },
   });
 }

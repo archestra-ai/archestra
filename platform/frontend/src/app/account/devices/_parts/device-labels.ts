@@ -1,4 +1,5 @@
 import type { DesktopDevice } from "@/lib/desktop-device.query";
+import { programUpdateInstruction } from "@/lib/mcp/mcp-bridge-command";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
 interface DeviceProgramUpdateNotice {
@@ -42,8 +43,7 @@ export function deviceProgramVersionLabel(
  * serves, or null when there is nothing to update. The text is in three
  * parts, so the page can show the command as code.
  *
- * Only the MCP bridge on Windows updates by itself, and only where the
- * deployment left auto-update on. Everywhere else the user runs the command.
+ * See {@link programUpdateInstruction} for who runs the command.
  */
 export function deviceProgramUpdateNotice(
   device: Pick<
@@ -53,19 +53,11 @@ export function deviceProgramUpdateNotice(
 ): DeviceProgramUpdateNotice | null {
   if (!device.programUpdate) return null;
   const { version } = device.programUpdate;
-  const updatesByItself =
-    device.programAutoUpdate && device.platform === "windows";
   return {
     title: version
       ? `A new version of the MCP bridge (${version}) is available`
       : "A new version of the MCP bridge is available",
-    text: {
-      before: updatesByItself
-        ? "The device updates by itself when no tool call is running. To update now, run "
-        : "Run ",
-      command: "archestra update",
-      after: " in a terminal on that device.",
-    },
+    text: programUpdateInstruction(device),
   };
 }
 

@@ -259,6 +259,49 @@ echo VERIFIED
     expect(result.stdout).toContain("VERIFIED");
   }, 30_000);
 
+  it("reports a failed full-screen client's own failure and keeps the workspace", () => {
+    // A stopped TUI leaves focus reporting on in its dead pane; detaching the
+    // recorder must neither stop tmux nor replace the client's failure.
+    const result = runInContainer(`
+cat > /var/run/archestra/turns/1.request <<'TURN'
+printf '\\033[?1004hfull-screen-client\\n'
+printf '{"version":1,"code":"client_failed","message":"The client failed."}' > "$ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX.failure"
+exit 1
+TURN
+wait_for /var/run/archestra/turns/1.exit
+test "$(cat /var/run/archestra/turns/1.exit)" = 1
+grep -q full-screen-client /var/run/archestra/turns/1.log
+grep -q client_failed /var/run/archestra/turns/1.failure
+tmux has-session -t agent
+printf 'echo follow-up\\n' > /var/run/archestra/turns/2.request
+wait_for /var/run/archestra/turns/2.exit
+test "$(cat /var/run/archestra/turns/2.exit)" = 0
+grep -q follow-up /var/run/archestra/turns/2.log
+echo VERIFIED
+`);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("VERIFIED");
+  }, 30_000);
+
+  it("keeps the agent's failure when the recording stops after it", () => {
+    const result = runInContainer(`
+cat > /var/run/archestra/turns/1.request <<'TURN'
+printf '{"version":1,"code":"client_failed","message":"The client failed."}' > "$ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX.failure"
+touch /tmp/started
+sleep 60
+TURN
+wait_for /tmp/started
+client="$(tmux list-clients -F '#{client_name}')"
+tmux detach-client -t "$client"
+wait_for /var/run/archestra/turns/1.exit
+test "$(cat /var/run/archestra/turns/1.exit)" = 75
+grep -q client_failed /var/run/archestra/turns/1.failure
+echo VERIFIED
+`);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("VERIFIED");
+  }, 30_000);
+
   it("bounds recording startup without launching unrecorded work", () => {
     const result = runInContainer(`
 cp /var/run/archestra/record-terminal /tmp/original-recorder

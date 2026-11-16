@@ -3,6 +3,7 @@ import {
   AGENT_PLACEMENT,
   CHANNEL_BINDINGS,
   COLLEAGUES,
+  DESKTOP_DEVICE,
   KNOWLEDGE_BASE_AGENTS,
   KNOWLEDGE_BASES,
   KNOWLEDGE_CONNECTORS,
@@ -56,6 +57,7 @@ ON CONFLICT DO NOTHING;`);
   seedKnowledge(state);
   seedYells(state);
   seedLogSession(state);
+  seedDesktopDevice(state);
 }
 
 /** Rebuild only reserved fixture records so session-head triggers and ownership stay current. */
@@ -168,6 +170,17 @@ INSERT INTO member (id, organization_id, user_id, role, created_at) VALUES (${sq
 }
 
 /** Agent reports on Guardrails → Yells, filed by the colleagues. Agents file them through a tool call; no API creates one. */
+/**
+ * The persona's device, linked and online. A device is online while its MCP
+ * bridge polls; no bridge runs here, so the last poll is set far ahead and the
+ * row stays online for every capture.
+ */
+function seedDesktopDevice(state: SeedState): void {
+  runSql(`INSERT INTO desktop_devices (id, organization_id, user_id, name, platform, key_hash, last_polled_at, client_version, created_at)
+VALUES (${sql(DESKTOP_DEVICE.id)}, ${sql(state.organization.id)}, ${sql(state.users.persona)}, ${sql(DESKTOP_DEVICE.name)}, ${sql(DESKTOP_DEVICE.platform)}, encode(sha256(${sql(`docs-device-${DESKTOP_DEVICE.id}`)}::bytea), 'hex'), now() + interval '10 years', ${sql(DESKTOP_DEVICE.version)}, ${FIXTURE_TIME_SQL} - make_interval(days => ${DESKTOP_DEVICE.daysAgo}))
+ON CONFLICT (user_id) DO UPDATE SET name = EXCLUDED.name, platform = EXCLUDED.platform, last_polled_at = EXCLUDED.last_polled_at, client_version = EXCLUDED.client_version, created_at = EXCLUDED.created_at;`);
+}
+
 function seedYells(state: SeedState): void {
   const organizationId = state.organization.id;
   runSql(

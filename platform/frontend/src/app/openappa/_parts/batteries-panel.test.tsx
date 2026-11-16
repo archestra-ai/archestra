@@ -127,6 +127,7 @@ const emptyDeclarations = (
   fields: Partial<Declarations> = {},
 ): Declarations => ({
   batteries: [],
+  repositoryFiles: [],
   unusedAliases: [],
   rootRevision: 3,
   lastError: null,
@@ -1254,6 +1255,7 @@ test("without the permission to manage guardrails the controls are read-only", a
 
 test("an alias no entry declares is listed without a control to remove it", async () => {
   declarations = emptyDeclarations({
+    repositoryFiles: [],
     unusedAliases: [{ namespace: "stripe", servers: ["billing"], line: 9 }],
   });
   show();

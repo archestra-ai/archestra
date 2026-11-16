@@ -1,0 +1,1 @@
+ALTER TABLE "openappa_github_sync" ADD COLUMN "self_service_auto_merge" boolean DEFAULT false NOT NULL;

@@ -1,8 +1,11 @@
-import type {
-  AzureModelEvidence,
-  AzureModelOperation,
+import { getDocsUrl } from "@archestra/shared";
+import {
+  type AzureModelEvidence,
+  type AzureModelOperation,
+  isAzureAnthropicBackingModel,
 } from "@archestra/shared/azure-models";
 import { z } from "zod";
+import { buildAzureFoundryAnthropicBaseUrl } from "@/clients/azure-url";
 import config from "@/config";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import { ApiError } from "@/types/api";
@@ -64,15 +67,7 @@ export async function resolveAzureModelCapabilities(params: {
   providerApiKeyId?: string;
   modelId: string;
 }): Promise<AzureModelCapabilities> {
-  if (!params.providerApiKeyId)
-    return classifyAzureModelCapabilities(undefined);
-  const rows =
-    await LlmProviderApiKeyModelLinkModel.findCapabilitiesForApiKeyModels([
-      params.providerApiKeyId,
-    ]);
-  return classifyAzureModelCapabilities(
-    rows.find((row) => row.model.modelId === params.modelId),
-  );
+  return classifyAzureModelCapabilities(await findLinkedCapabilities(params));
 }
 
 /** Explicit endpoints can defer unknown metadata to Azure; known incompatibility is rejected. */
@@ -82,9 +77,25 @@ export async function validateAzureModelOperation(params: {
   operation: AzureModelOperation;
   parameters?: Record<string, unknown>;
 }): Promise<AzureModelCapabilities> {
-  const evidence = await resolveAzureModelCapabilities(params);
+  const row = await findLinkedCapabilities(params);
+  const evidence = classifyAzureModelCapabilities(row);
   if (evidence.status !== "known") return evidence;
   if (!evidence.operations.includes(params.operation)) {
+    if (
+      params.operation === "chat" &&
+      isAzureAnthropicBackingModel({
+        underlyingModelName: evidence.underlyingModelName,
+      })
+    ) {
+      throw new ApiError(
+        400,
+        azureClaudeChatCompletionsGuidance({
+          deployment: params.modelId,
+          underlyingModelName: evidence.underlyingModelName,
+          baseUrl: row?.configuration.baseUrl || config.llm.azure.baseUrl,
+        }),
+      );
+    }
     throw new ApiError(
       400,
       `This Azure deployment does not support ${params.operation}; supported operations: ${evidence.operations.join(", ")}.`,
@@ -102,6 +113,33 @@ export async function validateAzureModelOperation(params: {
     });
   }
   return evidence;
+}
+
+/**
+ * What to do when a Claude deployment is called over Chat Completions, which
+ * Microsoft Foundry answers with `404 api_not_supported`. Without an
+ * `underlyingModelName` the deployment is not known to be Claude: Foundry's
+ * answer is the only evidence.
+ */
+export function azureClaudeChatCompletionsGuidance(params: {
+  deployment: string;
+  underlyingModelName?: string | null;
+  baseUrl?: string | null;
+}): string {
+  const { deployment, underlyingModelName } = params;
+  const cause = !underlyingModelName
+    ? `Azure deployment "${deployment}" does not serve the OpenAI Chat Completions API (Microsoft Foundry answered api_not_supported), which is how Foundry answers for Claude deployments.`
+    : underlyingModelName.toLowerCase() === deployment.toLowerCase()
+      ? `Azure deployment "${deployment}" is a Claude model, and Microsoft Foundry does not serve Claude over the OpenAI Chat Completions API.`
+      : `Azure deployment "${deployment}" runs ${underlyingModelName}, a Claude model, and Microsoft Foundry does not serve Claude over the OpenAI Chat Completions API.`;
+  const anthropicBaseUrl =
+    buildAzureFoundryAnthropicBaseUrl(params.baseUrl) ??
+    "https://<resource>.services.ai.azure.com/anthropic";
+  return (
+    `${cause} To fix it, either call the Responses API instead (POST /v1/model-router/responses on the Unified Model API), ` +
+    `or add this Foundry resource as an Anthropic provider key with base URL ${anthropicBaseUrl}, map that key on your virtual key, and call "anthropic:${deployment}". ` +
+    `Setup guide: ${getDocsUrl(ANTHROPIC_FOUNDRY_DOCS_PAGE, "anthropic-on-microsoft-foundry")}`
+  );
 }
 
 function validateImageParameters(params: {
@@ -190,3 +228,17 @@ function validateImageParameters(params: {
     }
   }
 }
+
+async function findLinkedCapabilities(params: {
+  providerApiKeyId?: string;
+  modelId: string;
+}): Promise<LinkedCapabilities | undefined> {
+  if (!params.providerApiKeyId) return undefined;
+  const rows =
+    await LlmProviderApiKeyModelLinkModel.findCapabilitiesForApiKeyModels([
+      params.providerApiKeyId,
+    ]);
+  return rows.find((row) => row.model.modelId === params.modelId);
+}
+
+const ANTHROPIC_FOUNDRY_DOCS_PAGE = "llm-proxy/providers/anthropic";

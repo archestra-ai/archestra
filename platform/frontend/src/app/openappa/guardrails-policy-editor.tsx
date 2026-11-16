@@ -51,8 +51,16 @@ export function GuardrailsPolicyEditor({
   focusLine?: number;
 }) {
   const declarations = usePolicyDeclarations();
+  const sync = useAppaGithubSync();
   const router = useRouter();
   const [tab, setTab] = useState<"policy" | "effective">("policy");
+  // The self-service folder's files are MCP servers' rules; any other file
+  // the root includes is the repository's own.
+  const selfService = sync.data?.selfService;
+  const serversFolder =
+    selfService?.enabled && selfService.directory
+      ? `${selfService.directory}/`
+      : null;
   const effective = useEffectivePolicy(tab === "effective");
   return (
     <div className="space-y-4">
@@ -79,22 +87,33 @@ export function GuardrailsPolicyEditor({
                 )
               }
               ariaLabel="Policy source file"
-              searchPlaceholder="Search included batteries"
+              searchPlaceholder="Search batteries and files"
               // On phones the picker takes its own full-width row under the
               // view toggle and the guide link, instead of a ragged middle row.
               className="order-last h-8 w-full sm:order-none sm:w-64"
               pinnedItems={[{ value: "root", label: "Organization policy" }]}
-              items={(declarations.data?.batteries ?? []).map((battery) => ({
-                value: battery.entry,
-                label: batteryDisplayName(battery.name),
-                description:
-                  BATTERY_STATUS[
-                    declarations.data
-                      ? enforcedStatus(declarations.data, battery)
-                      : battery.status
-                  ].label,
-                disabled: battery.status === "unavailable",
-              }))}
+              items={[
+                ...(declarations.data?.batteries ?? []).map((battery) => ({
+                  value: battery.entry,
+                  label: batteryDisplayName(battery.name),
+                  description:
+                    BATTERY_STATUS[
+                      declarations.data
+                        ? enforcedStatus(declarations.data, battery)
+                        : battery.status
+                    ].label,
+                  disabled: battery.status === "unavailable",
+                })),
+                // The repository's files the root folds in, in include order.
+                ...(declarations.data?.repositoryFiles ?? []).map((file) => ({
+                  value: file.path,
+                  label: file.path,
+                  description:
+                    serversFolder && file.path.startsWith(serversFolder)
+                      ? "MCP server rules"
+                      : "Repository file",
+                })),
+              ]}
             />
           )}
           <div className="ml-auto flex flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:gap-x-3">
@@ -296,6 +315,7 @@ function CompositionSummary({
       </output>
     );
   const total = declarations.batteries.length;
+  const files = declarations.repositoryFiles.length;
   const notEnforced = declarations.batteries.filter(
     (battery) => !batteryWorks(declarations, battery),
   ).length;
@@ -313,9 +333,18 @@ function CompositionSummary({
       <span className={stale ? undefined : "whitespace-nowrap"}>
         {stale
           ? `${compositionNotice(declarations)?.title ?? "The latest revision was refused"} · an earlier composition stays enforced`
-          : total === 1
-            ? "1 battery composes into this policy"
-            : `${total} batteries compose into this policy`}
+          : `${[
+              total === 1 ? "1 battery" : `${total} batteries`,
+              ...(files > 0
+                ? [
+                    files === 1
+                      ? "1 repository file"
+                      : `${files} repository files`,
+                  ]
+                : []),
+            ].join(
+              " and ",
+            )} ${total + files === 1 ? "composes" : "compose"} into this policy`}
       </span>
       {notEnforced > 0 && (
         // Every included battery with a problem is in the Needs attention group.

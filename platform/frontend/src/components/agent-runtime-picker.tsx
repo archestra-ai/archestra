@@ -16,14 +16,17 @@ import {
 } from "@/components/agent-pages/agent-catalog";
 import {
   AGENT_RUNTIME_PROTOCOL_LABELS,
+  AgentRuntimeAccessFields,
   type AgentRuntimeConfig,
   AgentRuntimeEnvironmentFields,
   AgentRuntimeImageFields,
+  AgentRuntimeLimitFields,
   AgentRuntimeProtocolField,
-  AgentRuntimeRunControls,
   AgentRuntimeSteeringField,
+  agentRuntimeSectionDescriptions,
   defaultAgentRuntime,
   isClaudeCodeRuntimeConfig,
+  RuntimeSettingsNotice,
 } from "@/components/agent-runtime-fields";
 import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavailable-notice";
 import { ConfigurationRow } from "@/components/configuration-row";
@@ -52,6 +55,7 @@ export function AgentRuntimePicker({
   modelBlock,
   modelSummary,
   modelAttention,
+  readOnlyBy,
   onChangeTemplate,
 }: {
   selectedId: AgentRuntimeSelection;
@@ -65,6 +69,11 @@ export function AgentRuntimePicker({
   modelSummary: string;
   modelAttention?: string;
   /**
+   * The Agent Runtime whose settings this agent takes because the reader may
+   * use it but not configure it, if any.
+   */
+  readOnlyBy?: string | null;
+  /**
    * Set when the runtime was picked from the catalog. The picker then shows
    * that choice as a summary rather than asking a second time, and this
    * returns the reader to the catalog to choose another.
@@ -75,7 +84,7 @@ export function AgentRuntimePicker({
   const appName = useAppName();
   const runtimeEnabled = useFeature("agentRuntime");
   const resolver = useResolveRuntimeTemplate();
-  const { templates, isError, isFetching, refetch } =
+  const { templates, canUseCustomImage, isError, isFetching, refetch } =
     useAvailableAgentCatalogTemplates();
   const options: Array<{
     id: AgentRuntimeSelection;
@@ -90,11 +99,15 @@ export function AgentRuntimePicker({
       runtime: template.initialValues.runtime ?? null,
       icon: template.icon,
     })),
-    {
-      id: "custom",
-      name: "Custom image",
-      runtime: defaultAgentRuntime(),
-    },
+    ...(canUseCustomImage
+      ? [
+          {
+            id: "custom",
+            name: "Custom image",
+            runtime: defaultAgentRuntime(),
+          },
+        ]
+      : []),
   ];
   // Hiding a template must not replace an existing agent's runtime settings.
   const visibleSelectedId = options.some((option) => option.id === selectedId)
@@ -224,6 +237,7 @@ export function AgentRuntimePicker({
         />
       )}
       {runtimeEnabled === false && <AgentRuntimeUnavailableNotice />}
+      {readOnlyBy && <RuntimeSettingsNotice name={readOnlyBy} />}
       <Accordion
         type="multiple"
         value={expandedRows}
@@ -290,29 +304,33 @@ export function AgentRuntimePicker({
                 id={`${id}-inference`}
                 value="inference"
                 title="Inference API"
-                description="The API the harness uses to call models."
+                description={agentRuntimeSectionDescriptions(appName).inference}
                 summary={protocol}
               >
-                <AgentRuntimeProtocolField
-                  value={value}
-                  onChange={onChange}
-                  hideLabel
-                  constrainToHarness
-                />
+                <fieldset disabled={!!readOnlyBy}>
+                  <AgentRuntimeProtocolField
+                    value={value}
+                    onChange={onChange}
+                    hideLabel
+                    constrainToHarness
+                  />
+                </fieldset>
               </ConfigurationRow>
             )}
             <ConfigurationRow
               id={`${id}-steering`}
               value="steering"
               title="Follow-up messages"
-              description="What happens to a message you send while it works."
+              description={agentRuntimeSectionDescriptions(appName).followUps}
               summary={steering}
             >
-              <AgentRuntimeSteeringField
-                value={value}
-                onChange={onChange}
-                hideLabel
-              />
+              <fieldset disabled={!!readOnlyBy}>
+                <AgentRuntimeSteeringField
+                  value={value}
+                  onChange={onChange}
+                  hideLabel
+                />
+              </fieldset>
             </ConfigurationRow>
             <ConfigurationRow
               id={`${id}-controls`}
@@ -321,7 +339,12 @@ export function AgentRuntimePicker({
               description="Idle timeout, maximum duration, spend cap, CPU and memory."
               summary={runControlsSummary(value)}
             >
-              <AgentRuntimeRunControls value={value} onChange={onChange} />
+              <div className="space-y-5">
+                <fieldset disabled={!!readOnlyBy}>
+                  <AgentRuntimeLimitFields value={value} onChange={onChange} />
+                </fieldset>
+                <AgentRuntimeAccessFields value={value} onChange={onChange} />
+              </div>
             </ConfigurationRow>
           </>
         )}

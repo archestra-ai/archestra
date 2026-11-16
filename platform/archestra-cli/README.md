@@ -102,7 +102,32 @@ On Windows `~` is `%USERPROFILE%`.
 
 ## Config
 
-Archestra has the config of the device: for each desktop MCP server that the user installed, the command or the URL, and on or off. An admin writes the command in the catalog item.
+Archestra has the config of the device: for each desktop MCP server that the user installed, the command or the URL, the arguments that the user added to the command, and on or off.
+
+| What | Who sets it | Where |
+| --- | --- | --- |
+| The command or the URL | An admin, for all users | The catalog item in the MCP registry |
+| The arguments after the command | Each user, for their own installation | The Connect dialog; later **Edit arguments** in the Devices section of the MCP server in the MCP registry |
+
+A user cannot change the command. The arguments are optional, and only a command has them: an item with a URL has none.
+
+```yaml
+control_plane:
+  base_url: https://archestra.example.com
+  tunnel_id: tunnel_6b1f0c2e4d5a4f7e8a9b0c1d2e3f4a5b
+  api_key: archestra_dev_…
+synced_at: 2026-11-10T12:00:00Z
+mcp:
+  commands:
+  - channel: 7c1e0000-0000-4000-8000-00000000a094
+    name: MATLAB
+    command: matlab-mcp-server --stdio
+    arguments:
+    - --root
+    - $HOME/My Models
+    enabled: true
+  server_urls: []
+```
 
 - A sync gets this config and writes it to the config file. The file is a copy: the user does not edit it, and a sync replaces its MCP entries.
 - A sync writes the file only when Archestra has other MCP entries than the file. So `synced_at` in the file is the time of the last sync that changed the MCP entries (or of the first sync), not of the last sync.
@@ -112,6 +137,10 @@ Archestra has the config of the device: for each desktop MCP server that the use
 - One command serves every system. A program on `PATH` (`matlab-mcp-server`) or a package runner (`npx -y some-mcp-server`, `uvx some-mcp-server`) works on macOS, Windows and Linux. On Windows a name with no extension is looked up with `PATHEXT`, so `npx` is `npx.cmd`.
 - A command can have `$USER` and `$HOME` (also `${USER}`, `${HOME}`), and the Windows names `%USERNAME%` and `%USERPROFILE%` for the same two values. On Windows the values come from `USERNAME` and `USERPROFILE`. The client splits the command into arguments, then replaces the variables in each argument. No shell runs: no `~`, no pipes, no other variables.
 - The split is shell-like: spaces separate arguments, and quotes keep spaces in one argument. On macOS and Linux a backslash escapes the next character; on Windows it is a part of the path (`C:\Users\$USER\bin\mcp.exe`).
+- `arguments` are what the user added. The client puts them after the arguments of the command, each as one argument: it does not split them, so a space, a quote or a backslash in one is a part of it on every system. The same variables are replaced in them. The example above starts `matlab-mcp-server` with `--stdio`, `--root` and `/Users/anna/My Models`.
+- An entry with no arguments has no `arguments` key. A command that is empty starts nothing, with or without arguments.
+- A change of the command or of the arguments stops the MCP server and starts it again at the sync that brings the change. Archestra tells the client to sync at once.
+- A program from before the arguments (older than 0.1.2) does not know the key: it starts the command with no arguments of the user. Archestra stores the arguments all the same, and tells the user in the Connect dialog and in **Edit arguments** that they need a newer program; they apply once the device runs one. The first version with arguments is `DESKTOP_MCP_ARGUMENTS_MIN_PROGRAM_VERSION` in `platform/shared/desktop-mcp.ts`: keep it equal to the `version` of `Cargo.toml` that first has them.
 - The client runs the command with no question to the user.
 
 ## State, restart and log

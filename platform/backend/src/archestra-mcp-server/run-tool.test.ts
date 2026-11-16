@@ -385,6 +385,49 @@ describe("run_tool", () => {
     ]);
   });
 
+  test("lets the dispatched upstream tool elicit from the chat viewer", async ({
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: mockContext.organizationId,
+    });
+    const tool = await makeTool({
+      name: "github__create_issue",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(testAgent.id, tool.id);
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+      content: [{ type: "text", text: "created" }],
+      isError: false,
+    } as any);
+    const handler = () => ({ action: "decline" as const });
+    const handlerRequests: { toolName: string; toolCallId?: string }[] = [];
+
+    await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      { tool_name: "github__create_issue", tool_args: {} },
+      {
+        ...mockContext,
+        currentToolCallId: "visible-call-1",
+        upstreamElicitation: {
+          createHandler: (params) => {
+            handlerRequests.push(params);
+            return handler;
+          },
+        },
+      },
+    );
+
+    expect(handlerRequests).toEqual([
+      { toolName: "github__create_issue", toolCallId: "visible-call-1" },
+    ]);
+    expect(
+      vi.mocked(mcpClient.executeToolCallForOwner).mock.calls[0][3],
+    ).toMatchObject({ elicitationHandler: handler });
+  });
+
   test("forwards the encrypted chat key to a dispatched tool call", async ({
     makeAgentTool,
     makeInternalMcpCatalog,

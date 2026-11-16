@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import pg from "pg";
 import {
   buildPgConnectionConfig,
+  isEntraDatabaseAuthEnabled,
   isRdsIamAuthEnabled,
   type RdsIamConnectionOptions,
 } from "@/database/rds-iam";
@@ -629,6 +630,8 @@ export function createDefaultPgClient(
 ): PgClient {
   const env = options.env ?? process.env;
   const iamAuthEnabled = options.iamAuthEnabled ?? isRdsIamAuthEnabled(env);
+  const entraAuthEnabled =
+    options.entraAuthEnabled ?? isEntraDatabaseAuthEnabled(env);
   const awsRegion =
     options.awsRegion?.trim() ||
     env.ARCHESTRA_DATABASE_AWS_REGION?.trim() ||
@@ -637,13 +640,16 @@ export function createDefaultPgClient(
     buildPgConnectionConfig(
       connectionString,
       {
-        connectionTimeoutMillis: iamAuthEnabled ? 10_000 : 1_000,
+        // A token fetch precedes each passwordless connection.
+        connectionTimeoutMillis:
+          iamAuthEnabled || entraAuthEnabled ? 10_000 : 1_000,
         keepAlive: true,
         keepAliveInitialDelayMillis: 10_000,
       },
       {
         ...options,
         iamAuthEnabled,
+        entraAuthEnabled,
         awsRegion,
         env,
       },

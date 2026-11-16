@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { ARCHESTRA_MCP_CATALOG_ID, parseFullToolName } from "@archestra/shared";
 import {
   and,
@@ -28,6 +29,7 @@ import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
+import { slugifyMcpServerNameSql } from "@/database/utils/slug-sql";
 import { constructFrozenMcpDeploymentName } from "@/k8s/deployment-names";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
@@ -597,9 +599,9 @@ class McpServerModel {
       /** Installs of any of these catalog items (the registry's visible page). */
       catalogIds?: string[];
       /**
-       * Installs of catalog items whose name, slugified the way tool names
-       * carry it ({@link slugifyMcpServerName}), is this: a tool's server
-       * prefix, resolved without the caller seeing the catalog item.
+       * Installs of catalog items whose tool prefix ({@link catalogToolPrefix})
+       * is this: a tool's server prefix, resolved without the caller seeing
+       * the catalog item.
        */
       catalogSlug?: string;
       /**
@@ -659,10 +661,9 @@ class McpServerModel {
       );
     }
     if (filters?.catalogSlug !== undefined) {
-      // slugifyMcpServerName in SQL: lowercase, whitespace runs to "_",
-      // anything but [a-z0-9_-] removed.
+      // The item's tool prefix: the allocated one, else its slugified name.
       conditions.push(
-        sql`regexp_replace(regexp_replace(lower(${schema.internalMcpCatalogTable.name}), '[[:space:]]+', '_', 'g'), '[^a-z0-9_-]', '', 'g') = ${filters.catalogSlug}`,
+        sql`coalesce(${schema.internalMcpCatalogTable.toolPrefix}, ${slugifyMcpServerNameSql(schema.internalMcpCatalogTable.name)}) = ${filters.catalogSlug}`,
       );
     }
 
@@ -2740,6 +2741,15 @@ class McpServerModel {
       hasOauthConfig: row.catalogOauthConfig !== null,
       hasSecret: Boolean(s.secretId),
       localInstallationStatus: s.localInstallationStatus,
+      // What the owner added to the command of a desktop MCP catalog item:
+      // how many arguments and their hash, so a change shows in the diff.
+      // Not the arguments: a user can type a token as one.
+      desktopArgumentCount: s.desktopArguments?.length ?? 0,
+      desktopArgumentsHash: s.desktopArguments?.length
+        ? createHash("sha256")
+            .update(JSON.stringify(s.desktopArguments))
+            .digest("hex")
+        : null,
       oauthRefreshError: s.oauthRefreshError ?? null,
       // Lifecycle fields so the soft-delete/restore diff is non-empty: a
       // (flag-only) restore flips deletedAt → null and reinstallRequired → true.

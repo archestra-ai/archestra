@@ -1,8 +1,11 @@
-import { describe, expect, test, vi } from "vitest";
+import { eq } from "drizzle-orm";
 import config from "@/config";
+import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import { describe, expect, test, vi } from "@/test";
 import { spyOnLogger } from "@/test/logging";
 import {
   readGuardrailsV2Activation,
@@ -88,5 +91,48 @@ describe("setGuardrailsDeployment", () => {
         /^Guardrails (enforcement switched off|deployment settings changed)$/,
       ),
     );
+  });
+
+  test("turning enforcement back on queues a pull for every organization whose policy syncs from a repository", async ({
+    makeOrganization,
+  }) => {
+    const syncing = (await makeOrganization()).id;
+    const stopped = (await makeOrganization()).id;
+    for (const organizationId of [syncing, stopped])
+      await OpenAppaGithubSyncModel.save(organizationId, {
+        repo: "acme/policies",
+        ref: null,
+        path: "appa.toml",
+        interval: "15m",
+        githubPatId: null,
+        githubAppConfigId: null,
+      });
+    await OpenAppaGithubSyncModel.setInterval(stopped, null);
+    const queued = async () =>
+      (
+        await db
+          .select()
+          .from(schema.tasksTable)
+          .where(eq(schema.tasksTable.taskType, "openappa_github_sync"))
+      ).map(
+        (task) => (task.payload as { organizationId: string }).organizationId,
+      );
+    const clear = () =>
+      db
+        .delete(schema.tasksTable)
+        .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
+    await GuardrailsDeploymentModel.setEnabled(false);
+    await clear();
+
+    // What merged while enforcement was off is pulled now, not at the next
+    // scheduled check.
+    await setGuardrailsDeployment({ enabled: true });
+    expect(await queued()).toContain(syncing);
+    expect(await queued()).not.toContain(stopped);
+
+    // Already on: another settings change queues nothing.
+    await clear();
+    await setGuardrailsDeployment({ enabled: true });
+    expect(await queued()).toEqual([]);
   });
 });

@@ -51,7 +51,9 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             resourceType: z
               .string()
               .optional()
-              .describe("Filter by resource type (e.g. agent, role)"),
+              .describe(
+                "Filter by resource type (e.g. agent, role); a comma-separated list matches any of them",
+              ),
             resourceId: z
               .string()
               .optional()
@@ -130,6 +132,12 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Return only this resource, e.g. to label a preselected filter",
             ),
+          resourceType: z
+            .string()
+            .optional()
+            .describe(
+              "Offer only resources of these types (comma-separated), e.g. the type picked in the event filter",
+            ),
           limit: z.coerce
             .number()
             .int()
@@ -145,6 +153,12 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 resourceType: z.string(),
                 resourceId: z.string(),
                 name: z.string(),
+                detail: z
+                  .string()
+                  .nullable()
+                  .describe(
+                    "A second line to tell resources apart: the owner (agents, apps, MCP servers, skills) and the description, joined by ' · '. Null when neither is set or the resource's row is gone",
+                  ),
               }),
             ),
           }),
@@ -152,7 +166,11 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { search, resourceId, limit }, user, organizationId },
+      {
+        query: { search, resourceId, resourceType, limit },
+        user,
+        organizationId,
+      },
       reply,
     ) => {
       const canSeeAllAuditLogs = await userHasPermission(
@@ -163,7 +181,7 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
       const data = await AuditLogModel.findResourceOptions({
         organizationId,
-        resourceTypes: RESOURCE_FILTER_TYPES,
+        resourceTypes: scopeResourceTypes(resourceType),
         actorId: canSeeAllAuditLogs ? undefined : user.id,
         search: search || undefined,
         resourceId,
@@ -231,3 +249,10 @@ const RESOURCE_FILTER_TYPES = [
   "skill",
   "team",
 ] as const;
+
+/** The offered types, narrowed to a requested comma-separated subset. */
+function scopeResourceTypes(requested: string | undefined): readonly string[] {
+  if (!requested) return RESOURCE_FILTER_TYPES;
+  const wanted = new Set(requested.split(",").map((type) => type.trim()));
+  return RESOURCE_FILTER_TYPES.filter((type) => wanted.has(type));
+}

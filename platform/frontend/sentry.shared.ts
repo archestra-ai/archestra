@@ -39,7 +39,8 @@ export type FrontendErrorReporting = {
  * through this so they cannot drift apart.
  *
  * Without NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN, errors go to Archestra's
- * project while analytics is on. An explicit DSN reports to that project,
+ * project while analytics is on (off by default with an enterprise license).
+ * An explicit DSN reports to that project,
  * independent of ARCHESTRA_ANALYTICS. Local environments never report; to
  * exercise reporting from a local build, set
  * NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT to something outside that set.
@@ -74,6 +75,8 @@ export function getFrontendServerErrorReporting(): FrontendErrorReporting {
     analyticsEnabled: isAnalyticsEnabled({
       analytics: process.env.ARCHESTRA_ANALYTICS,
       nodeEnv: process.env.NODE_ENV,
+      enterpriseLicenseActivated:
+        process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
     }),
   });
 }

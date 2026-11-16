@@ -71,21 +71,23 @@ describe("McpGatewayConnectInstructions", () => {
 
   it("offers only the OAuth clients allowed on this gateway", async () => {
     server.use(
-      http.get(`${API_ORIGIN}/api/mcp-oauth-clients`, () =>
-        HttpResponse.json([
-          oauthClient({
-            id: "oc-other",
-            clientId: "client-other",
-            name: "Other gateway's app",
-            allowedGatewayIds: ["gw-other"],
-          }),
-          oauthClient({
-            id: "oc-batch",
-            clientId: "client-batch",
-            name: "Batch jobs",
-            allowedGatewayIds: ["gw-1"],
-          }),
-        ]),
+      http.get(`${API_ORIGIN}/api/oauth-clients`, () =>
+        HttpResponse.json(
+          clientPage([
+            oauthClient({
+              id: "oc-other",
+              clientId: "client-other",
+              name: "Other gateway's app",
+              allowedGatewayIds: ["gw-other"],
+            }),
+            oauthClient({
+              id: "oc-batch",
+              clientId: "client-batch",
+              name: "Batch jobs",
+              allowedGatewayIds: ["gw-1"],
+            }),
+          ]),
+        ),
       ),
     );
     const user = userEvent.setup();
@@ -115,8 +117,8 @@ describe("McpGatewayConnectInstructions", () => {
 
   it("asks to create a client when none is allowed on this gateway", async () => {
     server.use(
-      http.get(`${API_ORIGIN}/api/mcp-oauth-clients`, () =>
-        HttpResponse.json([]),
+      http.get(`${API_ORIGIN}/api/oauth-clients`, () =>
+        HttpResponse.json(clientPage([])),
       ),
     );
     const user = userEvent.setup();
@@ -147,6 +149,21 @@ function renderInstructions() {
       />
     </QueryClientProvider>,
   );
+}
+
+/** One page of `/api/oauth-clients`, the shape the list endpoint returns. */
+function clientPage(data: ReturnType<typeof oauthClient>[]) {
+  return {
+    data,
+    pagination: {
+      currentPage: 1,
+      limit: 100,
+      total: data.length,
+      totalPages: 1,
+      hasNext: false,
+      hasPrev: false,
+    },
+  };
 }
 
 function oauthClient(fields: {

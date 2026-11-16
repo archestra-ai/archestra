@@ -6,7 +6,7 @@ import {
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
-import { AgentExcludedSubagentModel, AgentModel } from "@/models";
+import { AgentModel } from "@/models";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   declarePersonalRuntimeCredential,
@@ -39,9 +39,11 @@ import {
   structuredSuccessResult,
 } from "./helpers";
 import {
+  actorPrincipalUserId,
   checkCallerSubagentAccess,
   requireActor,
   resolveCandidateRuntimeSubagentIds,
+  resolveRouterRuntimePoolCandidateIds,
   resolveTargetAgentId,
 } from "./tasks";
 
@@ -137,7 +139,7 @@ const registry = defineArchestraTools([
       const actor = requireActor(context);
       const definitions = await listRuntimeCredentialDefinitions({
         organizationId: actor.organizationId,
-        userId: actor.id,
+        userId: actorPrincipalUserId(actor),
       });
       return structuredSuccessResult({
         credentials: definitions.map(credentialSummary),
@@ -155,7 +157,7 @@ const registry = defineArchestraTools([
       const definition = (
         await listRuntimeCredentialDefinitions({
           organizationId: actor.organizationId,
-          userId: actor.id,
+          userId: actorPrincipalUserId(actor),
         })
       ).find((item) => item.key === args.key);
       if (!definition) return errorResult("Credential not found");
@@ -180,7 +182,7 @@ const registry = defineArchestraTools([
       try {
         const created = await createRuntimeCredentialDefinition({
           organizationId: actor.organizationId,
-          userId: actor.id,
+          userId: actorPrincipalUserId(actor),
           definition: args,
         });
         return structuredSuccessResult({
@@ -207,7 +209,7 @@ const registry = defineArchestraTools([
       try {
         await CredentialAccess.requireByKey({
           organizationId: actor.organizationId,
-          userId: actor.id,
+          userId: actorPrincipalUserId(actor),
           key: args.key,
           action: "update",
         });
@@ -237,7 +239,7 @@ const registry = defineArchestraTools([
       try {
         await CredentialAccess.requireByKey({
           organizationId: actor.organizationId,
-          userId: actor.id,
+          userId: actorPrincipalUserId(actor),
           key: args.key,
           action: "delete",
         });
@@ -350,6 +352,7 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
+        const principalUserId = actorPrincipalUserId(actor);
         const rawAgentId = args.agent_id?.trim();
         const callerAgent = context.agent?.id
           ? await AgentModel.findById(context.agent.id)
@@ -388,7 +391,7 @@ const registry = defineArchestraTools([
             if (
               !(await ResourcePermissions.allows({
                 organizationId: actor.organizationId,
-                userId: actor.id,
+                userId: principalUserId,
                 resource: "agent",
                 scope: explicitTargetAgent.id,
                 action: "read",
@@ -407,30 +410,25 @@ const registry = defineArchestraTools([
                   : subagentAccess.message,
               );
             }
-            candidateAgentIds = await resolveCandidateRuntimeSubagentIds({
-              callerAgent: explicitTargetAgent,
-              actorUserId: actor.id,
-            });
-            if (callerAgent && callerAgent.id !== explicitTargetAgent.id) {
-              const callerExcludedIds =
-                await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
-                  callerAgent.id,
-                );
-              if (callerExcludedIds.length > 0) {
-                const callerExcludedSet = new Set(callerExcludedIds);
-                candidateAgentIds = candidateAgentIds.filter(
-                  (id) => !callerExcludedSet.has(id),
-                );
-              }
+            const routerCandidateIds =
+              await resolveRouterRuntimePoolCandidateIds({
+                routerAgent: explicitTargetAgent,
+                actorUserId: principalUserId,
+                callerAgentId: callerAgent?.id,
+              });
+            if (routerCandidateIds.length > 0) {
+              candidateAgentIds = routerCandidateIds;
+              isRouterPoolTarget = true;
+            } else {
+              candidateAgentIds = [explicitAgentId];
             }
-            isRouterPoolTarget = true;
           } else {
             candidateAgentIds = [explicitAgentId];
           }
         } else if (callerAgent) {
           candidateAgentIds = await resolveCandidateRuntimeSubagentIds({
             callerAgent,
-            actorUserId: actor.id,
+            actorUserId: principalUserId,
           });
         }
 
@@ -462,7 +460,7 @@ const registry = defineArchestraTools([
           if (
             !(await ResourcePermissions.allows({
               organizationId: actor.organizationId,
-              userId: actor.id,
+              userId: principalUserId,
               resource: "agent",
               scope: agent.id,
               action: "read",
@@ -550,7 +548,7 @@ const registry = defineArchestraTools([
             await validateEphemeralRuntimeCredential({
               runtime,
               organizationId: actor.organizationId,
-              userId: actor.id,
+              userId: principalUserId,
               key: entry.key,
               label: args.label,
             });
@@ -558,7 +556,7 @@ const registry = defineArchestraTools([
           const { grantId, expiresInSeconds } =
             await ephemeralCredentialGrantManager.createGrant({
               organizationId: actor.organizationId,
-              userId: actor.id,
+              userId: principalUserId,
               callerAgentId: context.agent.id,
               allowedAgentIds: targets.map(({ agent }) => agent.id),
               key: entry.key,
@@ -654,7 +652,7 @@ const registry = defineArchestraTools([
               await transferPersonalRuntimeCredential({
                 runtime,
                 organizationId: actor.organizationId,
-                userId: actor.id,
+                userId: principalUserId,
                 key: entry.key,
                 value: entry.value,
                 label: args.label,

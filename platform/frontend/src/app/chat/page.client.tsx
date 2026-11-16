@@ -3924,7 +3924,11 @@ export function ChatPageContent({
                                   />
                                 )}
                               {isInitialRuntimeMode &&
-                                runtimePreflight.data?.ready === false && (
+                                runtimePreflight.data != null &&
+                                (!runtimePreflight.data.ready ||
+                                  runtimePreflight.data.missing.length > 0 ||
+                                  runtimePreflight.data.misconfigured.length >
+                                    0) && (
                                   <AgentRuntimeCredentialPrompt
                                     agentId={initialAgentId ?? ""}
                                     missing={[

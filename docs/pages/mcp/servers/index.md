@@ -2,7 +2,7 @@
 title: MCP Servers
 description: Add MCP servers to your organization's registry, install them, and give their tools to agents and gateways
 order: 1
-lastUpdated: 2026-10-05
+lastUpdated: 2026-11-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -47,5 +47,6 @@ A teammate's sign-in expired but yours works? You are not asked to sign in again
 ## What to Know
 
 - Remote or self-hosted? Pick remote when someone already runs the server. Pick self-hosted when Archestra should run it, hold its secrets, and show its logs.
+- Does the MCP server run on a person's own device? Add it as a [desktop MCP server](/docs/mcp/servers/desktop).
 - New tools on a server? Open it, go to **Inspector**, and click **Refresh Tools**. To refresh on a schedule, set [`ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES`](/docs/admin/deployment/configuration#ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES).
 - **Renaming a server** renames its tools too, such as `reports__export`. Assignments and policies stay. Clients must reload their tool list.

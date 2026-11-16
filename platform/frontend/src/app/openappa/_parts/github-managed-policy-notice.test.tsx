@@ -1,6 +1,13 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -14,6 +21,7 @@ import {
 } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { makeSession, makeUserPermissions } from "@/mocks/data/auth";
+import { FinishSetupHost } from "./finish-setup-dialog";
 import { GithubManagedPolicyNotice } from "./github-managed-policy-notice";
 
 vi.mock("@/lib/clients/auth/auth-client");
@@ -97,7 +105,7 @@ test.each([
   client.clear();
 });
 
-test("a pending setup pull request asks for the merge on the configured GitHub host", async () => {
+test("a pending setup pull request shows the Finish setup notice, whose wizard links it on the configured GitHub host", async () => {
   let lastSyncError: string | null = null;
   server.use(
     http.get("http://localhost:9000/api/openappa/github-sync", () =>
@@ -108,6 +116,22 @@ test("a pending setup pull request asks for the merge on the configured GitHub h
           repo: "example/policies",
           ref: "main",
           path: "appa.toml",
+          interval: "1h",
+          setupPullRequestNumber: 7,
+          lastSyncError,
+        },
+      }),
+    ),
+    // The wizard's pull requests step syncs as it opens.
+    http.patch("http://localhost:9000/api/openappa/github-sync", () =>
+      HttpResponse.json({
+        enabled: true,
+        githubWebUrl: "https://github.example.com",
+        source: {
+          repo: "example/policies",
+          ref: "main",
+          path: "appa.toml",
+          interval: "1h",
           setupPullRequestNumber: 7,
           lastSyncError,
         },
@@ -120,22 +144,34 @@ test("a pending setup pull request asks for the merge on the configured GitHub h
   render(
     <QueryClientProvider client={client}>
       <GithubManagedPolicyNotice />
+      <FinishSetupHost />
     </QueryClientProvider>,
   );
-  expect(await screen.findByText("Merge your initial policy")).toBeVisible();
+  // The one Finish setup notice, as on the Git sync settings.
+  expect(await screen.findByText("Finish the Git sync setup")).toBeVisible();
+  expect(screen.getByText("Merge PR #7.")).toBeVisible();
+  expect(screen.queryByText("Managed in GitHub")).not.toBeInTheDocument();
+  fireEvent.click(await screen.findByRole("button", { name: "Finish setup" }));
   expect(
-    screen.getByRole("link", { name: "Review and merge PR" }),
+    within(
+      await screen.findByRole("dialog", { name: "Merge the pull request" }),
+    ).getByRole("link", { name: "Initial policy #7" }),
   ).toHaveAttribute(
     "href",
     "https://github.example.com/example/policies/pull/7",
   );
-  expect(screen.queryByText("Managed in GitHub")).not.toBeInTheDocument();
-  // A failed sync outranks the merge request: the error is what to act on.
+  cleanup();
+  // A failed sync outranks the setup: the error is what to act on.
   lastSyncError = "GitHub returned HTTP 403";
   await client.invalidateQueries();
+  render(
+    <QueryClientProvider client={client}>
+      <GithubManagedPolicyNotice />
+    </QueryClientProvider>,
+  );
   expect(await screen.findByText("Git sync failed")).toBeVisible();
   expect(
-    screen.queryByRole("link", { name: "Review and merge PR" }),
+    screen.queryByText("Finish the Git sync setup"),
   ).not.toBeInTheDocument();
   client.clear();
 });

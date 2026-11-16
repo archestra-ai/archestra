@@ -107,6 +107,35 @@ export function hasDesktopTarget(
 }
 
 /**
+ * Whether the Add dialog starts with no screen of its own. It does when the
+ * button that opened it said already what it does, but not for an item with
+ * a command: the viewer first sees the command and can add arguments to it,
+ * so the installation is not made before they press the button.
+ */
+export function desktopAddStartsAtOnce(params: {
+  startAtOnce: boolean;
+  /** The command of the catalog item; null when it has none. */
+  command: string | null;
+}): boolean {
+  return params.startAtOnce && params.command === null;
+}
+
+/**
+ * Whether the arguments in the field are other than the stored ones. No
+ * arguments are stored as null.
+ */
+export function desktopArgumentsChanged(
+  stored: readonly string[] | null | undefined,
+  typed: readonly string[],
+): boolean {
+  const current = stored ?? [];
+  return (
+    current.length !== typed.length ||
+    current.some((value, index) => value !== typed[index])
+  );
+}
+
+/**
  * Which first screen the Add dialog shows, from the viewer's devices:
  * - `loading` / `error`: not known yet, so neither promise is made;
  * - `no-bridge`: no computer runs the MCP bridge, so Add leads to its setup;

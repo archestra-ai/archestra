@@ -9,6 +9,7 @@ import {
   getAgentCatalogImages,
   MESSAGING_CHANNEL_LABELS,
   orderedPopularAgentIds,
+  withAgentRuntimeDefaults,
 } from "@archestra/shared";
 import {
   Bot,
@@ -33,10 +34,11 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import { runtimeTemplatePosition } from "@/lib/agent-runtime-template-order";
 import {
+  useAgentRuntimeAccess,
+  useBuiltInRuntimeDefaults,
   useResolveRuntimeTemplate,
   useRuntimeTemplateCatalog,
 } from "@/lib/agent-runtime-templates.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
@@ -161,22 +163,40 @@ export function useAvailableAgentCatalogTemplates() {
     isFetching,
     refetch,
   } = useOrganization(true, { fresh: true });
-  const catalog = getAgentCatalogTemplates(images, appName);
+  const builtInDefaults = useBuiltInRuntimeDefaults();
+  const catalog = getAgentCatalogTemplates(images, appName).map((template) => ({
+    ...template,
+    initialValues: {
+      ...template.initialValues,
+      runtime:
+        template.initialValues.runtime &&
+        withAgentRuntimeDefaults({
+          runtime: template.initialValues.runtime,
+          defaults: builtInDefaults(template.id as AgentCatalogId),
+        }),
+    },
+  }));
   const custom = useRuntimeTemplateCatalog();
+  const access = useAgentRuntimeAccess();
+  const usable = new Set(
+    access.data?.runtimes.filter((item) => item.canUse).map((item) => item.id),
+  );
   const builtIns = orderedPopularAgentIds(
     organization?.popularAgentOverrides ?? null,
     AGENT_CATALOG_IDS,
-  ).flatMap((id) => catalog.filter((item) => item.id === id));
+  ).flatMap((id) => catalog.filter((item) => item.id === id && usable.has(id)));
   const templates =
     organization &&
+    access.data &&
     !isError &&
     !custom.isError &&
+    !access.isError &&
     !isFetching &&
     !custom.isFetching
       ? [
           ...builtIns,
           ...(custom.data ?? [])
-            .filter((item) => !item.hidden)
+            .filter((item) => !item.hidden && usable.has(item.id))
             .map(
               (item): AgentCatalogTemplate => ({
                 id: item.id,
@@ -210,13 +230,21 @@ export function useAvailableAgentCatalogTemplates() {
     isFetching ||
     custom.isFetching ||
     (!organization && !isError) ||
-    custom.isPending;
+    custom.isPending ||
+    access.isPending;
   return {
     templates,
-    isError: isError || custom.isError,
-    isFetching: isFetching || custom.isFetching,
+    /** Whether the reader may run an image that is none of the runtimes. */
+    canUseCustomImage: access.data?.canConfigureAny === true,
+    /** Whether the reader may use any runtime; undefined while loading. */
+    hasRuntimeAccess: access.data
+      ? access.data.canConfigureAny ||
+        access.data.runtimes.some((item) => item.canUse)
+      : undefined,
+    isError: isError || custom.isError || access.isError,
+    isFetching: isFetching || custom.isFetching || access.isFetching,
     isLoading,
-    refetch: () => Promise.all([refetch(), custom.refetch()]),
+    refetch: () => Promise.all([refetch(), custom.refetch(), access.refetch()]),
   };
 }
 
@@ -238,17 +266,22 @@ export function AgentCatalog({
   /** Agent Runtimes run in a dedicated container; undefined while loading. */
   runtimeAvailable: boolean | undefined;
 }) {
-  const { templates, isError, isLoading, refetch } =
-    useAvailableAgentCatalogTemplates();
+  const {
+    templates,
+    canUseCustomImage,
+    hasRuntimeAccess,
+    isError,
+    isLoading,
+    refetch,
+  } = useAvailableAgentCatalogTemplates();
   const resolver = useResolveRuntimeTemplate();
   const appName = useAppName();
   const appIconLogo = useAppIconLogo();
-  const { data: canConfigureRuntime } = useHasPermissions({
-    agent: ["configure-runtime"],
-  });
+  // Runtimes the reader may use; nothing to show when there are none.
+  const showsRuntimes = hasRuntimeAccess === true;
   return (
     <div className="space-y-6">
-      {canConfigureRuntime === true && runtimeAvailable === false && (
+      {showsRuntimes && runtimeAvailable === false && (
         <AgentRuntimeUnavailableNotice />
       )}
       <div className="space-y-12">
@@ -266,7 +299,7 @@ export function AgentCatalog({
               disabled={!canCreateAgent}
               disabledReason="Requires permission to create agents."
             />
-            {canConfigureRuntime === true &&
+            {showsRuntimes &&
               (runtimeAvailable === undefined || isLoading ? (
                 <output
                   className="contents"
@@ -313,37 +346,30 @@ export function AgentCatalog({
                       }}
                       disabled={
                         !canCreateAgent ||
-                        !canConfigureRuntime ||
                         !runtimeAvailable ||
                         resolver.isPending
                       }
                       disabledReason={
                         canCreateAgent
-                          ? !canConfigureRuntime
-                            ? "Requires Configure runtime permission."
-                            : "Requires the Agent Sandbox controller."
+                          ? "Requires the Agent Sandbox controller."
                           : "Requires permission to create agents."
                       }
                     />
                   ))}
-                  <CatalogSourceCard
-                    icon={<Code className="size-5" />}
-                    title="Custom image"
-                    description="Run your own container image and command."
-                    onClick={onStartFromImage}
-                    disabled={
-                      !canCreateAgent ||
-                      !canConfigureRuntime ||
-                      !runtimeAvailable
-                    }
-                    disabledReason={
-                      canCreateAgent
-                        ? !canConfigureRuntime
-                          ? "Requires Configure runtime permission."
-                          : "Requires the Agent Sandbox controller."
-                        : "Requires permission to create agents."
-                    }
-                  />
+                  {canUseCustomImage && (
+                    <CatalogSourceCard
+                      icon={<Code className="size-5" />}
+                      title="Custom image"
+                      description="Run your own container image and command."
+                      onClick={onStartFromImage}
+                      disabled={!canCreateAgent || !runtimeAvailable}
+                      disabledReason={
+                        canCreateAgent
+                          ? "Requires the Agent Sandbox controller."
+                          : "Requires permission to create agents."
+                      }
+                    />
+                  )}
                 </>
               ))}
           </div>

@@ -227,9 +227,6 @@ const selectExtendedFields = {
   lastUsedAt: z.date().nullable().optional(),
 };
 
-const GUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 const insertExtendedFields = {
   incomingEmailSecurityMode: IncomingEmailSecurityModeSchema.optional(),
   agentType: AgentTypeSchema.optional(),
@@ -244,15 +241,6 @@ const insertExtendedFields = {
   runtime: AgentRuntimeSchema.nullable().optional(),
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   activationSkillMode: AgentActivationSkillModeSchema.optional(),
-  entraAgentIdentityId: z
-    .string()
-    .trim()
-    .regex(
-      GUID_PATTERN,
-      "Enter the Entra agent identity's app ID, a GUID such as 00000000-0000-0000-0000-000000000000",
-    )
-    .nullable()
-    .optional(),
 };
 
 /**
@@ -308,7 +296,8 @@ function validateIncomingEmailDomain(
 const AgentRowSchema = createSelectSchema(
   schema.agentsTable,
   selectExtendedFields,
-);
+  // Deprecated column, superseded by agent_identity_bindings.
+).omit({ entraAgentIdentityId: true });
 
 /**
  * Hot-path agent shape for the MCP gateway: the raw agents row plus labels,
@@ -562,6 +551,8 @@ export const InsertAgentSchemaBase = createInsertSchema(
     latestVersion: true,
     // Stamped by AgentUsageModel when the agent is used; never client-settable.
     lastUsedAt: true,
+    // Deprecated column, superseded by agent_identity_bindings.
+    entraAgentIdentityId: true,
     // Set on an existing gateway by the update route, which checks the
     // editor may use the GitHub App it names. A new agent starts without it.
     githubActionsAccess: true,
@@ -631,6 +622,8 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     latestVersion: true,
     // Stamped by AgentUsageModel when the agent is used; never client-settable.
     lastUsedAt: true,
+    // Deprecated column, superseded by agent_identity_bindings.
+    entraAgentIdentityId: true,
   });
 
 // Full schema with validation refinement

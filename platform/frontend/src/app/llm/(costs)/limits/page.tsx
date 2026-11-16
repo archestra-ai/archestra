@@ -107,8 +107,8 @@ import {
 } from "@/lib/limits.query";
 import { useTeamLimitAccess } from "@/lib/limits-access";
 import { useLlmModelOptions } from "@/lib/llm-models.query";
-import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import { useMemberOptionsReferences } from "@/lib/member-options.query";
+import { useOauthClients } from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 import { logoNameForProvider } from "@/lib/provider-logos";
 import { useTeams } from "@/lib/teams/team.query";
@@ -304,8 +304,9 @@ export default function LimitsPage() {
     enabled: access.globalRead,
   });
   const virtualKeys = virtualKeysData?.data ?? [];
-  const { data: oauthClientsData } = useLlmOauthClients({
+  const { data: oauthClientsData } = useOauthClients({
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
+    capability: "llm:proxy",
     enabled: access.globalRead,
   });
   const oauthClients = oauthClientsData?.data ?? [];

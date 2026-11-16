@@ -63,13 +63,15 @@ describe("POST /api/openappa/github-app/manifest", () => {
       ).default_permissions;
     };
     // Reading and proposing (Contents, Pull requests), the policy check on
-    // pull requests (Checks); Metadata comes with every App. The branch
+    // pull requests (Checks) and the validation workflow setup writes and
+    // keeps current (Workflows); Metadata comes with every App. The branch
     // ruleset that requires the check is the administrator's to import, so
     // no Administration, and self-service turned on later changes nothing.
     const expected = {
       contents: "write",
       pull_requests: "write",
       checks: "write",
+      workflows: "write",
       metadata: "read",
     };
     expect(await permissions()).toEqual(expected);

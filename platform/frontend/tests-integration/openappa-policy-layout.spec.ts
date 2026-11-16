@@ -57,7 +57,12 @@ for (const viewport of [
         method: "get",
         url: "/api/openappa/github-sync",
         body: {
-          selfService: { enabled: false, setting: false, directory: "mcp" },
+          selfService: {
+            enabled: false,
+            setting: false,
+            directory: "mcp",
+            autoMerge: { enabled: false, setting: false },
+          },
           enabled: true,
           hasPolicy: false,
           source: null,
@@ -94,6 +99,7 @@ for (const viewport of [
         body: {
           batteries: [],
           unusedAliases: [],
+          repositoryFiles: [],
           rootRevision: 1,
           lastError: null,
           composition: {

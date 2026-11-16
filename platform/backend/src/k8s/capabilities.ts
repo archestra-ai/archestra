@@ -1,4 +1,5 @@
 import type * as k8s from "@kubernetes/client-node";
+import config from "@/config";
 import logger from "@/logging";
 import type { K8sCapabilities } from "@/types";
 import {
@@ -16,6 +17,7 @@ import { createK8sClients, isK8sNotFoundError, loadKubeConfig } from "./shared";
 export async function getK8sCapabilities(): Promise<K8sCapabilities> {
   const cached = getValidCacheEntry(globalCapabilitiesCache);
   if (cached) return cached;
+  if (config.orchestrator.enabled === false) return unavailableCapabilities();
 
   try {
     const { kubeConfig, namespace } = loadKubeConfig();

@@ -39,7 +39,10 @@ import {
   UNATTENDED_HEADER,
   USER_ID_HEADER,
 } from "@archestra/shared";
-import type { AzureModelEvidence } from "@archestra/shared/azure-models";
+import {
+  type AzureModelEvidence,
+  isAzureAnthropicBackingModel,
+} from "@archestra/shared/azure-models";
 import { context, propagation } from "@opentelemetry/api";
 import {
   extractReasoningMiddleware,
@@ -1055,9 +1058,14 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       if (!baseURL) {
         throw new ApiError(400, "Azure AI Foundry base URL is required.");
       }
-      const useResponses = isAzureOpenAiFirstPartyModelName(
-        azureCapabilities?.underlyingModelName ?? modelName,
-      );
+      // Claude deployments serve Responses but reject Chat Completions.
+      const useResponses =
+        isAzureOpenAiFirstPartyModelName(
+          azureCapabilities?.underlyingModelName ?? modelName,
+        ) ||
+        isAzureAnthropicBackingModel({
+          underlyingModelName: azureCapabilities?.underlyingModelName,
+        });
 
       // Only direct classic Azure calls need the AI SDK to inject api-version.
       // Proxied calls let the adapter choose from the actual upstream URL:

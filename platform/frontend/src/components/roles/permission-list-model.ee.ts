@@ -54,7 +54,6 @@ const actionVerbs: Record<Action, string> = {
   impersonate: "Impersonate",
   "full-view": "Full view of",
   admin: "All",
-  "configure-runtime": "Configure runtime for",
 };
 
 /** Every grantable permission, grouped as the roles pages show them. */

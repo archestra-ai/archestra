@@ -10,7 +10,7 @@ CHART = Path(__file__).resolve().parents[2] / 'platform/helm/archestra'
 
 @unittest.skipUnless(shutil.which('helm'), 'Helm is required to render chart notes')
 class RegistryNoticeTests(unittest.TestCase):
-    def render(self, *values):
+    def render(self, *values, chart_version='0.0.0'):
         options = ['--set', 'postgresql.auth.password=test',
                    '--set', 'postgresql.auth.postgresPassword=test']
         for value in values:
@@ -29,7 +29,7 @@ class RegistryNoticeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             chart = Path(directory)
             (chart / 'templates').mkdir()
-            (chart / 'Chart.yaml').write_text('apiVersion: v2\nname: registry-notice\nversion: 0.0.0\n')
+            (chart / 'Chart.yaml').write_text(f'apiVersion: v2\nname: registry-notice\nversion: {chart_version}\n')
             shutil.copyfile(CHART / 'values.yaml', chart / 'values.yaml')
             shutil.copyfile(CHART / 'templates/_helpers.tpl', chart / 'templates/_helpers.tpl')
             shutil.copyfile(CHART / 'templates/NOTES.txt', chart / 'registry-notice.txt')
@@ -57,3 +57,13 @@ class RegistryNoticeTests(unittest.TestCase):
             with self.subTest(variable=variable):
                 rendered = self.render('archestra.env.' + variable + '=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public')
                 self.assertIn('  - archestra.env.' + variable, rendered)
+
+    def test_chart_registry_notice_shows_until_artifact_registry_stops(self):
+        for version in ('1.4.26', '1.5.0-rc.34', '1.5.0'):
+            with self.subTest(version=version):
+                rendered = self.render(chart_version=version)
+                self.assertIn('Chart registry notice:', rendered)
+                self.assertIn('oci://ghcr.io/archestra-ai/helm-charts/archestra-platform', rendered)
+        for version in ('1.5.1', '1.6.0-rc.1'):
+            with self.subTest(version=version):
+                self.assertNotIn('Chart registry notice:', self.render(chart_version=version))

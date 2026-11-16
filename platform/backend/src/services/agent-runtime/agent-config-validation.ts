@@ -1,6 +1,4 @@
-import { isDeepStrictEqual } from "node:util";
 import { findAgentRuntimeTier } from "@archestra/shared";
-import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import {
   LlmProviderApiKeyModel,
@@ -18,37 +16,16 @@ import { organizationAgentRuntimeTiers } from "./runtime-tiers";
 // agents REST routes and the create_agent/edit_agent MCP tools both call these,
 // so neither can store a runtime or model pairing the other would refuse.
 
+/**
+ * Whether a runtime may run here at all: the cluster has a runtime backend,
+ * the agent is an Agent, and privileged mode is allowed. Who may use which
+ * Agent Runtime is `applyAgentRuntimeAccess`'s question.
+ */
 export async function requireAgentRuntimePermission(params: {
   agentType: AgentType;
   runtime?: AgentRuntime | null;
   isAdmin: boolean;
-  userId: string;
-  organizationId: string;
-  previous?: AgentRuntime | null;
 }): Promise<void> {
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  // Omitted and unchanged values preserve existing configuration, including
-  // on ordinary edits after a role loses permission. Null removes a runtime.
-  const changesRuntime =
-    params.runtime !== undefined &&
-    !isDeepStrictEqual(params.runtime, params.previous ?? null);
-  if (
-    changesRuntime &&
-    !(await userHasPermission(
-      params.userId,
-      params.organizationId,
-      "agent",
-      "configure-runtime",
-    ))
-  ) {
-    throw new ApiError(
-      403,
-      "Configure runtime permission is required to change an agent runtime",
-    );
-  }
-  // SPDX-SnippetEnd
   if (params.runtime == null) return;
   if (!isAnyAgentRuntimeBackendDriverEnabled()) {
     throw new ApiError(

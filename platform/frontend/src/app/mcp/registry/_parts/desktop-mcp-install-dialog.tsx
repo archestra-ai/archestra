@@ -2,6 +2,7 @@
 
 import { Clock, Laptop, Loader2, TriangleAlert } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { argumentsFromText } from "@/components/container-deployment-fields.utils";
 import {
   McpBridgeSetup,
   McpBridgeSetupStatus,
@@ -22,8 +23,17 @@ import {
   useDesktopMcpInstallationStatus,
 } from "@/lib/desktop-device.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { desktopServerErrorSentence } from "@/lib/mcp/desktop-mcp";
+import {
+  desktopArgumentsProgramNotice,
+  desktopMcpArgumentsError,
+  desktopMcpCommandOf,
+  desktopServerErrorSentence,
+} from "@/lib/mcp/desktop-mcp";
 import { cn } from "@/lib/utils/tailwind";
+import {
+  DesktopMcpArgumentsFields,
+  DesktopMcpArgumentsNotice,
+} from "./desktop-mcp-arguments-fields";
 import {
   DESKTOP_MCP_NO_TARGET_REASON,
   DESKTOP_MCP_PROGRESS_STEPS,
@@ -31,6 +41,7 @@ import {
   type DesktopMcpAddCase,
   type DesktopMcpProgress,
   type DesktopMcpProgressHint,
+  desktopAddStartsAtOnce,
   desktopConnectActionLabel,
   desktopMcpAddCase,
   desktopMcpProgress,
@@ -44,13 +55,21 @@ import { useChatWithCatalogItem } from "./use-chat-with-catalog-item";
 type Props = {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (catalogItem: CatalogItem) => Promise<{ id: string } | null>;
+  /**
+   * Makes the installation. `desktopArguments` are what the user added to
+   * the command of the item; undefined when they added none.
+   */
+  onAdd: (
+    catalogItem: CatalogItem,
+    desktopArguments: string[] | undefined,
+  ) => Promise<{ id: string } | null>;
   catalogItem: CatalogItem;
   isAdding: boolean;
   /**
    * The button that opened the dialog said already what it does (Connect,
-   * or Install MCP bridge and connect): the dialog starts at once, with no
-   * intro.
+   * or Install MCP bridge and connect): the dialog has no intro. An item
+   * with no command starts at once; one with a command first shows the
+   * command and the arguments the user can add to it.
    */
   startAtOnce?: boolean;
   /**
@@ -65,6 +84,14 @@ type Props = {
  * Connects a desktop MCP server from the user's linked device to the app.
  * The installation is always the user's own: the MCP bridge on their device
  * runs the server.
+ *
+ * Before the installation is made, the dialog shows the command of the
+ * catalog item, which is not the user's to change, and a field for the
+ * arguments the user adds to it. The arguments are optional: one click on
+ * the button connects with none. When the user's device runs a program from
+ * before the arguments, a notice says that they need a newer one; it stays
+ * to the end when the user added some, so "connected" is not all the dialog
+ * says.
  *
  * With a linked device, the dialog follows the connection until the tools
  * are read, then says the server is connected. With none, it creates the
@@ -104,6 +131,8 @@ function DesktopMcpAddFlow({
     bridgeSetup: boolean;
     /** The setup was shown: the dialog keeps its width to the end. */
     viaSetup: boolean;
+    /** The user added arguments to the command. */
+    withArguments: boolean;
   } | null>(null);
   const { data: installStatus } = useDesktopMcpInstallationStatus(
     added?.id ?? null,
@@ -117,25 +146,44 @@ function DesktopMcpAddFlow({
   );
   const name = catalogItem.name;
   const canAdd = hasDesktopTarget(catalogItem.desktopConfig);
+  // Exactly as stored; null for an item with no command, which takes no
+  // arguments. An installation made earlier has its arguments: the dialog
+  // that follows it asks for none.
+  const command = followServerId
+    ? null
+    : desktopMcpCommandOf(catalogItem.desktopConfig);
+  const [argumentsText, setArgumentsText] = useState("");
+  const desktopArguments = argumentsFromText(argumentsText);
+  const argumentsError =
+    command === null ? null : desktopMcpArgumentsError(desktopArguments);
 
   const add = async () => {
-    const server = await onAdd(catalogItem);
+    // None are not sent: should the user have an installation already, it
+    // keeps the arguments it has.
+    const sent =
+      command === null || desktopArguments.length === 0
+        ? undefined
+        : desktopArguments;
+    const server = await onAdd(catalogItem, sent);
     if (!server) return;
     setAdded({
       id: server.id,
       at: Date.now(),
       bridgeSetup: addCase.kind === "no-bridge",
       viaSetup: addCase.kind === "no-bridge",
+      withArguments: sent !== undefined,
     });
   };
 
   // Started from a button that named the action, or to follow an earlier
   // installation: no intro, once the devices are known (they decide whether
-  // the setup comes first).
+  // the setup comes first). An item with a command waits for its button:
+  // the user can add arguments first.
+  const startsAtOnce = desktopAddStartsAtOnce({ startAtOnce, command });
   const startedAtOnce = useRef(false);
   useEffect(() => {
     if (
-      !(startAtOnce || followServerId) ||
+      !(startsAtOnce || followServerId) ||
       startedAtOnce.current ||
       addCase.kind === "loading"
     ) {
@@ -149,6 +197,7 @@ function DesktopMcpAddFlow({
         at: Date.now(),
         bridgeSetup,
         viaSetup: bridgeSetup,
+        withArguments: false,
       });
       return;
     }
@@ -182,6 +231,22 @@ function DesktopMcpAddFlow({
 
   const title = `Connect ${name} from your device to ${appName}`;
   const description = connectDescription({ addCase, appName, name });
+  // Read from the live devices: a device that is linked in this dialog, by
+  // the MCP bridge setup, is known here once it reported its version.
+  const argumentsNotice = desktopArgumentsProgramNotice({ device, appName });
+  const argumentsFields =
+    command === null ? null : (
+      <DesktopMcpArgumentsFields
+        idPrefix="desktop-mcp-connect"
+        name={name}
+        command={command}
+        value={argumentsText}
+        onValueChange={setArgumentsText}
+        error={argumentsError}
+        disabled={isAdding}
+        notice={argumentsNotice}
+      />
+    );
   const view: {
     icon: ReactNode;
     title: string;
@@ -205,15 +270,19 @@ function DesktopMcpAddFlow({
       ? {
           icon: <Laptop className="h-5 w-5" />,
           title,
-          body: canAdd ? (
+          body: !canAdd ? (
+            <NotSetUpNotice />
+          ) : startAtOnce && argumentsFields ? (
+            // The button that opened the dialog was the intro.
+            argumentsFields
+          ) : (
             <ProgressSteps
               name={name}
               description={description}
+              fields={argumentsFields}
               progress={null}
               hint={null}
             />
-          ) : (
-            <NotSetUpNotice />
           ),
           footer: (
             <>
@@ -228,7 +297,12 @@ function DesktopMcpAddFlow({
               <Button
                 type="button"
                 onClick={() => void add()}
-                disabled={isAdding || !canAdd || addCase.kind === "loading"}
+                disabled={
+                  isAdding ||
+                  !canAdd ||
+                  addCase.kind === "loading" ||
+                  argumentsError !== null
+                }
               >
                 {isAdding && <Loader2 className="animate-spin" />}
                 <span>{desktopConnectActionLabel(addCase)}</span>
@@ -243,6 +317,12 @@ function DesktopMcpAddFlow({
             <ProgressSteps
               name={name}
               description={description}
+              // The arguments the user added do not apply on this device.
+              notice={
+                added?.withArguments && argumentsNotice ? (
+                  <DesktopMcpArgumentsNotice notice={argumentsNotice} />
+                ) : null
+              }
               progress={progress}
               hint={
                 !progress.done && progress.hint ? (
@@ -351,15 +431,22 @@ function connectDescription(params: {
  * them: before Connect (`progress` null) the first step is next, then they
  * follow the device. A note on why it takes long goes under the step it is
  * about. A skeleton stands for the intro line while the devices load.
+ * `fields` go between the intro line and the steps: before Connect, the
+ * command with the arguments the user can add. `notice` goes under the
+ * steps: it is about the whole connection, not about one step.
  */
 function ProgressSteps({
   name,
   description,
+  fields,
+  notice,
   progress,
   hint,
 }: {
   name: string;
   description: string | null;
+  fields?: ReactNode;
+  notice?: ReactNode;
   progress: DesktopMcpProgress | null;
   hint: ReactNode;
 }) {
@@ -370,6 +457,7 @@ function ProgressSteps({
       ) : (
         <Skeleton className="h-5 w-2/3" aria-busy />
       )}
+      {fields}
       <ol className="space-y-[18px]" aria-live="polite">
         {DESKTOP_MCP_PROGRESS_STEPS.map((step, index) => {
           const status = progress
@@ -412,6 +500,7 @@ function ProgressSteps({
           );
         })}
       </ol>
+      {notice}
     </div>
   );
 }

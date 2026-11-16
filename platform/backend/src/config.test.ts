@@ -57,9 +57,6 @@ import config, {
   parseFileStorageProvider,
   parseFileStorageS3Config,
   parseFrontendBaseUrl,
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   parseHelmReleaseName,
   // SPDX-SnippetEnd
   parseK8sResourceQuantity,
@@ -76,6 +73,10 @@ import config, {
   parseNonNegativeInt,
   parseOpenAppaConfig,
   parseOpenAppaPolicyCheckName,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  parseOptionalNamespace,
   parseOptionalPort,
   parseOtelCaptureContent,
   parseProcessType,
@@ -84,6 +85,7 @@ import config, {
   parseSampleRate,
   parseSandboxMemoryMaxBytes,
   parseShutdownSeconds,
+  parseSpiffeTrustDomain,
   parseSreApiServerCidrs,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
@@ -109,6 +111,7 @@ describe("getAnalyticsConfig", () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     delete process.env.ARCHESTRA_ANALYTICS;
+    delete process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED;
     delete process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY;
     delete process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST;
   });
@@ -142,6 +145,21 @@ describe("getAnalyticsConfig", () => {
     expect(getAnalyticsConfig().enabled).toBe(true);
   });
 
+  test("defaults to disabled in production with an enterprise license", () => {
+    process.env.NODE_ENV = "production";
+    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED = "true";
+
+    expect(getAnalyticsConfig().enabled).toBe(false);
+  });
+
+  test("explicit ARCHESTRA_ANALYTICS=enabled wins with an enterprise license", () => {
+    process.env.NODE_ENV = "production";
+    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED = "true";
+    process.env.ARCHESTRA_ANALYTICS = "enabled";
+
+    expect(getAnalyticsConfig().enabled).toBe(true);
+  });
+
   test("explicit ARCHESTRA_ANALYTICS=disabled wins in production", () => {
     process.env.NODE_ENV = "production";
     process.env.ARCHESTRA_ANALYTICS = "disabled";
@@ -168,6 +186,7 @@ describe("getAnalyticsConfig", () => {
 describe("getSentryConfig", () => {
   beforeEach(() => {
     vi.stubEnv("ARCHESTRA_ANALYTICS", undefined);
+    vi.stubEnv("ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED", undefined);
     vi.stubEnv("ARCHESTRA_SENTRY_BACKEND_DSN", undefined);
     vi.stubEnv("ARCHESTRA_SENTRY_ENVIRONMENT", undefined);
     vi.stubEnv("NODE_ENV", "production");
@@ -518,6 +537,37 @@ describe("getRumOtlpAuthHeaders", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       "OTEL authentication misconfigured: both ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
     );
+  });
+});
+
+describe("parseSpiffeTrustDomain", () => {
+  test("defaults to the frontend's hostname", () => {
+    expect(
+      parseSpiffeTrustDomain({
+        rawValue: undefined,
+        frontendBaseUrl: "https://archestra.example.com:8443",
+      }),
+    ).toBe("archestra.example.com");
+  });
+
+  test("takes a configured trust domain", () => {
+    expect(
+      parseSpiffeTrustDomain({
+        rawValue: " prod.example.org ",
+        frontendBaseUrl: "https://archestra.example.com",
+      }),
+    ).toBe("prod.example.org");
+  });
+
+  test("rejects a value that is not a trust domain", () => {
+    for (const rawValue of ["Example.com", "spiffe://example.com", "a b"]) {
+      expect(() =>
+        parseSpiffeTrustDomain({
+          rawValue,
+          frontendBaseUrl: "https://archestra.example.com",
+        }),
+      ).toThrow(/SPIFFE trust domain/);
+    }
   });
 });
 
@@ -2487,6 +2537,17 @@ describe("isCodeRuntimeEnabled", () => {
     loadKubeconfigFromCurrentCluster: undefined,
   };
 
+  test("disabled when the orchestrator is turned off, even with the flag and k8s configured", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "true",
+        loadKubeconfigFromCurrentCluster: "true",
+        orchestratorEnabledEnv: "false",
+      }),
+    ).toBe(false);
+  });
+
   test("enabled when an explicit runner host is configured, even without k8s", () => {
     expect(
       isCodeRuntimeEnabled({
@@ -3037,6 +3098,62 @@ describe("parseMcpIdleHibernationSeconds", () => {
   });
 });
 // SPDX-SnippetEnd
+
+describe("parseOptionalNamespace", () => {
+  test("takes a valid namespace name", () => {
+    expect(
+      parseOptionalNamespace(
+        "agent-runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBe("agent-runtimes");
+    expect(
+      parseOptionalNamespace(
+        "  agent-runtimes  ",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBe("agent-runtimes");
+  });
+
+  test("unset or blank leaves runs in their fallback namespace", () => {
+    expect(
+      parseOptionalNamespace(
+        undefined,
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace("   ", "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE"),
+    ).toBeUndefined();
+  });
+
+  test("ignores a name Kubernetes would reject", () => {
+    expect(
+      parseOptionalNamespace(
+        "Agent-Runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "agent_runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "-agent-runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "a".repeat(64),
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+  });
+});
 
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -3821,6 +3938,7 @@ describe("OpenAPPA feature configuration", () => {
     "true",
     " true ",
   ])("requires explicit opt-in for external reports independently of analytics (%s)", (forwarding) => {
+    vi.stubEnv("ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED", undefined);
     for (const analytics of ["disabled", "enabled", undefined]) {
       vi.stubEnv("ARCHESTRA_ANALYTICS", analytics);
       for (const environment of ["production", "development"]) {
@@ -3877,6 +3995,24 @@ describe("OpenAPPA feature configuration", () => {
     );
     expect(() => parseOpenAppaConfig({ selfService: "true" })).toThrow(
       "ARCHESTRA_OPENAPPA_SELF_SERVICE must be one of: enabled, disabled",
+    );
+  });
+
+  test("auto-merge of self-served pull requests is unset by default, and set only to enabled or disabled", () => {
+    expect(parseOpenAppaConfig()).not.toHaveProperty("selfServiceAutoMerge");
+    expect(
+      parseOpenAppaConfig({ selfServiceAutoMerge: "" }),
+    ).not.toHaveProperty("selfServiceAutoMerge");
+    expect(
+      parseOpenAppaConfig({ selfServiceAutoMerge: " enabled " })
+        .selfServiceAutoMerge,
+    ).toBe("enabled");
+    expect(
+      parseOpenAppaConfig({ selfServiceAutoMerge: "disabled" })
+        .selfServiceAutoMerge,
+    ).toBe("disabled");
+    expect(() => parseOpenAppaConfig({ selfServiceAutoMerge: "on" })).toThrow(
+      "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE must be one of: enabled, disabled",
     );
   });
 

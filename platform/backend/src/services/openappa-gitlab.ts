@@ -462,6 +462,22 @@ class OpenAppaGitlab {
     return request;
   }
 
+  /** Whether `commit` has `ancestor` in its history. */
+  async contains(params: {
+    access: GitAccess;
+    repo: string;
+    commit: string;
+    ancestor: string;
+  }): Promise<boolean> {
+    return withGitlabErrors(() =>
+      gitClient(params.access).gitlabContains(
+        params.repo,
+        params.commit,
+        params.ancestor,
+      ),
+    );
+  }
+
   async branchCommit(params: {
     access: GitAccess;
     repo: string;

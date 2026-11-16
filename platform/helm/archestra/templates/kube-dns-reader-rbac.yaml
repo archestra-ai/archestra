@@ -4,7 +4,7 @@ reads from the kube-system/kube-dns Service. The platform's other permissions ar
 namespace-scoped, so grant that single read in kube-system. The name carries the
 release namespace so two releases in one cluster never share the object.
 */}}
-{{- if and .Values.archestra.orchestrator.kubernetes.rbac.create .Values.archestra.orchestrator.kubernetes.rbac.kubeDnsServiceRead }}
+{{- if and .Values.archestra.orchestrator.enabled .Values.archestra.orchestrator.kubernetes.rbac.create .Values.archestra.orchestrator.kubernetes.rbac.kubeDnsServiceRead }}
 {{- $roleName := printf "%s-%s-kube-dns-reader" (include "archestra-platform.fullname" .) .Release.Namespace }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

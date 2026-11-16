@@ -143,6 +143,27 @@ const frontendBaseUrl = parseFrontendBaseUrl(
   process.env.ARCHESTRA_FRONTEND_URL,
 );
 
+/**
+ * Parse `ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN`, the SPIFFE trust domain
+ * agents' SPIFFE IDs live in (`spiffe://<trust domain>/agent/<id>`). Defaults
+ * to the frontend's hostname. A trust domain is lowercase letters, digits,
+ * dots, dashes and underscores (SPIFFE ID standard, section 2.1).
+ * @public — exported for testability
+ */
+export function parseSpiffeTrustDomain(params: {
+  rawValue: string | undefined;
+  frontendBaseUrl: string;
+}): string {
+  const trustDomain =
+    params.rawValue?.trim() || new URL(params.frontendBaseUrl).hostname;
+  if (!/^[a-z0-9._-]+$/.test(trustDomain)) {
+    throw new Error(
+      `ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN must be a SPIFFE trust domain: lowercase letters, digits, dots, dashes and underscores (got "${trustDomain}")`,
+    );
+  }
+  return trustDomain;
+}
+
 /** @public — validates an operator-provided webhook base URL. */
 export function parseChatopsWebhookBaseUrl(rawValue: string | undefined) {
   const trimmed = rawValue?.trim();
@@ -1635,14 +1656,17 @@ export function parseCommaSeparatedList(value: string): string[] {
 export const getAnalyticsConfig = () => {
   return {
     // Analytics (PostHog product analytics, instance heartbeats, and error
-    // reports to Archestra's Sentry) defaults to on only in production builds.
-    // Local dev and test runs (bare `pnpm dev`, vitest — where NODE_ENV isn't
-    // "production") stay silent unless ARCHESTRA_ANALYTICS is explicitly set,
+    // reports to Archestra's Sentry) defaults to on only in production builds
+    // without an activated enterprise license. Local dev and test runs (bare
+    // `pnpm dev`, vitest — where NODE_ENV isn't "production") and enterprise
+    // deployments stay silent unless ARCHESTRA_ANALYTICS is explicitly set,
     // which always wins in both directions ("disabled" → off, any other value
     // → on). Evaluated at call time so tests can exercise both environments.
     enabled: isAnalyticsEnabled({
       analytics: process.env.ARCHESTRA_ANALYTICS,
       nodeEnv: process.env.NODE_ENV,
+      enterpriseLicenseActivated:
+        process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
     }),
     posthog: {
       key:
@@ -1888,6 +1912,32 @@ export const parseHelmReleaseName = (
   return releaseName;
 };
 // SPDX-SnippetEnd
+
+/**
+ * Parses an optional workload namespace setting such as
+ * ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE. A value that is not a valid Kubernetes
+ * namespace name (a DNS-1123 label) is ignored with a warning, so workloads
+ * keep their namespace instead of failing on every launch.
+ *
+ * @public — exported for testability
+ */
+export const parseOptionalNamespace = (
+  envValue: string | undefined,
+  envName: string,
+): string | undefined => {
+  const namespace = envValue?.trim();
+  if (!namespace) return undefined;
+  if (
+    namespace.length > 63 ||
+    !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(namespace)
+  ) {
+    logger.warn(
+      `Ignoring ${envName} "${namespace}": not a valid Kubernetes namespace name (lowercase alphanumerics and "-", at most 63 characters)`,
+    );
+    return undefined;
+  }
+  return namespace;
+};
 
 /**
  * resolves the Dagger runner host. A misconfigured host returns `undefined`
@@ -2148,12 +2198,14 @@ export const isCodeRuntimeEnabled = ({
   codeRuntimeEnabledEnv,
   kubeconfig,
   loadKubeconfigFromCurrentCluster,
+  orchestratorEnabledEnv,
 }: {
   runnerHost: string | undefined;
   runnerHostEnv: string | undefined;
   codeRuntimeEnabledEnv: string | undefined;
   kubeconfig: string | undefined;
   loadKubeconfigFromCurrentCluster: string | undefined;
+  orchestratorEnabledEnv?: string | undefined;
 }): boolean => {
   if (codeRuntimeEnabledEnv === "false") return false;
   if (runnerHost !== undefined) return true;
@@ -2164,8 +2216,9 @@ export const isCodeRuntimeEnabled = ({
   const runnerHostRejected = (runnerHostEnv?.trim().length ?? 0) > 0;
   if (runnerHostRejected) return false;
   const k8sConfigured =
-    loadKubeconfigFromCurrentCluster === "true" ||
-    (kubeconfig?.trim().length ?? 0) > 0;
+    orchestratorEnabledEnv !== "false" &&
+    (loadKubeconfigFromCurrentCluster === "true" ||
+      (kubeconfig?.trim().length ?? 0) > 0);
   return codeRuntimeEnabledEnv === "true" && k8sConfigured;
 };
 
@@ -2233,11 +2286,13 @@ export function parseOpenAppaConfig({
   softBlockMode,
   policyCheckName,
   selfService,
+  selfServiceAutoMerge,
 }: {
   humanApprovalMode?: string;
   softBlockMode?: string;
   policyCheckName?: string;
   selfService?: string;
+  selfServiceAutoMerge?: string;
   yellEnabled?: string;
   yellForwardingEnabled?: string;
   offerSigningSecret?: string;
@@ -2300,10 +2355,19 @@ export function parseOpenAppaConfig({
     selfService,
     ["enabled", "disabled"] as const,
   );
+  // Whether the GitHub App merges a self-served rules pull request once its
+  // policy check passes. While set, it overrides the saved setting.
+  const selfServiceAutoMergeOverride = optionalChoice(
+    "selfServiceAutoMerge",
+    OPENAPPA_SELF_SERVICE_AUTO_MERGE_VARIABLE,
+    selfServiceAutoMerge,
+    ["enabled", "disabled"] as const,
+  );
   return {
     enabled: true,
     policyCheckName: parseOpenAppaPolicyCheckName(policyCheckName),
     ...selfServiceOverride,
+    ...selfServiceAutoMergeOverride,
     yellEnabled: (yellEnabled ?? "true") === "true",
     // External diagnostic delivery requires its own opt-in in every environment.
     yellForwardingEnabled: forwarding === "true",
@@ -2322,6 +2386,10 @@ export function parseOpenAppaConfig({
 
 /** The variable that turns self-service Guardrails on or off for the deployment. */
 export const OPENAPPA_SELF_SERVICE_VARIABLE = "ARCHESTRA_OPENAPPA_SELF_SERVICE";
+
+/** The variable that turns auto-merge of self-served pull requests on or off. */
+export const OPENAPPA_SELF_SERVICE_AUTO_MERGE_VARIABLE =
+  "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE";
 
 /** An unset or empty variable sets nothing; any other value must be a choice. */
 function optionalChoice<
@@ -2435,6 +2503,7 @@ const skillsSandboxEnabled = isCodeRuntimeEnabled({
   kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
   loadKubeconfigFromCurrentCluster:
     process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER,
+  orchestratorEnabledEnv: process.env.ARCHESTRA_ORCHESTRATOR_ENABLED,
 });
 // the Dagger runtime fronts the sandbox; enabling the sandbox lights it up.
 // runnerHost is the optional process-default/BYO engine — unset in the
@@ -2477,6 +2546,7 @@ const openappa = parseOpenAppaConfig({
   softBlockMode: process.env.ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE,
   policyCheckName: process.env.ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME,
   selfService: process.env.ARCHESTRA_OPENAPPA_SELF_SERVICE,
+  selfServiceAutoMerge: process.env.ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE,
   yellForwardingEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED,
   offerSigningSecret: process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   postgresMaxConnections:
@@ -2549,6 +2619,12 @@ const config = {
   },
   openappa,
   frontendBaseUrl,
+  agentIdentity: {
+    spiffeTrustDomain: parseSpiffeTrustDomain({
+      rawValue: process.env.ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN,
+      frontendBaseUrl,
+    }),
+  },
   api: {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),
@@ -2718,6 +2794,16 @@ const config = {
    * cluster serves the Agent Sandbox API (see `k8s/agent-runtime/sandbox-api`).
    */
   agentRuntime: {
+    /**
+     * Namespace for Agent Runtime pods whose Agent's Environment sets none,
+     * so runs can live apart from MCP servers. An Environment's own namespace
+     * still wins; unset falls back to the organization's default Environment
+     * namespace, then ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE.
+     */
+    namespace: parseOptionalNamespace(
+      process.env.ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE,
+      "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+    ),
     /** Ready spare workspaces per compatible runtime configuration. */
     warmPoolSize: parseNonNegativeInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE,
@@ -2819,6 +2905,18 @@ const config = {
       process.env.ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR,
       {},
       "ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR",
+    ),
+    /**
+     * Node pool for privileged Agent Runtime pods only, in the same key=value
+     * form as `nodeSelector` (each pair also becomes a NoSchedule
+     * toleration). Docker-in-Docker runs have node-level access, so a
+     * dedicated tainted pool keeps them away from unprivileged runs and other
+     * workloads. Empty (the default) places privileged runs with `nodeSelector`.
+     */
+    privilegedNodeSelector: parseLabelSelector(
+      process.env.ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR,
+      {},
+      "ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR",
     ),
     /**
      * RuntimeClass for unprivileged Agent Runtime pods, such as `gvisor` on a
@@ -2960,6 +3058,8 @@ const config = {
       process.env.ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS,
     ),
     iamAuthEnabled: process.env.ARCHESTRA_DATABASE_IAM_AUTH_ENABLED === "true",
+    entraAuthEnabled:
+      process.env.ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED === "true",
     awsRegion: process.env.ARCHESTRA_DATABASE_AWS_REGION?.trim() || "",
   },
   // Cost/billing behavior for LLM interactions. Kept separate from `llm` (which
@@ -2973,6 +3073,17 @@ const config = {
     // billing-mode override. See resolveInteractionBillingMode.
     subscriptionAutodetect:
       process.env.ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT !== "false",
+  },
+  // The automatic keys of keyless providers (Vertex AI, Entra ID, IAM). Kept
+  // out of `llm` for the same reason as `llmCost`.
+  llmSystemKeys: {
+    // On (default): this deployment deletes a provider's system key once the
+    // provider is no longer enabled in its environment. Off: it never deletes
+    // one. For deployments sharing a database, where a provider enabled in
+    // only one of them would otherwise lose its key, virtual key mappings and
+    // model pool members whenever another one starts.
+    autoDeleteEnabled:
+      process.env.ARCHESTRA_LLM_SYSTEM_KEYS_AUTO_DELETE_ENABLED !== "false",
   },
   llm: {
     openai: {
@@ -3452,6 +3563,14 @@ const config = {
    */
   codegenMode: process.env.CODEGEN === "true",
   orchestrator: {
+    /**
+     * `ARCHESTRA_ORCHESTRATOR_ENABLED=false` turns the Kubernetes orchestrator
+     * off: no kubeconfig is loaded (not even the in-cluster service account)
+     * and nothing in the cluster is created, changed or deleted. For an
+     * install that shares its database with another install that owns the
+     * workloads.
+     */
+    enabled: process.env.ARCHESTRA_ORCHESTRATOR_ENABLED !== "false",
     mcpServerBaseImage,
     mcpServerResources,
     /**
@@ -3538,6 +3657,12 @@ const config = {
       // editor can offer a namespace dropdown instead of free text.
       environmentNamespaces: parseCommaSeparatedList(
         process.env.ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES ?? "",
+      ),
+      // Namespaces workloads ran in before a namespace change (Helm
+      // rbac.retiredNamespaces). The platform removes what it left there and
+      // lets Agent Runtime sessions finish, then logs that it is done.
+      retiredNamespaces: parseCommaSeparatedList(
+        process.env.ARCHESTRA_ORCHESTRATOR_K8S_RETIRED_NAMESPACES ?? "",
       ),
     },
   },
@@ -3631,6 +3756,18 @@ const config = {
   daggerRuntime: {
     enabled: daggerRuntimeEnabled,
     runnerHost: daggerRuntimeRunnerHost,
+    /**
+     * Namespace for the code sandbox's Dagger engines, apart from MCP
+     * servers. Engines run privileged, and Pod Security is per namespace, so
+     * sharing one forces the MCP namespace to allow `privileged`. When set,
+     * every engine runs here, whatever its Environment's namespace; each
+     * Environment still gets its own engine and egress policy. Unset keeps
+     * engines in their Environment's namespace (or the orchestrator's).
+     */
+    namespace: parseOptionalNamespace(
+      process.env.ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE,
+      "ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE",
+    ),
     cliBin:
       process.env.ARCHESTRA_DAGGER_RUNTIME_CLI_BIN ||
       process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||

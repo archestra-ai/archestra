@@ -640,7 +640,9 @@ export default function ChatSessionHook({
           // a hard inline error panel; the toast is the only surfaced
           // feedback.
           clearErrorRef.current?.();
-          setMcpElicitations([]);
+          // Keep pending questions: the 409 means the run is still live, and
+          // a run waiting on a question stays blocked until it is answered.
+          // Dropping the card would leave nothing to answer it with.
           return;
         }
         // The 409 was provoked by our own auto-recovery: the stream

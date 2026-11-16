@@ -18,13 +18,18 @@ class OpenAppaGithubSyncModel {
     organizationId: string,
     source: Omit<
       AppaGithubSource,
-      "gitlabTokenId" | "selfService" | "selfServiceDirectory"
+      | "gitlabTokenId"
+      | "selfService"
+      | "selfServiceDirectory"
+      | "selfServiceAutoMerge"
     > & {
       gitlabTokenId?: string | null;
       /** Off unless the source says otherwise. */
       selfService?: boolean;
       /** The servers' folder; mcp unless the source says otherwise. */
       selfServiceDirectory?: string;
+      /** Off unless the source says otherwise. */
+      selfServiceAutoMerge?: boolean;
       setupPullRequestNumber?: number;
     },
   ) {
@@ -34,6 +39,7 @@ class OpenAppaGithubSyncModel {
       gitlabTokenId = null,
       selfService = false,
       selfServiceDirectory = "mcp",
+      selfServiceAutoMerge = false,
       ...policySource
     } = source;
     const values = {
@@ -41,6 +47,7 @@ class OpenAppaGithubSyncModel {
       gitlabTokenId,
       selfService,
       selfServiceDirectory,
+      selfServiceAutoMerge,
       ...policySource,
       revision: randomUUID(),
       sourceCommit: null,
@@ -88,6 +95,16 @@ class OpenAppaGithubSyncModel {
         selfService,
         ...(selfServiceDirectory ? { selfServiceDirectory } : {}),
       })
+      .where(eq(table.organizationId, organizationId));
+  }
+  /** Turn auto-merge of self-served pull requests on or off for the source. */
+  static async setSelfServiceAutoMerge(
+    organizationId: string,
+    selfServiceAutoMerge: boolean,
+  ) {
+    await db
+      .update(table)
+      .set({ selfServiceAutoMerge })
       .where(eq(table.organizationId, organizationId));
   }
   /** Change or stop the schedule. */
@@ -179,12 +196,29 @@ class OpenAppaGithubSyncModel {
       .where(
         and(
           isNotNull(table.interval),
-          sql`(${table.lastSyncedAt} IS NULL OR ${table.lastSyncedAt} <= NOW() - CASE WHEN ${table.setupPullRequestNumber} IS NOT NULL THEN INTERVAL '1 minute' WHEN ${table.interval} = '15m' THEN INTERVAL '15 minutes' WHEN ${table.interval} = '1h' THEN INTERVAL '1 hour' ELSE INTERVAL '1 day' END)`,
+          sql`(${table.lastSyncedAt} IS NULL OR ${table.lastSyncedAt} <= NOW() - CASE WHEN ${table.setupPullRequestNumber} IS NOT NULL THEN INTERVAL '1 minute' WHEN ${table.interval} = '5m' THEN INTERVAL '5 minutes' WHEN ${table.interval} = '15m' THEN INTERVAL '15 minutes' WHEN ${table.interval} = '1h' THEN INTERVAL '1 hour' ELSE INTERVAL '1 day' END)`,
         ),
       );
   }
-  /** Every source a pull has accepted a commit from: those with pull requests to check. */
-  static async findConnected() {
+  /** The organizations whose policy syncs from a repository now. */
+  static async findSyncing() {
+    return db
+      .select({ organizationId: table.organizationId })
+      .from(table)
+      .where(
+        and(
+          isNotNull(table.interval),
+          isNotNull(table.repo),
+          isNotNull(table.path),
+        ),
+      );
+  }
+  /**
+   * Every source read through a GitHub App that syncs: those whose pull
+   * requests get the policy check, the setup pull request included, so a
+   * commit accepted yet is not required.
+   */
+  static async findGithubAppSources() {
     return db
       .select()
       .from(table)
@@ -192,34 +226,27 @@ class OpenAppaGithubSyncModel {
         and(
           isNotNull(table.interval),
           isNotNull(table.repo),
-          isNotNull(table.sourceCommit),
+          isNotNull(table.path),
+          isNotNull(table.githubAppConfigId),
         ),
       );
   }
-  /** Sources whose setup pull request has not merged: no commit accepted yet. */
-  static async findAwaitingSetup() {
-    return db
-      .select()
-      .from(table)
-      .where(
-        and(
-          isNotNull(table.interval),
-          isNotNull(table.repo),
-          isNotNull(table.setupPullRequestNumber),
-          isNull(table.sourceCommit),
-        ),
-      );
-  }
-  static async enqueue(organizationId: string) {
-    // The partial unique index also deduplicates simultaneous requests on different replicas.
-    await db
+  /**
+   * Queue a pull. One pending or processing already is left alone (the
+   * partial unique index deduplicates simultaneous requests on different
+   * replicas too): true when this call queued one, false when it coalesced.
+   */
+  static async enqueue(organizationId: string): Promise<boolean> {
+    const queued = await db
       .insert(schema.tasksTable)
       .values({
         taskType: "openappa_github_sync",
         payload: { organizationId },
         maxAttempts: 1,
       })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ id: schema.tasksTable.id });
+    return queued.length > 0;
   }
   static async findByIdForAudit(id: string, organizationId: string) {
     if (id !== organizationId) return null;

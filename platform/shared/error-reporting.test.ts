@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
   isAnalyticsEnabled,
@@ -10,15 +11,38 @@ const DEFAULT_DSN = "https://public@errors.example.com/1";
 
 describe("isAnalyticsEnabled", () => {
   test.each([
-    [undefined, "production", true],
-    ["", "production", true],
-    [undefined, "development", false],
-    [undefined, "test", false],
-    ["disabled", "production", false],
-    [" disabled ", "production", false],
-    ["enabled", "development", true],
-  ])("ARCHESTRA_ANALYTICS=%s with NODE_ENV=%s is %s", (analytics, nodeEnv, expected) => {
-    expect(isAnalyticsEnabled({ analytics, nodeEnv })).toBe(expected);
+    [undefined, "production", false, true],
+    ["", "production", false, true],
+    [undefined, "development", false, false],
+    [undefined, "test", false, false],
+    ["disabled", "production", false, false],
+    [" disabled ", "production", false, false],
+    ["enabled", "development", false, true],
+    [undefined, "production", true, false],
+    ["", "production", true, false],
+    ["enabled", "production", true, true],
+    ["disabled", "production", true, false],
+  ])("ARCHESTRA_ANALYTICS=%s with NODE_ENV=%s and enterprise license %s is %s", (analytics, nodeEnv, enterpriseLicenseActivated, expected) => {
+    expect(
+      isAnalyticsEnabled({ analytics, nodeEnv, enterpriseLicenseActivated }),
+    ).toBe(expected);
+  });
+});
+
+describe("isAnalyticsEnabled in the released image", () => {
+  const imageEnv = readDockerfileEnv(new URL("../Dockerfile", import.meta.url));
+
+  test.each([
+    ["false", true],
+    ["true", false],
+  ])("with ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=%s and no operator override is %s", (enterpriseLicense, expected) => {
+    expect(
+      isAnalyticsEnabled({
+        analytics: imageEnv.ARCHESTRA_ANALYTICS,
+        nodeEnv: imageEnv.NODE_ENV,
+        enterpriseLicenseActivated: enterpriseLicense === "true",
+      }),
+    ).toBe(expected);
   });
 });
 
@@ -266,3 +290,15 @@ describe("scrubErrorReportBreadcrumb", () => {
     ).toEqual({ category: "console", level: "log" });
   });
 });
+
+// === Internal helpers ===
+
+function readDockerfileEnv(path: URL): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const match of readFileSync(path, "utf8").matchAll(
+    /^ENV (\w+)=(?:"([^"]*)"|(\S*))$/gm,
+  )) {
+    env[match[1]] = match[2] ?? match[3];
+  }
+  return env;
+}

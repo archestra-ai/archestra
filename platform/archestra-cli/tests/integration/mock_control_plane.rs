@@ -338,10 +338,12 @@ impl MockControlPlane {
             if let Some(found) = check(&self.lock()) {
                 return found;
             }
-            assert!(
-                tokio::time::Instant::now() < deadline,
-                "timed out waiting for {what}"
-            );
+            if tokio::time::Instant::now() >= deadline {
+                // The last state report has the error of each MCP server
+                // that is not ready: it says why the wait failed.
+                let last_report = self.lock().state_reports.last().cloned();
+                panic!("timed out waiting for {what}; the last state report: {last_report:?}");
+            }
             tokio::time::sleep(STEP).await;
         }
     }

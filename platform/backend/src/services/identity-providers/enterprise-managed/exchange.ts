@@ -5,10 +5,11 @@ import {
   type ExternalIdentityProviderConfig,
   findExternalIdentityProviderById,
 } from "@/services/identity-providers/oidc";
-import type {
-  EnterpriseCredentialClientType,
-  EnterpriseManagedCredentialConfig,
-  EnterpriseManagedCredentialType,
+import {
+  ApiError,
+  type EnterpriseCredentialClientType,
+  type EnterpriseManagedCredentialConfig,
+  type EnterpriseManagedCredentialType,
 } from "@/types";
 import { entraOboStrategy } from "./exchange-strategies/entra-obo-strategy";
 import { oktaManagedCredentialExchangeStrategy } from "./exchange-strategies/okta-managed-credential-exchange";
@@ -19,14 +20,19 @@ export interface EnterpriseCredentialExchangeParams {
   assertion: string;
   enterpriseManagedConfig: EnterpriseManagedCredentialConfig;
   /**
-   * The calling agent's Entra agent identity (its app ID). `null` for a caller
-   * (agent or app) with none; `undefined` when no agent is calling, such as
-   * install-time tool discovery, which the blueprint's "require an agent
-   * identity" setting does not apply to. Only the Entra On-Behalf-Of strategy
-   * acts on it.
+   * The identity the calling agent acts as at this identity provider. `null`
+   * for a caller (agent or app) with none; `undefined` when no agent is
+   * calling, such as install-time tool discovery, which "require an agent
+   * identity" does not apply to.
    */
-  entraAgentIdentityId?: string | null;
+  agentIdentity?: AgentIdentityContext | null;
 }
+
+/** The calling agent's binding at the identity provider an exchange runs at. */
+export type AgentIdentityContext = {
+  identityProviderId: string;
+  externalId: string;
+};
 
 export type EnterpriseManagedCredentialResult = {
   credentialType: EnterpriseManagedCredentialType;
@@ -35,6 +41,11 @@ export type EnterpriseManagedCredentialResult = {
   issuedTokenType: string | null;
   /** The client the credential was issued to, when the strategy knows it. */
   issuedTo?: EnterpriseCredentialIssuedTo;
+  /**
+   * The agent the exchange named as the actor (RFC 8693 `actor_token`), whose
+   * client ID the issued token carries in `act`.
+   */
+  actor?: { clientId: string };
 };
 
 export type EnterpriseCredentialIssuedTo = {
@@ -52,13 +63,23 @@ export async function exchangeEnterpriseManagedCredential(params: {
   identityProviderId: string;
   assertion: string;
   enterpriseManagedConfig: EnterpriseManagedCredentialConfig;
-  entraAgentIdentityId?: string | null;
+  agentIdentity?: AgentIdentityContext | null;
 }): Promise<EnterpriseManagedCredentialResult> {
   const identityProvider = await findExternalIdentityProviderById(
     params.identityProviderId,
   );
   if (!identityProvider) {
     throw new Error("Enterprise identity provider not found");
+  }
+  // A binding names an identity at one provider; presenting it to another
+  // would let the agent act as an identity that provider never issued.
+  if (
+    params.agentIdentity &&
+    params.agentIdentity.identityProviderId !== identityProvider.id
+  ) {
+    throw new Error(
+      "The agent identity binding belongs to a different identity provider than the one this exchange runs at",
+    );
   }
 
   const strategy = getEnterpriseCredentialExchangeStrategy(identityProvider);
@@ -79,8 +100,74 @@ export async function exchangeEnterpriseManagedCredential(params: {
     identityProvider,
     assertion: params.assertion,
     enterpriseManagedConfig: params.enterpriseManagedConfig,
-    entraAgentIdentityId: params.entraAgentIdentityId,
+    agentIdentity: params.agentIdentity,
   });
+}
+
+/**
+ * Fails closed when the identity provider requires every agent to act through
+ * its own identity and the calling agent has none. `agentIdentity` undefined
+ * means no agent is calling, which the requirement does not apply to.
+ */
+export function assertAgentIdentityRequirement(params: {
+  agentIdentity: AgentIdentityContext | null | undefined;
+  requireAgentIdentity: boolean | undefined;
+}): void {
+  if (
+    params.requireAgentIdentity &&
+    params.agentIdentity !== undefined &&
+    !params.agentIdentity
+  ) {
+    throw new ApiError(
+      403,
+      "This identity provider requires every agent to act through its own identity, and this agent has none. Bind one in the agent's settings.",
+    );
+  }
+}
+
+/**
+ * How agents get their own identity at the identity provider, or null while it
+ * is not set up: an Entra agent identity under an Entra Agent ID blueprint,
+ * the agent's own client signed for with the provider's agent key (Okta AI
+ * agents, RFC 8693 actors), or, for RFC 8693, the SPIFFE ID Archestra issues
+ * every agent. Only the first two are bound per agent.
+ */
+export function agentIdentityKind(
+  identityProvider: ExternalIdentityProviderConfig,
+): "entra" | "client" | "spiffe" | null {
+  const enterpriseConfig =
+    identityProvider.oidcConfig?.enterpriseManagedCredentials;
+  if (!enterpriseConfig) return null;
+  const strategy = getEnterpriseCredentialExchangeStrategy(identityProvider);
+  if (strategy === entraOboStrategy) {
+    return enterpriseConfig.entraAgentId?.blueprintClientId?.trim()
+      ? "entra"
+      : null;
+  }
+  if (
+    strategy === rfc8693TokenExchangeStrategy &&
+    enterpriseConfig.agentIdentity?.source === "spiffe"
+  ) {
+    return "spiffe";
+  }
+  return enterpriseConfig.agentIdentity?.privateKeyPem ? "client" : null;
+}
+
+/**
+ * Whether the identity provider refuses callers without their own identity:
+ * the Entra Agent ID setting for an Entra On-Behalf-Of provider, the Agent
+ * Identities setting for Okta and RFC 8693.
+ */
+export function identityProviderRequiresAgentIdentity(
+  identityProvider: ExternalIdentityProviderConfig,
+): boolean {
+  const enterpriseConfig =
+    identityProvider.oidcConfig?.enterpriseManagedCredentials;
+  if (!enterpriseConfig) return false;
+  return getEnterpriseCredentialExchangeStrategy(identityProvider) ===
+    entraOboStrategy
+    ? enterpriseConfig.entraAgentId?.requireAgentIdentity === true
+    : enterpriseConfig.agentIdentity?.requireAgentIdentity === true;
 }
 
 function getEnterpriseCredentialExchangeStrategy(

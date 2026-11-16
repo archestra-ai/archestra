@@ -763,9 +763,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       );
       if (typeof notice === "string") unansweredNotices.set(answer.id, notice);
     }
-    // The runtime withholds the output of a spawn that failed. What the gateway
-    // recorded about the launch is not that output, so it is restored after.
-    const failedLaunchResults: Record<string, string> = {};
+    // The runtime withholds the output of a spawn that failed or of a detached
+    // background runtime launch whose open dispatch must close before an
+    // ephemeral child trajectory ends via endChild. What the gateway recorded
+    // about the launch is host-authored metadata, not child output, so restore it.
+    const settlesDetachedRuntimeLaunches =
+      Boolean(governed.parent_id) &&
+      binding.runtimeSessionId !== governed.session_id;
+    const preservedLaunchResults: Record<string, string> = {};
     const nonHandbackResults = results
       .filter(
         (result) =>
@@ -790,8 +795,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           const launch = runtimeLaunches.get(withoutTrajectoryStamp(result.id));
           const content = runtimeLaunchResult(launch);
           childResultUpdates[result.id] = content;
-          if (launch?.kind === "failed")
-            failedLaunchResults[result.id] = content;
+          if (
+            launch?.kind === "failed" ||
+            (settlesDetachedRuntimeLaunches && launch?.kind === "launched")
+          ) {
+            preservedLaunchResults[result.id] = content;
+          }
           return { ...result, content };
         }
         const content = childResultUpdates[result.id];
@@ -810,7 +819,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         }
         if (runtimeSpawns.has(withoutTrajectoryStamp(answer.id))) {
           const launch = runtimeLaunches.get(withoutTrajectoryStamp(answer.id));
-          if (launch) return launch.kind === "launched" ? "pending" : "failed";
+          if (launch) {
+            return launch.kind === "launched"
+              ? settlesDetachedRuntimeLaunches
+                ? "detached"
+                : "pending"
+              : "failed";
+          }
           return answer.isError ? "failed" : "pending";
         }
         if (
@@ -1013,7 +1028,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           ];
         }),
       ),
-      ...failedLaunchResults,
+      ...preservedLaunchResults,
       // Inspect answers are the platform's own instruction to re-ask for the
       // same card; they replace the client's answer text entirely.
       ...continuedReviewUpdates,
@@ -3681,9 +3696,6 @@ async function resolveRuntimeCalls(params: {
     )
   ) {
     const { organizationId } = params;
-    const actorUserId = params.callerId?.startsWith("user:")
-      ? params.callerId.slice("user:".length)
-      : undefined;
     const [runtimeTargets, spawnTargets] = await Promise.all([
       AgentModel.findRuntimeTargets(organizationId),
       AgentModel.findSpawnTargets(organizationId),
@@ -3710,7 +3722,6 @@ async function resolveRuntimeCalls(params: {
         cached = callerHasCandidateRuntimeSubagents({
           callerAgentId,
           organizationId,
-          actorUserId,
         });
         candidatePoolByCaller.set(callerAgentId, cached);
       }
@@ -3864,6 +3875,16 @@ const RUNTIME_LAUNCH_FAILURE_TEXT: Record<RuntimeLaunchFailureReason, string> =
       "No runtime was started. This Agent's Agent Runtime needs credentials that are not set up yet.",
     credentials_misconfigured:
       "No runtime was started. This Agent is missing shared Agent Runtime credentials that an administrator must configure.",
+    credentials_admin_only:
+      "No runtime was started. Only admins can run this Agent, because it uses an organization credential. Ask an admin to run it for you.",
+    model_unready:
+      "No runtime was started. This Agent's model or provider credential is not set up for your account.",
+    backend_unavailable:
+      "No runtime was started. The Agent Runtime backend is not available right now.",
+    not_allowed:
+      "No runtime was started. This caller is not allowed to start a run on the requested Agent.",
+    invalid_request:
+      "No runtime was started. The launch request parameters or limits are not valid for this Agent.",
     refused: "No runtime was started. OpenAPPA refused this launch.",
     failed:
       "No runtime was started. An internal error occurred while starting the run.",

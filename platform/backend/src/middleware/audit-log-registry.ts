@@ -1,6 +1,7 @@
 import config from "@/config";
 import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import AgentModel from "@/models/agent";
+import AgentIdentityBindingModel from "@/models/agent-identity-binding";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
@@ -250,6 +251,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "organization.updated",
     fetchById: (id) => AgentRuntimeTemplateModel.findByIdForAudit(id),
   },
+  // The handler records which agents took the runtime's settings.
+  "/api/agent-runtime-templates/:id/apply-to-agents": {
+    resourceType: "organization",
+    resourceIdSource: "organizationContext",
+    action: "organization.updated",
+  },
   // Agents
   "/api/agents": {
     resourceType: "agent",
@@ -265,6 +272,25 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
     onlyWhenChanged: true,
   },
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // An agent's identities decide whose consents its tool calls run under.
+  "/api/agents/:id/identity-bindings": {
+    resourceType: "agent",
+    action: "agent.updated",
+    fetchById: async (id, orgId) => {
+      const agent = await AgentModel.findIdentityForAudit(id, orgId);
+      return agent
+        ? {
+            ...agent,
+            identityBindings: await AgentIdentityBindingModel.findForAgent(id),
+          }
+        : null;
+    },
+    onlyWhenChanged: true,
+  },
+  // SPDX-SnippetEnd
   "/api/agents/:id/runtime/credentials/:key": {
     resourceType: "agent",
     action: "agent.updated",
@@ -474,6 +500,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "mcpServer",
     action: "mcpServer.hardReset",
     fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
+  },
+  // The arguments a user adds to the command of their own desktop MCP
+  // server. The snapshot holds how many there are and their hash, not the
+  // arguments. A request with the stored arguments updates nothing.
+  "/api/mcp_server/:id/desktop-arguments": {
+    resourceType: "mcpServer",
+    action: "mcpServer.updated",
+    fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
+    onlyWhenChanged: true,
   },
   // Restore is a POST carrying :id — register directly so the POST walk-up
   // isn't dropped (which would mis-log it as unknown.created). findByIdForAudit
@@ -1163,23 +1198,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       ManagedOauthClientModel.findByIdForAudit(id, orgId),
   },
-  "/api/llm-oauth-clients": {
-    resourceType: "oauthClient",
-    fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
-  },
-  "/api/llm-oauth-clients/:id": {
-    resourceType: "oauthClient",
-    fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
-  },
-
-  "/api/mcp-oauth-clients": {
-    resourceType: "oauthClient",
-    fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
-  },
-  "/api/mcp-oauth-clients/:id": {
-    resourceType: "oauthClient",
-    fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
-  },
 
   // LLM model catalog (admin) — sync has distinct semantics from a generic update.
   "/api/llm-models/sync": {
@@ -1541,16 +1559,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   },
 
   // OAuth client secret rotation — security-critical.
-  "/api/llm-oauth-clients/:id/rotate-secret": {
-    resourceType: "oauthClient",
-    action: "oauthClient.rotated",
-    fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
-  },
-  "/api/mcp-oauth-clients/:id/rotate-secret": {
-    resourceType: "oauthClient",
-    action: "oauthClient.rotated",
-    fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
-  },
 
   // ===== Bulk routes =====
   //
@@ -1640,11 +1648,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     actionByMethod: { DELETE: "virtualApiKey.bulk_deleted" },
   },
   "/api/oauth-clients/bulk": {
-    resourceType: "oauthClient",
-    resourceIdSource: "organizationContext",
-    actionByMethod: { DELETE: "oauthClient.bulk_deleted" },
-  },
-  "/api/llm-oauth-clients/bulk": {
     resourceType: "oauthClient",
     resourceIdSource: "organizationContext",
     actionByMethod: { DELETE: "oauthClient.bulk_deleted" },

@@ -38,7 +38,9 @@ export function PrivateKeyDrop({
   }
 
   return (
-    <div className="min-w-0 space-y-2">
+    // A grid, not space-y: the sr-only input is absolutely positioned and
+    // would otherwise still take a sibling margin below the button.
+    <div className="grid min-w-0 gap-2">
       <Label htmlFor={id}>Private key</Label>
       <UnstyledButton
         className={cn(

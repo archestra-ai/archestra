@@ -34,7 +34,7 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
       body: { data: [], pagination: {} },
     },
   ]);
-  await page.goto("/settings/agents");
+  await page.goto("/settings/agents/runtimes");
 
   const block = page.locator("#runtime-tiers");
   const heading = block.getByRole("heading", { name: "Runtime tiers" });

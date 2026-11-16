@@ -57,6 +57,7 @@ call services, and use joins rather than calling other models.
 
 - When an endpoint's request/response schema changes, check for a mirrored `archestra__*` tool in `backend/src/archestra-mcp-server/` and update its `inputSchema` and handler in sync.
 - New tools need a `TOOL_PERMISSIONS` entry in `backend/src/archestra-mcp-server/rbac.ts` — that one IS compile-enforced (`Record<ArchestraToolShortName, ...>`).
+- Adding a built-in tool or changing its name, description, or `inputSchema` stales its `search_tools` ranking text in `backend/src/archestra-mcp-server/search-texts.generated.json`. Nothing in CI catches it, so refresh the entry in the same change. From `platform/`, run `pnpm --dir backend codegen:tool-search-texts --list-stale <defs.json>`. It writes only the stale definitions, each with its hash. Write a `{ shortName: { definitionHash, searchText } }` file for them that follows `TOOL_SEARCH_TEXT_SYSTEM_PROMPT` in `search-text.ts`, then run `... --apply <texts.json>`. It refuses an entry whose definition changed since it was listed. With `ANTHROPIC_API_KEY` set, running it with no flags generates the texts instead. Config loading needs some `DATABASE_URL`, but the script never connects.
 
 ## Codegen
 

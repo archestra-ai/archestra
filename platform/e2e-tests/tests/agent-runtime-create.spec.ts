@@ -150,7 +150,7 @@ test("configures popular agent templates and preserves the creation wizard", asy
     (template: { hidden: boolean }) => !template.hidden,
   ).length;
   const settings = page.getByRole("list", {
-    name: "Agent Runtimes",
+    name: "Available runtimes",
     exact: true,
   });
   const names = AGENT_CATALOG_IDS.map((id) => AGENT_CATALOG_NAMES[id]);
@@ -187,7 +187,7 @@ test("configures popular agent templates and preserves the creation wizard", asy
         })
       ).ok(),
     ).toBe(true);
-    await goToPage(page, "/settings/agents");
+    await goToPage(page, "/settings/agents/runtimes");
     await expect(actions()).toHaveCount(names.length + customCount);
     for (const name of removedNames) await remove(name);
     await save();
@@ -218,7 +218,7 @@ test("configures popular agent templates and preserves the creation wizard", asy
       page.getByRole("radiogroup", { name: "Runtime", exact: true }),
     ).toHaveCount(0);
 
-    await goToPage(page, "/settings/agents");
+    await goToPage(page, "/settings/agents/runtimes");
     await expect(actions()).toHaveCount(2 + customCount);
     for (const name of ["Claude Code", "Codex"]) await remove(name);
     await save();
@@ -239,7 +239,7 @@ test("configures popular agent templates and preserves the creation wizard", asy
       page.getByRole("button", { name: /Connect via A2A/ }),
     ).toBeVisible();
 
-    await goToPage(page, "/settings/agents");
+    await goToPage(page, "/settings/agents/runtimes");
     for (const name of names) {
       await page
         .getByRole("button", { name: "Add runtime", exact: true })

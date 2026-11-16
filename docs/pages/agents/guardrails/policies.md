@@ -3,7 +3,7 @@ title: Managing the Policy
 description: Change the Guardrails policy with the APPA Keeper, include batteries, and validate it
 order: 1
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -82,4 +82,5 @@ What to know:
 
 Required permissions:
 
-- [`log:read`](/docs/reference/permissions#log:read) to see and resolve yells.
+- [`log:read`](/docs/reference/permissions#log:read) to see and resolve the yells from your own sessions.
+- [`log:admin`](/docs/reference/permissions#log:admin) to see and resolve every yell in the organization.

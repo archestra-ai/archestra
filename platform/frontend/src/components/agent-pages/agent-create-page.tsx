@@ -57,7 +57,16 @@ export function AgentCreatePage({
   const [selectedTemplate, setSelectedTemplate] =
     useState<AgentCatalogTemplate | null>(null);
   const [startsFromImage, setStartsFromImage] = useState(false);
-  const steps = getAgentSetupSteps({ agentType: kind, builtIn: false });
+  // The form renders the channel editor only for a reader of the org's
+  // channel bindings; without that read the step would be blank.
+  const { data: canReadAgentTriggers } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
+  const steps = getAgentSetupSteps({
+    agentType: kind,
+    builtIn: false,
+    canReadTriggers: !!canReadAgentTriggers,
+  });
   const [step, setStep] = useState<AgentSetupStepId>(steps[0].id);
   const stepIndex = steps.findIndex((s) => s.id === step);
   const prevStep = steps[stepIndex - 1];

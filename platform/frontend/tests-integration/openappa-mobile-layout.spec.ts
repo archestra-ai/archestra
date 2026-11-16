@@ -27,6 +27,7 @@ for (const width of [320, 375]) {
           body: {
             batteries: [],
             unusedAliases: [],
+            repositoryFiles: [],
             rootRevision: 3,
             lastError: null,
             composition: {
@@ -45,7 +46,12 @@ for (const width of [320, 375]) {
           method: "get",
           url: "/api/openappa/github-sync",
           body: {
-            selfService: { enabled: false, setting: false, directory: "mcp" },
+            selfService: {
+              enabled: false,
+              setting: false,
+              directory: "mcp",
+              autoMerge: { enabled: false, setting: false },
+            },
             enabled: false,
             hasPolicy: false,
             source: null,

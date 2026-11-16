@@ -1,4 +1,9 @@
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DESKTOP_MCP_ARGUMENTS_MIN_PROGRAM_VERSION,
+  programAppliesDesktopMcpArguments,
+} from "@archestra/shared";
+import { programUpdateInstruction } from "./mcp-bridge-command";
 
 type DesktopDevice =
   archestraApiTypes.GetDesktopDevicesResponses["200"][number];
@@ -95,11 +100,133 @@ export function desktopMcpTargetError(target: {
 }
 
 /**
+ * The command of a desktop MCP catalog item, exactly as its admin stored it;
+ * null for an item that has none (it is not set up, or it is stored with a
+ * URL). Only an item with a command takes arguments from its user.
+ */
+export function desktopMcpCommandOf(
+  desktopConfig: { command?: string | null } | null | undefined,
+): string | null {
+  const command = desktopConfig?.command;
+  return command?.trim() ? command : null;
+}
+
+/**
+ * Why the arguments a user typed for their desktop MCP server cannot be
+ * saved, or null when they can. The limits are the backend's.
+ */
+export function desktopMcpArgumentsError(values: string[]): string | null {
+  if (values.length > DESKTOP_MCP_ARGUMENTS_MAX_COUNT) {
+    return `Use at most ${DESKTOP_MCP_ARGUMENTS_MAX_COUNT} arguments.`;
+  }
+  if (values.some((value) => value.length > DESKTOP_MCP_TARGET_MAX_LENGTH)) {
+    return `Use at most ${DESKTOP_MCP_TARGET_MAX_LENGTH} characters in one argument.`;
+  }
+  const total = values.reduce((sum, value) => sum + value.length, 0);
+  if (total > DESKTOP_MCP_ARGUMENTS_MAX_TOTAL_LENGTH) {
+    return `Use at most ${DESKTOP_MCP_ARGUMENTS_MAX_TOTAL_LENGTH} characters in all arguments together.`;
+  }
+  return null;
+}
+
+/**
+ * What a dialog says about arguments when the viewer's device cannot apply
+ * them. The text is in three parts, so the dialog can show a command as
+ * code; `command` is null when there is none to run.
+ */
+export interface DesktopArgumentsProgramNotice {
+  title: string;
+  text: { before: string; command: string | null; after: string };
+}
+
+/**
+ * The notice for a viewer whose device runs a program from before the
+ * arguments: its MCP bridge starts the command with none of them. The
+ * arguments are stored all the same, and apply once the device runs a newer
+ * program. Null when there is nothing to say:
+ * - the viewer has no device;
+ * - the device was linked a moment ago and has not reported yet, so its
+ *   version is not known;
+ * - the program of the device applies arguments.
+ *
+ * The notice names `archestra update` only when the deployment serves a
+ * program that applies arguments: with an older one served, the command
+ * would get that older one again.
+ */
+export function desktopArgumentsProgramNotice(params: {
+  device:
+    | Pick<
+        DesktopDevice,
+        | "name"
+        | "platform"
+        | "lastPolledAt"
+        | "programVersion"
+        | "programUpdate"
+        | "programAutoUpdate"
+      >
+    | null
+    | undefined;
+  appName: string;
+}): DesktopArgumentsProgramNotice | null {
+  const { device, appName } = params;
+  if (!device || device.lastPolledAt === null) return null;
+  if (programAppliesDesktopMcpArguments(device.programVersion)) return null;
+
+  const title = "Arguments need a newer version of the MCP bridge";
+  const needs = `${
+    device.programVersion
+      ? `The MCP bridge on ${device.name} is version ${device.programVersion}.`
+      : `The MCP bridge on ${device.name} did not report its version.`
+  } Arguments need version ${DESKTOP_MCP_ARGUMENTS_MIN_PROGRAM_VERSION} or newer.`;
+  if (programAppliesDesktopMcpArguments(device.programUpdate?.version)) {
+    const update = programUpdateInstruction(device);
+    return {
+      title,
+      text: {
+        before: `${needs} ${update.before}`,
+        command: update.command,
+        after: `${update.after} Arguments are saved and apply after the update.`,
+      },
+    };
+  }
+  return {
+    title,
+    text: {
+      before: `${needs} ${appName} does not offer that version yet. Arguments are saved and apply once the device has it.`,
+      command: null,
+      after: "",
+    },
+  };
+}
+
+/**
+ * Whether the Connect dialog follows an installation after its arguments
+ * were saved. It does when the MCP server starts again on the device: the
+ * saved installation then waits for its tools. It does not when
+ * - the device runs a program from before the arguments (a notice said so):
+ *   nothing starts again;
+ * - the saved installation is complete all the same: Archestra found
+ *   nothing to wait for, and the dialog would say "connected" at once.
+ */
+export function desktopArgumentsSaveIsFollowed(params: {
+  /** The notice the dialog showed; null when it showed none. */
+  notice: DesktopArgumentsProgramNotice | null;
+  /** The status of the installation, as the save answered it. */
+  installStatus: string | null | undefined;
+}): boolean {
+  return params.notice === null && params.installStatus !== "success";
+}
+
+/**
  * Adds a desktop MCP catalog item to the caller's own computer, through the
  * caller's install mutation. The installation is always personal: the server
  * runs on the computer of the user who adds it. Resolves with the
  * installation, which the Add dialog then follows, or with null when it was
  * refused (a toast says why) and the dialog stays for another try.
+ *
+ * `desktopArguments` are what the caller adds to the command of the item.
+ * They are sent only when given: an item with no command takes none, and
+ * an installation the caller has already keeps its arguments.
  */
 export async function addDesktopMcpServer<Server>(params: {
   install: (body: {
@@ -108,16 +235,19 @@ export async function addDesktopMcpServer<Server>(params: {
     scope: "personal";
     dontShowToast: true;
     desktop: true;
+    desktopArguments?: string[];
   }) => Promise<{ installedServer?: Server; errorMessage: string | null }>;
   catalogItem: { id: string; name: string };
+  desktopArguments?: string[];
 }): Promise<Server | null> {
-  const { install, catalogItem } = params;
+  const { install, catalogItem, desktopArguments } = params;
   const result = await install({
     name: catalogItem.name,
     catalogId: catalogItem.id,
     scope: "personal",
     dontShowToast: true,
     desktop: true,
+    ...(desktopArguments ? { desktopArguments } : {}),
   });
   return result.errorMessage ? null : (result.installedServer ?? null);
 }
@@ -278,8 +408,12 @@ function programOf(command: string | null | undefined): string | null {
   return text.split(/\s+/)[0] ?? null;
 }
 
-/** The limit the backend sets for a command and for a URL. */
+/** The limit the backend sets for a command, a URL and one argument. */
 const DESKTOP_MCP_TARGET_MAX_LENGTH = 4096;
+/** The limits the backend sets for the arguments of one installation. */
+const DESKTOP_MCP_ARGUMENTS_MAX_COUNT = 64;
+const DESKTOP_MCP_ARGUMENTS_MAX_TOTAL_LENGTH =
+  4 * DESKTOP_MCP_TARGET_MAX_LENGTH;
 
 function isHttpUrl(value: string): boolean {
   try {

@@ -494,12 +494,16 @@ export function useCatalogInstall(opts?: {
 
   // The dialog stays open and follows the installation until the tools are
   // read; closed earlier, the completion effect toasts it.
-  const handleDesktopAdd = async (catalogItem: CatalogItem) => {
+  const handleDesktopAdd = async (
+    catalogItem: CatalogItem,
+    desktopArguments: string[] | undefined,
+  ) => {
     setInstallingItemId(catalogItem.id);
     try {
       const server = await addDesktopMcpServer({
         install: installMutation.mutateAsync,
         catalogItem,
+        desktopArguments,
       });
       if (!server) return null;
       clearPendingInstall();

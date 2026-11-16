@@ -1,13 +1,15 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
+import { ShieldBan, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
 import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
+  useCompactFilters,
 } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
@@ -19,33 +21,30 @@ import {
   type AuditLog,
   type AuditOutcome,
   useAuditLog,
-  useAuditLogResourceSearch,
   useAuditLogs,
 } from "@/lib/audit-log/audit-log.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
-import { useMemberSearch } from "@/lib/member.query";
 import { AuditActorCell } from "./audit-actor-cell";
+import { AuditActorFilter } from "./audit-actor-filter";
 import {
   AuditEventCell,
   AuditStatusCell,
   AuditTimeCell,
 } from "./audit-event-cells";
+import { AuditEventFilter } from "./audit-event-filter";
+import { findAuditEventEntry } from "./audit-event-taxonomy";
 import {
-  ACTOR_TYPE_LABEL,
   ALL_ACTIONS,
   ALL_ACTOR_TYPES,
   ALL_OUTCOMES,
-  formatAction,
-  formatResourceType,
-  KNOWN_RESOURCE_TYPES,
   OUTCOME_LABEL,
 } from "./audit-log-action-labels";
-import { AuditLogDetailDialog } from "./audit-log-detail-dialog";
+import { AuditLogDetailDrawer } from "./audit-log-detail-drawer";
+import { AuditResourceFilter } from "./audit-resource-filter";
 
-const ACTOR_FILTER_LIMIT = 100;
 const ALL_VALUE = "all";
 
 // TS7 (tsgo) trips instantiating ColumnDef over AuditLog because `action` is a
@@ -76,6 +75,7 @@ export function AuditLogTable() {
     | AuditActorType;
   const searchFromUrl = searchParams.get("search");
 
+  const compactFilters = useCompactFilters();
   const cursorPagination = useCursorPagination({
     defaultPageSize: DEFAULT_TABLE_LIMIT,
   });
@@ -157,48 +157,6 @@ export function AuditLogTable() {
   );
   useLogsHeaderAction(timeRangePicker);
 
-  const handleActionChange = useCallback(
-    (value: string) => {
-      updateUrlParams({ action: value === ALL_VALUE ? null : value });
-    },
-    [updateUrlParams],
-  );
-
-  const handleResourceChange = useCallback(
-    (value: string) => {
-      updateUrlParams({ resourceType: value === ALL_VALUE ? null : value });
-    },
-    [updateUrlParams],
-  );
-
-  const handleActorChange = useCallback(
-    (value: string) => {
-      updateUrlParams({ actorId: value === ALL_VALUE ? null : value });
-    },
-    [updateUrlParams],
-  );
-
-  const handleEntityChange = useCallback(
-    (value: string) => {
-      updateUrlParams({ resourceId: value === ALL_VALUE ? null : value });
-    },
-    [updateUrlParams],
-  );
-
-  const handleOutcomeChange = useCallback(
-    (value: string) => {
-      updateUrlParams({ outcome: value === ALL_VALUE ? null : value });
-    },
-    [updateUrlParams],
-  );
-
-  const handleActorTypeChange = useCallback(
-    (value: string) => {
-      updateUrlParams({ actorType: value === ALL_VALUE ? null : value });
-    },
-    [updateUrlParams],
-  );
-
   const action = (ALL_ACTIONS as readonly string[]).includes(actionFromUrl)
     ? (actionFromUrl as AuditEventName)
     : undefined;
@@ -234,99 +192,13 @@ export function AuditLogTable() {
     resourceId,
   });
 
-  // The actor and resource pickers search on the server and load their
-  // options only while open, so a closed picker does not refetch on window
-  // focus. A selection from the URL still loads its label.
-  const [actorPickerOpen, setActorPickerOpen] = useState(false);
-  const [resourcePickerOpen, setResourcePickerOpen] = useState(false);
   const { data: canSeeAllAuditLogs } = useHasPermissions({
     auditLog: ["admin"],
   });
-  const {
-    users: actorUsers,
-    onSearchQueryChange: onActorSearchChange,
-    emptyMessage: actorEmptyMessage,
-  } = useMemberSearch({
-    limit: ACTOR_FILTER_LIMIT,
-    selectedUserIds: actorId ? [actorId] : [],
-    enabled: !!canSeeAllAuditLogs && (actorPickerOpen || !!actorId),
-  });
-  const resourceSearch = useAuditLogResourceSearch({
-    enabled: resourcePickerOpen,
-    selectedResourceId: resourceId,
-  });
+  const eventEntry = findAuditEventEntry({ action, resourceType });
 
   const rows = response?.data ?? [];
   const paginationMeta = response?.pagination;
-
-  const memberOptions = useMemo(
-    () =>
-      actorUsers.map((user) => ({
-        value: user.userId,
-        label: user.name || user.email || "Unknown",
-        description: user.name ? (user.email ?? undefined) : undefined,
-      })),
-    [actorUsers],
-  );
-
-  const entityOptions = useMemo(() => {
-    const { options, selected } = resourceSearch;
-    const listed =
-      selected && !options.some((o) => o.resourceId === selected.resourceId)
-        ? [selected, ...options]
-        : options;
-    return listed.map((option) => ({
-      value: option.resourceId,
-      label: option.name,
-      // Single line per option: long machine names truncate with an ellipsis
-      // (full name in the hover title) so the popover stays scannable. The
-      // type goes into `description`, rendered as a subtitle.
-      content: (
-        <span className="block truncate" title={option.name}>
-          {option.name}
-        </span>
-      ),
-      description: formatResourceType(option.resourceType),
-    }));
-  }, [resourceSearch]);
-
-  const actionOptions = useMemo(
-    () => [
-      { value: ALL_VALUE, label: "All actions" },
-      ...ALL_ACTIONS.map((a) => ({ value: a, label: formatAction(a) })),
-    ],
-    [],
-  );
-
-  const resourceOptions = useMemo(
-    () => [
-      { value: ALL_VALUE, label: "All resource types" },
-      ...KNOWN_RESOURCE_TYPES.map((r) => ({
-        value: r,
-        label: formatResourceType(r),
-      })),
-    ],
-    [],
-  );
-
-  const outcomeOptions = useMemo(
-    () => [
-      { value: ALL_VALUE, label: "All outcomes" },
-      ...ALL_OUTCOMES.map((o) => ({ value: o, label: OUTCOME_LABEL[o] })),
-    ],
-    [],
-  );
-
-  const actorTypeOptions = useMemo(
-    () => [
-      { value: ALL_VALUE, label: "All actor types" },
-      ...ALL_ACTOR_TYPES.map((t) => ({
-        value: t,
-        label: ACTOR_TYPE_LABEL[t],
-      })),
-    ],
-    [],
-  );
 
   const columns = useMemo<ColumnDef<AuditLogRow>[]>(
     () => [
@@ -405,100 +277,34 @@ export function AuditLogTable() {
         <FilterBar
           leading
           onClearFilters={hasFilters ? clearFilters : undefined}
-          // Action, outcome and the date range are what people reach for on this
-          // trail day to day; the four identity/resource pickers only matter once
-          // you are chasing a specific thing, so they start tucked away.
-          moreFilters={[
-            {
-              key: "actorType",
-              label: "Actor type",
-              active: !!actorType,
-              control: (
-                <FilterSelect
-                  value={actorType ?? ALL_VALUE}
-                  onValueChange={handleActorTypeChange}
-                  placeholder="Filter by actor type"
-                  items={actorTypeOptions}
-                  inactiveValue={ALL_VALUE}
-                />
-              ),
-            },
-            {
-              key: "resourceType",
-              label: "Resource type",
-              active: !!resourceType,
-              control: (
-                <FilterSelect
-                  value={resourceType ?? ALL_VALUE}
-                  onValueChange={handleResourceChange}
-                  placeholder="Filter by resource type"
-                  items={resourceOptions}
-                  inactiveValue={ALL_VALUE}
-                />
-              ),
-            },
-            {
-              key: "resourceId",
-              label: "Resource",
-              active: !!resourceId,
-              control: (
-                <FilterSelect
-                  value={resourceId ?? ALL_VALUE}
-                  onValueChange={handleEntityChange}
-                  placeholder="Filter by resource"
-                  items={entityOptions}
-                  pinnedItems={[{ value: ALL_VALUE, label: "All resources" }]}
-                  onSearchQueryChange={resourceSearch.onSearchQueryChange}
-                  onOpenChange={setResourcePickerOpen}
-                  emptyMessage={
-                    resourceSearch.isSearching
-                      ? "Searching…"
-                      : "No matching resources found."
-                  }
-                  inactiveValue={ALL_VALUE}
-                />
-              ),
-            },
-            // Without auditLog:admin the server scopes the trail to the caller's
-            // own actions, so an actor filter would be pointless.
-            ...(canSeeAllAuditLogs
-              ? [
-                  {
-                    key: "actorId",
-                    label: "Actor",
-                    active: !!actorId,
-                    control: (
-                      <FilterSelect
-                        value={actorId ?? ALL_VALUE}
-                        onValueChange={handleActorChange}
-                        placeholder="Filter by actor"
-                        items={memberOptions}
-                        pinnedItems={[
-                          { value: ALL_VALUE, label: "All actors" },
-                        ]}
-                        onSearchQueryChange={onActorSearchChange}
-                        onOpenChange={setActorPickerOpen}
-                        emptyMessage={actorEmptyMessage}
-                        inactiveValue={ALL_VALUE}
-                      />
-                    ),
-                  },
-                ]
-              : []),
-          ]}
         >
-          <FilterSelect
-            value={action ?? ALL_VALUE}
-            onValueChange={handleActionChange}
-            placeholder="Filter by action"
-            items={actionOptions}
-            inactiveValue={ALL_VALUE}
+          <AuditEventFilter
+            action={action}
+            resourceType={resourceType}
+            compact={compactFilters}
+            onChange={(next) => updateUrlParams(next)}
+          />
+          <AuditActorFilter
+            actorId={actorId}
+            actorType={actorType}
+            canPickPrincipals={!!canSeeAllAuditLogs}
+            compact={compactFilters}
+            onChange={(next) => updateUrlParams(next)}
+          />
+          <AuditResourceFilter
+            resourceId={resourceId}
+            resourceTypes={eventEntry?.resourceTypes}
+            compact={compactFilters}
+            onChange={(next) => updateUrlParams({ resourceId: next })}
           />
           <FilterSelect
             value={outcome ?? ALL_VALUE}
-            onValueChange={handleOutcomeChange}
+            onValueChange={(value) =>
+              updateUrlParams({ outcome: value === ALL_VALUE ? null : value })
+            }
             placeholder="Filter by outcome"
-            items={outcomeOptions}
+            items={OUTCOME_ITEMS}
+            showSearch={false}
             inactiveValue={ALL_VALUE}
           />
         </FilterBar>
@@ -520,11 +326,42 @@ export function AuditLogTable() {
         onRowClick={(row) => openEventDialog(row as AuditLog)}
       />
 
-      <AuditLogDetailDialog
+      <AuditLogDetailDrawer
         event={selectedEvent}
         shareUrl={eventShareUrl}
         onClose={closeEventDialog}
+        events={rows}
+        onOpenEvent={openEventDialog}
       />
     </div>
   );
 }
+
+// === Internal helpers
+
+/** Outcomes with the same glyphs the Status column shows. */
+const OUTCOME_ITEMS = [
+  { value: ALL_VALUE, label: "All outcomes" },
+  ...ALL_OUTCOMES.map((outcome) => {
+    const Icon = outcome === "denied" ? ShieldBan : X;
+    return {
+      value: outcome,
+      label: OUTCOME_LABEL[outcome],
+      content: (
+        <span className="flex min-w-0 items-center gap-2">
+          <span
+            aria-hidden
+            className="flex size-3.5 shrink-0 items-center justify-center"
+          >
+            {outcome === "success" ? (
+              <span className="size-1.5 rounded-full bg-emerald-500" />
+            ) : (
+              <Icon className="size-3.5 text-destructive" />
+            )}
+          </span>
+          <span className="truncate">{OUTCOME_LABEL[outcome]}</span>
+        </span>
+      ),
+    };
+  }),
+];

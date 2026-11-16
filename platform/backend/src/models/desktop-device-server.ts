@@ -37,6 +37,34 @@ class DesktopDeviceServerModel {
   }
 
   /**
+   * Stores that one MCP server on a device is about to start again: its
+   * config changed in Archestra, so the state the tunnel client reported is
+   * of a server that the device stops when it gets the config. The next
+   * report of the tunnel client stores the state again. Whether the user
+   * stopped the MCP server stays as it is.
+   */
+  static async markStarting(params: {
+    deviceId: string;
+    catalogId: string;
+  }): Promise<void> {
+    await db
+      .insert(schema.desktopDeviceServersTable)
+      .values({
+        deviceId: params.deviceId,
+        catalogId: params.catalogId,
+        state: "starting",
+        lastError: null,
+      })
+      .onConflictDoUpdate({
+        target: [
+          schema.desktopDeviceServersTable.deviceId,
+          schema.desktopDeviceServersTable.catalogId,
+        ],
+        set: { state: "starting", lastError: null },
+      });
+  }
+
+  /**
    * Stores the states the tunnel client reported. A state for a catalog item
    * that does not exist any more is dropped.
    */

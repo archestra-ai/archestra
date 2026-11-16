@@ -416,12 +416,16 @@ class WorkflowContractTests(unittest.TestCase):
         for job in ("required-contexts", "legacy-required-context"):
             section = re.search(rf"^  {job}:\n(.*?)(?=^  [\w-]+:|\Z)", source, re.M | re.S).group(1)
             self.assertIn("if: ${{ always() }}", section)
-            self.assertIn("needs: [release-image-security]", section)
+            self.assertIn("needs: [release-image-security, attest-release-candidates]", section)
+            # An unsigned release candidate must not merge; a run with nothing
+            # to sign (pull requests, non-release queue groups) skips signing.
+            command = section.split("        run: ", 1)[1].splitlines()[0]
             for result in ("success", "failure", "cancelled", "skipped", ""):
-                command = section.split("        run: ", 1)[1].splitlines()[0]
-                completed = subprocess.run(["bash", "-e", "-c", command],
-                    env=os.environ | {"RESULT": result})
-                self.assertEqual(completed.returncode == 0, result == "success")
+                for attested in ("success", "skipped", "failure", "cancelled", ""):
+                    completed = subprocess.run(["bash", "-e", "-c", command],
+                        env=os.environ | {"RESULT": result, "ATTESTED": attested})
+                    self.assertEqual(completed.returncode == 0,
+                                     result == "success" and attested in ("success", "skipped"), (result, attested))
         e2e = (ROOT / ".github/workflows/platform-e2e-tests.yml").read_text()
         self.assertNotIn(".github/actions/scan-docker-image", e2e)
         self.assertNotIn("run-docker-scan", source)

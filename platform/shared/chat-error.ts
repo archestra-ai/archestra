@@ -509,6 +509,17 @@ export interface ChatErrorResponse {
     provider: SupportedProvider;
     providerLabel: string;
   };
+  /**
+   * Present when the failure came from a delegated agent's own model call, not
+   * the conversation's agent. The error card's agent and model describe the
+   * conversation, so without this a subagent's provider error reads as if the
+   * conversation's model had failed. Holds the innermost subagent in a chain.
+   */
+  subagent?: {
+    name: string;
+    /** The model the subagent called, when known. */
+    model?: string;
+  };
   /** Original error details for debugging (provider-specific) */
   originalError?: {
     /** Provider name (anthropic, openai, gemini) */
@@ -537,6 +548,12 @@ export const ChatErrorResponseSchema: z.ZodType<ChatErrorResponse> = z.object({
     .object({
       provider: SupportedProvidersSchema,
       providerLabel: z.string(),
+    })
+    .optional(),
+  subagent: z
+    .object({
+      name: z.string(),
+      model: z.string().optional(),
     })
     .optional(),
   originalError: z

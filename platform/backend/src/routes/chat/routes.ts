@@ -4945,6 +4945,8 @@ function redactChatErrorForEncryptedChat(
       ? { usageLimitEntityType: error.usageLimitEntityType }
       : {}),
     ...(error.authAction ? { authAction: error.authAction } : {}),
+    // Agent and model names, not conversation content.
+    ...(error.subagent ? { subagent: error.subagent } : {}),
   };
 }
 

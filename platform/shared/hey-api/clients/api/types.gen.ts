@@ -45650,6 +45650,10 @@ export type GetConversationBootstrapResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -47076,6 +47080,10 @@ export type GetChatConversationsResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -47261,6 +47269,10 @@ export type CreateChatConversationResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -47428,6 +47440,10 @@ export type GetDeletedChatConversationsResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -47692,6 +47708,10 @@ export type GetChatConversationResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -47872,6 +47892,10 @@ export type UpdateChatConversationResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -48588,6 +48612,10 @@ export type ForkChatConversationResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -48850,6 +48878,10 @@ export type RestoreChatConversationResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -49124,6 +49156,10 @@ export type CompactChatConversationResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -49300,6 +49336,10 @@ export type GenerateChatConversationTitleResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -49474,6 +49514,10 @@ export type UpdateChatMessageResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -67833,6 +67877,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -68097,6 +68145,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -68236,6 +68288,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -68372,6 +68428,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -68510,6 +68570,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -68647,6 +68711,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -68765,6 +68833,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -68880,6 +68952,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -69451,6 +69527,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -70108,6 +70188,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -70223,6 +70307,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -70340,6 +70428,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -70455,6 +70547,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -70572,6 +70668,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -70687,6 +70787,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -70804,6 +70908,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -70919,6 +71027,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -71036,6 +71148,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -71151,6 +71267,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -71268,6 +71388,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -71384,6 +71508,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -71499,6 +71627,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -72614,6 +72746,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -73727,6 +73863,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -74842,6 +74982,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -75956,6 +76100,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -76071,6 +76219,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -76255,6 +76407,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -77370,6 +77526,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -77532,6 +77692,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -77696,6 +77860,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -77856,6 +78024,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -78080,6 +78252,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -78302,6 +78478,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -78526,6 +78706,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -78641,6 +78825,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -78789,6 +78977,10 @@ export type GetLlmProxyLogsResponses = {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
+                    subagent?: {
+                        name: string;
+                        model?: string;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
@@ -78927,6 +79119,10 @@ export type GetLlmProxyLogsResponses = {
                     authAction?: {
                         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
+                    };
+                    subagent?: {
+                        name: string;
+                        model?: string;
                     };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -80042,6 +80238,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -80306,6 +80506,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -80445,6 +80649,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -80581,6 +80789,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -80719,6 +80931,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -80856,6 +81072,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -80974,6 +81194,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -81089,6 +81313,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -81660,6 +81888,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -82317,6 +82549,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -82432,6 +82668,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -82549,6 +82789,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -82664,6 +82908,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -82781,6 +83029,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -82896,6 +83148,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -83013,6 +83269,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -83128,6 +83388,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -83245,6 +83509,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -83360,6 +83628,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -83477,6 +83749,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -83593,6 +83869,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -83708,6 +83988,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -84823,6 +85107,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -85936,6 +86224,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -87051,6 +87343,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -88165,6 +88461,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -88280,6 +88580,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -88464,6 +88768,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -89579,6 +89887,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -89741,6 +90053,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -89905,6 +90221,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -90065,6 +90385,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -90289,6 +90613,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -90511,6 +90839,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -90735,6 +91067,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -90850,6 +91186,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -90998,6 +91338,10 @@ export type GetLlmProxyLogResponses = {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
+                subagent?: {
+                    name: string;
+                    model?: string;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
@@ -91136,6 +91480,10 @@ export type GetLlmProxyLogResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -140592,6 +140940,10 @@ export type CreateScheduleTriggerRunConversationResponses = {
                 authAction?: {
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
+                };
+                subagent?: {
+                    name: string;
+                    model?: string;
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';

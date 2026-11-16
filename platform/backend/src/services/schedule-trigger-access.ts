@@ -9,6 +9,7 @@ import { taskQueueService } from "@/task-queue";
 import type { ScheduleTrigger, ScheduleTriggerRun } from "@/types";
 import { ApiError } from "@/types";
 import { ResourcePermissions } from "./resource-permissions";
+import { hasTunerAccess } from "./tuners/access";
 
 // === Exports ===
 
@@ -24,6 +25,22 @@ export async function findAccessibleScheduleTriggerOrThrow(params: {
 }): Promise<ScheduleTrigger> {
   const trigger = await ScheduleTriggerModel.findById(params.id);
   if (!trigger || trigger.organizationId !== params.organizationId) {
+    throw new ApiError(404, "Schedule trigger not found");
+  }
+
+  // Tuner triggers are managed only through the tuner routes; generic schedule
+  // surfaces may at most open a run (its conversation) for tuner viewers.
+  if (trigger.tunerKind !== null) {
+    if (
+      params.access === "read" &&
+      (await hasTunerAccess({
+        userId: params.userId,
+        organizationId: params.organizationId,
+        access: "read",
+      }))
+    ) {
+      return trigger;
+    }
     throw new ApiError(404, "Schedule trigger not found");
   }
 

@@ -28,6 +28,7 @@ import {
   persistRunUserMessage,
   recordRunConversationError,
 } from "@/services/scheduled-run-conversation";
+import { runTunerPreflight } from "@/services/tuners/preflight";
 import type { Conversation } from "@/types";
 import { hasUnavailableScheduleReview } from "./schedule-review-outcome";
 
@@ -120,6 +121,32 @@ export async function handleScheduleTriggerRunExecution(
 
     if (triggerAgent.agentType !== "agent") {
       throw new Error("Scheduled trigger target must be an internal agent");
+    }
+
+    let message = trigger.messageTemplate;
+    if (trigger.tunerKind !== null) {
+      const preflight = await runTunerPreflight({
+        runId: run.id,
+        trigger: { ...trigger, tunerKind: trigger.tunerKind },
+        agentHasRuntime: resolveAgentRuntime(triggerAgent) !== null,
+        now: new Date(),
+      });
+      switch (preflight.type) {
+        case "duplicate":
+          return;
+        case "settled":
+          await ScheduleTriggerRunModel.markCompleted({
+            runId: run.id,
+            status: "success",
+          });
+          metrics.scheduleTrigger.reportScheduleTriggerRun(
+            agentName,
+            "success",
+          );
+          return;
+        case "run_agent":
+          message = preflight.message;
+      }
     }
 
     if (resolveAgentRuntime(triggerAgent)) {
@@ -230,7 +257,7 @@ export async function handleScheduleTriggerRunExecution(
     const writer = eventWriter;
     executeResult = await executeA2AMessage({
       agentId: trigger.agentId,
-      message: trigger.messageTemplate,
+      message,
       organizationId: trigger.organizationId,
       userId: actor.id,
       sessionId: `scheduled-${run.id}`,

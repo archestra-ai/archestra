@@ -43,6 +43,7 @@
     "src/routes/github-pat/github-pat.routes.ts",
     "src/routes/blob-provider/blob-provider.routes.ts",
     "src/routes/cost-export/cost-export.routes.ts",
+    "src/routes/tuner/tuner.routes.ts",
     "src/routes/guardrails-policy/guardrails-deployment.routes.ts",
     "src/routes/guardrails-policy/guardrails-noop-annotator.routes.ts",
     "src/routes/guardrails-policy/guardrails-policy.routes.ts",

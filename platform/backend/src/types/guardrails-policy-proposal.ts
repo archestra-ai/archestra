@@ -17,7 +17,7 @@ export const GuardrailsPolicyContentSchema = z
     },
   );
 
-const GuardrailsPolicyEditSchema = z.strictObject({
+export const GuardrailsPolicyEditSchema = z.strictObject({
   oldText: z
     .string()
     .describe(

@@ -19,6 +19,7 @@ import type {
   ScheduleTriggerRunKind,
   ScheduleTriggerRunStatus,
 } from "@/types";
+import type { TunerRunRecord } from "@/types/tuner";
 import TaskModel from "./task";
 
 class ScheduleTriggerRunModel {
@@ -301,6 +302,43 @@ class ScheduleTriggerRunModel {
           eq(schema.scheduleTriggerRunsTable.id, params.runId),
           eq(schema.scheduleTriggerRunsTable.status, "running"),
           isNull(schema.scheduleTriggerRunsTable.runtimeTaskId),
+        ),
+      )
+      .returning({ id: schema.scheduleTriggerRunsTable.id });
+    return !!updated;
+  }
+
+  /** The newest run of each trigger. */
+  static async findLatestByTriggerIds(
+    triggerIds: string[],
+  ): Promise<ScheduleTriggerRun[]> {
+    if (triggerIds.length === 0) return [];
+    return db
+      .selectDistinctOn([schema.scheduleTriggerRunsTable.triggerId])
+      .from(schema.scheduleTriggerRunsTable)
+      .where(inArray(schema.scheduleTriggerRunsTable.triggerId, triggerIds))
+      .orderBy(
+        schema.scheduleTriggerRunsTable.triggerId,
+        desc(schema.scheduleTriggerRunsTable.createdAt),
+      );
+  }
+
+  /**
+   * Records a tuner scan on a running run once; a duplicate delivery of the
+   * same run loses here and must not scan or run the agent again.
+   */
+  static async claimTunerScan(params: {
+    runId: string;
+    record: TunerRunRecord;
+  }): Promise<boolean> {
+    const [updated] = await db
+      .update(schema.scheduleTriggerRunsTable)
+      .set({ tuner: params.record })
+      .where(
+        and(
+          eq(schema.scheduleTriggerRunsTable.id, params.runId),
+          eq(schema.scheduleTriggerRunsTable.status, "running"),
+          isNull(schema.scheduleTriggerRunsTable.tuner),
         ),
       )
       .returning({ id: schema.scheduleTriggerRunsTable.id });

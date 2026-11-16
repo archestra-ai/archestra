@@ -247,6 +247,8 @@ export const TOOL_APP_DATA_SET_SHORT_NAME = "app_data_set";
 export const TOOL_APP_DATA_LIST_SHORT_NAME = "app_data_list";
 export const TOOL_APP_DATA_DELETE_SHORT_NAME = "app_data_delete";
 export const TOOL_APP_LLM_COMPLETE_SHORT_NAME = "llm_complete";
+export const TOOL_PROPOSE_TUNER_SUGGESTION_SHORT_NAME =
+  "propose_tuner_suggestion";
 
 export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_WHOAMI_SHORT_NAME,
@@ -264,6 +266,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   "resolve_openappa_yell",
   "list_openappa_yells",
   "list_openappa_consults",
+  "list_openappa_operations",
   "list_guardrails_battery_fits",
   "inspect_guardrails_server",
   "validate_guardrails_policy",
@@ -425,6 +428,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_APP_DATA_LIST_SHORT_NAME,
   TOOL_APP_DATA_DELETE_SHORT_NAME,
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
+  TOOL_PROPOSE_TUNER_SUGGESTION_SHORT_NAME,
 ] as const;
 
 export type ArchestraToolShortName =
@@ -468,6 +472,7 @@ export const ARCHESTRA_TOOL_GROUPS = [
   // these operate on saved files, not on a container.
   { id: "files", label: "Files" },
   { id: "apps", label: "Apps" },
+  { id: "tuners", label: "Tuners" },
 ] as const;
 
 export type ArchestraToolGroupId = (typeof ARCHESTRA_TOOL_GROUPS)[number]["id"];
@@ -496,6 +501,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   resolve_openappa_yell: "openappa",
   list_openappa_yells: "openappa",
   list_openappa_consults: "openappa",
+  list_openappa_operations: "openappa",
   list_guardrails_battery_fits: "openappa",
   inspect_guardrails_server: "openappa",
   validate_guardrails_policy: "openappa",
@@ -674,6 +680,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   app_data_list: "apps",
   app_data_delete: "apps",
   llm_complete: "apps",
+  propose_tuner_suggestion: "tuners",
 };
 
 /**

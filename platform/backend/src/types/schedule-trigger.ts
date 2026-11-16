@@ -6,6 +6,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database/schema";
+import { TunerKindSchema, TunerRunRecordSchema } from "@/types/tuner";
 import {
   createCron,
   normalizeCronExpression,
@@ -64,13 +65,20 @@ export const ScheduleTriggerConfigurationSchema =
 
 export const SelectScheduleTriggerSchema = createSelectSchema(
   schema.scheduleTriggersTable,
+  { tunerKind: TunerKindSchema.nullable() },
 ).extend({
   actor: ScheduleTriggerActorSummarySchema.nullable().optional(),
   agent: ScheduleTriggerAgentSummarySchema.nullable().optional(),
 });
 
+/** Generic schedule API shape: tuner triggers never reach these routes. */
+export const ScheduleTriggerResponseSchema = SelectScheduleTriggerSchema.omit({
+  tunerKind: true,
+});
+
 export const InsertScheduleTriggerSchema = createInsertSchema(
   schema.scheduleTriggersTable,
+  { tunerKind: TunerKindSchema.nullable().optional() },
 )
   .omit({
     id: true,
@@ -80,6 +88,7 @@ export const InsertScheduleTriggerSchema = createInsertSchema(
 
 export const UpdateScheduleTriggerSchema = createUpdateSchema(
   schema.scheduleTriggersTable,
+  { tunerKind: TunerKindSchema.nullable().optional() },
 )
   .omit({
     id: true,
@@ -101,18 +110,23 @@ const selectRunExtendedFields = {
   runKind: ScheduleTriggerRunKindSchema,
   status: ScheduleTriggerRunStatusSchema,
   blockedBy: ScheduleRunBlockerSchema.nullable(),
+  tuner: TunerRunRecordSchema.nullable(),
 };
 
 const insertRunExtendedFields = {
   runKind: ScheduleTriggerRunKindSchema,
   status: ScheduleTriggerRunStatusSchema.optional(),
   blockedBy: ScheduleRunBlockerSchema.nullable().optional(),
+  tuner: TunerRunRecordSchema.nullable().optional(),
 };
 
 export const SelectScheduleTriggerRunSchema = createSelectSchema(
   schema.scheduleTriggerRunsTable,
   selectRunExtendedFields,
 );
+
+export const ScheduleTriggerRunResponseSchema =
+  SelectScheduleTriggerRunSchema.omit({ tuner: true });
 
 export const InsertScheduleTriggerRunSchema = createInsertSchema(
   schema.scheduleTriggerRunsTable,

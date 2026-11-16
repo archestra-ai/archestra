@@ -92,6 +92,7 @@ export function makeUserPermissions(
     organizationSettings: ["read", "update"],
     knowledgeSource: [...ALL],
     log: ["read", "admin"],
+    tuner: [...ALL],
     auditLog: ["read", "admin"],
     accessPolicies: ["read", "update"],
     ac: [...ALL],

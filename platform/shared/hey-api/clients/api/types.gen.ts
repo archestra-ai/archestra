@@ -17270,6 +17270,8 @@ export type GetAgentCatalogResponses = {
                 builtInAgentConfig: {
                     name: 'openappa-configuration-agent';
                 } | {
+                    name: 'appa-tuner-agent';
+                } | {
                     name: 'context-compaction-subagent';
                 } | {
                     name: 'chat-title-generation-subagent';
@@ -17671,6 +17673,8 @@ export type GetAgentsResponses = {
             builtInAgentConfig: {
                 name: 'openappa-configuration-agent';
             } | {
+                name: 'appa-tuner-agent';
+            } | {
                 name: 'context-compaction-subagent';
             } | {
                 name: 'chat-title-generation-subagent';
@@ -17827,6 +17831,8 @@ export type CreateAgentData = {
         } | null;
         builtInAgentConfig?: {
             name: 'openappa-configuration-agent';
+        } | {
+            name: 'appa-tuner-agent';
         } | {
             name: 'context-compaction-subagent';
         } | {
@@ -18121,6 +18127,8 @@ export type CreateAgentResponses = {
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
+        } | {
+            name: 'appa-tuner-agent';
         } | {
             name: 'context-compaction-subagent';
         } | {
@@ -18458,6 +18466,8 @@ export type GetChatAgentRosterResponses = {
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
+            name: 'appa-tuner-agent';
+        } | {
             name: 'context-compaction-subagent';
         } | {
             name: 'chat-title-generation-subagent';
@@ -18604,6 +18614,8 @@ export type GetChatAgentRosterPageResponses = {
             builtIn: boolean | null;
             builtInAgentConfig: {
                 name: 'openappa-configuration-agent';
+            } | {
+                name: 'appa-tuner-agent';
             } | {
                 name: 'context-compaction-subagent';
             } | {
@@ -19400,6 +19412,8 @@ export type GetDefaultMcpGatewayResponses = {
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
+            name: 'appa-tuner-agent';
+        } | {
             name: 'context-compaction-subagent';
         } | {
             name: 'chat-title-generation-subagent';
@@ -19719,6 +19733,8 @@ export type ImportAgentResponses = {
             } | null;
             builtInAgentConfig: {
                 name: 'openappa-configuration-agent';
+            } | {
+                name: 'appa-tuner-agent';
             } | {
                 name: 'context-compaction-subagent';
             } | {
@@ -20049,6 +20065,8 @@ export type GetAgentResponses = {
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
+            name: 'appa-tuner-agent';
+        } | {
             name: 'context-compaction-subagent';
         } | {
             name: 'chat-title-generation-subagent';
@@ -20194,6 +20212,8 @@ export type UpdateAgentData = {
         } | null;
         builtInAgentConfig?: {
             name: 'openappa-configuration-agent';
+        } | {
+            name: 'appa-tuner-agent';
         } | {
             name: 'context-compaction-subagent';
         } | {
@@ -20387,6 +20407,8 @@ export type UpdateAgentResponses = {
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
+        } | {
+            name: 'appa-tuner-agent';
         } | {
             name: 'context-compaction-subagent';
         } | {
@@ -21185,6 +21207,8 @@ export type RestoreAgentVersionResponses = {
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
+            name: 'appa-tuner-agent';
+        } | {
             name: 'context-compaction-subagent';
         } | {
             name: 'chat-title-generation-subagent';
@@ -21445,6 +21469,8 @@ export type CloneAgentResponses = {
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
+        } | {
+            name: 'appa-tuner-agent';
         } | {
             name: 'context-compaction-subagent';
         } | {
@@ -23942,6 +23968,8 @@ export type RestoreAgentResponses = {
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
+        } | {
+            name: 'appa-tuner-agent';
         } | {
             name: 'context-compaction-subagent';
         } | {
@@ -33857,7 +33885,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'tuner.updated' | 'tuner.run' | 'tunerSuggestion.proposed' | 'tunerSuggestion.done' | 'tunerSuggestion.rejected' | 'tunerSuggestion.applied' | 'tunerSuggestion.refreshed' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -33964,7 +33992,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'tuner.updated' | 'tuner.run' | 'tunerSuggestion.proposed' | 'tunerSuggestion.done' | 'tunerSuggestion.rejected' | 'tunerSuggestion.applied' | 'tunerSuggestion.refreshed' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -34197,7 +34225,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'tuner.updated' | 'tuner.run' | 'tunerSuggestion.proposed' | 'tunerSuggestion.done' | 'tunerSuggestion.rejected' | 'tunerSuggestion.applied' | 'tunerSuggestion.refreshed' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -44943,6 +44971,7 @@ export type GetBootstrapResponses = {
                 mcpGatewaySkillsEnabled: boolean;
                 devFeedbackEnabled: boolean;
                 autoRoutingEnabled: boolean;
+                tunersEnabled: boolean;
             };
             providerBaseUrls: {
                 [key: string]: string | null;
@@ -45089,6 +45118,8 @@ export type GetNewChatBootstrapResponses = {
             builtIn: boolean | null;
             builtInAgentConfig: {
                 name: 'openappa-configuration-agent';
+            } | {
+                name: 'appa-tuner-agent';
             } | {
                 name: 'context-compaction-subagent';
             } | {
@@ -45348,6 +45379,8 @@ export type GetNewChatBootstrapResponses = {
                 } | null;
                 builtInAgentConfig: {
                     name: 'openappa-configuration-agent';
+                } | {
+                    name: 'appa-tuner-agent';
                 } | {
                     name: 'context-compaction-subagent';
                 } | {
@@ -45688,6 +45721,8 @@ export type GetConversationBootstrapResponses = {
                 builtInAgentConfig: {
                     name: 'openappa-configuration-agent';
                 } | {
+                    name: 'appa-tuner-agent';
+                } | {
                     name: 'context-compaction-subagent';
                 } | {
                     name: 'chat-title-generation-subagent';
@@ -45946,6 +45981,8 @@ export type GetConversationBootstrapResponses = {
                     } | null;
                     builtInAgentConfig: {
                         name: 'openappa-configuration-agent';
+                    } | {
+                        name: 'appa-tuner-agent';
                     } | {
                         name: 'context-compaction-subagent';
                     } | {
@@ -54739,6 +54776,7 @@ export type GetConfigResponses = {
             mcpGatewaySkillsEnabled: boolean;
             devFeedbackEnabled: boolean;
             autoRoutingEnabled: boolean;
+            tunersEnabled: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -150855,6 +150893,1138 @@ export type GetToolsWithAssignmentsResponses = {
 };
 
 export type GetToolsWithAssignmentsResponse = GetToolsWithAssignmentsResponses[keyof GetToolsWithAssignmentsResponses];
+
+export type ListTunersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tuners';
+};
+
+export type ListTunersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListTunersError = ListTunersErrors[keyof ListTunersErrors];
+
+export type ListTunersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        kind: 'sre' | 'appa';
+        available: boolean;
+        trigger: {
+            id: string;
+            enabled: boolean;
+            cronExpression: string;
+            timezone: string;
+            actor: {
+                id: string;
+                name: string | null;
+                email: string | null;
+            } | null;
+            lastExecutedAt: string | null;
+        } | null;
+        lastRun: {
+            id: string;
+            status: 'running' | 'success' | 'failed' | 'cancelled';
+            scan: {
+                outcome: 'no_candidates' | 'all_suppressed' | 'agent_ran';
+                candidateCount: number;
+            } | null;
+            createdAt: string;
+            completedAt: string | null;
+            error: string | null;
+        } | null;
+    }>;
+};
+
+export type ListTunersResponse = ListTunersResponses[keyof ListTunersResponses];
+
+export type ConfigureTunerData = {
+    body: {
+        enabled: boolean;
+        cronExpression?: string;
+        timezone?: string;
+    };
+    path: {
+        kind: 'sre' | 'appa';
+    };
+    query?: never;
+    url: '/api/tuners/{kind}';
+};
+
+export type ConfigureTunerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ConfigureTunerError = ConfigureTunerErrors[keyof ConfigureTunerErrors];
+
+export type ConfigureTunerResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        kind: 'sre' | 'appa';
+        available: boolean;
+        trigger: {
+            id: string;
+            enabled: boolean;
+            cronExpression: string;
+            timezone: string;
+            actor: {
+                id: string;
+                name: string | null;
+                email: string | null;
+            } | null;
+            lastExecutedAt: string | null;
+        } | null;
+        lastRun: {
+            id: string;
+            status: 'running' | 'success' | 'failed' | 'cancelled';
+            scan: {
+                outcome: 'no_candidates' | 'all_suppressed' | 'agent_ran';
+                candidateCount: number;
+            } | null;
+            createdAt: string;
+            completedAt: string | null;
+            error: string | null;
+        } | null;
+    }>;
+};
+
+export type ConfigureTunerResponse = ConfigureTunerResponses[keyof ConfigureTunerResponses];
+
+export type RunTunerData = {
+    body?: never;
+    path: {
+        kind: 'sre' | 'appa';
+    };
+    query?: never;
+    url: '/api/tuners/{kind}/run';
+};
+
+export type RunTunerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RunTunerError = RunTunerErrors[keyof RunTunerErrors];
+
+export type RunTunerResponses = {
+    /**
+     * Default Response
+     */
+    202: {
+        id: string;
+        organizationId: string;
+        triggerId: string;
+        runKind: 'due' | 'manual';
+        status: 'running' | 'success' | 'failed' | 'cancelled';
+        initiatedByUserId: string | null;
+        chatConversationId: string | null;
+        runtimeTaskId: string | null;
+        startedAt: string | null;
+        completedAt: string | null;
+        error: string | null;
+        blockedBy: {
+            phase: 'starting' | 'running' | 'stopping';
+            runId: string | null;
+            runtimeTaskId: string | null;
+            startedAt: string;
+            elapsedSeconds: number;
+            deadline: string | null;
+            maximumDurationSeconds: number | null;
+        } | null;
+        artifact: string | null;
+        createdAt: string;
+    };
+};
+
+export type RunTunerResponse = RunTunerResponses[keyof RunTunerResponses];
+
+export type ListTunerSuggestionsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        kind?: 'sre' | 'appa';
+        status?: 'open' | 'done' | 'rejected' | 'published' | 'effective' | 'resolved' | Array<'open' | 'done' | 'rejected' | 'published' | 'effective' | 'resolved'>;
+    };
+    url: '/api/tuner-suggestions';
+};
+
+export type ListTunerSuggestionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListTunerSuggestionsError = ListTunerSuggestionsErrors[keyof ListTunerSuggestionsErrors];
+
+export type ListTunerSuggestionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            tunerKind: 'sre' | 'appa';
+            fingerprint: string;
+            source: 'sre_oom_killed' | 'sre_restart_loop' | 'sre_pod_stuck' | 'sre_replicas_unavailable' | 'appa_hitl_approvals' | 'appa_hitl_denials' | 'appa_repeated_denials' | 'appa_unresolved_yell' | 'appa_observe_auto_approvals';
+            severity: 'info' | 'warn' | 'critical';
+            title: string;
+            rationale: string;
+            evidence: Array<{
+                type: 'k8s_pod';
+                namespace: string;
+                name: string;
+            } | {
+                type: 'k8s_workload';
+                namespace: string;
+                kind: 'Deployment' | 'StatefulSet' | 'DaemonSet' | 'ReplicaSet' | 'Job' | 'CronJob';
+                name: string;
+            } | {
+                type: 'openappa_operation';
+                sessionId: string;
+                operationId: string;
+            } | {
+                type: 'openappa_consult';
+                id: string;
+            } | {
+                type: 'openappa_yell';
+                id: string;
+            }>;
+            action: {
+                type: 'note';
+            } | {
+                type: 'policy_change';
+                expectedRevision: number;
+                edits: Array<{
+                    /**
+                     * Exact text copied from the current policy, including whitespace and line breaks. It must match one place unless replaceAll is true.
+                     */
+                    oldText: string;
+                    /**
+                     * The text that replaces oldText. Empty deletes oldText.
+                     */
+                    newText: string;
+                    /**
+                     * Replace every match of oldText instead of exactly one.
+                     */
+                    replaceAll?: boolean | null;
+                }>;
+                gate: {
+                    verification: 'verified' | 'unverified';
+                    reasons: Array<'no_saved_validations' | 'replay_unavailable' | 'validation_cannot_run'>;
+                    files: Array<{
+                        path: string;
+                        status: 'passed' | 'cannot_run';
+                        error: string | null;
+                    }>;
+                    suiteVersion: string | null;
+                };
+                publication: {
+                    number: number;
+                    url: string;
+                } | null;
+            };
+            status: 'open' | 'done' | 'rejected' | 'published' | 'effective' | 'resolved';
+            statusChangedAt: string;
+            statusChangedBy: string | null;
+            comment: string | null;
+            scheduleTriggerRunId: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type ListTunerSuggestionsResponse = ListTunerSuggestionsResponses[keyof ListTunerSuggestionsResponses];
+
+export type MarkTunerSuggestionDoneData = {
+    body: {
+        comment?: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/tuner-suggestions/{id}/done';
+};
+
+export type MarkTunerSuggestionDoneErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type MarkTunerSuggestionDoneError = MarkTunerSuggestionDoneErrors[keyof MarkTunerSuggestionDoneErrors];
+
+export type MarkTunerSuggestionDoneResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        tunerKind: 'sre' | 'appa';
+        fingerprint: string;
+        source: 'sre_oom_killed' | 'sre_restart_loop' | 'sre_pod_stuck' | 'sre_replicas_unavailable' | 'appa_hitl_approvals' | 'appa_hitl_denials' | 'appa_repeated_denials' | 'appa_unresolved_yell' | 'appa_observe_auto_approvals';
+        severity: 'info' | 'warn' | 'critical';
+        title: string;
+        rationale: string;
+        evidence: Array<{
+            type: 'k8s_pod';
+            namespace: string;
+            name: string;
+        } | {
+            type: 'k8s_workload';
+            namespace: string;
+            kind: 'Deployment' | 'StatefulSet' | 'DaemonSet' | 'ReplicaSet' | 'Job' | 'CronJob';
+            name: string;
+        } | {
+            type: 'openappa_operation';
+            sessionId: string;
+            operationId: string;
+        } | {
+            type: 'openappa_consult';
+            id: string;
+        } | {
+            type: 'openappa_yell';
+            id: string;
+        }>;
+        action: {
+            type: 'note';
+        } | {
+            type: 'policy_change';
+            expectedRevision: number;
+            edits: Array<{
+                /**
+                 * Exact text copied from the current policy, including whitespace and line breaks. It must match one place unless replaceAll is true.
+                 */
+                oldText: string;
+                /**
+                 * The text that replaces oldText. Empty deletes oldText.
+                 */
+                newText: string;
+                /**
+                 * Replace every match of oldText instead of exactly one.
+                 */
+                replaceAll?: boolean | null;
+            }>;
+            gate: {
+                verification: 'verified' | 'unverified';
+                reasons: Array<'no_saved_validations' | 'replay_unavailable' | 'validation_cannot_run'>;
+                files: Array<{
+                    path: string;
+                    status: 'passed' | 'cannot_run';
+                    error: string | null;
+                }>;
+                suiteVersion: string | null;
+            };
+            publication: {
+                number: number;
+                url: string;
+            } | null;
+        };
+        status: 'open' | 'done' | 'rejected' | 'published' | 'effective' | 'resolved';
+        statusChangedAt: string;
+        statusChangedBy: string | null;
+        comment: string | null;
+        scheduleTriggerRunId: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type MarkTunerSuggestionDoneResponse = MarkTunerSuggestionDoneResponses[keyof MarkTunerSuggestionDoneResponses];
+
+export type RejectTunerSuggestionData = {
+    body: {
+        comment: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/tuner-suggestions/{id}/reject';
+};
+
+export type RejectTunerSuggestionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RejectTunerSuggestionError = RejectTunerSuggestionErrors[keyof RejectTunerSuggestionErrors];
+
+export type RejectTunerSuggestionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        tunerKind: 'sre' | 'appa';
+        fingerprint: string;
+        source: 'sre_oom_killed' | 'sre_restart_loop' | 'sre_pod_stuck' | 'sre_replicas_unavailable' | 'appa_hitl_approvals' | 'appa_hitl_denials' | 'appa_repeated_denials' | 'appa_unresolved_yell' | 'appa_observe_auto_approvals';
+        severity: 'info' | 'warn' | 'critical';
+        title: string;
+        rationale: string;
+        evidence: Array<{
+            type: 'k8s_pod';
+            namespace: string;
+            name: string;
+        } | {
+            type: 'k8s_workload';
+            namespace: string;
+            kind: 'Deployment' | 'StatefulSet' | 'DaemonSet' | 'ReplicaSet' | 'Job' | 'CronJob';
+            name: string;
+        } | {
+            type: 'openappa_operation';
+            sessionId: string;
+            operationId: string;
+        } | {
+            type: 'openappa_consult';
+            id: string;
+        } | {
+            type: 'openappa_yell';
+            id: string;
+        }>;
+        action: {
+            type: 'note';
+        } | {
+            type: 'policy_change';
+            expectedRevision: number;
+            edits: Array<{
+                /**
+                 * Exact text copied from the current policy, including whitespace and line breaks. It must match one place unless replaceAll is true.
+                 */
+                oldText: string;
+                /**
+                 * The text that replaces oldText. Empty deletes oldText.
+                 */
+                newText: string;
+                /**
+                 * Replace every match of oldText instead of exactly one.
+                 */
+                replaceAll?: boolean | null;
+            }>;
+            gate: {
+                verification: 'verified' | 'unverified';
+                reasons: Array<'no_saved_validations' | 'replay_unavailable' | 'validation_cannot_run'>;
+                files: Array<{
+                    path: string;
+                    status: 'passed' | 'cannot_run';
+                    error: string | null;
+                }>;
+                suiteVersion: string | null;
+            };
+            publication: {
+                number: number;
+                url: string;
+            } | null;
+        };
+        status: 'open' | 'done' | 'rejected' | 'published' | 'effective' | 'resolved';
+        statusChangedAt: string;
+        statusChangedBy: string | null;
+        comment: string | null;
+        scheduleTriggerRunId: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type RejectTunerSuggestionResponse = RejectTunerSuggestionResponses[keyof RejectTunerSuggestionResponses];
+
+export type ApplyTunerSuggestionData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/tuner-suggestions/{id}/apply';
+};
+
+export type ApplyTunerSuggestionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ApplyTunerSuggestionError = ApplyTunerSuggestionErrors[keyof ApplyTunerSuggestionErrors];
+
+export type ApplyTunerSuggestionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        tunerKind: 'sre' | 'appa';
+        fingerprint: string;
+        source: 'sre_oom_killed' | 'sre_restart_loop' | 'sre_pod_stuck' | 'sre_replicas_unavailable' | 'appa_hitl_approvals' | 'appa_hitl_denials' | 'appa_repeated_denials' | 'appa_unresolved_yell' | 'appa_observe_auto_approvals';
+        severity: 'info' | 'warn' | 'critical';
+        title: string;
+        rationale: string;
+        evidence: Array<{
+            type: 'k8s_pod';
+            namespace: string;
+            name: string;
+        } | {
+            type: 'k8s_workload';
+            namespace: string;
+            kind: 'Deployment' | 'StatefulSet' | 'DaemonSet' | 'ReplicaSet' | 'Job' | 'CronJob';
+            name: string;
+        } | {
+            type: 'openappa_operation';
+            sessionId: string;
+            operationId: string;
+        } | {
+            type: 'openappa_consult';
+            id: string;
+        } | {
+            type: 'openappa_yell';
+            id: string;
+        }>;
+        action: {
+            type: 'note';
+        } | {
+            type: 'policy_change';
+            expectedRevision: number;
+            edits: Array<{
+                /**
+                 * Exact text copied from the current policy, including whitespace and line breaks. It must match one place unless replaceAll is true.
+                 */
+                oldText: string;
+                /**
+                 * The text that replaces oldText. Empty deletes oldText.
+                 */
+                newText: string;
+                /**
+                 * Replace every match of oldText instead of exactly one.
+                 */
+                replaceAll?: boolean | null;
+            }>;
+            gate: {
+                verification: 'verified' | 'unverified';
+                reasons: Array<'no_saved_validations' | 'replay_unavailable' | 'validation_cannot_run'>;
+                files: Array<{
+                    path: string;
+                    status: 'passed' | 'cannot_run';
+                    error: string | null;
+                }>;
+                suiteVersion: string | null;
+            };
+            publication: {
+                number: number;
+                url: string;
+            } | null;
+        };
+        status: 'open' | 'done' | 'rejected' | 'published' | 'effective' | 'resolved';
+        statusChangedAt: string;
+        statusChangedBy: string | null;
+        comment: string | null;
+        scheduleTriggerRunId: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type ApplyTunerSuggestionResponse = ApplyTunerSuggestionResponses[keyof ApplyTunerSuggestionResponses];
+
+export type RefreshTunerSuggestionData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/tuner-suggestions/{id}/refresh';
+};
+
+export type RefreshTunerSuggestionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RefreshTunerSuggestionError = RefreshTunerSuggestionErrors[keyof RefreshTunerSuggestionErrors];
+
+export type RefreshTunerSuggestionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        tunerKind: 'sre' | 'appa';
+        fingerprint: string;
+        source: 'sre_oom_killed' | 'sre_restart_loop' | 'sre_pod_stuck' | 'sre_replicas_unavailable' | 'appa_hitl_approvals' | 'appa_hitl_denials' | 'appa_repeated_denials' | 'appa_unresolved_yell' | 'appa_observe_auto_approvals';
+        severity: 'info' | 'warn' | 'critical';
+        title: string;
+        rationale: string;
+        evidence: Array<{
+            type: 'k8s_pod';
+            namespace: string;
+            name: string;
+        } | {
+            type: 'k8s_workload';
+            namespace: string;
+            kind: 'Deployment' | 'StatefulSet' | 'DaemonSet' | 'ReplicaSet' | 'Job' | 'CronJob';
+            name: string;
+        } | {
+            type: 'openappa_operation';
+            sessionId: string;
+            operationId: string;
+        } | {
+            type: 'openappa_consult';
+            id: string;
+        } | {
+            type: 'openappa_yell';
+            id: string;
+        }>;
+        action: {
+            type: 'note';
+        } | {
+            type: 'policy_change';
+            expectedRevision: number;
+            edits: Array<{
+                /**
+                 * Exact text copied from the current policy, including whitespace and line breaks. It must match one place unless replaceAll is true.
+                 */
+                oldText: string;
+                /**
+                 * The text that replaces oldText. Empty deletes oldText.
+                 */
+                newText: string;
+                /**
+                 * Replace every match of oldText instead of exactly one.
+                 */
+                replaceAll?: boolean | null;
+            }>;
+            gate: {
+                verification: 'verified' | 'unverified';
+                reasons: Array<'no_saved_validations' | 'replay_unavailable' | 'validation_cannot_run'>;
+                files: Array<{
+                    path: string;
+                    status: 'passed' | 'cannot_run';
+                    error: string | null;
+                }>;
+                suiteVersion: string | null;
+            };
+            publication: {
+                number: number;
+                url: string;
+            } | null;
+        };
+        status: 'open' | 'done' | 'rejected' | 'published' | 'effective' | 'resolved';
+        statusChangedAt: string;
+        statusChangedBy: string | null;
+        comment: string | null;
+        scheduleTriggerRunId: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type RefreshTunerSuggestionResponse = RefreshTunerSuggestionResponses[keyof RefreshTunerSuggestionResponses];
 
 export type GetUserPermissionSourcesData = {
     body?: never;

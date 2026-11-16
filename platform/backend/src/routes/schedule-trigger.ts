@@ -31,11 +31,12 @@ import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  ScheduleTriggerResponseSchema,
+  type ScheduleTriggerRun,
   ScheduleTriggerRunKindSchema,
+  ScheduleTriggerRunResponseSchema,
   ScheduleTriggerRunStatusSchema,
   SelectConversationSchema,
-  SelectScheduleTriggerRunSchema,
-  SelectScheduleTriggerSchema,
   UuidIdSchema,
 } from "@/types";
 import {
@@ -76,7 +77,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .optional(),
         }),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectScheduleTriggerSchema),
+          createPaginatedResponseSchema(ScheduleTriggerResponseSchema),
         ),
       },
     },
@@ -181,7 +182,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Create a scheduled agent trigger",
         tags: ["Schedule Triggers"],
         body: CreateScheduleTriggerBodySchema,
-        response: constructResponseSchema(SelectScheduleTriggerSchema),
+        response: constructResponseSchema(ScheduleTriggerResponseSchema),
       },
     },
     async ({ body, user, organizationId }, reply) => {
@@ -203,7 +204,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a scheduled agent trigger",
         tags: ["Schedule Triggers"],
         params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(SelectScheduleTriggerSchema),
+        response: constructResponseSchema(ScheduleTriggerResponseSchema),
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
@@ -227,7 +228,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Schedule Triggers"],
         params: z.object({ id: UuidIdSchema }),
         body: UpdateScheduleTriggerBodySchema,
-        response: constructResponseSchema(SelectScheduleTriggerSchema),
+        response: constructResponseSchema(ScheduleTriggerResponseSchema),
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
@@ -278,7 +279,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Enable a scheduled agent trigger",
         tags: ["Schedule Triggers"],
         params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(SelectScheduleTriggerSchema),
+        response: constructResponseSchema(ScheduleTriggerResponseSchema),
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
@@ -309,7 +310,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Disable a scheduled agent trigger",
         tags: ["Schedule Triggers"],
         params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(SelectScheduleTriggerSchema),
+        response: constructResponseSchema(ScheduleTriggerResponseSchema),
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
@@ -340,7 +341,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Run a scheduled agent trigger immediately",
         tags: ["Schedule Triggers"],
         params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(SelectScheduleTriggerRunSchema),
+        response: constructResponseSchema(ScheduleTriggerRunResponseSchema),
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
@@ -373,7 +374,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           runKind: ScheduleTriggerRunKindSchema.optional(),
         }),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectScheduleTriggerRunSchema),
+          createPaginatedResponseSchema(ScheduleTriggerRunResponseSchema),
         ),
       },
     },
@@ -428,7 +429,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
           runId: UuidIdSchema,
         }),
-        response: constructResponseSchema(SelectScheduleTriggerRunSchema),
+        response: constructResponseSchema(ScheduleTriggerRunResponseSchema),
       },
     },
     async ({ params: { id, runId }, user, organizationId }, reply) => {
@@ -486,7 +487,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default scheduleTriggerRoutes;
 
 async function ensureRunConversation(params: {
-  run: z.infer<typeof SelectScheduleTriggerRunSchema>;
+  run: ScheduleTriggerRun;
   userId: string;
   organizationId: string;
 }): Promise<z.infer<typeof SelectConversationSchema>> {

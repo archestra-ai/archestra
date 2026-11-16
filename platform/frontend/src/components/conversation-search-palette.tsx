@@ -22,6 +22,7 @@ import {
   chatsNavItems,
   contentNavGroups,
   isNavItemPermitted,
+  TUNERS_URL,
 } from "@/app/_parts/studio-nav";
 import { useNavPermissionMap } from "@/app/_parts/use-settings-area-access";
 import { useSettingsTabs } from "@/app/settings/settings-tabs";
@@ -152,6 +153,7 @@ function useNavigationDestinations(
 ) {
   const openappaEnabled = useFeature("openappaEnabled");
   const autoRoutingEnabled = useFeature("autoRoutingEnabled");
+  const tunersEnabled = useFeature("tunersEnabled");
   const { visible: showConnect } = useConnectNavigation();
 
   return useMemo(() => {
@@ -173,6 +175,7 @@ function useNavigationDestinations(
         if (item.url === AUTO_ROUTING_URL && autoRoutingEnabled !== true) {
           return false;
         }
+        if (item.url === TUNERS_URL && tunersEnabled !== true) return false;
         return isNavItemPermitted(item, permissionMap);
       })
       .map((item) => ({
@@ -182,7 +185,13 @@ function useNavigationDestinations(
         keywords: NAVIGATION_KEYWORDS[item.url] ?? "",
         href: item.url,
       }));
-  }, [permissionMap, openappaEnabled, autoRoutingEnabled, showConnect]);
+  }, [
+    permissionMap,
+    openappaEnabled,
+    autoRoutingEnabled,
+    tunersEnabled,
+    showConnect,
+  ]);
 }
 
 interface ConversationSearchPaletteProps {

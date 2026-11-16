@@ -47,6 +47,7 @@ export const TOOL_PERMISSIONS: Record<
   },
   list_openappa_yells: { resource: "log", action: "read" },
   list_openappa_consults: { resource: "log", action: "read" },
+  list_openappa_operations: { resource: "log", action: "read" },
   get_guardrails_policy: { resource: "guardrailsPolicy", action: "read" },
   get_openappa_policy_tests: { resource: "guardrailsPolicy", action: "read" },
   run_openappa_policy_tests: { resource: "guardrailsPolicy", action: "update" },
@@ -351,6 +352,9 @@ export const TOOL_PERMISSIONS: Record<
   app_data_delete: { resource: "app", action: "update" },
   // A viewer who can use an app can run its archestra.llm.complete() calls.
   llm_complete: { resource: "app", action: "read" },
+  // Callable only inside a tuner run (checked in the handler); the run's actor
+  // must still hold tuner:update.
+  propose_tuner_suggestion: { resource: "tuner", action: "update" },
 };
 
 /**

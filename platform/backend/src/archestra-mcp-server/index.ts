@@ -19,6 +19,7 @@ import {
   TOOL_LIST_AGENT_RUNS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
+  TOOL_PROPOSE_TUNER_SUGGESTION_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -143,6 +144,8 @@ import {
   tools as toolAssignmentTools,
 } from "./tool-assignment";
 import { toolDiscoverySteer } from "./tool-recovery-messages";
+import { admitTunerRunToolCall } from "./tuner-run-admission";
+import { toolEntries as tunerToolEntries, tools as tunerTools } from "./tuners";
 import type { ArchestraContext } from "./types";
 
 export { archestraMcpBranding } from "./branding";
@@ -216,6 +219,7 @@ function getToolEntries(): Partial<
       ...appToolEntries,
       ...appDataToolEntries,
       ...appLlmToolEntries,
+      ...tunerToolEntries,
     };
   }
   return toolEntriesCache;
@@ -256,6 +260,7 @@ function getAllTools(): (typeof identityTools)[number][] {
       ...appTools,
       ...appDataTools,
       ...appLlmTools,
+      ...tunerTools,
     ];
   }
   return allToolsCache;
@@ -388,6 +393,9 @@ export async function executeArchestraTool(
     // one that does not check out must not fail a call that runs without it.
     args = original;
   }
+  // Before every other branch: delegation and dispatch return early below.
+  const tunerRunRefusal = await admitTunerRunToolCall({ toolName, context });
+  if (tunerRunRefusal) return tunerRunRefusal.refusal;
   if (
     isYellToolShortName(archestraMcpBranding.getToolShortName(toolName)) &&
     (!openappaYellEnabled() || !(await isGuardrailsV2Active()))
@@ -626,6 +634,8 @@ async function resolveToolAssignment(params: {
   // search_tools invocation skips the extra queries (excluding these tools is
   // also rejected at write time).
   if (ASSIGNMENT_EXEMPT_SHORT_NAMES.has(shortName)) return null;
+  // Never assigned: admitTunerRunToolCall already confined it to tuner runs.
+  if (shortName === TOOL_PROPOSE_TUNER_SUGGESTION_SHORT_NAME) return null;
   if (
     shortName === TOOL_LIST_AGENT_RUNS_SHORT_NAME &&
     params.args?.mine_only === true

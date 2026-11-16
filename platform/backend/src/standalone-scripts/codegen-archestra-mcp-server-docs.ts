@@ -60,6 +60,7 @@ const docsGroupOrder: Record<ArchestraToolGroupId, number> = {
   logs: 16,
   teams: 17,
   plugins: 18,
+  tuners: 19,
 };
 const docsGroupLabelOverrides: Partial<Record<ArchestraToolGroupId, string>> = {
   meta: "Tool Discovery",
@@ -420,6 +421,7 @@ const toolPageGroups: Record<string, { slug: string; title: string }> = {
   "MCP Gateways": { slug: "knowledge-and-mcp", title: "Knowledge and MCP" },
   "Tool Assignment": { slug: "knowledge-and-mcp", title: "Knowledge and MCP" },
   Guardrails: { slug: "guardrails", title: "Guardrails" },
+  Tuners: { slug: "organization", title: "Organization" },
   Limits: { slug: "organization", title: "Organization" },
   Logs: { slug: "organization", title: "Organization" },
   Teams: { slug: "organization", title: "Organization" },

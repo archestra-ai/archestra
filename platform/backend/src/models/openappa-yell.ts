@@ -5,10 +5,12 @@ import {
   eq,
   exists,
   getTableColumns,
+  gt,
   ilike,
   inArray,
   isNotNull,
   isNull,
+  lte,
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
@@ -21,10 +23,11 @@ import {
   createCursorPaginatedResult,
   decodeCursor,
 } from "@/database/utils/pagination";
-import type {
-  InsertOpenAppaYell,
-  OpenAppaYellKind,
-  OpenAppaYellQuery,
+import {
+  type InsertOpenAppaYell,
+  type OpenAppaYellKind,
+  OpenAppaYellKindSchema,
+  type OpenAppaYellQuery,
 } from "@/types/openappa-yell";
 import { normalizeByteaField } from "@/utils/normalize-bytea";
 
@@ -334,7 +337,101 @@ export default class OpenAppaYellModel {
       .returning(metadataColumns());
     return row ?? null;
   }
+
+  /**
+   * Unresolved waiver yells raised in `(since, until]`, per tool they name:
+   * a waiver's key is `<kind>:<tool>`, its tool part possibly a
+   * comma-separated list. Most yells first.
+   */
+  static async unresolvedWaiversByTool(params: {
+    organizationId: string;
+    since: Date;
+    until: Date;
+    limit: number;
+    evidenceLimit: number;
+  }) {
+    const kinds: Exclude<OpenAppaYellKind, "agent">[] = [
+      "approval_waived",
+      "block_waived",
+    ];
+    const result = await db.execute(sql`
+      WITH named AS (
+        SELECT y.id, y.session_id, y.count, y.created_at, y.kind, btrim(t.tool) AS tool
+        FROM ${table} AS y
+        CROSS JOIN LATERAL regexp_split_to_table(
+          substr(y.tool_call_id, strpos(y.tool_call_id, ':') + 1), ','
+        ) AS t(tool)
+        WHERE y.organization_id = ${params.organizationId}
+          AND y.resolved_at IS NULL
+          AND y.created_at > ${params.since.toISOString()}::timestamptz
+          AND y.created_at <= ${params.until.toISOString()}::timestamptz
+          AND y.kind IN (${sql.join(
+            kinds.map((kind) => sql`${kind}`),
+            sql`, `,
+          )})
+      )
+      SELECT tool,
+        COUNT(DISTINCT id)::int AS yells,
+        SUM(count)::int AS calls,
+        COUNT(DISTINCT session_id)::int AS sessions,
+        MIN(created_at) AS first_at,
+        MAX(created_at) AS last_at,
+        to_jsonb(ARRAY_AGG(DISTINCT kind)) AS kinds,
+        to_jsonb((ARRAY_AGG(id::text ORDER BY created_at DESC, id DESC))[1:${params.evidenceLimit}::int]) AS recent_ids
+      FROM named
+      WHERE tool <> ''
+      GROUP BY tool
+      ORDER BY yells DESC, tool
+      LIMIT ${params.limit}
+    `);
+    return UnresolvedWaiversByToolRowSchema.array().parse(result.rows);
+  }
+
+  /** Unresolved yells agents raised themselves in `(since, until]`, newest first. */
+  static async unresolvedAgentYells(params: {
+    organizationId: string;
+    since: Date;
+    until: Date;
+    limit: number;
+  }) {
+    return db
+      .select({
+        id: table.id,
+        sessionId: table.sessionId,
+        createdAt: table.createdAt,
+      })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          isNull(table.resolvedAt),
+          gt(table.createdAt, params.since),
+          lte(table.createdAt, params.until),
+          eq(table.kind, "agent"),
+        ),
+      )
+      .orderBy(desc(table.createdAt), desc(table.id))
+      .limit(params.limit);
+  }
 }
+
+const UnresolvedWaiversByToolRowSchema = z
+  .object({
+    tool: z.string(),
+    yells: z.number().int(),
+    calls: z.number().int(),
+    sessions: z.number().int(),
+    first_at: z.coerce.date(),
+    last_at: z.coerce.date(),
+    kinds: z.array(OpenAppaYellKindSchema.exclude(["agent"])),
+    recent_ids: z.array(z.uuid()),
+  })
+  .transform(({ first_at, last_at, recent_ids, ...row }) => ({
+    ...row,
+    firstAt: first_at,
+    lastAt: last_at,
+    recentIds: recent_ids,
+  }));
 
 function callerCondition(scope: YellScope) {
   return scope.callerId === undefined

@@ -33,6 +33,7 @@ import AgentVersionModel from "@/models/agent-version";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ToolModel from "@/models/tool";
 import { DEFAULT_APPS } from "@/services/apps/default-apps";
+import { findVisibleChatAgent } from "@/services/chat-agent-visibility";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   builtInSkillSourceRef,
@@ -43,6 +44,7 @@ import { accessGrants, describe, expect, test } from "@/test";
 import {
   decideEnvSeed,
   seedDefaultAppsForPristineOrgs,
+  syncAppaTunerAgentCapabilities,
   syncBuiltInAgents,
   syncBuiltInSkills,
   syncOpenAppaConfigAgentCapabilities,
@@ -80,7 +82,10 @@ async function countBuiltIns(organizationId: string) {
 function expectedBuiltIns() {
   return {
     agents: Object.values(BUILT_IN_AGENT_IDS)
-      .filter((id) => id !== BUILT_IN_AGENT_IDS.SRE)
+      .filter(
+        (id) =>
+          id !== BUILT_IN_AGENT_IDS.SRE && id !== BUILT_IN_AGENT_IDS.APPA_TUNER,
+      )
       .sort(),
     skills: getEnabledBuiltInSkills()
       .map(({ builtInSkillId }) => builtInSkillSourceRef(builtInSkillId))
@@ -202,7 +207,7 @@ describe("syncBuiltInAgents", () => {
     const originalToolIds = await AgentToolModel.findToolIdsByAgent(
       agent?.id ?? "",
     );
-    expect(originalToolIds).toHaveLength(43);
+    expect(originalToolIds).toHaveLength(44);
     const [resolveYellTool] = await ToolModel.findBuiltInToolIdsByNames([
       archestraMcpBranding.getToolName("resolve_openappa_yell"),
     ]);
@@ -473,7 +478,7 @@ Be neurodiversity friendly.
     ).toHaveLength(1);
     expect(
       await AgentToolModel.findToolIdsByAgent(agent?.id ?? ""),
-    ).toHaveLength(43);
+    ).toHaveLength(44);
     await syncOpenAppaConfigAgentCapabilities();
     expect(
       (
@@ -592,7 +597,7 @@ Be neurodiversity friendly.
     const managedToolIds = (
       await AgentToolModel.findToolIdsByAgent(guidedAgentId)
     ).sort();
-    expect(managedToolIds).toHaveLength(43);
+    expect(managedToolIds).toHaveLength(44);
     expect((await AgentToolModel.findToolIdsByAgent(agentId)).sort()).toEqual(
       managedToolIds,
     );
@@ -638,7 +643,7 @@ Be neurodiversity friendly.
     expect(await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames)).toEqual(
       [],
     );
-    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(40);
+    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(41);
 
     config.skillsSandbox.enabled = true;
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
@@ -648,7 +653,7 @@ Be neurodiversity friendly.
       await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames);
     expect(sandboxToolIds).toHaveLength(3);
     const assigned = await AgentToolModel.findToolIdsByAgent(agentId);
-    expect(assigned).toHaveLength(43);
+    expect(assigned).toHaveLength(44);
     expect(assigned).toEqual(expect.arrayContaining(sandboxToolIds));
   });
 
@@ -1033,6 +1038,165 @@ Be neurodiversity friendly.
 // A shipped OpenAPPA configuration prompt that has since been replaced.
 const LEGACY_OPENAPPA_CONFIG_SYSTEM_PROMPT =
   "Configure the organization's OpenAPPA policy. Load the appa-guide skill, inspect the current policy, preview requested changes and explain the diff before publishing. Answer questions without changing the policy. Use only OpenAPPA policy and discovery tools.";
+
+describe("APPA tuner", () => {
+  const seedTuner = async () => {
+    await syncBuiltInSkills();
+    await syncBuiltInAgents();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await syncOpenAppaConfigAgentCapabilities();
+    await syncAppaTunerAgentCapabilities();
+  };
+
+  test("is seeded only while both tuners and OpenAPPA are enabled", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    for (const [tuners, openappa] of [
+      [true, false],
+      [false, true],
+    ] as const) {
+      config.tuners.enabled = tuners;
+      config.openappa.enabled = openappa;
+      await seedTuner();
+      expect(
+        await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.APPA_TUNER,
+          organization.id,
+        ),
+      ).toBeNull();
+    }
+
+    config.tuners.enabled = true;
+    config.openappa.enabled = true;
+    await seedTuner();
+    expect(
+      await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.APPA_TUNER,
+        organization.id,
+      ),
+    ).toMatchObject({
+      name: BUILT_IN_AGENT_NAMES.APPA_TUNER,
+      systemPrompt:
+        BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[BUILT_IN_AGENT_IDS.APPA_TUNER],
+    });
+  });
+
+  test("gets exactly its read-only tools and the guide, and leaves APPA Keeper's tools alone", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    config.openappa.enabled = true;
+    await seedTuner();
+    const keeper = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+      organization.id,
+    );
+    const keeperToolIds = (
+      await AgentToolModel.findToolIdsByAgent(keeper?.id ?? "")
+    ).sort();
+
+    config.tuners.enabled = true;
+    await seedTuner();
+    // A manual assignment is reverted on the next sync.
+    const tuner = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.APPA_TUNER,
+      organization.id,
+    );
+    if (!tuner) throw new Error("APPA tuner missing");
+    await AgentToolModel.createManyIfNotExists(
+      tuner.id,
+      await ToolModel.findBuiltInToolIdsByNames([
+        archestraMcpBranding.getToolName("update_guardrails_policy"),
+      ]),
+    );
+    await syncAppaTunerAgentCapabilities();
+
+    const expectedToolIds = await ToolModel.findBuiltInToolIdsByNames(
+      (
+        [
+          "get_guardrails_policy",
+          "get_openappa_policy_tests",
+          "preview_guardrails_validation_change",
+          "list_openappa_yells",
+          "list_openappa_consults",
+          "list_openappa_operations",
+          "list_llm_interactions",
+          "get_llm_interaction",
+          "list_llm_sessions",
+          "get_llm_session_logs",
+          "list_guardrails_battery_fits",
+          "validate_guardrails_policy",
+          "preview_guardrails_policy_change",
+          "get_guardrails_server_rules",
+          "load_skill",
+        ] as const
+      ).map((name) => archestraMcpBranding.getToolName(name)),
+    );
+    expect(expectedToolIds).toHaveLength(15);
+    expect((await AgentToolModel.findToolIdsByAgent(tuner.id)).sort()).toEqual(
+      expectedToolIds.sort(),
+    );
+    const guide = await SkillModel.findBuiltIn({
+      organizationId: organization.id,
+      sourceRef: builtInSkillSourceRef("appa-guide"),
+    });
+    expect(
+      await AgentActivationSkillRuleModel.findPolicySnapshot(tuner.id),
+    ).toMatchObject({
+      mode: "manual",
+      rules: [
+        {
+          disposition: "allow",
+          reference: { source: "native", skillId: guide?.id },
+        },
+      ],
+    });
+    expect(
+      (await AgentToolModel.findToolIdsByAgent(keeper?.id ?? "")).sort(),
+    ).toEqual(keeperToolIds);
+  });
+
+  test("is managed by Admin and Platform Admin but never offered in chat", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organization = await makeOrganization();
+    config.tuners.enabled = true;
+    config.openappa.enabled = true;
+    await seedTuner();
+    const tuner = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.APPA_TUNER,
+      organization.id,
+    );
+    if (!tuner) throw new Error("APPA tuner missing");
+    for (const [role, allowed] of [
+      [ADMIN_ROLE_NAME, true],
+      [PLATFORM_ADMIN_ROLE_NAME, true],
+      [MEMBER_ROLE_NAME, false],
+    ] as const) {
+      const user = await makeUser();
+      await makeMember(user.id, organization.id, { role });
+      expect(
+        await ResourcePermissions.allows({
+          organizationId: organization.id,
+          userId: user.id,
+          resource: "agent",
+          scope: tuner.id,
+          action: "update",
+        }),
+      ).toBe(allowed);
+      expect(
+        await findVisibleChatAgent({
+          agentId: tuner.id,
+          userId: user.id,
+          organizationId: organization.id,
+        }),
+      ).toBeNull();
+    }
+  });
+});
 
 describe("syncBuiltInSkills", () => {
   // syncBuiltInSkills syncs branding per org; reset the singleton so it never

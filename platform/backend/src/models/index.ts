@@ -181,6 +181,7 @@ export { default as TeamTokenModel } from "./team-token";
 export { default as ToolModel } from "./tool";
 export { default as ToolObservationModel } from "./tool-observation";
 export { default as ToolSearchTextModel } from "./tool-search-text";
+export { default as TunerSuggestionModel } from "./tuner-suggestion";
 export { default as UsageStatisticsModel } from "./usage-statistics";
 export { default as UserModel } from "./user";
 export { default as UserCredentialModel } from "./user-credential";

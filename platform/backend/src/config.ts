@@ -3675,6 +3675,10 @@ const config = {
       process.env.ARCHESTRA_SRE_APISERVER_CIDRS,
     ),
   },
+  /** Scheduled built-in agents that file suggestions into the admin inbox (services/tuners). */
+  tuners: {
+    enabled: process.env.ARCHESTRA_TUNERS_ENABLED === "true",
+  },
   /**
    * code execution sandbox runtime — the per-conversation Dagger container that
    * runs commands, holds uploaded files, and materializes activated skills.

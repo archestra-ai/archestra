@@ -315,6 +315,7 @@ export { default as teamTokensTable } from "./team-token";
 export { default as toolsTable } from "./tool";
 export { default as toolObservationsTable } from "./tool-observation";
 export { default as toolSearchTextsTable } from "./tool-search-text";
+export { default as tunerSuggestionsTable } from "./tuner-suggestion";
 export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";
 export { default as userCredentialsTable } from "./user-credential";

@@ -816,6 +816,16 @@ export const RouteId = {
   DeleteCostExport: "deleteCostExport",
   RunCostExport: "runCostExport",
 
+  // Tuners
+  ListTuners: "listTuners",
+  ConfigureTuner: "configureTuner",
+  RunTuner: "runTuner",
+  ListTunerSuggestions: "listTunerSuggestions",
+  MarkTunerSuggestionDone: "markTunerSuggestionDone",
+  RejectTunerSuggestion: "rejectTunerSuggestion",
+  ApplyTunerSuggestion: "applyTunerSuggestion",
+  RefreshTunerSuggestion: "refreshTunerSuggestion",
+
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
   DropEmbeddingConfig: "dropEmbeddingConfig",

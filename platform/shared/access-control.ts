@@ -63,6 +63,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   chat: ["read", "create", "update", "delete", "full-view"],
   project: ["read", "create", "update", "delete"],
   log: ["read", "admin"],
+  tuner: ["read", "update"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
@@ -121,6 +122,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Editors see only their own logs; org-wide visibility is log:admin,
   // reserved for admin-tier roles.
   log: ["read"],
+  // Tuners read organization-wide logs; every tuner route also needs log:admin.
+  tuner: [],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
@@ -184,6 +187,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   chat: ["read", "create", "update", "delete", "full-view"],
   project: ["read", "create", "update", "delete"],
   log: [],
+  tuner: [],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
@@ -408,6 +412,10 @@ export const permissionDescriptions: Record<string, string> = {
   "project:update":
     "Edit project descriptions, instructions, sharing, and schedules",
   "project:delete": "Delete projects and schedules",
+  "tuner:read":
+    "View tuners and their suggestions (also requires organization-wide log access)",
+  "tuner:update":
+    "Enable, schedule, and run tuners, and act on their suggestions (also requires organization-wide log access)",
   "log:read":
     "View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve your own Guardrails yells",
 
@@ -1407,6 +1415,16 @@ export const requiredEndpointPermissionsMap: Partial<
   // A cost export ships organization-wide spend out of the platform: changing
   // one also needs cost visibility, so the permission cannot be used to read
   // spend its holder could not see.
+  // Tuners read organization-wide logs, so every route also needs log:admin.
+  [RouteId.ListTuners]: { tuner: ["read"], log: ["admin"] },
+  [RouteId.ConfigureTuner]: { tuner: ["update"], log: ["admin"] },
+  [RouteId.RunTuner]: { tuner: ["update"], log: ["admin"] },
+  [RouteId.ListTunerSuggestions]: { tuner: ["read"], log: ["admin"] },
+  [RouteId.MarkTunerSuggestionDone]: { tuner: ["update"], log: ["admin"] },
+  [RouteId.RejectTunerSuggestion]: { tuner: ["update"], log: ["admin"] },
+  // Applying also needs guardrailsPolicy:update, checked in the service.
+  [RouteId.ApplyTunerSuggestion]: { tuner: ["update"], log: ["admin"] },
+  [RouteId.RefreshTunerSuggestion]: { tuner: ["update"], log: ["admin"] },
   [RouteId.ListCostExports]: { costExport: ["read"] },
   [RouteId.CreateCostExport]: {
     costExport: ["create"],
@@ -2246,6 +2264,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/costs": { llmCost: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
   "/llm/cost-exports": { costExport: ["read"] },
+  "/tuners": { tuner: ["read"], log: ["admin"] },
   "/llm/auto-routing": { llmProxy: ["read"] },
   "/llm/auto-routing/plans": { llmProxy: ["read"] },
   "/llm/auto-routing/diagnostics": { llmProxy: ["read"] },

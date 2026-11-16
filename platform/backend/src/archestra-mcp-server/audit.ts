@@ -25,6 +25,7 @@ import PluginModel from "@/models/plugin";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
+import TunerSuggestionModel from "@/models/tuner-suggestion";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import { parseSkillManifest, SkillParseError } from "@/skills/parser";
@@ -316,6 +317,13 @@ const agentEditSpec: ArchestraToolAuditSpec = {
 };
 
 const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
+  propose_tuner_suggestion: {
+    resourceType: "tunerSuggestion",
+    action: "tunerSuggestion.proposed",
+    recordWhen: (result) => result.structuredContent?.status === "created",
+    idFromResult: (s) => str(s?.suggestionId),
+    fetchById: (id, orgId) => TunerSuggestionModel.findByIdForAudit(id, orgId),
+  },
   create_schedule_trigger: {
     resourceType: "scheduleTrigger",
     action: "scheduleTrigger.created",

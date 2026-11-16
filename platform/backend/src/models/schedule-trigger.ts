@@ -6,11 +6,14 @@ import {
   eq,
   ilike,
   inArray,
+  isNotNull,
+  isNull,
   ne,
   type SQL,
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { decodeCursor } from "@/database/utils/pagination";
@@ -193,6 +196,25 @@ class ScheduleTriggerModel {
     return result.length > 0;
   }
 
+  /** The organization's tuner triggers, one per tuner kind at most. */
+  static async findTunerTriggers(
+    organizationId: string,
+  ): Promise<ScheduleTrigger[]> {
+    return db
+      .select({ ...triggerColumns(), actor: actorColumns() })
+      .from(schema.scheduleTriggersTable)
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.scheduleTriggersTable.actorUserId, schema.usersTable.id),
+      )
+      .where(
+        and(
+          eq(schema.scheduleTriggersTable.organizationId, organizationId),
+          isNotNull(schema.scheduleTriggersTable.tunerKind),
+        ),
+      );
+  }
+
   static async findDueTriggers(now: Date): Promise<ScheduleTrigger[]> {
     const enabledTriggers = await db
       .select({
@@ -220,6 +242,10 @@ class ScheduleTriggerModel {
           // same stance as the notDeleted(agents) join above. Filtered in SQL,
           // so hidden triggers never enter the fetch-and-iterate set below.
           belongsToLiveProject(schema.scheduleTriggersTable.projectId),
+          // With tuners off, their triggers stay paused rather than failing.
+          config.tuners.enabled
+            ? undefined
+            : isNull(schema.scheduleTriggersTable.tunerKind),
         ),
       );
 
@@ -309,6 +335,8 @@ function buildListFilters(
     // in `findAccessibleScheduleTriggerOrThrow`
     // (services/schedule-trigger-access.ts).
     belongsToLiveProject(schema.scheduleTriggersTable.projectId),
+    // Tuner triggers have their own surface (routes/tuner).
+    isNull(schema.scheduleTriggersTable.tunerKind),
   ];
 
   if (params.enabled !== undefined) {
@@ -362,6 +390,7 @@ function triggerColumns() {
     name: schema.scheduleTriggersTable.name,
     agentId: schema.scheduleTriggersTable.agentId,
     projectId: schema.scheduleTriggersTable.projectId,
+    tunerKind: schema.scheduleTriggersTable.tunerKind,
     messageTemplate: schema.scheduleTriggersTable.messageTemplate,
     cronExpression: schema.scheduleTriggersTable.cronExpression,
     timezone: schema.scheduleTriggersTable.timezone,

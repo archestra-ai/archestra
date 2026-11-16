@@ -212,6 +212,8 @@ export const ConfigResponseSchema = z.strictObject({
     devFeedbackEnabled: z.boolean(),
     /** ALPHA: the Unified Model API's "auto" model and its settings. */
     autoRoutingEnabled: z.boolean(),
+    /** Tuners and their suggestion inbox. */
+    tunersEnabled: z.boolean(),
   }),
   providerBaseUrls: z.record(SupportedProvidersSchema, z.string().nullable()),
 });
@@ -304,6 +306,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       mcpGatewaySkillsEnabled: config.mcpGateway.skillsEnabled,
       devFeedbackEnabled: devFeedbackService.isAvailable,
       autoRoutingEnabled: config.autoRouting.enabled,
+      tunersEnabled: config.tuners.enabled,
     },
     providerBaseUrls: {
       openai: config.llm.openai.baseUrl || null,

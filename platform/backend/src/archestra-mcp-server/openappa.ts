@@ -19,6 +19,9 @@ import ConversationEnabledToolModel from "@/models/conversation-enabled-tool";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaDeploymentModel from "@/models/openappa-deployment";
 import OpenappaExternalConsultModel from "@/models/openappa-external-consult";
+import OpenAppaOperationModel, {
+  OpenAppaOperationDecisionSchema,
+} from "@/models/openappa-operation";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
@@ -468,6 +471,75 @@ const registry = defineArchestraTools([
         nextCursor: cutAfter
           ? OpenappaExternalConsultModel.cursorAfter(cutAfter)
           : page.pagination.nextCursor,
+      });
+    },
+  }),
+  defineArchestraTool({
+    shortName: "list_openappa_operations",
+    title: "List OpenAPPA operations",
+    annotations: { readOnlyHint: true },
+    description:
+      "List the operations OpenAPPA decided, newest first: the session, operation id, event, tool and decision of each, never the call's arguments. Filter by exact tool name, by decision (such as deny_call), and by since, an ISO datetime (14 days ago by default). Pass a sessionId from a row to list_openappa_consults or get_llm_session_logs to dig in. When hasMore is true, pass nextCursor with the same filters for the next page. Without log:admin only your own sessions are returned, and ownSessionsOnly is true. Operations of encrypted conversations are left out. Listing operations changes nothing.",
+    schema: z.strictObject({
+      tool: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("Only operations of this exact tool name."),
+      decision: OpenAppaOperationDecisionSchema.optional().describe(
+        "Only operations with this decision, such as deny_call.",
+      ),
+      since: z
+        .string()
+        .datetime({ offset: true })
+        .optional()
+        .describe(
+          "Only operations at or after this ISO datetime; 14 days ago by default.",
+        ),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(200)
+        .default(50)
+        .describe("Rows per page."),
+      cursor: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "The nextCursor of the previous call, with the same filters, for the next page.",
+        ),
+    }),
+    async handler({ args, context }) {
+      const { organizationId, userId } = organizationUser(context);
+      const { callerId } = await externalConsultAccess({
+        userId,
+        organizationId,
+      });
+      const page = await OpenAppaOperationModel.findCursorPaginated({
+        organizationId,
+        callerId,
+        tool: args.tool,
+        decision: args.decision,
+        since: args.since
+          ? new Date(args.since)
+          : new Date(Date.now() - OPERATION_LIST_DEFAULT_WINDOW_MS),
+        limit: args.limit,
+        cursor: args.cursor,
+      });
+      return result({
+        ownSessionsOnly: callerId !== undefined,
+        operations: page.data.map((row) => ({
+          sessionId: row.sessionId,
+          operationId: row.operationId,
+          event: row.event,
+          tool: row.tool,
+          decision: row.decision,
+          createdAt: row.createdAt,
+        })),
+        hasMore: page.pagination.hasNext,
+        nextCursor: page.pagination.nextCursor,
       });
     },
   }),
@@ -1715,6 +1787,7 @@ const YELL_LIST_LIMIT = 20;
 const YELL_MESSAGE_LIMIT = 300;
 const CONSULT_LIST_LIMIT = 50;
 const CONSULT_TEXT_LIMIT = 2000;
+const OPERATION_LIST_DEFAULT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
 /** What the agent reads of one consult: its outcome and the helper's own words, never the request or answer. */
 function consultSummary(row: ExternalConsult) {

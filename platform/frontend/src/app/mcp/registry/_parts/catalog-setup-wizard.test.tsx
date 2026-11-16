@@ -1,6 +1,7 @@
 import type { McpDeploymentStatusEntry } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSession } from "@/lib/auth/auth.query";
 import {
@@ -26,8 +27,12 @@ vi.mock("./local-server-install-dialog", () => ({
 vi.mock("@/components/oauth-confirmation-dialog", () => ({
   OAuthConfirmationDialog: () => null,
 }));
+// The install and reinstall requests are the network boundary.
+const install = vi.hoisted(() => vi.fn());
+const reinstall = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/mcp/mcp-server.query", () => ({
-  useInstallMcpServer: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useInstallMcpServer: () => ({ mutateAsync: install, isPending: false }),
+  useReinstallMcpServer: () => ({ mutateAsync: reinstall, isPending: false }),
   useMcpDeploymentStatuses: vi.fn(),
   useMcpInstallationStatusCacheSync: vi.fn(),
   useMcpServers: vi.fn(),
@@ -64,6 +69,8 @@ const CRASH_LOOP: McpDeploymentStatusEntry = {
 
 beforeEach(() => {
   wsHandlers.clear();
+  install.mockReset();
+  reinstall.mockReset();
   vi.mocked(websocketService.send).mockClear();
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "user-1" } },
@@ -117,6 +124,15 @@ describe("TestConnectionStep failure", () => {
     expect(websocketService.send).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "subscribe_mcp_logs" }),
     );
+  });
+
+  it("reconnects the user's failed connection on Retry", async () => {
+    renderFailedStep({ serverType: "remote", status: undefined });
+
+    await userEvent.click(screen.getByRole("button", { name: /retry/i }));
+
+    expect(reinstall).toHaveBeenCalledWith({ id: "install-1", name: "Orbit" });
+    expect(install).not.toHaveBeenCalled();
   });
 });
 

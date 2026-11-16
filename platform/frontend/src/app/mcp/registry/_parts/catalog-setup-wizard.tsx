@@ -66,6 +66,7 @@ import {
   useMcpDeploymentStatuses,
   useMcpInstallationStatusCacheSync,
   useMcpServers,
+  useReinstallMcpServer,
   useReloadMcpServerTools,
 } from "@/lib/mcp/mcp-server.query";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
@@ -147,7 +148,11 @@ export function useTestConnectionTarget(item: CatalogItem) {
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       )[0];
-  return { target, status: target?.localInstallationStatus ?? null };
+  return {
+    target,
+    status: target?.localInstallationStatus ?? null,
+    ownsTarget: !!target && target.ownerId === currentUserId && !target.teamId,
+  };
 }
 
 /**
@@ -158,10 +163,11 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
   const { statuses: deploymentStatuses } = useMcpDeploymentStatuses();
   useMcpInstallationStatusCacheSync();
   const installMutation = useInstallMcpServer();
+  const reinstallMutation = useReinstallMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
   const queryClient = useQueryClient();
 
-  const { target, status } = useTestConnectionTarget(item);
+  const { target, status, ownsTarget } = useTestConnectionTarget(item);
 
   // Refresh tool lists once the connection succeeds so the next steps show
   // freshly discovered tools.
@@ -196,13 +202,18 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
   // hands off via the install deep link for that combination.
   const needsRegistryHandoff = !!item.oauthConfig && hasPromptedFields;
 
+  // Installing again returns the user's existing connection unchanged, so a
+  // failed one is reconnected instead: after fixing what made it fail (a
+  // server that was down, a trust policy), Retry tries again.
   const directInstall = () =>
-    installMutation.mutateAsync({
-      name: item.name,
-      catalogId: item.id,
-      scope: "personal",
-      dontShowToast: true,
-    });
+    target && ownsTarget && status === "error"
+      ? reinstallMutation.mutateAsync({ id: target.id, name: target.name })
+      : installMutation.mutateAsync({
+          name: item.name,
+          catalogId: item.id,
+          scope: "personal",
+          dontShowToast: true,
+        });
 
   const appName = useAppName();
   const isDesktopMcp = item.serverType === "desktop_mcp";

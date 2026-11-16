@@ -96,9 +96,6 @@ export function AwsIamAuthFields(props: {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Service</FormLabel>
-              <FormDescription>
-                The SigV4 service name of what the server sits behind.
-              </FormDescription>
               <FormControl>
                 <Input
                   placeholder="bedrock-agentcore"
@@ -107,6 +104,9 @@ export function AwsIamAuthFields(props: {
                   value={field.value ?? ""}
                 />
               </FormControl>
+              <FormDescription>
+                The SigV4 service name of what the server sits behind.
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -118,10 +118,6 @@ export function AwsIamAuthFields(props: {
         render={({ field }) => (
           <FormItem>
             <FormLabel>Token Audience (Optional)</FormLabel>
-            <FormDescription>
-              The audience the IAM OpenID Connect provider lists. Defaults to{" "}
-              <code>sts.amazonaws.com</code>.
-            </FormDescription>
             <FormControl>
               <Input
                 placeholder="sts.amazonaws.com"
@@ -130,6 +126,10 @@ export function AwsIamAuthFields(props: {
                 value={field.value ?? ""}
               />
             </FormControl>
+            <FormDescription>
+              The audience the IAM OpenID Connect provider lists. Defaults to{" "}
+              <code>sts.amazonaws.com</code>.
+            </FormDescription>
             <FormMessage />
           </FormItem>
         )}

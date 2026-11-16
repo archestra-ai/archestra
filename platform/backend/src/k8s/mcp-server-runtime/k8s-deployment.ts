@@ -3153,21 +3153,17 @@ export default class K8sDeployment {
           if (this.observeState("hibernated")) {
             this.errorMessage = null;
           }
-          if (
-            config.orchestrator.mcpIdleHibernation.betaEnabled &&
-            !config.orchestrator.mcpIdleHibernation.hardDisabled
-          ) {
+          if (!config.orchestrator.mcpIdleHibernation.hardDisabled) {
             logger.info(
               `Deployment ${this.deploymentName} is hibernated — adopted without scaling up`,
             );
             return;
           }
           // The operator's kill switch (…MCP_IDLE_HIBERNATION_SECONDS=0) is
-          // set, or the beta flag that offers the feature is off. Leaving the
-          // deployment asleep would strand it: no sweeper runs, so only a
-          // tool call would ever wake it. Deployment-level off means "always
-          // on", so scale it back up here and let the periodic refresh
-          // complete the wake once it reports available replicas.
+          // set. Leaving the deployment asleep would strand it: no sweeper
+          // runs, so only a tool call would ever wake it. Deployment-level off
+          // means "always on", so scale it back up here and let the periodic
+          // refresh complete the wake once it reports available replicas.
           // (An org toggle that is merely OFF is deliberately NOT enough to
           // force a wake: nothing new gets hibernated, and ensureAwake still
           // wakes what is asleep on the next call that needs it.)

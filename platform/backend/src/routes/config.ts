@@ -115,10 +115,13 @@ export const ConfigResponseSchema = z.strictObject({
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // Deployment-level gate for MCP idle hibernation (the beta flag
-    // AND the operator kill switch); the licence and the
-    // organization toggle sit behind it.
-    mcpIdleHibernationBetaEnabled: z.boolean(),
+    // Deployment-level gate for MCP idle hibernation (the operator kill
+    // switch); the licence and the organization toggle sit behind it.
+    mcpIdleHibernationOffered: z.boolean(),
+    /** @deprecated Use `mcpIdleHibernationOffered`; same value. */
+    mcpIdleHibernationBetaEnabled: z
+      .boolean()
+      .describe("Deprecated: use mcpIdleHibernationOffered. Same value."),
     /** BETA: MCP registry attention and alert dismissal surfaces. */
     // SPDX-SnippetEnd
     sandbox: z.boolean(),
@@ -250,10 +253,11 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      // The whole deployment-level gate, not the beta flag alone: an
-      // operator's hard kill switch must take the settings toggle and the
+      // An operator's hard kill switch must take the settings toggle and the
       // per-server control with it, or the UI renders an operational
       // feature nothing behind it will ever run.
+      mcpIdleHibernationOffered: isIdleHibernationOffered(),
+      // Kept for API compatibility with clients of the beta release.
       mcpIdleHibernationBetaEnabled: isIdleHibernationOffered(),
       // SPDX-SnippetEnd
       sandbox: skillSandboxRuntimeService.isEnabled,

@@ -65,7 +65,7 @@ beforeEach(() => {
   setOrgHibernation(true);
   setInstalledMode("inherit");
   vi.mocked(useEnterpriseFeature).mockReturnValue(true);
-  // The control only exists while the deployment's beta flag is on.
+  // The control only exists while the deployment offers idle hibernation.
   vi.mocked(useFeature).mockReturnValue(true);
   mockCanModifyCatalogItem.mockReturnValue({
     canModify: true,
@@ -151,7 +151,7 @@ describe("IdleHibernationSection", () => {
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
-  it("stays hidden while the deployment's beta flag is off", () => {
+  it("stays hidden while the operator kill switch is set", () => {
     vi.mocked(useFeature).mockReturnValue(false);
     render(<IdleHibernationSection item={catalogItem} />);
 

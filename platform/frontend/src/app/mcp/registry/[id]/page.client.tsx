@@ -1042,7 +1042,7 @@ function useMcpServerSpec({
 function useIdleHibernationFact(item: CatalogItem): OverviewFact[] {
   const { data: organization } = useOrganization();
   const enterpriseCoreActive = useEnterpriseFeature("core");
-  const hibernationBeta = useFeature("mcpIdleHibernationBetaEnabled");
+  const hibernationOffered = useFeature("mcpIdleHibernationOffered");
   // Only this item's installs, without agents: the fact reads their modes.
   const { data: servers = [] } = useMcpServers({
     includeAssignedAgents: false,
@@ -1051,7 +1051,7 @@ function useIdleHibernationFact(item: CatalogItem): OverviewFact[] {
 
   if (
     item.serverType !== "local" ||
-    !hibernationBeta ||
+    !hibernationOffered ||
     !enterpriseCoreActive ||
     !organization?.mcpIdleHibernationEnabled
   ) {

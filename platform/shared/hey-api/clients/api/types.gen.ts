@@ -44883,6 +44883,10 @@ export type GetBootstrapResponses = {
                     jwksUri: string;
                     bundleUri: string;
                 };
+                mcpIdleHibernationOffered: boolean;
+                /**
+                 * Deprecated: use mcpIdleHibernationOffered. Same value.
+                 */
                 mcpIdleHibernationBetaEnabled: boolean;
                 sandbox: boolean;
                 agentRuntime: boolean;
@@ -54674,6 +54678,10 @@ export type GetConfigResponses = {
                 jwksUri: string;
                 bundleUri: string;
             };
+            mcpIdleHibernationOffered: boolean;
+            /**
+             * Deprecated: use mcpIdleHibernationOffered. Same value.
+             */
             mcpIdleHibernationBetaEnabled: boolean;
             sandbox: boolean;
             agentRuntime: boolean;

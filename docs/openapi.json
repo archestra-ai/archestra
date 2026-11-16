@@ -167517,8 +167517,12 @@
                               ],
                               "additionalProperties": false
                             },
-                            "mcpIdleHibernationBetaEnabled": {
+                            "mcpIdleHibernationOffered": {
                               "type": "boolean"
+                            },
+                            "mcpIdleHibernationBetaEnabled": {
+                              "type": "boolean",
+                              "description": "Deprecated: use mcpIdleHibernationOffered. Same value."
                             },
                             "sandbox": {
                               "type": "boolean"
@@ -167709,6 +167713,7 @@
                             "betaEnabled",
                             "orchestratorK8sRuntime",
                             "agentIdentitySpiffe",
+                            "mcpIdleHibernationOffered",
                             "mcpIdleHibernationBetaEnabled",
                             "sandbox",
                             "agentRuntime",
@@ -205441,8 +205446,12 @@
                           ],
                           "additionalProperties": false
                         },
-                        "mcpIdleHibernationBetaEnabled": {
+                        "mcpIdleHibernationOffered": {
                           "type": "boolean"
+                        },
+                        "mcpIdleHibernationBetaEnabled": {
+                          "type": "boolean",
+                          "description": "Deprecated: use mcpIdleHibernationOffered. Same value."
                         },
                         "sandbox": {
                           "type": "boolean"
@@ -205633,6 +205642,7 @@
                         "betaEnabled",
                         "orchestratorK8sRuntime",
                         "agentIdentitySpiffe",
+                        "mcpIdleHibernationOffered",
                         "mcpIdleHibernationBetaEnabled",
                         "sandbox",
                         "agentRuntime",

@@ -41,8 +41,8 @@ const DEFAULT_HIBERNATION_MODE: HibernationMode = "inherit";
 export function IdleHibernationSection({ item }: { item: CatalogItem }) {
   const { data: organization } = useOrganization();
   const enterpriseCoreActive = useEnterpriseFeature("core");
-  // Beta feature: with the deployment flag off, the control does not exist.
-  const hibernationBeta = useFeature("mcpIdleHibernationBetaEnabled");
+  // With the operator's kill switch set, the control does not exist.
+  const hibernationOffered = useFeature("mcpIdleHibernationOffered");
   const { canModify } = useCanModifyCatalogItem(item);
   const updateMutation = useUpdateInternalMcpCatalogItem();
   // Only this item's installs, narrowed on the server.
@@ -71,7 +71,7 @@ export function IdleHibernationSection({ item }: { item: CatalogItem }) {
     organization?.mcpIdleHibernationEnabled ?? false;
   if (
     item.serverType !== "local" ||
-    !hibernationBeta ||
+    !hibernationOffered ||
     !enterpriseCoreActive ||
     !orgHibernationEnabled ||
     !canModify

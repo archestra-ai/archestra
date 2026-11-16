@@ -87,16 +87,13 @@ function loadAlias(mcpServer: McpServer, live: FakeDeployment): K8sDeployment {
 describe("McpServerRuntimeManager.isDeploymentDormant", () => {
   let manager: McpServerRuntimeManager;
   let internals: ManagerInternals;
-  let betaEnabled: boolean;
   let hardDisabled: boolean;
   let live: FakeDeployment;
 
   beforeEach(() => {
-    betaEnabled = config.orchestrator.mcpIdleHibernation.betaEnabled;
     hardDisabled = config.orchestrator.mcpIdleHibernation.hardDisabled;
     // Idle hibernation fully on: offered by the deployment, licensed, and
     // opted into by the organization. Dormancy is a no-op below any of these.
-    config.orchestrator.mcpIdleHibernation.betaEnabled = true;
     config.orchestrator.mcpIdleHibernation.hardDisabled = false;
     vi.spyOn(enterpriseTier, "isCoreActive").mockReturnValue(true);
     vi.spyOn(
@@ -111,7 +108,6 @@ describe("McpServerRuntimeManager.isDeploymentDormant", () => {
   });
 
   afterEach(() => {
-    config.orchestrator.mcpIdleHibernation.betaEnabled = betaEnabled;
     config.orchestrator.mcpIdleHibernation.hardDisabled = hardDisabled;
     vi.restoreAllMocks();
   });
@@ -172,7 +168,7 @@ describe("McpServerRuntimeManager.isDeploymentDormant", () => {
     alias.syncStateFromSibling("running");
     await alias.hibernate();
 
-    config.orchestrator.mcpIdleHibernation.betaEnabled = false;
+    config.orchestrator.mcpIdleHibernation.hardDisabled = true;
 
     // Disabling future sleep does not wake existing zero-replica deployments.
     // Passive background paths must keep skipping it until demand wakes it.

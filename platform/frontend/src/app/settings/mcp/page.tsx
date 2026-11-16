@@ -49,9 +49,9 @@ export default function McpSettingsPage() {
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   const enterpriseCoreActive = useEnterpriseFeature("core");
-  // Idle hibernation ships as a beta feature: with the deployment flag off,
-  // the setting does not exist on this page at all.
-  const hibernationBeta = useFeature("mcpIdleHibernationBetaEnabled");
+  // With the operator's kill switch set, the deployment does not offer idle
+  // hibernation, and the setting does not exist on this page at all.
+  const hibernationOffered = useFeature("mcpIdleHibernationOffered");
   // SPDX-SnippetEnd
   const updateMcpSettingsMutation = useUpdateMcpSettings(
     "MCP settings updated",
@@ -147,7 +147,7 @@ export default function McpSettingsPage() {
       {/* SPDX-SnippetBegin */}
       {/* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */}
       {/* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-      {hibernationBeta && (
+      {hibernationOffered && (
         <SmallTeamTierBanner featureName="Idle hibernation" />
       )}
       {/* SPDX-SnippetEnd */}
@@ -211,13 +211,13 @@ export default function McpSettingsPage() {
         {/* SPDX-SnippetBegin */}
         {/* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */}
         {/* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-        {/* Only this block is enterprise (and beta) — the catalog setting
-            above stays available to every deployment. */}
-        {hibernationBeta && (
+        {/* Only this block is enterprise — the catalog setting above stays
+            available to every deployment. */}
+        {hibernationOffered && (
           <DisabledEnterpriseSection disabled={!enterpriseCoreActive}>
             <SettingsBlock
               title="Idle hibernation"
-              description="Hibernates self-hosted MCP servers that go unused, scaling them to zero until the next tool call. Beta feature."
+              description="Hibernates self-hosted MCP servers that go unused, scaling them to zero until the next tool call."
               control={
                 <ToggleControl
                   value={hibernationEnabled}

@@ -83,7 +83,7 @@ beforeEach(() => {
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   vi.mocked(useEnterpriseFeature).mockReturnValue(true);
-  // The hibernation block only exists when the beta flag is on.
+  // The hibernation block only exists while the deployment offers it.
   vi.mocked(useFeature).mockReturnValue(true);
   vi.mocked(useSmallTeamTier).mockReturnValue(
     undefined as ReturnType<typeof useSmallTeamTier>,
@@ -188,7 +188,7 @@ describe("McpSettingsPage", () => {
     expect(blockSelect("Online MCP catalog")).toBeEnabled();
   });
 
-  it("hides hibernation entirely while the beta flag is off", () => {
+  it("hides hibernation entirely while the operator kill switch is set", () => {
     vi.mocked(useFeature).mockReturnValue(false);
     renderPage();
 

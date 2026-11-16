@@ -1196,7 +1196,7 @@ test.describe("MCP idle hibernation - on-demand wake", () => {
       })
     ).json();
     expect(
-      platformConfig.features?.mcpIdleHibernationBetaEnabled,
+      platformConfig.features?.mcpIdleHibernationOffered,
       "this deployment does not offer idle hibernation, so no sweep can run",
     ).toBe(true);
 

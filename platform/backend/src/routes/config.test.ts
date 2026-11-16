@@ -53,6 +53,37 @@ describe("config routes", () => {
     await app.close();
   });
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  test("offers idle hibernation without ARCHESTRA_BETA unless the kill switch is set", async () => {
+    const originalBeta = config.beta;
+    const originalHardDisabled =
+      config.orchestrator.mcpIdleHibernation.hardDisabled;
+    config.beta = false;
+    try {
+      config.orchestrator.mcpIdleHibernation.hardDisabled = false;
+      const offered = (
+        await app.inject({ method: "GET", url: "/api/config" })
+      ).json();
+      expect(offered.features.mcpIdleHibernationOffered).toBe(true);
+      // The deprecated beta-era field keeps the same value for older clients.
+      expect(offered.features.mcpIdleHibernationBetaEnabled).toBe(true);
+
+      config.orchestrator.mcpIdleHibernation.hardDisabled = true;
+      const killed = (
+        await app.inject({ method: "GET", url: "/api/config" })
+      ).json();
+      expect(killed.features.mcpIdleHibernationOffered).toBe(false);
+      expect(killed.features.mcpIdleHibernationBetaEnabled).toBe(false);
+    } finally {
+      config.beta = originalBeta;
+      config.orchestrator.mcpIdleHibernation.hardDisabled =
+        originalHardDisabled;
+    }
+  });
+  // SPDX-SnippetEnd
+
   test("advertises the UI feedback overlay only when its flag is set", async () => {
     config.devFeedback.enabled = true;
     const on = await app.inject({ method: "GET", url: "/api/config" });
@@ -177,7 +208,7 @@ describe("config routes", () => {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      // Beta-derived flags may inherit an ambient ARCHESTRA_BETA in dev/CI.
+      mcpIdleHibernationOffered: expect.any(Boolean),
       mcpIdleHibernationBetaEnabled: expect.any(Boolean),
       // SPDX-SnippetEnd
     });

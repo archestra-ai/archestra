@@ -60,6 +60,24 @@ Every site calls providers itself, so a request is served where it lands.
 To call a provider from a site in another cloud, give that site federated
 credentials for it (see the user docs).
 
+## Remote database (`remote-database.ts`, `database/read-cache.ts`)
+
+`config.site.remoteDatabase` (`ARCHESTRA_SITE_REMOTE_DATABASE`) marks a site
+whose database is in another cloud or region, so each statement is a
+cross-cloud round trip. An LLM proxy request there makes none when warm:
+
+- Reads: the auth plugin marks LLM proxy requests (`requestScope.cachesReads`)
+  and `startRemoteDatabaseMode` wraps `pool.query`. A standalone SELECT whose
+  tables are all in `CACHEABLE_TABLES` is read through `configCache` (5 s TTL,
+  cleared by the `archestra_proxy_config` notifications, used only while
+  notifications are proven to arrive). Transactions always read the database.
+  A table without a notification trigger (budget usage, keys, tokens) is
+  served at most 5 s stale. Add a table only if that staleness is acceptable.
+- Writes: `persistProxyInteraction` goes through `writeAfterResponse`, which
+  queues the write (retried for 2 minutes; the interaction id is fixed so a
+  retry is idempotent) and runs it inline when 1,000 are pending in the
+  process.
+
 ## Channel (`channel-auth.ts`, `channel-client.ts`, `routes/site-channel.ts`)
 
 Endpoints live under `SITE_CHANNEL_PREFIX` (`/api/internal/sites`) on the
@@ -93,5 +111,6 @@ and record logs, limits and spend on one side only.
 ## Not here yet
 
 Admin UI (Sites page, site filter on logs), the site on interactions and
-spans, an outbound tunnel for sites that can't accept inbound connections, and
-a mode where a site needs no database login of its own.
+spans, an outbound tunnel for sites that can't accept inbound connections,
+a mode where a site needs no database login of its own, and per-site limit
+allowances (a remote-database site checks limits against usage up to 5 s old).

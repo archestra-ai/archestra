@@ -81,6 +81,10 @@ Several installs can share one database, each in its own cluster or cloud. See [
   - Default: `false`
   - Set it only for a deliberate mixed-version window during an upgrade, then unset it.
 
+- **`ARCHESTRA_SITE_REMOTE_DATABASE`** - Set on a site whose database is in another cloud or region. LLM proxy requests then read configuration from a cache in each pod and write logs and spend after the response, so a warm request makes no database round trip. See [Multiple Clusters and Clouds](/docs/admin/deployment/multi-site#run-a-site-far-from-the-database).
+  - Default: `false`
+  - In Helm, set `archestra.site.remoteDatabase`.
+
 ## Server and Network
 
 - **`ARCHESTRA_API_BASE_URL`** - Public URL of the Archestra API, shown in the connection instructions for the LLM Proxy, MCP Gateway, and A2A Gateway.

@@ -57,6 +57,20 @@ flowchart LR
 
 To upgrade, upgrade the primary first, then each secondary to the same version. Until a secondary is upgraded it keeps running, but it refuses to restart on the old version. [`ARCHESTRA_SITE_ALLOW_VERSION_SKEW=true`](/docs/admin/deployment/configuration#ARCHESTRA_SITE_ALLOW_VERSION_SKEW) lets a secondary start anyway, for a deliberate mixed-version window.
 
+## Run a Site Far from the Database
+
+A site in another cloud or region than the database pays a round trip for each database statement, and an LLM proxy request makes about twenty. Set [`ARCHESTRA_SITE_REMOTE_DATABASE=true`](/docs/admin/deployment/configuration#ARCHESTRA_SITE_REMOTE_DATABASE) on that site (in Helm, `archestra.site.remoteDatabase: true`) so a warm request makes none:
+
+- **Configuration reads come from a cache in each pod.** Keys, users, permissions, models, pools, limits and pricing are read once and kept for up to 5 seconds. Most changes drop the cache at once through database notifications; the rest, such as budget usage, show up within those 5 seconds.
+- **Logs and spend are written after the response.** A failed write is retried for 2 minutes, then dropped and logged. When 1,000 writes are waiting in a pod, new requests write before they respond, so an unreachable database slows requests down instead of losing records.
+
+What this changes on that site:
+
+- A limit is enforced up to a few seconds late, so a burst can overshoot it a little.
+- A log appears shortly after the response.
+- A revoked key or token keeps working for up to 5 seconds.
+- The first request after a configuration change still reads from the database.
+
 ## Call a Cloud Provider from Another Cloud
 
 Keyless providers read their cloud credentials the standard way, so a site in another cloud can use federated credentials instead of a stored key. Mount a projected Kubernetes service account token with `archestra.extraVolumes` and `archestra.extraVolumeMounts`, and trust that cluster's OIDC issuer in the provider's cloud:
@@ -71,6 +85,6 @@ Then enable the provider on that site as usual (for example [`ARCHESTRA_GEMINI_V
 
 ## Limits
 
-- Every site talks to the shared database directly, so a site far from it pays that round trip on every request.
+- Every site talks to the shared database directly. A site far from it pays the round trip on every proxy request, or, in [remote database mode](#run-a-site-far-from-the-database), only on admin pages and on requests that miss its cache.
 - The database is shared: if it is down, every site is down.
 - Every site holds the auth secret, so every site can read every stored secret.

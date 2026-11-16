@@ -2422,6 +2422,7 @@ describe("parseSiteConfig", () => {
     role: undefined,
     internalUrl: undefined,
     allowVersionSkew: undefined,
+    remoteDatabase: undefined,
   };
 
   test("a single install is the primary site named default", () => {
@@ -2430,6 +2431,7 @@ describe("parseSiteConfig", () => {
       role: "primary",
       internalUrl: null,
       allowVersionSkew: false,
+      remoteDatabase: false,
     });
   });
 
@@ -2440,12 +2442,14 @@ describe("parseSiteConfig", () => {
         role: "Secondary",
         internalUrl: "http://archestra.gcp.internal:9000/",
         allowVersionSkew: "true",
+        remoteDatabase: "true",
       }),
     ).toEqual({
       name: "gcp-us",
       role: "secondary",
       internalUrl: "http://archestra.gcp.internal:9000",
       allowVersionSkew: true,
+      remoteDatabase: true,
     });
   });
 

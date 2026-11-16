@@ -1585,6 +1585,12 @@ export interface SiteConfig {
   internalUrl: string | null;
   /** Escape hatch for a deliberate mixed-version window during an upgrade. */
   allowVersionSkew: boolean;
+  /**
+   * The database is in another cloud or region: LLM proxy requests read
+   * configuration from a per-pod cache and record logs and spend after the
+   * response, so a request makes no round trip to the database when warm.
+   */
+  remoteDatabase: boolean;
 }
 
 const DEFAULT_SITE_NAME = "default";
@@ -1595,6 +1601,7 @@ export function parseSiteConfig(env: {
   role: string | undefined;
   internalUrl: string | undefined;
   allowVersionSkew: string | undefined;
+  remoteDatabase: string | undefined;
 }): SiteConfig {
   const name = env.name?.trim() || DEFAULT_SITE_NAME;
   if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) {
@@ -1614,6 +1621,7 @@ export function parseSiteConfig(env: {
     role,
     internalUrl,
     allowVersionSkew: env.allowVersionSkew === "true",
+    remoteDatabase: env.remoteDatabase === "true",
   };
 }
 
@@ -4507,6 +4515,7 @@ const config = {
     role: process.env.ARCHESTRA_SITE_ROLE,
     internalUrl: process.env.ARCHESTRA_SITE_INTERNAL_URL,
     allowVersionSkew: process.env.ARCHESTRA_SITE_ALLOW_VERSION_SKEW,
+    remoteDatabase: process.env.ARCHESTRA_SITE_REMOTE_DATABASE,
   }),
   maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,
   // Instance-wide banner (markdown) shown at the top of the UI. Unlike

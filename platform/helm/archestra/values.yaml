@@ -722,6 +722,11 @@ archestra:
     # http://archestra.internal.example.com:9000. Recorded in the site
     # registry; no feature calls other sites yet.
     internalUrl: ""
+    # true when the database is in another cloud or region. LLM proxy
+    # requests then read configuration from a per-pod cache kept current by
+    # database notifications, and record logs and spend after the response,
+    # so a warm request makes no round trip to the database.
+    remoteDatabase: false
 
   # Configuration for the MCP Server Runtime
   orchestrator:

@@ -320,6 +320,10 @@ producing a duplicate env entry.
 - name: ARCHESTRA_SITE_INTERNAL_URL
   value: {{ .internalUrl | quote }}
 {{- end }}
+{{- if .remoteDatabase }}
+- name: ARCHESTRA_SITE_REMOTE_DATABASE
+  value: "true"
+{{- end }}
 {{- end }}
 {{- include "archestra-platform.databaseEnv" . }}
 {{- $databasePoolProvided := hasKey .Values.archestra.env "ARCHESTRA_DATABASE_POOL_MAX" }}

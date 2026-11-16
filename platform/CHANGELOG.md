@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.33](https://github.com/archestra-ai/archestra/compare/platform-v1.4.32...platform-v1.4.33) (2026-11-16)
+
+
+### Bug Fixes
+
+* **environments:** keep per-kind deploy limits on environment grants (backport release/1.4) ([#10797](https://github.com/archestra-ai/archestra/issues/10797)) ([3583ae1](https://github.com/archestra-ai/archestra/commit/3583ae139313b979f44bfb07320c1d0d46bc113c))
+* **oauth:** preserve metadata discovery failure diagnostics (backport release/1.4) ([#10792](https://github.com/archestra-ai/archestra/issues/10792)) ([99801bc](https://github.com/archestra-ai/archestra/commit/99801bc747eb6f0caf5cb3be474d4d80c6473fa2))
+* **permissions:** give authors of objects shared before the upgrade full acce (backport release/1.4) ([#10793](https://github.com/archestra-ai/archestra/issues/10793)) ([9cdb374](https://github.com/archestra-ai/archestra/commit/9cdb374cf52231e973de076a9e06bc15089f1312))
+* **sandbox:** report base package setup failures accurately (backport release/1.4) ([#10790](https://github.com/archestra-ai/archestra/issues/10790)) ([33754bd](https://github.com/archestra-ai/archestra/commit/33754bd32c1b03729d572a2a21b8c6a5d879d368))
+
 ## [1.4.32](https://github.com/archestra-ai/archestra/compare/platform-v1.4.31...platform-v1.4.32) (2026-11-15)
 
 

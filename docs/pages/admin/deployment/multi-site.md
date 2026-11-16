@@ -36,7 +36,7 @@ flowchart LR
        name: azure-us
    ```
 
-2. Install the secondary in the other cluster with the **same version**, the **same database URL** and a **byte-for-byte copy of the primary's auth Secret** (`ARCHESTRA_AUTH_SECRET`, and the split secrets if you use them):
+2. Install the secondary in the other cluster with the **same version**, the **same database URL** and a **byte-for-byte copy of the primary's auth Secret** ([`ARCHESTRA_AUTH_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SECRET), and the split secrets if you use them):
 
    ```yaml
    archestra:
@@ -55,7 +55,7 @@ flowchart LR
 
 3. Point each cloud's apps at the site in that cloud. Virtual keys, model pools and limits work the same on every site.
 
-To upgrade, upgrade the primary first, then each secondary to the same version. Until a secondary is upgraded it keeps running, but it refuses to restart on the old version. `ARCHESTRA_SITE_ALLOW_VERSION_SKEW=true` lets a secondary start anyway, for a deliberate mixed-version window.
+To upgrade, upgrade the primary first, then each secondary to the same version. Until a secondary is upgraded it keeps running, but it refuses to restart on the old version. [`ARCHESTRA_SITE_ALLOW_VERSION_SKEW=true`](/docs/admin/deployment/configuration#ARCHESTRA_SITE_ALLOW_VERSION_SKEW) lets a secondary start anyway, for a deliberate mixed-version window.
 
 ## Call a Cloud Provider from Another Cloud
 
@@ -63,11 +63,11 @@ Keyless providers read their cloud credentials the standard way, so a site in an
 
 | Provider | In the provider's cloud | On the site |
 | --- | --- | --- |
-| Vertex AI (Gemini, Anthropic) | A Workload Identity Federation pool with an OIDC provider for the cluster's issuer, and `roles/aiplatform.user` for the site's service account | A credential configuration file (`gcloud iam workload-identity-pools create-cred-config`) in `ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE` or `ARCHESTRA_ANTHROPIC_VERTEX_AI_CREDENTIALS_FILE` |
+| Vertex AI (Gemini, Anthropic) | A Workload Identity Federation pool with an OIDC provider for the cluster's issuer, and `roles/aiplatform.user` for the site's service account | A credential configuration file (`gcloud iam workload-identity-pools create-cred-config`) in [`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`](/docs/admin/deployment/configuration#ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE) or [`ARCHESTRA_ANTHROPIC_VERTEX_AI_CREDENTIALS_FILE`](/docs/admin/deployment/configuration#ARCHESTRA_ANTHROPIC_VERTEX_AI_CREDENTIALS_FILE) |
 | Bedrock (IAM) | An IAM OIDC identity provider for the cluster's issuer, and a role it may assume | `AWS_ROLE_ARN` and `AWS_WEB_IDENTITY_TOKEN_FILE` |
 | Azure OpenAI (Entra ID) | A federated credential on an Entra app registration or user-assigned identity, for the cluster's issuer and service account | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_FEDERATED_TOKEN_FILE` |
 
-Then enable the provider on that site as usual (for example `ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`).
+Then enable the provider on that site as usual (for example [`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_GEMINI_VERTEX_AI_ENABLED)).
 
 ## Limits
 

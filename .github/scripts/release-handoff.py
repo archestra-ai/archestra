@@ -13,7 +13,9 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import base64
 from urllib.parse import urlencode
+import urllib.request
 import zipfile
 
 
@@ -22,6 +24,7 @@ DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 WORKFLOW = ".github/workflows/docker-image-scanning.yml"
 MAX_AGE = dt.timedelta(hours=24)
 MAX_ARCHIVE = 20 * 1024**3
+INDEX_MEDIA_TYPE = "application/vnd.oci.image.index.v1+json"
 
 
 def command(*args):
@@ -276,9 +279,48 @@ def push(record, image, arch):
     return result
 
 
+def push_index(selection, image, destination, tag, token, actor, opener=None):
+    """Push the multi-arch index the queue built and signed for `image` (both
+    architectures' scanned roots, release-oci.multi_arch_index) as
+    destination:tag, byte for byte, so the published digest carries the queue
+    run's build provenance. Returns that digest."""
+    if not re.fullmatch(r"ghcr\.io/archestra-ai/ci/[a-z0-9-]+", destination) or not re.fullmatch(r"[A-Za-z0-9._-]+", tag):
+        raise ValueError("Unexpected release index destination")
+    data = load_module("release-oci").multi_arch_index(
+        {arch: selected_record(selection, image, arch)["oci"] for arch in ("amd64", "arm64")})
+    result = "sha256:" + hashlib.sha256(data).hexdigest()
+    signed = (selection["index"].get("release_indexes") or {}).get(image, {}).get("digest")
+    if signed != result:
+        raise ValueError(f"The queue run signed no release index {result} for {image}; it predates signed "
+                         "release indexes or wrote another one")
+    opener = opener or urllib.request.urlopen
+    repository = destination.removeprefix("ghcr.io/")
+    basic = base64.b64encode(f"{actor}:{token}".encode()).decode()
+    grant = urllib.request.Request(
+        f"https://ghcr.io/token?{urlencode({'service': 'ghcr.io', 'scope': f'repository:{repository}:pull,push'})}",
+        headers={"Authorization": f"Basic {basic}"})
+    with opener(grant, timeout=30) as response:
+        bearer = json.load(response)["token"]
+    upload = urllib.request.Request(
+        f"https://ghcr.io/v2/{repository}/manifests/{tag}", data=data, method="PUT",
+        headers={"Authorization": f"Bearer {bearer}", "Content-Type": INDEX_MEDIA_TYPE})
+    with opener(upload, timeout=60) as response:
+        pushed = response.headers.get("Docker-Content-Digest")
+    if pushed != result:
+        raise ValueError(f"The registry stored {pushed}, not the queue's release index {result}")
+    return result
+
+
 def main():
     mode = sys.argv[1]
     selected = Path(os.environ["SELECTION_FILE"])
+    if mode == "push-index":
+        result = push_index(json.loads(selected.read_text()), os.environ["IMAGE_NAME"],
+                            os.environ["IMAGE_DESTINATION"], os.environ["VERSION"], os.environ["GH_TOKEN"],
+                            os.environ["GITHUB_ACTOR"])
+        with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+            output.write(f"digest={result}\n")
+        return
     if mode == "select":
         sha = os.environ["RELEASE_SHA"]
         manifest = json.loads(command("git", "show", f"{sha}:.github/release-please/.release-please-manifest.json"))
@@ -306,5 +348,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (KeyError, TypeError, ValueError, OSError, subprocess.CalledProcessError, zipfile.BadZipFile) as error:
+    except (KeyError, TypeError, ValueError, OSError, subprocess.CalledProcessError, zipfile.BadZipFile,
+            json.JSONDecodeError) as error:
         sys.exit(f"Release image handoff failed: {error}")

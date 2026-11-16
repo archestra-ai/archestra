@@ -540,6 +540,10 @@ the injection.
 - name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
   value: {{ join "," .Values.archestra.orchestrator.kubernetes.rbac.environmentNamespaces | quote }}
 {{- end }}
+{{- if and .Values.archestra.orchestrator.kubernetes.rbac.retiredNamespaces (not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_K8S_RETIRED_NAMESPACES")) }}
+- name: ARCHESTRA_ORCHESTRATOR_K8S_RETIRED_NAMESPACES
+  value: {{ join "," .Values.archestra.orchestrator.kubernetes.rbac.retiredNamespaces | quote }}
+{{- end }}
 {{- if .Values.archestra.sre.enabled }}
 {{- if not (hasKey .Values.archestra.env "ARCHESTRA_SRE_AGENT_ENABLED") }}
 - name: ARCHESTRA_SRE_AGENT_ENABLED

@@ -11,6 +11,7 @@ import {
 } from "@/k8s/mcp-server-runtime/k8s-deployment";
 import { constructManagedNetworkPolicyName } from "@/k8s/mcp-server-runtime/network-policy";
 import { resolveRuntimeOwnerReferences } from "@/k8s/mcp-server-runtime/runtime-owner";
+import { retiredWorkloadNamespaces } from "@/k8s/retired-namespaces";
 import {
   createK8sClients,
   getK8sNamespace,
@@ -450,6 +451,14 @@ class DaggerEnvironmentRuntimeManager {
         const defaultIds = new Set(
           defaults.map((org) => deriveOrgEngineId(org.id)),
         );
+        // A default engine is kept only in its organization's engine
+        // namespace; a copy left where it ran before is torn down.
+        const defaultEngineNamespaces = new Map(
+          defaults.map((org) => [
+            deriveOrgEngineId(org.id),
+            this.engineNamespace(org.defaultEnvironmentNamespace),
+          ]),
+        );
         // Likewise read after enumeration: an agent engine is kept only in the
         // namespace its agent currently runs in. One whose agent was deleted,
         // cleared its policy, or moved is an orphan like any other.
@@ -460,7 +469,8 @@ class DaggerEnvironmentRuntimeManager {
           ]),
         );
         for (const [id, candidate] of candidates) {
-          if (candidate.foreign || defaultIds.has(id)) continue;
+          if (candidate.foreign) continue;
+          if (defaultEngineNamespaces.get(id) === namespace) continue;
           if (agentEngineNamespaces.get(id) === namespace) continue;
           // An explicitly shared external runtime-owner Role is not a database
           // identity. Require the resource's organization to exist here too.
@@ -747,6 +757,8 @@ class DaggerEnvironmentRuntimeManager {
         : []),
       getK8sNamespace(),
       ...config.orchestrator.kubernetes.environmentNamespaces,
+      // Never an engine's namespace, so every engine there is torn down.
+      ...retiredWorkloadNamespaces(),
     ]);
   }
 

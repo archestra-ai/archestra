@@ -89,6 +89,7 @@ import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { agentWarmPoolManager } from "@/k8s/agent-runtime/warm-pool";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+import { retiredNamespaceDrainer } from "@/k8s/retired-namespaces";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import { initAuditDecisions } from "@/middleware/audit-decisions";
@@ -1167,6 +1168,7 @@ const startWebServer = async () => {
     agentImagePrefetcher.start();
     // SPDX-SnippetEnd
     agentWarmPoolManager.start();
+    retiredNamespaceDrainer.start();
 
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
@@ -1390,6 +1392,7 @@ function registerWebServerShutdown(
     agentImagePrefetcher.stop();
     // SPDX-SnippetEnd
     agentWarmPoolManager.stop();
+    retiredNamespaceDrainer.stop();
 
     // Fail this pod's in-flight chat runs first: a long SSE stream keeps Fastify
     // connections open, so waiting for fastify.close() risks SIGKILL before the

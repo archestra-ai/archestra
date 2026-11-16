@@ -3658,6 +3658,12 @@ const config = {
       environmentNamespaces: parseCommaSeparatedList(
         process.env.ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES ?? "",
       ),
+      // Namespaces workloads ran in before a namespace change (Helm
+      // rbac.retiredNamespaces). The platform removes what it left there and
+      // lets Agent Runtime sessions finish, then logs that it is done.
+      retiredNamespaces: parseCommaSeparatedList(
+        process.env.ARCHESTRA_ORCHESTRATOR_K8S_RETIRED_NAMESPACES ?? "",
+      ),
     },
   },
   /**

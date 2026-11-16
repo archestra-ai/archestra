@@ -637,10 +637,22 @@ test("removes templates and the warm-workspace policy a moved pool left behind",
   const base = `${ORIGIN}/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/:namespace`;
   const created = new Set<string>();
   const deleted: string[] = [];
+  let retiredPoolDeleted = false;
   server.use(
-    http.get(`${base}/sandboxwarmpools`, () =>
-      HttpResponse.json({ items: [] }),
+    // "old-runtimes" is retired: nothing reconciles it except this cleanup.
+    http.get(`${base}/sandboxwarmpools`, ({ params }) =>
+      HttpResponse.json({
+        items:
+          params.namespace === "old-runtimes" && !retiredPoolDeleted
+            ? [{ metadata: { name: "archestra-warm-old" } }]
+            : [],
+      }),
     ),
+    http.delete(`${base}/sandboxwarmpools/:name`, ({ params }) => {
+      deleted.push(`${params.namespace}/pool/${params.name}`);
+      retiredPoolDeleted = true;
+      return HttpResponse.json({});
+    }),
     http.get(`${base}/sandboxclaims`, () => HttpResponse.json({ items: [] })),
     // "test" keeps a template from before the pools moved to "agent-runtimes";
     // "agent-runtimes" has the template of the pool it wants.
@@ -649,7 +661,9 @@ test("removes templates and the warm-workspace policy a moved pool left behind",
         items:
           params.namespace === "test"
             ? [{ metadata: { name: "archestra-warm-moved" } }]
-            : [...created].map((name) => ({ metadata: { name } })),
+            : params.namespace === "agent-runtimes"
+              ? [...created].map((name) => ({ metadata: { name } }))
+              : [],
       }),
     ),
     http.post(`${base}/sandboxtemplates`, async ({ request }) => {
@@ -680,15 +694,20 @@ test("removes templates and the warm-workspace policy a moved pool left behind",
   config.agentRuntime.warmPoolSize = 1;
   config.agentRuntime.warmPoolMaxPools = 2;
   config.agentRuntime.namespace = "agent-runtimes";
+  config.orchestrator.kubernetes.retiredNamespaces = ["old-runtimes"];
   try {
     // Twice: the second pass sees the desired template already listed.
     await agentWarmPoolManager.reconcile();
     await agentWarmPoolManager.reconcile();
   } finally {
     config.agentRuntime.namespace = undefined;
+    config.orchestrator.kubernetes.retiredNamespaces = [];
   }
   expect(created.size).toBe(1);
   expect([...new Set(deleted)].sort()).toEqual([
+    "old-runtimes/networkpolicy/archestra-warm-workspaces",
+    "old-runtimes/pool/archestra-warm-old",
+    "old-runtimes/template/archestra-warm-old",
     "test/networkpolicy/archestra-warm-workspaces",
     "test/template/archestra-warm-moved",
   ]);

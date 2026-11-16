@@ -2,7 +2,7 @@
 title: Verify Releases
 description: Check that an Archestra image comes from Archestra's release workflow, and get its signed SBOM for your vulnerability scanner.
 order: 10
-lastUpdated: 2026-11-15
+lastUpdated: 2026-11-16
 ---
 
 Prove that the Archestra image you run is the one Archestra released, and see every package inside it, without trusting the registry. Each release image carries signed attestations next to it in its registry: where it was built, its SBOM, and a scan for live credentials. `gh`, cosign, and admission controllers such as Kyverno read them.
@@ -13,7 +13,7 @@ Every attestation is signed with a GitHub Actions identity from Archestra's rele
 
 | Attestation | Tells you | Predicate type | Signed by |
 | --- | --- | --- | --- |
-| Build provenance | The repository, commit, and workflow run that built the image | `https://slsa.dev/provenance/v1` | `archestra-ai/archestra/.github/workflows/release-please.yml` |
+| Build provenance | The repository, commit, and workflow run that built the image | `https://slsa.dev/provenance/v1` | `archestra-ai/.github/.github/workflows/attest-provenance.yml` |
 | SBOM (SPDX) | Every package in the image, in SPDX 2.3 | `https://spdx.dev/Document/v2.3` | `archestra-ai/.github/.github/workflows/release-publish.yml` |
 | SBOM (CycloneDX) | The same packages, in CycloneDX | `https://cyclonedx.org/bom` | `archestra-ai/.github/.github/workflows/release-publish.yml` |
 | Secret scan | How many credentials a scan found, by type and whether they were live | `https://archestra.ai/attestations/secret-scan/v1` | `archestra-ai/.github/.github/workflows/release-publish.yml` |
@@ -24,6 +24,7 @@ What to know:
 
 - The SBOMs list the `linux/amd64` image. The `linux/arm64` image is built from the same source and is covered by the same provenance.
 - An image with a live credential is never released. The secret scan holds counts only, never a secret or where it was found.
+- Provenance is signed in a job that runs none of the build's steps, so a build cannot forge it ([SLSA Build L3](https://slsa.dev/spec/v1.0/levels#build-l3)). The certificate still names Archestra's repository, branch, and release run.
 
 ## Verify Archestra Images
 
@@ -36,7 +37,8 @@ DIGEST=${IMAGE#*@}
 
 # Built by Archestra's release workflow
 gh attestation verify "oci://docker.io/archestra/platform@$DIGEST" \
-  --repo archestra-ai/archestra --bundle-from-oci
+  --repo archestra-ai/archestra --bundle-from-oci \
+  --signer-workflow archestra-ai/.github/.github/workflows/attest-provenance.yml
 
 # Its SBOM, from the same release run
 gh attestation verify "oci://docker.io/archestra/platform@$DIGEST" \
@@ -45,16 +47,21 @@ gh attestation verify "oci://docker.io/archestra/platform@$DIGEST" \
   --predicate-type https://spdx.dev/Document/v2.3
 ```
 
-To check without `gh`, use cosign with the issuer `https://token.actions.githubusercontent.com` and the release workflow's identity:
+To check without `gh`, use cosign. The identity is the shared signing workflow, so also pin Archestra's repository and the release line you run:
 
 ```bash
 cosign verify-attestation --new-bundle-format --type slsaprovenance1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp '^https://github\.com/archestra-ai/archestra/\.github/workflows/release-please\.yml@refs/heads/(main|release/[0-9]+\.[0-9]+)$' \
+  --certificate-identity-regexp '^https://github\.com/archestra-ai/\.github/\.github/workflows/attest-provenance\.yml@' \
+  --certificate-github-workflow-repository archestra-ai/archestra \
+  --certificate-github-workflow-ref refs/heads/release/1.5 \
   "docker.io/archestra/platform@$DIGEST"
 ```
 
-Stable releases come from `refs/heads/release/<major>.<minor>`, release candidates from `refs/heads/main`.
+What to know:
+
+- Stable releases come from `refs/heads/release/<major>.<minor>`, release candidates from `refs/heads/main`.
+- An older release signs its provenance in `archestra-ai/archestra/.github/workflows/release-please.yml`. If the check finds no provenance, pass that workflow to `--signer-workflow`, or to cosign as `--certificate-identity-regexp '^https://github\.com/archestra-ai/archestra/\.github/workflows/release-please\.yml@refs/heads/(main|release/[0-9]+\.[0-9]+)$'` with no `--certificate-github-workflow-*` flags.
 
 ## Scan the SBOM
 
@@ -102,10 +109,22 @@ Make your cluster refuse any Archestra image that Archestra's release workflow d
             attestations:
               - type: https://slsa.dev/provenance/v1
                 attestors:
-                  - entries:
+                  # Any one entry admits the image.
+                  - count: 1
+                    entries:
+                      # Releases signed by the shared workflow, from your release line.
                       - keyless:
                           issuer: https://token.actions.githubusercontent.com
-                          subjectRegExp: '^https://github\.com/archestra-ai/archestra/\.github/workflows/release-please\.yml@refs/heads/(main|release/[0-9]+\.[0-9]+)$'
+                          subjectRegExp: '^https://github\.com/archestra-ai/\.github/\.github/workflows/attest-provenance\.yml@'
+                          additionalExtensions:
+                            githubWorkflowRepository: archestra-ai/archestra
+                            githubWorkflowRef: refs/heads/release/1.5
+                          rekor:
+                            url: https://rekor.sigstore.dev
+                      # Older releases, signed in the release workflow itself.
+                      - keyless:
+                          issuer: https://token.actions.githubusercontent.com
+                          subjectRegExp: '^https://github\.com/archestra-ai/archestra/\.github/workflows/release-please\.yml@refs/heads/release/[0-9]+\.[0-9]+$'
                           rekor:
                             url: https://rekor.sigstore.dev
   ```
@@ -115,6 +134,7 @@ Make your cluster refuse any Archestra image that Archestra's release workflow d
 
 What to know:
 
-- To admit release candidates nowhere, drop `main|` from the identity pattern.
+- Set `githubWorkflowRef` to the release line you run. To admit release candidates too, add a copy of the first entry with `refs/heads/main`.
+- Drop the older-release entry once every cluster runs a release signed by the shared workflow.
 - A registry mirror must copy the attestations with the image: `oras cp -r <image>@<digest> <mirror>/<image>` does. Point the policy's image references at the mirror.
 - An older release may have its attestations on GitHub only. If `--bundle-from-oci` finds none, drop the flag to check with GitHub instead.

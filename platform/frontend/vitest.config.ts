@@ -70,7 +70,11 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./vitest-setup.ts"],
-    testTimeout: 10_000,
+    // CI runs the whole JSDOM suite at once on a shared runner, where
+    // several interaction-heavy tests take 7 to 10 seconds; 30 seconds keeps
+    // a slow runner from failing one at random. Locally a hang still fails
+    // fast.
+    testTimeout: isCI ? 30_000 : 10_000,
     // JSDOM-heavy frontend tests need a larger worker heap on Node 24; inside
     // a container the heap ceiling is each fork's share of the container's
     // memory, because the kernel kills the container before V8 would give up.

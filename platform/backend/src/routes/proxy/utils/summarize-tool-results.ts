@@ -10,8 +10,8 @@
  *
  * Rewriting an earlier result changes the prompt prefix, so every prompt-cache
  * entry written after it stops matching. Older results are therefore stripped
- * in whole batches of {@link STRIP_BATCH_SIZE} browser tool calls: the prefix
- * changes once per batch instead of on every browser call.
+ * in whole batches of up to {@link STRIP_BATCH_SIZE} browser tool calls: the
+ * prefix changes once per batch instead of on every browser call.
  */
 
 import {
@@ -30,6 +30,10 @@ const SIZE_THRESHOLD = 2000;
 // Browser tool calls (an assistant message's parallel calls count as one) kept
 // raw, at most, before the older ones are stripped together.
 const STRIP_BATCH_SIZE = 3;
+
+// Raw size of the older kept calls above which they are stripped before the
+// batch fills, so a few huge snapshots cannot outgrow the context window.
+const MAX_RETAINED_RAW_CHARS = 100_000;
 
 // Generic message type
 interface Message {
@@ -52,87 +56,90 @@ function isBrowserTool(toolName: string): boolean {
   return isLargeResultBrowserMcpTool(toolName);
 }
 
-/**
- * Extract tool name from messages by finding the assistant message
- * that contains the tool_call_id
- */
-function extractToolNameFromMessages(
-  messages: Message[],
-  toolCallId: string,
-): string | null {
-  for (const message of messages) {
-    if (message.role !== "assistant" || !message.tool_calls) continue;
+type ToolCallOrigin = { assistantIndex: number; toolName: string | null };
 
-    for (const toolCall of message.tool_calls) {
-      if (toolCall.id === toolCallId && toolCall.function?.name) {
-        return toolCall.function.name;
-      }
+/**
+ * Where each tool_call_id was issued, built once per request
+ */
+function indexToolCalls(messages: Message[]): Map<string, ToolCallOrigin> {
+  const origins = new Map<string, ToolCallOrigin>();
+  messages.forEach((message, assistantIndex) => {
+    if (message.role !== "assistant") return;
+    for (const toolCall of message.tool_calls ?? []) {
+      if (origins.has(toolCall.id)) continue;
+      origins.set(toolCall.id, {
+        assistantIndex,
+        toolName: toolCall.function?.name ?? null,
+      });
     }
-  }
-  return null;
-}
-
-/**
- * Index of the assistant message that issued a tool_call_id, or -1
- */
-function findAssistantIndexForToolCall(
-  messages: Message[],
-  toolCallId: string,
-): number {
-  return messages.findIndex(
-    (message) =>
-      message.role === "assistant" &&
-      message.tool_calls?.some((toolCall) => toolCall.id === toolCallId),
-  );
+  });
+  return origins;
 }
 
 /**
  * Resolve a tool name for a tool message
  */
-function resolveToolName(messages: Message[], message: Message): string {
+function resolveToolName(
+  message: Message,
+  origins: Map<string, ToolCallOrigin>,
+): string {
   if (typeof message.name === "string") {
     return message.name;
   }
-
-  if (message.tool_call_id) {
-    return extractToolNameFromMessages(messages, message.tool_call_id) || "";
-  }
-
-  return "";
+  return (
+    (message.tool_call_id && origins.get(message.tool_call_id)?.toolName) || ""
+  );
 }
 
 /**
- * Indexes of the browser tool messages to strip. Calls are numbered in order,
- * one number per issuing assistant message; once the newest number reaches
- * the next multiple of {@link STRIP_BATCH_SIZE}, every call below that
- * multiple is stripped. Numbers depend only on earlier messages, so an
- * append-only conversation keeps its rewritten prefix until the next multiple.
+ * Indexes of the browser tool messages to strip. Calls are walked in order,
+ * one call per issuing assistant message, and a cutoff advances to the current
+ * call once {@link STRIP_BATCH_SIZE} calls are kept raw or the older raw ones
+ * exceed {@link MAX_RETAINED_RAW_CHARS}; every call before the cutoff is
+ * stripped. The cutoff depends only on earlier calls, so an append-only
+ * conversation keeps its rewritten prefix until the cutoff moves.
  */
-function getStrippableBrowserToolIndexes(messages: Message[]): Set<number> {
-  const callNumbers = new Map<string, number>();
-  const browserMessages: Array<{ index: number; callNumber: number }> = [];
+function getStrippableBrowserToolIndexes(
+  messages: Message[],
+  origins: Map<string, ToolCallOrigin>,
+): Set<number> {
+  const calls: Array<{ indexes: number[]; size: number }> = [];
+  const callByKey = new Map<string, number>();
 
   messages.forEach((message, index) => {
     if (message.role !== "tool") return;
-    if (!isBrowserTool(resolveToolName(messages, message))) return;
+    if (!isBrowserTool(resolveToolName(message, origins))) return;
     const assistantIndex = message.tool_call_id
-      ? findAssistantIndexForToolCall(messages, message.tool_call_id)
-      : -1;
-    const callKey =
-      assistantIndex >= 0 ? `assistant:${assistantIndex}` : `tool:${index}`;
-    const callNumber = callNumbers.get(callKey) ?? callNumbers.size;
-    callNumbers.set(callKey, callNumber);
-    browserMessages.push({ index, callNumber });
+      ? origins.get(message.tool_call_id)?.assistantIndex
+      : undefined;
+    const key =
+      assistantIndex === undefined
+        ? `tool:${index}`
+        : `assistant:${assistantIndex}`;
+    let call = callByKey.get(key);
+    if (call === undefined) {
+      call = calls.length;
+      callByKey.set(key, call);
+      calls.push({ indexes: [], size: 0 });
+    }
+    calls[call].indexes.push(index);
+    calls[call].size += getContentSize(message.content).length;
   });
 
-  const keepFrom =
-    Math.floor(Math.max(callNumbers.size - 1, 0) / STRIP_BATCH_SIZE) *
-    STRIP_BATCH_SIZE;
-  return new Set(
-    browserMessages
-      .filter(({ callNumber }) => callNumber < keepFrom)
-      .map(({ index }) => index),
-  );
+  let cutoff = 0;
+  let retainedSize = 0;
+  calls.forEach((call, position) => {
+    if (
+      position - cutoff >= STRIP_BATCH_SIZE ||
+      retainedSize > MAX_RETAINED_RAW_CHARS
+    ) {
+      cutoff = position;
+      retainedSize = 0;
+    }
+    retainedSize += call.size;
+  });
+
+  return new Set(calls.slice(0, cutoff).flatMap((call) => call.indexes));
 }
 
 /**
@@ -209,7 +216,8 @@ export function stripBrowserToolsResults<T extends Message>(
     "[stripBrowserToolsResults] Starting",
   );
 
-  const strippable = getStrippableBrowserToolIndexes(messages);
+  const origins = indexToolCalls(messages);
+  const strippable = getStrippableBrowserToolIndexes(messages, origins);
 
   let strippedCount = 0;
   let toolMessagesCount = 0;
@@ -220,7 +228,7 @@ export function stripBrowserToolsResults<T extends Message>(
     toolMessagesCount++;
 
     // Get tool name - first try direct name field, then look up from tool_call_id
-    const toolName = resolveToolName(messages, msg);
+    const toolName = resolveToolName(msg, origins);
 
     const contentSize = getContentSize(msg.content);
 

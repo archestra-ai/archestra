@@ -194,12 +194,12 @@ describe("applyPromptCacheBreakpoints", () => {
   });
 
   it("spends the remaining budget on the last message before the first", () => {
-    // 3 existing breakpoints → budget of 1 → only the last gets a marker.
+    // 2 existing breakpoints + 1 kept for step markers → budget of 1 → only
+    // the last gets a marker.
     const messages = [
       userMessage("first"),
       messageWithMarkedPart("b"),
       messageWithMarkedPart("c"),
-      messageWithMarkedPart("d"),
       userMessage("last"),
     ];
 
@@ -208,7 +208,7 @@ describe("applyPromptCacheBreakpoints", () => {
       messages,
     });
 
-    expect(anthropicCacheControl(result[4])).toEqual(EPHEMERAL);
+    expect(anthropicCacheControl(result[3])).toEqual(EPHEMERAL);
     expect(anthropicCacheControl(result[0])).toBeUndefined();
   });
 
@@ -601,8 +601,7 @@ describe("previous user turn breakpoint", () => {
   it("prefers the previous turn over the first message when the budget is short", () => {
     const messages = [
       userMessage("turn 1"),
-      messageWithMarkedPart("note a"),
-      messageWithMarkedPart("note b"),
+      messageWithMarkedPart("note"),
       assistantText("answer 1"),
       userMessage("turn 2"),
       assistantText("answer 2"),
@@ -614,8 +613,9 @@ describe("previous user turn breakpoint", () => {
       messages,
     });
 
-    // The two notes carry part-level markers, leaving room for two more.
-    expect(markedIndexes(result)).toEqual([4, 6]);
+    // The note's part-level marker and the slot kept for step markers leave
+    // room for two more.
+    expect(markedIndexes(result)).toEqual([3, 5]);
   });
 
   it("leaves a slot for the tool-loop step marker", () => {
@@ -638,6 +638,22 @@ describe("previous user turn breakpoint", () => {
       history.length - 1,
       step.length - 1,
     ]);
+    expect(anthropicCacheControl(result[step.length - 1])).toEqual(EPHEMERAL);
+  });
+
+  it("keeps the step marker slot when a breakpoint already exists", () => {
+    const withNote = [messageWithMarkedPart("note"), ...history];
+    const initial = applyPromptCacheBreakpoints({
+      provider: "anthropic",
+      messages: withNote,
+    });
+    const step = [...initial, ...toolStep("next")];
+
+    const result = applyStepPromptCacheBreakpoint({
+      provider: "anthropic",
+      messages: step,
+    });
+
     expect(anthropicCacheControl(result[step.length - 1])).toEqual(EPHEMERAL);
   });
 });

@@ -14,8 +14,8 @@ type TestMessage = {
   }>;
 };
 
-function snapshot(id: string): string {
-  return `### Page state\n- Page URL: https://example.com/${id}\n${"x".repeat(3000)}`;
+function snapshot(id: string, size = 3000): string {
+  return `### Page state\n- Page URL: https://example.com/${id}\n${"x".repeat(size)}`;
 }
 
 function browserCalls(
@@ -41,9 +41,9 @@ function browserCalls(
   ];
 }
 
-function snapshotTurns(count: number): TestMessage[] {
+function snapshotTurns(count: number, size?: number): TestMessage[] {
   return Array.from({ length: count }, (_, i) => [
-    ...browserCalls([{ id: `call_${i}`, content: snapshot(`${i}`) }]),
+    ...browserCalls([{ id: `call_${i}`, content: snapshot(`${i}`, size) }]),
     { role: "assistant" as const, content: `looked at page ${i}` },
   ]).flat();
 }
@@ -83,6 +83,16 @@ describe("stripBrowserToolsResults", () => {
     }
 
     expect(changedAt).toEqual([4, 7, 10]);
+  });
+
+  test("strips before the batch fills once the kept raw results grow too large", () => {
+    const result = stripBrowserToolsResults(snapshotTurns(3, 60_000));
+
+    expect(toolContents(result)).toEqual([
+      "[Page https://example.com/0 browser_snapshot was here]",
+      "[Page https://example.com/1 browser_snapshot was here]",
+      snapshot("2", 60_000),
+    ]);
   });
 
   test("keeps every result of the newest parallel batch", () => {

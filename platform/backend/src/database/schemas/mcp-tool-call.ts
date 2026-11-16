@@ -136,6 +136,9 @@ const mcpToolCallsTable = pgTable(
     // The own-logs (log:read without log:admin) view filters every listing by
     // attributed user; without this each such query seq-scans the table.
     userIdIdx: index("mcp_tool_calls_user_id_idx").on(table.userId),
+    serviceAccountIdIdx: index("mcp_tool_calls_service_account_id_idx")
+      .on(table.serviceAccountId)
+      .where(sql`${table.serviceAccountId} IS NOT NULL`),
     appIdIdx: index("mcp_tool_calls_app_id_idx").on(table.appId),
     createdAtIdx: index("mcp_tool_calls_created_at_idx").on(table.createdAt),
     // A session's calls in time order (the session view's keyset walk).

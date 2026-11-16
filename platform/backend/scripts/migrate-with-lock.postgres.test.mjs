@@ -4,6 +4,16 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -91,17 +101,343 @@ test("keeps the migration lease while index recovery waits longer than the lease
   assert.equal(remaining.rows[0].count, 0);
 });
 
-function migrate(databaseUrl) {
+test("builds the MCP service-account index without blocking writes and recovers an interrupted build", {
+  skip: !serverUrl && "set ARCHESTRA_MIGRATION_TEST_DATABASE_URL",
+  timeout: 180_000,
+}, async (t) => {
+  const name = `mcp_index_${randomUUID().replaceAll("-", "")}`;
+  const admin = new pg.Client({ connectionString: serverUrl });
+  await admin.connect();
+  const clients = [];
+  const runs = [];
+  let fixture;
+  let writing;
+  let keepWriting = false;
+  t.after(async () => {
+    keepWriting = false;
+    await writing;
+    await Promise.allSettled(clients.map((client) => client.end()));
+    await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+    for (const run of runs) if (!run.exited) run.stop();
+    await admin.end();
+    if (fixture) await rm(fixture.root, { recursive: true, force: true });
+  });
+  await admin.query(`CREATE DATABASE ${name}`);
+  const url = new URL(serverUrl);
+  url.pathname = `/${name}`;
+  url.search = "";
+  const databaseUrl = url.toString();
+  fixture = await mcpIndexFixture();
+  const startMigration = () => {
+    const run = migrate(databaseUrl, fixture.directory);
+    runs.push(run);
+    return run;
+  };
+  const connect = async () => {
+    const client = new pg.Client({ connectionString: databaseUrl });
+    clients.push(client);
+    await client.connect();
+    return client;
+  };
+  const database = await connect();
+  const holder = await connect();
+  const writer = await connect();
+
+  const initial = await startMigration().done;
+  assert.equal(initial.code, 0, initial.output);
+  const account = randomUUID();
+  await database.query("INSERT INTO service_accounts (id) VALUES ($1)", [
+    account,
+  ]);
+  const seedStarted = Date.now();
+  await database.query(
+    `
+    INSERT INTO mcp_tool_calls (service_account_id, payload)
+    SELECT CASE WHEN value % 100 = 0 THEN $1::uuid ELSE NULL END,
+           repeat(md5(value::text), 8)
+    FROM generate_series(1, 1000000) AS value
+  `,
+    [account],
+  );
+  const seededMs = Date.now() - seedStarted;
+  await database.query("ANALYZE mcp_tool_calls");
+  await fixture.addIndexAndLaterMigration();
+
+  await holder.query("BEGIN");
+  await holder.query(
+    "INSERT INTO mcp_tool_calls (payload) VALUES ('older writer')",
+  );
+  const holderStarted = Date.now();
+  const interrupted = startMigration();
+  const buildPid = await waitForIndexBuild(database);
+  await writer.query("SET statement_timeout = '1s'");
+  const waitingSince = Date.now();
+  let writes = 0;
+  let maxWriteMs = 0;
+  let writerError;
+  keepWriting = true;
+  writing = (async () => {
+    while (keepWriting) {
+      const started = Date.now();
+      await writer.query(
+        "INSERT INTO mcp_tool_calls (payload) VALUES ('concurrent writer')",
+      );
+      maxWriteMs = Math.max(maxWriteMs, Date.now() - started);
+      writes++;
+      await sleep(10);
+    }
+  })().catch((error) => {
+    writerError = error;
+  });
+  while (Date.now() - waitingSince < 6_000) {
+    await sleep(100);
+    assert.equal(interrupted.exited, false, interrupted.output());
+    assert.equal(writerError, undefined);
+  }
+  assert.ok(
+    writes > 0,
+    "writes must continue while the index waits for the older transaction",
+  );
+  assert.equal(
+    (
+      await database.query("SELECT pg_cancel_backend($1) AS cancelled", [
+        buildPid,
+      ])
+    ).rows[0].cancelled,
+    true,
+  );
+  const cancelled = await interrupted.done;
+  assert.notEqual(cancelled.code, 0, cancelled.output);
+  assert.equal(await mcpIndexValidity(database), false);
+  assert.equal(
+    (
+      await database.query(
+        "SELECT to_regclass('after_mcp_index_probe') AS name",
+      )
+    ).rows[0].name,
+    null,
+  );
+  await holder.query("COMMIT");
+  const heldWriterMs = Date.now() - holderStarted;
+
+  const recoveryStarted = Date.now();
+  const recovered = await startMigration().done;
+  const recoveryMs = Date.now() - recoveryStarted;
+  keepWriting = false;
+  await writing;
+  assert.equal(writerError, undefined);
+  assert.equal(recovered.code, 0, recovered.output);
+  assert.match(
+    recovered.output,
+    /Dropped invalid index mcp_tool_calls_service_account_id_idx left by an interrupted concurrent build/,
+  );
+  assert.equal(await mcpIndexValidity(database), true);
+  assert.deepEqual(
+    (await database.query("SELECT lock_timeout FROM after_mcp_index_probe"))
+      .rows,
+    [{ lock_timeout: "5s" }],
+  );
+  assert.equal(
+    (
+      await database.query(
+        "SELECT count(*)::int AS count FROM drizzle.__drizzle_migrations",
+      )
+    ).rows[0].count,
+    4,
+  );
+  const rerun = await startMigration().done;
+  assert.equal(rerun.code, 0, rerun.output);
+  assert.equal(await mcpIndexValidity(database), true);
+
+  const definition = (
+    await database.query(
+      "SELECT pg_get_indexdef('mcp_tool_calls_service_account_id_idx'::regclass) AS definition",
+    )
+  ).rows[0].definition;
+  assert.match(definition, /WHERE \(service_account_id IS NOT NULL\)/);
+  const plan = await database.query(
+    "EXPLAIN (FORMAT JSON) UPDATE mcp_tool_calls SET service_account_id = NULL WHERE service_account_id = $1",
+    [account],
+  );
+  assert.match(
+    JSON.stringify(plan.rows),
+    /mcp_tool_calls_service_account_id_idx/,
+  );
+  const beforeDelete = (
+    await database.query("SELECT count(*)::int AS count FROM mcp_tool_calls")
+  ).rows[0].count;
+  assert.equal(beforeDelete, 1_000_001 + writes);
+  await database.query("DELETE FROM service_accounts WHERE id = $1", [account]);
+  assert.equal(
+    (await database.query("SELECT count(*)::int AS count FROM mcp_tool_calls"))
+      .rows[0].count,
+    beforeDelete,
+  );
+  assert.equal(
+    (
+      await database.query(
+        "SELECT count(*)::int AS count FROM mcp_tool_calls WHERE service_account_id IS NOT NULL",
+      )
+    ).rows[0].count,
+    0,
+  );
+  await assert.rejects(
+    database.query(
+      "INSERT INTO mcp_tool_calls (service_account_id) VALUES ($1)",
+      [randomUUID()],
+    ),
+    /foreign key constraint/,
+  );
+  t.diagnostic(
+    JSON.stringify({
+      postgres: (await database.query("SHOW server_version")).rows[0]
+        .server_version,
+      seededRows: 1_000_000,
+      seededMs,
+      heldWriterMs,
+      concurrentWrites: writes,
+      maxWriteMs,
+      recoveryMs,
+      interruptedBuildInvalid: true,
+      recoveredIndexValid: true,
+      laterMigrationApplied: true,
+      lockTimeoutRestored: true,
+      deletionPlanUsesIndex: true,
+      auditRowsRetained: true,
+    }),
+  );
+});
+
+async function mcpIndexFixture() {
+  const root = await mkdtemp(path.join(os.tmpdir(), "archestra-mcp-index-"));
+  const directory = path.join(root, "platform/backend");
+  const scripts = path.join(directory, "scripts");
+  const migrations = path.join(directory, "src/database/migrations");
+  await mkdir(scripts, { recursive: true });
+  await mkdir(path.join(migrations, "meta"), { recursive: true });
+  for (const file of [
+    "migrate-with-lock.mjs",
+    "concurrent-index-leftovers.mjs",
+    "rds-iam.mjs",
+  ])
+    await copyFile(
+      path.join(backend, "scripts", file),
+      path.join(scripts, file),
+    );
+  await symlink(
+    path.join(backend, "node_modules"),
+    path.join(directory, "node_modules"),
+    "dir",
+  );
+  await symlink(
+    path.resolve(backend, "../node_modules"),
+    path.join(root, "platform/node_modules"),
+    "dir",
+  );
+  await writeFile(path.join(directory, "package.json"), '{"type":"module"}\n');
+  await writeFile(
+    path.join(directory, "drizzle.config.ts"),
+    `import { defineConfig } from "drizzle-kit";
+export default defineConfig({ dialect: "postgresql", out: "./src/database/migrations", dbCredentials: { url: process.env.ARCHESTRA_DATABASE_URL! } });\n`,
+  );
+  const source = path.join(backend, "src/database/migrations");
+  const sourceJournal = JSON.parse(
+    await readFile(path.join(source, "meta/_journal.json"), "utf8"),
+  );
+  const column = sourceJournal.entries.find(
+    (entry) => entry.tag === "0644_foamy_norman_osborn",
+  );
+  const index = sourceJournal.entries.find(
+    (entry) => entry.tag === "0645_bitter_venom",
+  );
+  assert.ok(
+    column && index,
+    "the actual column and index migrations must be present",
+  );
+  const entries = [
+    { idx: 0, version: "7", when: 1000, tag: "bootstrap", breakpoints: true },
+    { ...column, idx: 1 },
+  ];
+  const writeJournal = () =>
+    writeFile(
+      path.join(migrations, "meta/_journal.json"),
+      JSON.stringify({ version: "7", dialect: "postgresql", entries }),
+    );
+  await writeFile(
+    path.join(migrations, "bootstrap.sql"),
+    `CREATE TABLE service_accounts (id uuid PRIMARY KEY);--> statement-breakpoint
+CREATE TABLE mcp_tool_calls (id bigserial PRIMARY KEY, payload text, created_at timestamptz NOT NULL DEFAULT now());`,
+  );
+  await copyFile(
+    path.join(source, `${column.tag}.sql`),
+    path.join(migrations, `${column.tag}.sql`),
+  );
+  await writeJournal();
+  return {
+    root,
+    directory,
+    async addIndexAndLaterMigration() {
+      await copyFile(
+        path.join(source, `${index.tag}.sql`),
+        path.join(migrations, `${index.tag}.sql`),
+      );
+      await writeFile(
+        path.join(migrations, "after_index.sql"),
+        `CREATE TABLE after_mcp_index_probe (lock_timeout text NOT NULL);--> statement-breakpoint
+INSERT INTO after_mcp_index_probe VALUES (current_setting('lock_timeout'));`,
+      );
+      entries.push(
+        { ...index, idx: 2 },
+        {
+          idx: 3,
+          version: "7",
+          when: index.when + 1,
+          tag: "after_index",
+          breakpoints: true,
+        },
+      );
+      await writeJournal();
+    },
+  };
+}
+
+async function waitForIndexBuild(database) {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const { rows } = await database.query(`SELECT pid FROM pg_stat_activity
+      WHERE datname = current_database() AND pid <> pg_backend_pid()
+        AND state = 'active' AND wait_event_type = 'Lock'
+        AND query LIKE '%CREATE INDEX CONCURRENTLY IF NOT EXISTS "mcp_tool_calls_service_account_id_idx"%'`);
+    if (rows[0]) return rows[0].pid;
+    await sleep(25);
+  }
+  throw new Error(
+    "the concurrent index build did not wait for the older writer",
+  );
+}
+
+async function mcpIndexValidity(database) {
+  const { rows } =
+    await database.query(`SELECT i.indisvalid AS valid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+    WHERE c.relnamespace = 'public'::regnamespace AND c.relname = 'mcp_tool_calls_service_account_id_idx'`);
+  return rows[0]?.valid ?? null;
+}
+
+function migrate(databaseUrl, cwd = backend) {
   let output = "";
   const child = spawn(process.execPath, ["scripts/migrate-with-lock.mjs"], {
-    cwd: backend,
+    cwd,
     env: {
       ...process.env,
       ARCHESTRA_DATABASE_URL: databaseUrl,
       PGOPTIONS: "-c lock_timeout=5s",
     },
   });
-  const run = { exited: false, output: () => output };
+  const run = {
+    exited: false,
+    output: () => output,
+    stop: () => child.kill("SIGTERM"),
+  };
   child.stdout.on("data", (chunk) => {
     output += chunk;
   });

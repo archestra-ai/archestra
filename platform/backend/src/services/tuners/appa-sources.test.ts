@@ -28,7 +28,7 @@ describe("collectAppaCandidates", () => {
 
     expect(found).toEqual([
       expect.objectContaining({
-        fingerprint: "appa_hitl_approvals:fs__read",
+        fingerprint: "appa_hitl_approvals:mcp/fs/read",
         severity: "info",
         evidence: approvals
           .slice(0, 5)
@@ -93,7 +93,7 @@ describe("collectAppaCandidates", () => {
 
     expect(await candidatesOf(org, "appa_hitl_denials")).toEqual([
       expect.objectContaining({
-        fingerprint: "appa_hitl_denials:mail__send",
+        fingerprint: "appa_hitl_denials:mcp/mail/send",
         severity: "warn",
         evidence: denials.map((id) => ({ type: "openappa_consult", id })),
       }),
@@ -136,7 +136,7 @@ describe("collectAppaCandidates", () => {
 
     expect(await candidatesOf(org, "appa_repeated_denials")).toEqual([
       expect.objectContaining({
-        fingerprint: "appa_repeated_denials:db__drop",
+        fingerprint: "appa_repeated_denials:mcp/db/drop",
         severity: "warn",
         evidence: recent.slice(0, 5),
       }),
@@ -167,7 +167,7 @@ describe("collectAppaCandidates", () => {
     const found = await candidatesOf(org, "appa_repeated_denials");
 
     expect(found.map((c) => c.fingerprint)).toEqual([
-      "appa_repeated_denials:inside",
+      "appa_repeated_denials:host/archestra/inside",
     ]);
   });
 
@@ -187,8 +187,14 @@ describe("collectAppaCandidates", () => {
     expect(
       found.map(({ fingerprint, severity }) => ({ fingerprint, severity })),
     ).toEqual([
-      { fingerprint: "appa_repeated_denials:twenty", severity: "critical" },
-      { fingerprint: "appa_repeated_denials:nineteen", severity: "warn" },
+      {
+        fingerprint: "appa_repeated_denials:host/archestra/twenty",
+        severity: "critical",
+      },
+      {
+        fingerprint: "appa_repeated_denials:host/archestra/nineteen",
+        severity: "warn",
+      },
     ]);
   });
 

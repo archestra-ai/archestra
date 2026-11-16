@@ -328,8 +328,8 @@ describe("tools inside a tuner run", () => {
     const allowed = await tunerRunToolFilter(context.agent.id);
 
     expect(
-      ["execute_remedy_plan", "get_remedy_plans", "ask_user"].map((name) =>
-        allowed(getArchestraToolFullName(name)),
+      (["execute_remedy_plan", "get_remedy_plans", "ask_user"] as const).map(
+        (name) => allowed(getArchestraToolFullName(name)),
       ),
     ).toEqual([true, true, false]);
   });

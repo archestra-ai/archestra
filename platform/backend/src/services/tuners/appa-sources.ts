@@ -29,7 +29,15 @@ export async function collectAppaCandidates(params: {
     limit: TOOL_SCAN_LIMIT,
     evidenceLimit: EVIDENCE_LIMIT,
   };
-  const [hitl, denied, stock, waivers, agentYells] = await Promise.all([
+  const [
+    { canonicalOpenappaTool },
+    platformHitl,
+    platformDenied,
+    stock,
+    waivers,
+    agentYells,
+  ] = await Promise.all([
+    import("@archestra/openappa-rs"),
     OpenappaExternalConsultModel.hitlRulingsByTool(scan),
     OpenAppaOperationModel.deniedCallsByTool(scan),
     OpenappaExternalConsultModel.stockApprovalsByTool(scan),
@@ -41,9 +49,21 @@ export async function collectAppaCandidates(params: {
       since: new Date(0),
     }),
   ]);
-  const complete = [hitl, denied, stock, waivers, agentYells].every(
-    (rows) => rows.length < TOOL_SCAN_LIMIT,
-  );
+  const complete = [
+    platformHitl,
+    platformDenied,
+    stock,
+    waivers,
+    agentYells,
+  ].every((rows) => rows.length < TOOL_SCAN_LIMIT);
+  // Operations name a tool as the platform does; consults and rules name it
+  // as the policy does. Candidates use the policy's name.
+  const byPolicyName = <T extends { tool: string }>(row: T): T => ({
+    ...row,
+    tool: canonicalOpenappaTool(row.tool) ?? row.tool,
+  });
+  const hitl = platformHitl.map(byPolicyName);
+  const denied = platformDenied.map(byPolicyName);
 
   const candidates = [
     ...top(

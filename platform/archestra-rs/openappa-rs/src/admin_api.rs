@@ -40,6 +40,14 @@ pub fn get_openappa_replay_engine_version() -> String {
     replay::ENGINE_VERSION.to_string()
 }
 
+/// The policy identity the runtime judges a platform tool name as, such as
+/// `mcp/archestra/save_file` for `archestra__save_file`; null for a name
+/// outside the adapter's grammar.
+#[napi(js_name = "canonicalOpenappaTool")]
+pub fn canonical_openappa_tool(name: String) -> Option<String> {
+    crate::operations::canonical_tool(&name).ok()
+}
+
 /// Parse scenario files into tools and assertion counts without loading a policy
 /// or evaluating any call.
 #[napi(js_name = "inspectOpenappaPolicyTests")]

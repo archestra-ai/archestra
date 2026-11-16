@@ -50,6 +50,13 @@ export interface BatteryTargetView {
   setup?: string
 }
 
+/**
+ * The policy identity the runtime judges a platform tool name as, such as
+ * `mcp/archestra/save_file` for `archestra__save_file`; null for a name
+ * outside the adapter's grammar.
+ */
+export declare function canonicalOpenappaTool(name: string): string | null
+
 export interface ChildAddressRecord {
   /** Fully scoped session id of the parent that addressed the child. */
   parentSessionId: string

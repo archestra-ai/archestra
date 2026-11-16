@@ -14,7 +14,7 @@ import { TunerFingerprintSchema, type TunerKind } from "@/types/tuner";
 import { runTunerPreflight } from "./preflight";
 
 const DENIED_TOOL = "shell__exec";
-const DENIED_FINGERPRINT = `appa_repeated_denials:${DENIED_TOOL}`;
+const DENIED_FINGERPRINT = "appa_repeated_denials:mcp/shell/exec";
 
 describe("runTunerPreflight", () => {
   const saved = {
@@ -210,7 +210,7 @@ describe("runTunerPreflight", () => {
     const record = await recordOf(tuner.runId);
     expect(record?.candidates).toHaveLength(25);
     expect(record?.candidates[0]).toMatchObject({
-      fingerprint: "appa_repeated_denials:tool_25",
+      fingerprint: "appa_repeated_denials:host/archestra/tool_25",
       severity: "critical",
     });
   });

@@ -575,13 +575,13 @@ function PermissionsEditor({
             key={grant.id}
             data-testid={isOwner ? "owner-grant" : undefined}
             className={cn(
-              "grid min-h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1 gap-y-1 py-2 pr-1.5 pl-2.5 sm:col-span-full sm:grid-cols-subgrid sm:py-0",
+              "grid min-h-9 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-1 pr-1.5 pl-2.5 sm:col-span-full sm:grid-cols-subgrid",
               // The owner is pinned first and barely tinted, so the one row
               // nobody can edit reads as the list's anchor, not another grant.
               isOwner && "bg-muted/40",
             )}
           >
-            <div className="col-span-2 flex min-w-0 flex-1 items-center gap-2 sm:col-span-1">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               {/* The glyph names the kind, so the row needs no "User" or
                   "Team" word beside the name. */}
               {/* The owner's glyph is a starred person in the brand colour
@@ -613,7 +613,7 @@ function PermissionsEditor({
                     : subjectLabels[grant.subject.type]}
                 </TooltipContent>
               </Tooltip>
-              <span className="min-w-0 break-words sm:truncate">
+              <span className="min-w-0 truncate">
                 <span className="font-medium">
                   {isSelf ? "You" : grant.name}
                 </span>

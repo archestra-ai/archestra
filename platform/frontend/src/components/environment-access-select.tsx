@@ -130,16 +130,22 @@ export function EnvironmentAccessSelect({
           disabled={disabled}
           aria-label={`Permission for ${name}`}
           title={narrowed ? `${label}: ${kindsSummary}` : selected?.description}
-          className="h-11 min-h-11 max-w-64 gap-1 px-2 text-[13px] font-normal sm:h-7 sm:min-h-7"
+          className="h-11 min-h-11 max-w-44 gap-1 px-2 text-[13px] font-normal sm:h-7 sm:min-h-7 sm:max-w-64"
         >
           <span className="truncate">
             {label}
             {narrowed && (
               <span className="text-muted-foreground">
                 {" · "}
-                {kinds.length <= 2
-                  ? kindsSummary
-                  : `${kinds.length} of ${total} kinds`}
+                {/* A narrow row has room for the count, not the names. */}
+                <span className="hidden sm:inline">
+                  {kinds.length <= 2
+                    ? kindsSummary
+                    : `${kinds.length} of ${total} kinds`}
+                </span>
+                <span className="sm:hidden">
+                  {kinds.length} of {total}
+                </span>
               </span>
             )}
           </span>

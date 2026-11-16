@@ -138,9 +138,8 @@ class SandboxRuntimeService {
   private status: SandboxRuntimeStatus = "disabled";
   private initPromise: Promise<void> | null = null;
   private lastInitAttemptAt = 0;
-  // the shared engine answered but could not pull its base image. kept so calls
-  // during the init cooldown name the blocked image instead of an outage.
-  private initImagePullFailure: SandboxRuntimeError | null = null;
+  // Keep a base-image pull or setup failure actionable during the init cooldown.
+  private initBaseFailure: SandboxRuntimeError | null = null;
   private activeRuns = 0;
   private readonly waiters: Waiter[] = [];
   // consumers attached to the shared service. shutdown only fires when the
@@ -306,7 +305,7 @@ class SandboxRuntimeService {
         return;
       default:
         throw (
-          this.initImagePullFailure ??
+          this.initBaseFailure ??
           new SandboxRuntimeError(
             "the sandbox runtime is not available (engine unreachable)",
             "ARCHESTRA_ENGINE_UNREACHABLE",
@@ -356,7 +355,7 @@ class SandboxRuntimeService {
       // shutdown() may have fired while we were awaiting; don't revive it.
       // re-read status as the union type since TS narrows past the await.
       if ((this.status as SandboxRuntimeStatus) === "stopped") return;
-      this.initImagePullFailure = null;
+      this.initBaseFailure = null;
       this.setStatus("ready");
       logger.debug(
         "[SandboxRuntime] ready — shared session + warm base online",
@@ -370,11 +369,12 @@ class SandboxRuntimeService {
         "[SandboxRuntime] failed to initialize — sandbox execution unavailable",
       );
       const native = getNativeSandboxError(error);
-      this.initImagePullFailure =
-        native.code === "ARCHESTRA_SANDBOX_IMAGE_PULL_FAILED"
+      this.initBaseFailure =
+        native.code === "ARCHESTRA_SANDBOX_IMAGE_PULL_FAILED" ||
+        native.code === "ARCHESTRA_COMMAND_FAILED"
           ? new SandboxRuntimeError(native.message, native.code)
           : null;
-      throw this.initImagePullFailure ?? error;
+      throw this.initBaseFailure ?? error;
     }
   }
 

@@ -1,0 +1,48 @@
+suite: test archestra platform -- Agent Runtime RuntimeClass reader
+templates:
+  - agent-runtime-class-reader-rbac.yaml
+release:
+  name: archestra
+  namespace: platform
+tests:
+  - it: creates nothing without a RuntimeClass
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: grants get on the configured RuntimeClass only
+    set:
+      archestra.env.ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME: gvisor
+    asserts:
+      - hasDocuments:
+          count: 2
+      - documentIndex: 0
+        isKind:
+          of: ClusterRole
+      - documentIndex: 0
+        equal:
+          path: metadata.name
+          value: archestra-archestra-platform-platform-runtime-class-reader
+      - documentIndex: 0
+        equal:
+          path: rules
+          value:
+            - apiGroups: ["node.k8s.io"]
+              resources: ["runtimeclasses"]
+              resourceNames: ["gvisor"]
+              verbs: ["get"]
+      - documentIndex: 1
+        isKind:
+          of: ClusterRoleBinding
+      - documentIndex: 1
+        equal:
+          path: subjects[0].namespace
+          value: platform
+
+  - it: creates nothing when RBAC is managed outside the chart
+    set:
+      archestra.env.ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME: gvisor
+      archestra.orchestrator.kubernetes.rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 0

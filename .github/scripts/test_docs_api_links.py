@@ -26,7 +26,7 @@ class ApiLinkTest(unittest.TestCase):
         (self.root / "docs/pages").mkdir(parents=True)
         (self.root / "docs/openapi.json").write_text(json.dumps(SPEC))
         (self.root / "docs/api-reference-groups.json").write_text(
-            json.dumps({"operations": ["Statistics"], "knowledge": ["Knowledge Files"], "organization": ["Permissions"]})
+            json.dumps({"operations": ["Statistics"], "knowledge": ["Knowledge Files"], "organization": ["Permissions"], "misc": ["Misc"]})
         )
         previous = os.getcwd()
         os.chdir(self.root)
@@ -41,6 +41,18 @@ class ApiLinkTest(unittest.TestCase):
         return subprocess.run(
             [sys.executable, str(SCRIPTS / "check-docs-api-links.py"), *args], capture_output=True, text=True, cwd=self.root
         )
+
+    def test_topic_groups_must_match_the_spec_tags(self):
+        self.write("Nothing to link.\n")
+        groups = self.root / "docs/api-reference-groups.json"
+        # A tag the spec dropped, a spec tag no topic lists, and a tag in two topics.
+        groups.write_text(json.dumps({"operations": ["Statistics", "Gone"], "knowledge": ["Knowledge Files", "Statistics"],
+                                      "organization": ["Permissions"]}))
+        result = self.run_check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("tag 'Gone' (operations) is no longer in the spec", result.stderr)
+        self.assertIn("tag 'Misc' is in no topic group", result.stderr)
+        self.assertIn("tag 'Statistics' is in both 'operations' and 'knowledge'", result.stderr)
 
     def test_fix_links_mentions_with_any_parameter_spelling(self):
         page = self.write(

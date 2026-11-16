@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 8
-lastUpdated: 2026-11-11
+lastUpdated: 2026-11-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -112,7 +112,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
   - Also turns on [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) when it is left blank. Set to `false`, it stays off.
 
-- **`ARCHESTRA_RELEASE_IMAGE_DIGESTS`** - Digests of the images released with this version: the MCP server base, the p4 shim, and the maintained agent images. The Helm chart of every release sets it, so those images run exactly as released, pinned by digest instead of a tag that could move. To check their signatures, or admit only those images, see [Verify Archestra Images](/docs/admin/deployment/production#verify-archestra-images).
+- **`ARCHESTRA_RELEASE_IMAGE_DIGESTS`** - Digests of the images released with this version: the MCP server base, the p4 shim, and the maintained agent images. The Helm chart of every release sets it, so those images run exactly as released, pinned by digest instead of a tag that could move. To check their signatures, or admit only those images, see [Verify Releases](/docs/admin/deployment/verify-releases).
   - Default: unset (the Docker quickstart and charts built outside a release use the version tags)
   - Leave it to the chart. A mirror set with [`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY), or an image set with [`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE) or [`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE), runs exactly as you set it. To pin a mirrored image, set its digest in that value: `registry.example.com/mcp-server-base:1.6.0@sha256:…`.
 
@@ -1019,6 +1019,11 @@ Archestra creates one Dagger engine per organization and per environment. Each e
   - Values: comma-separated CIDRs, for example `100.68.0.0/16,34.118.224.0/20`. Invalid entries are ignored and logged.
   - Engines without a [network policy](/docs/admin/environments) already block private, link-local, and cloud-metadata ranges. Add your cluster's Service and Pod CIDRs when they fall outside those ranges.
 
+- **`ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE`** - Runs every code sandbox engine in its own namespace, apart from MCP servers. Engines run privileged, so this lets the MCP namespaces enforce a stricter Pod Security level.
+  - Default: unset (each engine runs in its [environment's](/docs/admin/environments) namespace, or else [`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE))
+  - When set, it wins over environment namespaces. Each environment still gets its own engine and egress policy there. At startup, the platform removes engines from the namespaces they ran in before.
+  - The Helm chart sets it from `archestra.orchestrator.kubernetes.daggerRuntimeNamespace` and grants the platform ServiceAccount access there. Create the namespace first.
+
 - **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_NODE_SELECTOR`** - Schedules engines onto a dedicated node pool.
   - Default: unset (engines use the platform pod's `nodeSelector` and `tolerations`)
   - Values: comma-separated `key=value` pairs, for example `archestra-sandbox=true`. Each pair also adds a matching `NoSchedule` toleration.
@@ -1068,6 +1073,7 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Lets Agent administrators enable privileged runtime pods, which have node-level access.
   - Default: `false`
   - Values: `true`, `false`
+  - Turning it off also stops Agents already set to privileged: their new runs and follow-up turns fail until an Agent administrator turns privileged mode off.
 
 - **`ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL`** - URL a runtime pod uses to reach the LLM proxy and MCP gateway. It must be reachable from inside the cluster.
   - Default: [`ARCHESTRA_INTERNAL_API_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_INTERNAL_API_BASE_URL)
@@ -1108,9 +1114,15 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
   - Default: unset (scheduled like any other pod)
   - Values: comma-separated `key=value` pairs, for example `archestra-agent-runtime=true`. Each pair also adds a matching `NoSchedule` toleration.
 
+- **`ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR`** - Schedules [privileged](/docs/agents/runtime/setup#privileged-containers) runtime pods onto their own node pool, away from unprivileged runs and other workloads.
+  - Default: unset (privileged pods use [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR))
+  - Values: comma-separated `key=value` pairs, for example `archestra-agent-runtime-privileged=true`. Each pair also adds a matching `NoSchedule` toleration, so taint the pool with the same pairs.
+  - The [runtime image cache](/docs/agents/runtime/setup#runtime-image-cache) fills only the [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR) pool, so the first privileged run on a new node pulls its image.
+
 - **`ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME`** - RuntimeClass for unprivileged runtime pods, such as `gvisor`, so a run does not share the node's kernel.
   - Default: unset (the cluster's default runtime)
   - Privileged runtime pods ignore it, because gVisor cannot run privileged containers. The cluster needs nodes that serve the RuntimeClass. See [Sandboxed Runtime](/docs/agents/runtime/setup#sandboxed-runtime).
+  - If the RuntimeClass does not exist, unprivileged runs fail at once. The Helm chart grants the platform ServiceAccount `get` on this RuntimeClass so it can check.
 
 - **`ARCHESTRA_AGENT_RUNTIME_PLATFORM_POD_SELECTOR`** - Label selector for the platform's API pods. Runtime pods may send traffic only to pods that match.
   - Default: `archestra.io/platform-api=true` (set on API pods by the Helm chart)

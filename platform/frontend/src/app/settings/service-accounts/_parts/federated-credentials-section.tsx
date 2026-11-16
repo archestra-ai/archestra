@@ -457,7 +457,9 @@ function CredentialAddedDialog({
         <Label>Sign in from the workload</Label>
         <FieldDescription>
           Exchange the workload&apos;s OIDC token for an {appName} token, then
-          send that as a Bearer token.{" "}
+          send that as a Bearer token. A workload that cannot run the exchange,
+          such as an Agent Substrate actor, can send its OIDC token itself as
+          the Bearer token.{" "}
           {docsUrl ? (
             <ExternalDocsLink href={docsUrl}>How it works</ExternalDocsLink>
           ) : null}
@@ -560,6 +562,15 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     subjectPlaceholder: "system:serviceaccount:my-namespace:my-service-account",
     claimsHint: "any top-level claim of the token",
     logo: siKubernetes,
+  },
+  {
+    // Each installation publishes its own issuer.
+    id: "substrate",
+    label: "Agent Substrate",
+    issuer: "",
+    subjectPlaceholder: "actor/my-atespace/my-actor",
+    claimsHint: "none needed: the subject names one actor",
+    logo: null,
   },
   {
     id: "other",

@@ -68,6 +68,12 @@ const llmProviderApiKeysTable = pgTable(
     /** System keys are auto-managed for keyless LLM providers (Vertex AI, vLLM, etc.) */
     isSystem: boolean("is_system").notNull().default(false),
     /**
+     * The site (see `sites/README.md`) that calls the provider with this key.
+     * Null: any site may. A system key always names the site whose
+     * environment provides its cloud credentials; other sites relay to it.
+     */
+    siteName: text("site_name"),
+    /**
      * The preferred key for its provider among the owner's own keys, or among
      * the organization's shared keys when `userId` is null.
      */
@@ -101,9 +107,10 @@ const llmProviderApiKeysTable = pgTable(
       table.organizationId,
       table.provider,
     ),
-    // Partial unique index: only one system key per provider (global)
-    uniqueIndex("chat_api_keys_system_unique")
-      .on(table.provider)
+    // Partial unique index: one system key per provider for each site. A
+    // system key written before sites existed has no site and counts as one.
+    uniqueIndex("chat_api_keys_system_site_unique")
+      .on(table.provider, sql`coalesce(${table.siteName}, '')`)
       .where(sql`${table.isSystem} = true`),
     // At most one primary key per provider for each owner's own keys, and one
     // per provider among the organization's shared keys (no owner). The owner

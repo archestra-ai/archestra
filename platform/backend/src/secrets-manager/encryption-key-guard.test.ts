@@ -108,6 +108,38 @@ describe("verifySecretsEncryptionKey", () => {
     }
   });
 
+  test("a secondary site only verifies: it never writes the canary or re-keys", async () => {
+    await SecretModel.create({ name: "s1", secret: { apiKey: "sk-1" } });
+    config.site.role = "secondary";
+    try {
+      await expect(verifySecretsEncryptionKey()).rejects.toThrow(
+        "Start the primary site first",
+      );
+      expect(await EncryptionKeyCanaryModel.get()).toBeNull();
+
+      config.site.role = "primary";
+      await verifySecretsEncryptionKey();
+      const canary = await EncryptionKeyCanaryModel.get();
+      config.site.role = "secondary";
+      await verifySecretsEncryptionKey();
+
+      // Another secret, even with the escape hatch and a valid previous key.
+      const restore = withEncryptionKeys("another-site-secret", TEST_SECRET);
+      config.secretsManager.acceptNewEncryptionKey = true;
+      try {
+        await expect(verifySecretsEncryptionKey()).rejects.toThrow(
+          "must use the primary site's auth Secret",
+        );
+      } finally {
+        config.secretsManager.acceptNewEncryptionKey = false;
+        restore();
+      }
+      expect(await EncryptionKeyCanaryModel.get()).toEqual(canary);
+    } finally {
+      config.site.role = "primary";
+    }
+  });
+
   test("accepts a rotated key when ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY is set", async () => {
     await SecretModel.create({ name: "s1", secret: { apiKey: "sk-1" } });
     await verifySecretsEncryptionKey();

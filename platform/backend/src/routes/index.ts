@@ -113,6 +113,7 @@ export { default as scheduleTriggerRoutes } from "./schedule-trigger";
 export { default as secretsRoutes } from "./secrets";
 export { default as serviceAccountRoutes } from "./service-account";
 export { default as sessionRoutes } from "./session/session.routes";
+export { default as siteChannelRoutes } from "./site-channel";
 export { default as siteNotificationRoutes } from "./site-notification";
 export { default as externalMcpSkillRoutes } from "./skill/external-mcp-skill.routes";
 export { default as pluginSkillRoutes } from "./skill/plugin-skill.routes";

@@ -9,6 +9,7 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import { modelsDevClient } from "@/clients/models-dev-client";
+import config from "@/config";
 import logger from "@/logging";
 import { LlmProviderApiKeyModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -149,6 +150,7 @@ async function syncDueApiKeys(maxKeys: number): Promise<void> {
     defaultTtlMs: DEFAULT_MODEL_SYNC_TTL_MS,
     attemptMarkerPrefix: CacheKey.LlmModelSyncAttempt,
     limit: maxKeys,
+    siteName: config.site.name,
   });
   if (dueKeys.length === 0) {
     return;

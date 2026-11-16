@@ -8,6 +8,7 @@ import {
   isFireworksEndpoint,
   resolveFireworksModel,
 } from "@/services/fireworks-model";
+import { isServedHere } from "@/sites/registry";
 import type { BillingAttribution } from "@/utils/billable-usage";
 import { primaryBillingUsage } from "@/utils/billable-usage";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
@@ -243,6 +244,10 @@ import {
   type PoolWire,
   requestedMaxOutputTokens,
 } from "./model-pool-transport";
+import {
+  relayWireForOwnRequest,
+  remoteSiteTransport,
+} from "./remote-site-transport";
 import { StreamKeepAlive } from "./stream-keepalive";
 import {
   openUpstreamWithRetry,
@@ -297,6 +302,8 @@ export interface LLMProxyContext<TRequest> {
   modelPool?: ModelPoolRouting;
   /** Set when a platform call on the organization default was auto routed. */
   autoRoutedTier?: AutoRoutedTier;
+  /** Set when the request's own key is served by another site. */
+  remoteOwnTransport?: MemberTransport;
   billingAttribution?: BillingAttribution;
   connectionVerification?: boolean;
   appaReceipts?: OpenappaReceipts;
@@ -2215,6 +2222,15 @@ async function handleObservedLLMProxy<
           ? { googleUserProject: headersForExtraction["x-goog-user-project"] }
           : {}),
       });
+    // What a relayed upstream call carries besides the request itself.
+    const relayCallContext = {
+      source,
+      sessionId: sessionId ?? undefined,
+      ...(providerName === "gemini" &&
+      typeof headersForExtraction["x-goog-user-project"] === "string"
+        ? { googleUserProject: headersForExtraction["x-goog-user-project"] }
+        : {}),
+    };
     // A member's key, its secret and the billing mode that key implies.
     const memberCredential = async (member: TierMember) => {
       const row = await LlmProviderApiKeyModel.findById(
@@ -2303,6 +2319,30 @@ async function handleObservedLLMProxy<
         apiKey: memberApiKey,
       } = owned ?? (await memberCredential(member));
       const sameWire = inboundPoolWire(adapter.interactionType) === inbound;
+      // Protocol headers (anthropic-beta, ...) only mean something to a
+      // member on the client's own wire.
+      const protocolHeaders = sameWire ? headersToForward : {};
+      if (row.siteName && !isServedHere(row.siteName)) {
+        return remoteSiteTransport({
+          siteName: row.siteName,
+          keyName: row.name,
+          call: {
+            providerApiKeyId: row.id,
+            provider: member.provider,
+            inbound,
+            modelId: member.modelId,
+            mode: "member",
+            inboundReasoningOutsideCompletion:
+              reportsReasoningOutsideCompletion(providerName),
+            headers: protocolHeaders,
+            ...relayCallContext,
+          },
+          signal:
+            abortSignal && signal
+              ? AbortSignal.any([abortSignal, signal])
+              : (signal ?? abortSignal),
+        });
+      }
       return memberTransport({
         inbound,
         provider: member.provider,
@@ -2314,12 +2354,7 @@ async function handleObservedLLMProxy<
           apiKey: memberApiKey,
           credentialBillingMode: owned?.billingMode,
           baseUrl: row.inferenceBaseUrl ?? row.baseUrl ?? adapter.getBaseUrl(),
-          // Protocol headers (anthropic-beta, ...) only mean something to a
-          // member on the client's own wire.
-          headers: {
-            ...(row.extraHeaders ?? {}),
-            ...(sameWire ? headersToForward : {}),
-          },
+          headers: { ...(row.extraHeaders ?? {}), ...protocolHeaders },
           providerApiKeyId: row.id,
           model: member.modelId,
           attemptSignal: signal,
@@ -2364,10 +2399,45 @@ async function handleObservedLLMProxy<
           }
         : undefined;
 
+    // A request on a key another site serves: that site makes the call.
+    const ownKeySite =
+      !modelPoolPlan &&
+      !autoRoutedTier &&
+      perKeyProviderApiKeyRow?.siteName &&
+      !isServedHere(perKeyProviderApiKeyRow.siteName)
+        ? perKeyProviderApiKeyRow.siteName
+        : undefined;
+    let remoteOwnTransport: MemberTransport | undefined;
+    if (ownKeySite && perKeyProviderApiKeyRow) {
+      const wire = relayWireForOwnRequest(
+        providerName,
+        String(provider.interactionType),
+      );
+      if (!wire)
+        throw new ApiError(
+          400,
+          `Provider key "${perKeyProviderApiKeyRow.name}" is served by site "${ownKeySite}", which this endpoint cannot relay to. Call that site directly or use a chat endpoint.`,
+        );
+      remoteOwnTransport = remoteSiteTransport({
+        siteName: ownKeySite,
+        keyName: perKeyProviderApiKeyRow.name,
+        call: {
+          providerApiKeyId: perKeyProviderApiKeyRow.id,
+          provider: providerName,
+          inbound: wire,
+          modelId: requestAdapter.getModel(),
+          mode: "own",
+          headers: headersToForward,
+          ...relayCallContext,
+        },
+        signal: abortSignal,
+      });
+    }
+
     // A pooled or routed request never uses the caller's own key, which a
     // Unified Model API pool request doesn't even carry.
     const client =
-      modelPoolPlan || autoRoutedTier
+      modelPoolPlan || autoRoutedTier || remoteOwnTransport
         ? undefined
         : createUpstreamClient({
             adapter: provider,
@@ -2731,6 +2801,7 @@ async function handleObservedLLMProxy<
       upstreamAttempt,
       ...(modelPool ? { modelPool } : {}),
       ...(autoRoutedTier ? { autoRoutedTier } : {}),
+      ...(remoteOwnTransport ? { remoteOwnTransport } : {}),
       billingAttribution: {
         organizationId: resolvedAgent.organizationId,
         environmentId: resolvedAgent.environmentId,
@@ -5393,9 +5464,17 @@ async function openUpstream<TRequest, T>(params: {
   }
   const pool = ctx.modelPool;
   if (!pool) {
+    // Another site serves the key: bind `onAccepted` the way `transport` does.
+    const remote = ctx.remoteOwnTransport;
+    const ownOrRemote: MemberTransport = remote
+      ? {
+          ...remote,
+          executeStream: (request) => remote.executeStream(request, onAccepted),
+        }
+      : transport;
     try {
       return await openUpstreamWithRetry({
-        open: () => authorizedOpen(transport),
+        open: () => authorizedOpen(ownOrRemote),
         ...retry,
       });
     } catch (error) {

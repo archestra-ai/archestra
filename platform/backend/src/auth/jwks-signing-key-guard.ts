@@ -1,5 +1,6 @@
 import { symmetricDecrypt } from "better-auth/crypto";
 import { createJwk } from "better-auth/plugins/jwt";
+import config from "@/config";
 import logger from "@/logging";
 import JwksModel from "@/models/jwks";
 import { auth, JWT_PLUGIN_OPTIONS } from "./better-auth";
@@ -40,6 +41,15 @@ export async function verifyJwksSigningKey(): Promise<void> {
   const authContext = await auth.$context;
   if (await canDecryptPrivateKey(latest.privateKey, authContext.secretConfig)) {
     return;
+  }
+
+  // A secondary site never re-keys what the primary owns: an unreadable key
+  // there means this site runs with another auth secret than the primary.
+  if (config.site.role === "secondary") {
+    throw new Error(
+      "The JWKS signing key cannot be decrypted with this site's auth secret. A secondary site " +
+        "(ARCHESTRA_SITE_ROLE=secondary) must use the primary site's auth Secret byte for byte.",
+    );
   }
 
   logger.error(

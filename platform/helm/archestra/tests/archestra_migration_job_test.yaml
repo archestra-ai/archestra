@@ -49,6 +49,13 @@ tests:
       - hasDocuments:
           count: 0
 
+  - it: does not create the migration job on a secondary site
+    set:
+      archestra.site.role: secondary
+    asserts:
+      - hasDocuments:
+          count: 0
+
   - it: does not create the migration job in maintenance mode
     set:
       archestra.env:

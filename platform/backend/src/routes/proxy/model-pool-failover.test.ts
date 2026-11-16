@@ -11,6 +11,7 @@ import {
   orderPoolMembers,
   type PlannedMember,
   planModelPool,
+  preferLocalSite,
   type UpstreamAttempt,
   withMemberHealth,
 } from "./model-pool-failover";
@@ -22,6 +23,64 @@ beforeEach(() => {
 });
 
 setupTestCacheManager();
+
+describe("preferLocalSite", () => {
+  const now = Date.UTC(2026, 10, 16, 12, 0, 0);
+  const site = (
+    name: string,
+    overrides: { draining?: boolean; ageMs?: number } = {},
+  ) => ({
+    name,
+    role: "secondary" as const,
+    internalUrl: `http://${name}.internal:9000`,
+    version: "test",
+    capabilities: { keylessProviders: [] },
+    draining: overrides.draining ?? false,
+    startedAt: new Date(now),
+    lastSeenAt: new Date(now - (overrides.ageMs ?? 0)),
+  });
+  const members = [
+    { id: "vertex", priority: 1, providerApiKeyId: "k-vertex" },
+    { id: "openai", priority: 1, providerApiKeyId: "k-openai" },
+    { id: "backup", priority: 2, providerApiKeyId: "k-backup" },
+  ];
+  const siteOfKey = new Map<string, string | null>([
+    ["k-vertex", "gcp-us"],
+    ["k-openai", null],
+    ["k-backup", null],
+  ]);
+
+  test("tries this site's members of a priority before another site's", () => {
+    expect(
+      preferLocalSite({
+        order: ["vertex", "openai", "backup"],
+        members,
+        benchedUntil: new Map(),
+        siteOfKey,
+        sites: new Map([["gcp-us", site("gcp-us")]]),
+        now,
+      }),
+    ).toEqual(["openai", "vertex", "backup"]);
+  });
+
+  test("moves a member whose site is draining or silent to the end", () => {
+    for (const gcp of [
+      site("gcp-us", { draining: true }),
+      site("gcp-us", { ageMs: 120_000 }),
+    ]) {
+      expect(
+        preferLocalSite({
+          order: ["vertex", "openai", "backup"],
+          members,
+          benchedUntil: new Map(),
+          siteOfKey,
+          sites: new Map([["gcp-us", gcp]]),
+          now,
+        }),
+      ).toEqual(["openai", "backup", "vertex"]);
+    }
+  });
+});
 
 describe("orderPoolMembers", () => {
   const member = (id: string, priority: number, weight = 1) => ({

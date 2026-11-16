@@ -464,6 +464,7 @@ class LlmProviderApiKeyModel {
         createdByServiceAccountId:
           schema.llmProviderApiKeysTable.createdByServiceAccountId,
         isSystem: schema.llmProviderApiKeysTable.isSystem,
+        siteName: schema.llmProviderApiKeysTable.siteName,
         isPrimary: schema.llmProviderApiKeysTable.isPrimary,
         requiresReauthentication:
           schema.llmProviderApiKeysTable.requiresReauthentication,
@@ -700,6 +701,7 @@ class LlmProviderApiKeyModel {
         createdByServiceAccountId:
           schema.llmProviderApiKeysTable.createdByServiceAccountId,
         isSystem: schema.llmProviderApiKeysTable.isSystem,
+        siteName: schema.llmProviderApiKeysTable.siteName,
         isPrimary: schema.llmProviderApiKeysTable.isPrimary,
         requiresReauthentication:
           schema.llmProviderApiKeysTable.requiresReauthentication,
@@ -1630,16 +1632,27 @@ class LlmProviderApiKeyModel {
    */
   static async findSystemKey(
     provider: SupportedProvider,
+    /**
+     * The site the key must be served by: its own key, else one written
+     * before sites existed (no site). Omitted: any site's key.
+     */
+    siteName?: string,
   ): Promise<LlmProviderApiKey | null> {
+    const table = schema.llmProviderApiKeysTable;
     const [result] = await db
       .select()
-      .from(schema.llmProviderApiKeysTable)
+      .from(table)
       .where(
         and(
-          eq(schema.llmProviderApiKeysTable.provider, provider),
-          eq(schema.llmProviderApiKeysTable.isSystem, true),
+          eq(table.provider, provider),
+          eq(table.isSystem, true),
+          siteName === undefined
+            ? undefined
+            : or(eq(table.siteName, siteName), isNull(table.siteName)),
         ),
       )
+      // A site's own key wins over a siteless legacy one.
+      .orderBy(sql`${table.siteName} is null`)
       .limit(1);
 
     return result ?? null;
@@ -1653,12 +1666,18 @@ class LlmProviderApiKeyModel {
     organizationId: string;
     name: string;
     provider: SupportedProvider;
+    /**
+     * The site whose environment provides the key's cloud credentials; this
+     * site unless given.
+     */
+    siteName?: string;
   }): Promise<LlmProviderApiKey> {
     const values = await CreatedByModel.forInsert({
       data: {
         organizationId: params.organizationId,
         name: params.name,
         provider: params.provider,
+        siteName: params.siteName ?? config.site.name,
         scope: "org" as const,
         isSystem: true,
         secretId: null,
@@ -1692,15 +1711,15 @@ class LlmProviderApiKeyModel {
   }
 
   /**
-   * Delete the system LLM provider API key for a provider.
+   * Delete one system LLM provider API key.
    * Also deletes associated model links via cascade.
    */
-  static async deleteSystemKey(provider: SupportedProvider): Promise<void> {
+  static async deleteSystemKey(id: string): Promise<void> {
     await db
       .delete(schema.llmProviderApiKeysTable)
       .where(
         and(
-          eq(schema.llmProviderApiKeysTable.provider, provider),
+          eq(schema.llmProviderApiKeysTable.id, id),
           eq(schema.llmProviderApiKeysTable.isSystem, true),
         ),
       );
@@ -1722,9 +1741,20 @@ class LlmProviderApiKeyModel {
     /** Cache key prefix of the attempt markers; each marker ends in the key id. */
     attemptMarkerPrefix: CacheKeyPrefix;
     limit: number;
+    /**
+     * Only keys this site can call: no site, or this one. Another site's
+     * keys (its cloud identity, its network) are synced by that site.
+     */
+    siteName: string;
   }): Promise<LlmProviderApiKeyForModelSync[]> {
-    const { now, ttlMsByProvider, defaultTtlMs, attemptMarkerPrefix, limit } =
-      params;
+    const {
+      now,
+      ttlMsByProvider,
+      defaultTtlMs,
+      attemptMarkerPrefix,
+      limit,
+      siteName,
+    } = params;
     const keys = schema.llmProviderApiKeysTable;
     const links = schema.llmProviderApiKeyModelsTable;
     const ttlCases = Object.entries(ttlMsByProvider).map(
@@ -1766,6 +1796,7 @@ class LlmProviderApiKeyModel {
       .where(
         and(
           syncableCondition,
+          or(isNull(keys.siteName), eq(keys.siteName, siteName)),
           // synced_at is a UTC timestamp without time zone.
           sql`coalesce(${oldestSyncedAt} <= (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC') - ${ttlMs} * interval '1 millisecond', true)`,
           sql`NOT ${cacheManager.liveEntryExists({

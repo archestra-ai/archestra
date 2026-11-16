@@ -168756,6 +168756,10 @@
                           "isSystem": {
                             "type": "boolean"
                           },
+                          "siteName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "isPrimary": {
                             "type": "boolean"
                           },
@@ -168895,6 +168899,7 @@
                           "inferenceBaseUrl",
                           "extraHeaders",
                           "isSystem",
+                          "siteName",
                           "isPrimary",
                           "createdByServiceAccountId",
                           "createdAt",
@@ -168991,6 +168996,10 @@
                           "isSystem": {
                             "type": "boolean"
                           },
+                          "siteName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "isPrimary": {
                             "type": "boolean"
                           },
@@ -169130,6 +169139,7 @@
                           "inferenceBaseUrl",
                           "extraHeaders",
                           "isSystem",
+                          "siteName",
                           "isPrimary",
                           "createdByServiceAccountId",
                           "createdAt",
@@ -172100,6 +172110,10 @@
                               "isSystem": {
                                 "type": "boolean"
                               },
+                              "siteName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "isPrimary": {
                                 "type": "boolean"
                               },
@@ -172239,6 +172253,7 @@
                               "inferenceBaseUrl",
                               "extraHeaders",
                               "isSystem",
+                              "siteName",
                               "isPrimary",
                               "createdByServiceAccountId",
                               "createdAt",
@@ -172335,6 +172350,10 @@
                               "isSystem": {
                                 "type": "boolean"
                               },
+                              "siteName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "isPrimary": {
                                 "type": "boolean"
                               },
@@ -172474,6 +172493,7 @@
                               "inferenceBaseUrl",
                               "extraHeaders",
                               "isSystem",
+                              "siteName",
                               "isPrimary",
                               "createdByServiceAccountId",
                               "createdAt",
@@ -422190,6 +422210,10 @@
                       "isSystem": {
                         "type": "boolean"
                       },
+                      "siteName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "isPrimary": {
                         "type": "boolean"
                       },
@@ -422329,6 +422353,7 @@
                       "inferenceBaseUrl",
                       "extraHeaders",
                       "isSystem",
+                      "siteName",
                       "isPrimary",
                       "createdByServiceAccountId",
                       "createdAt",
@@ -422950,6 +422975,10 @@
                     "isSystem": {
                       "type": "boolean"
                     },
+                    "siteName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "isPrimary": {
                       "type": "boolean"
                     },
@@ -423089,6 +423118,7 @@
                     "inferenceBaseUrl",
                     "extraHeaders",
                     "isSystem",
+                    "siteName",
                     "isPrimary",
                     "createdByServiceAccountId",
                     "createdAt",
@@ -423485,6 +423515,10 @@
                       "isSystem": {
                         "type": "boolean"
                       },
+                      "siteName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "isPrimary": {
                         "type": "boolean"
                       },
@@ -423624,6 +423658,7 @@
                       "inferenceBaseUrl",
                       "extraHeaders",
                       "isSystem",
+                      "siteName",
                       "isPrimary",
                       "createdByServiceAccountId",
                       "createdAt",
@@ -423985,6 +424020,10 @@
                     "isSystem": {
                       "type": "boolean"
                     },
+                    "siteName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "isPrimary": {
                       "type": "boolean"
                     },
@@ -424124,6 +424163,7 @@
                     "inferenceBaseUrl",
                     "extraHeaders",
                     "isSystem",
+                    "siteName",
                     "isPrimary",
                     "createdByServiceAccountId",
                     "createdAt",
@@ -424564,6 +424604,10 @@
                     "isSystem": {
                       "type": "boolean"
                     },
+                    "siteName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "isPrimary": {
                       "type": "boolean"
                     },
@@ -424703,6 +424747,7 @@
                     "inferenceBaseUrl",
                     "extraHeaders",
                     "isSystem",
+                    "siteName",
                     "isPrimary",
                     "createdByServiceAccountId",
                     "createdAt",
@@ -425358,6 +425403,10 @@
                     "isSystem": {
                       "type": "boolean"
                     },
+                    "siteName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "isPrimary": {
                       "type": "boolean"
                     },
@@ -425497,6 +425546,7 @@
                     "inferenceBaseUrl",
                     "extraHeaders",
                     "isSystem",
+                    "siteName",
                     "isPrimary",
                     "createdByServiceAccountId",
                     "createdAt",

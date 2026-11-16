@@ -26,10 +26,16 @@ import config from "@/config";
 import logger from "@/logging";
 import { LlmProviderApiKeyModel, ModelPoolModel } from "@/models";
 import {
+  isServedHere,
+  listSites,
+  siteUnavailableReason,
+} from "@/sites/registry";
+import {
   ApiError,
   type ModelPool,
   type ModelPoolMember,
   type ModelPoolWithHealth,
+  type Site,
 } from "@/types";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 import { poolFailoverReason } from "./llm-proxy-helpers";
@@ -249,10 +255,18 @@ export async function planModelPool(params: {
     cooldownMs: toMs(pool.cooldownSeconds),
     retrySettings: pool.retrySettings ?? undefined,
     requestNumRetries: parseRetryCountHeader(params.retryCountHeader),
-    members: orderPoolMembers({
+    members: preferLocalSite({
+      order: orderPoolMembers({
+        members: reachable,
+        benchedUntil,
+        seed: params.sessionId ?? undefined,
+      }),
       members: reachable,
       benchedUntil,
-      seed: params.sessionId ?? undefined,
+      siteOfKey: new Map(keys.map((key) => [key.id, key.siteName])),
+      sites: keys.some((key) => !isServedHere(key.siteName))
+        ? await listSites()
+        : new Map(),
     }).map((id) => {
       const member = byId.get(id) as ModelPoolMember;
       return {
@@ -331,6 +345,45 @@ export function orderPoolMembers(params: {
     }
   }
   return [...ordered, ...benched.map((member) => member.id)];
+}
+
+/**
+ * Within each priority, members this site serves first, then members another
+ * site serves (relayed there). A member whose site can't take relayed work
+ * (down, draining) goes last with the benched ones, so a request still has
+ * somewhere to go. Otherwise the order stays as drawn.
+ */
+export function preferLocalSite(params: {
+  order: string[];
+  members: Pick<ModelPoolMember, "id" | "priority" | "providerApiKeyId">[];
+  benchedUntil: Map<string, number>;
+  siteOfKey: Map<string, string | null>;
+  sites: Map<string, Site>;
+  now?: number;
+}): string[] {
+  const byId = new Map(params.members.map((member) => [member.id, member]));
+  const rank = (id: string): [number, number, number] => {
+    const member = byId.get(id);
+    const site = member ? params.siteOfKey.get(member.providerApiKeyId) : null;
+    const local = isServedHere(site);
+    const unavailable =
+      !local &&
+      site !== null &&
+      site !== undefined &&
+      siteUnavailableReason(params.sites.get(site), params.now) !== null;
+    if (params.benchedUntil.has(id) || unavailable) return [1, 0, 0];
+    return [0, member?.priority ?? 0, local ? 0 : 1];
+  };
+  return params.order
+    .map((id, index) => ({ id, index, rank: rank(id) }))
+    .sort(
+      (a, b) =>
+        a.rank[0] - b.rank[0] ||
+        a.rank[1] - b.rank[1] ||
+        a.rank[2] - b.rank[2] ||
+        a.index - b.index,
+    )
+    .map((entry) => entry.id);
 }
 
 /**

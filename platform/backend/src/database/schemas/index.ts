@@ -282,6 +282,7 @@ export { default as serviceAccountFederatedCredentialsTable } from "./service-ac
 export { default as serviceAccountLabelsTable } from "./service-account-label";
 export { default as serviceAccountTokensTable } from "./service-account-token";
 export { default as sessionsTable } from "./session";
+export { default as sitesTable } from "./site";
 export { default as siteNotificationsTable } from "./site-notification";
 export { default as skillsTable } from "./skill";
 export { default as skillEnvironmentsTable } from "./skill-environment";

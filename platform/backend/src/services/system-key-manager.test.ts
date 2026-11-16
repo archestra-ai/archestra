@@ -81,6 +81,7 @@ describe("systemKeyManager", () => {
 
   afterEach(() => {
     config.llmSystemKeys.autoDeleteEnabled = true;
+    config.site.name = "default";
   });
 
   /**
@@ -151,6 +152,56 @@ describe("systemKeyManager", () => {
       LlmProviderApiKeyModel.findSystemKey("gemini"),
     ).resolves.toMatchObject({ id: geminiKey.id });
     expect(await mappedKeyIds()).toEqual([geminiKey.id]);
+  });
+
+  test("a site without Vertex AI never deletes the key another site serves, even with auto-delete on", async ({
+    makeOrganization,
+    makeVirtualApiKey,
+  }) => {
+    const organization = await makeOrganization();
+    config.site.name = "gcp-us";
+    const { geminiKey, mappedKeyIds } = await setUpVertexKeyInUse(
+      organization.id,
+      makeVirtualApiKey,
+    );
+    expect(geminiKey.siteName).toBe("gcp-us");
+
+    // The primary on Azure starts with no Vertex AI settings.
+    config.site.name = "azure-us";
+    vi.mocked(isVertexAiEnabled).mockReturnValue(false);
+    expect(await systemKeyManager.syncSystemKeys(organization.id)).toEqual([]);
+
+    await expect(
+      LlmProviderApiKeyModel.findSystemKey("gemini"),
+    ).resolves.toMatchObject({ id: geminiKey.id, siteName: "gcp-us" });
+    expect(await mappedKeyIds()).toEqual([geminiKey.id]);
+  });
+
+  test("each site with Vertex AI gets its own key, and a key from before sites is claimed", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const legacy = await LlmProviderApiKeyModel.createSystemKey({
+      organizationId: organization.id,
+      name: "Vertex AI (Gemini)",
+      provider: "gemini",
+    });
+    await LlmProviderApiKeyModel.update(legacy.id, { siteName: null });
+
+    config.site.name = "gcp-us";
+    await systemKeyManager.syncSystemKeys(organization.id);
+    await expect(
+      LlmProviderApiKeyModel.findSystemKey("gemini", "gcp-us"),
+    ).resolves.toMatchObject({ id: legacy.id, siteName: "gcp-us" });
+
+    config.site.name = "gcp-eu";
+    await systemKeyManager.syncSystemKeys(organization.id);
+    const euKey = await LlmProviderApiKeyModel.findSystemKey(
+      "gemini",
+      "gcp-eu",
+    );
+    expect(euKey).toMatchObject({ siteName: "gcp-eu" });
+    expect(euKey?.id).not.toBe(legacy.id);
   });
 
   test("by default, deletes the system key of a provider that is no longer enabled", async ({

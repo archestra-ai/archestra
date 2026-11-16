@@ -155,6 +155,11 @@ class SystemKeyManager {
 
   /**
    * Sync system key for a single provider.
+   *
+   * Each site (see `sites/README.md`) owns the system keys its own
+   * environment provides and never touches another site's: a key written
+   * before sites existed (no site) is claimed by the first site that has the
+   * provider enabled.
    */
   private async syncProviderSystemKey(
     organizationId: string,
@@ -162,15 +167,23 @@ class SystemKeyManager {
   ): Promise<void> {
     const { provider, name, isEnabled, customFetch } = providerConfig;
     const enabled = isEnabled();
+    const siteName = config.site.name;
 
-    const existingKey = await LlmProviderApiKeyModel.findSystemKey(provider);
+    const existingKey = await LlmProviderApiKeyModel.findSystemKey(
+      provider,
+      siteName,
+    );
 
     if (enabled) {
       if (existingKey) {
         // Keep auto-managed labels current when naming becomes more specific or
-        // when an Anthropic deployment changes its keyless auth method.
-        if (existingKey.name !== name) {
-          await LlmProviderApiKeyModel.update(existingKey.id, { name });
+        // when an Anthropic deployment changes its keyless auth method. A
+        // siteless key from before sites existed becomes this site's.
+        if (existingKey.name !== name || existingKey.siteName !== siteName) {
+          await LlmProviderApiKeyModel.update(existingKey.id, {
+            name,
+            siteName,
+          });
         }
 
         // Sync models after reconciling the system-managed metadata.
@@ -185,11 +198,15 @@ class SystemKeyManager {
         );
       } else {
         // Create new system key
-        logger.info({ provider, organizationId }, "Creating system API key");
+        logger.info(
+          { provider, organizationId, site: siteName },
+          "Creating system API key",
+        );
         const newKey = await LlmProviderApiKeyModel.createSystemKey({
           organizationId,
           name,
           provider,
+          siteName,
         });
         await this.syncModelsForSystemKey(newKey.id, provider, customFetch);
       }
@@ -201,14 +218,14 @@ class SystemKeyManager {
           "Keeping system API key (provider disabled, ARCHESTRA_LLM_SYSTEM_KEYS_AUTO_DELETE_ENABLED is off)",
         );
       } else if (existingKey) {
-        // Provider disabled, delete system key
+        // Provider disabled, delete this site's system key
         logger.info(
           { provider, apiKeyId: existingKey.id },
           "Deleting system API key (provider disabled)",
         );
-        await LlmProviderApiKeyModel.deleteSystemKey(provider);
+        await LlmProviderApiKeyModel.deleteSystemKey(existingKey.id);
       }
-      // else: Provider disabled and no key exists, nothing to do
+      // else: Provider disabled and no key of this site exists, nothing to do
     }
   }
 

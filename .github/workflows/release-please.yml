@@ -699,9 +699,14 @@ jobs:
         shell: bash
         run: |
           bash .github/scripts/release-subjects.sh release-images ghcr.io/archestra-ai "archestra-platform-${VERSION}.tgz"
+          # Only the chart is built in this run. The images' provenance comes
+          # from the merge-queue run that built them (docker-image-scanning.yml
+          # attest-release-candidates), for the same index bytes.
+          chart=$(grep -E '^[0-9a-f]{64}  archestra-platform-[^ /]+\.tgz$' release-subjects.txt)
+          [ "$(printf '%s\n' "$chart" | grep -c .)" -eq 1 ] || { echo "::error::Expected one chart subject"; exit 1; }
           {
             echo "subjects<<SUBJECTS"
-            cat release-subjects.txt
+            echo "$chart"
             echo "SUBJECTS"
           } >> "$GITHUB_OUTPUT"
 
@@ -759,10 +764,10 @@ jobs:
           PLATFORM_LATEST: ${{ steps.platform-latest.outputs.move }}
         run: bash .github/scripts/release-request.sh release-images.json
 
-  # Signs in a job of its own that runs no build step (SLSA Build L3): no job
-  # that builds, relays or collects the release can sign its provenance.
+  # Signs the chart's build provenance in a job of its own that runs no build
+  # step (SLSA Build L3). The images carry the merge-queue run's.
   attest-release-images:
-    name: Attest release images and chart
+    name: Attest release chart
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     needs: [release-please, release-subjects]
     permissions:
@@ -814,10 +819,9 @@ jobs:
     permissions:
       contents: read # Check out the chart and publication scripts.
       packages: write # Stage the smoke digests in ghcr.io/archestra-ai/ci.
-      id-token: write # Sign the build provenance attestation.
-      attestations: write # Store the build provenance attestation.
     outputs:
       images: ${{ steps.subjects.outputs.images }}
+      subjects: ${{ steps.subjects.outputs.subjects }}
     env:
       SOURCE_VERSION: ${{ inputs.publisher-smoke-version }}
       VERSION: 0.0.0-smoke.${{ github.run_id }}
@@ -874,15 +878,26 @@ jobs:
           jq -s add smoke-ghcr.json release-images.json > smoke-images.json
           cat smoke-images.json
           echo "images=$(jq -c . smoke-images.json)" >> "$GITHUB_OUTPUT"
+          {
+            echo "subjects<<SUBJECTS"
+            cat smoke-subjects.txt
+            echo "SUBJECTS"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Attest smoke images and chart
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-checksums: smoke-subjects.txt
+  # The same signing path as a release: the shared workflow, in a job of its own.
+  publisher-smoke-attest:
+    name: Publisher dry run (attest)
+    needs: publisher-smoke
+    permissions:
+      id-token: write # Sign the build provenance attestation.
+      attestations: write # Store the build provenance attestation.
+    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@0bd6a54bf206174fd0cebc3222def111651e91bb # v1.31.1
+    with:
+      subjects: ${{ needs.publisher-smoke.outputs.subjects }}
 
   publisher-smoke-publish:
     name: Publisher dry run (publish)
-    needs: publisher-smoke
+    needs: [publisher-smoke, publisher-smoke-attest]
     permissions:
       actions: read # Download the smoke chart.
       id-token: write # sign the image contents attestations (release-publish.yml)

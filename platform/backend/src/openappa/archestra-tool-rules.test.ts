@@ -49,6 +49,9 @@ const UNNAMED: ArchestraToolShortName[] = [
   "preview_guardrails_server_rules_change",
   "propose_guardrails_server_rules_change",
   "get_guardrails_server_rules_change_status",
+  // Exists only inside a tuner run and files a suggestion an admin reviews,
+  // until the archestra battery names it.
+  "propose_tuner_suggestion",
 ];
 
 const ORGANIZATION_GRANT = {

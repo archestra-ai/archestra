@@ -44883,6 +44883,11 @@ export type GetBootstrapResponses = {
                     jwksUri: string;
                     bundleUri: string;
                 };
+                /**
+                 * Deprecated. Always true: MCP idle hibernation is generally available. Kept for backward compatibility.
+                 *
+                 * @deprecated
+                 */
                 mcpIdleHibernationBetaEnabled: boolean;
                 sandbox: boolean;
                 agentRuntime: boolean;
@@ -54674,6 +54679,11 @@ export type GetConfigResponses = {
                 jwksUri: string;
                 bundleUri: string;
             };
+            /**
+             * Deprecated. Always true: MCP idle hibernation is generally available. Kept for backward compatibility.
+             *
+             * @deprecated
+             */
             mcpIdleHibernationBetaEnabled: boolean;
             sandbox: boolean;
             agentRuntime: boolean;

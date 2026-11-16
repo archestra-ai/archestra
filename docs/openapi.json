@@ -167518,7 +167518,9 @@
                               "additionalProperties": false
                             },
                             "mcpIdleHibernationBetaEnabled": {
-                              "type": "boolean"
+                              "type": "boolean",
+                              "deprecated": true,
+                              "description": "Deprecated. Always true: MCP idle hibernation is generally available. Kept for backward compatibility."
                             },
                             "sandbox": {
                               "type": "boolean"
@@ -205442,7 +205444,9 @@
                           "additionalProperties": false
                         },
                         "mcpIdleHibernationBetaEnabled": {
-                          "type": "boolean"
+                          "type": "boolean",
+                          "deprecated": true,
+                          "description": "Deprecated. Always true: MCP idle hibernation is generally available. Kept for backward compatibility."
                         },
                         "sandbox": {
                           "type": "boolean"

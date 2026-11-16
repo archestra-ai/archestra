@@ -157,7 +157,9 @@ class OpenappaExternalConsultModel {
             ELSE 'unreadable'
           END AS ruling
         FROM ${table} AS c
-        JOIN offered ON offered.offer_id = c.offer_id
+        -- Decisions carry the rendered offer id, a prefix of the canonical one a consult stores.
+        JOIN offered ON offered.offer_id <> ''
+          AND starts_with(c.offer_id, offered.offer_id)
         WHERE c.organization_id = ${params.organizationId}
           AND c.created_at > ${since}::timestamptz
           AND c.created_at <= ${until}::timestamptz

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import db, { schema } from "@/database";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { describe, expect, test } from "@/test";
@@ -445,14 +446,14 @@ async function reviewed(params: {
   ruling: "approve" | "deny" | null;
   hoursAgo: number;
 }) {
-  const offerId = `offer-${crypto.randomUUID()}`;
+  const offerId = canonicalOfferId();
   const session = `session-${params.hoursAgo}`;
   await denied({
     org: params.org,
     tool: params.tool,
     session,
     hoursAgo: params.hoursAgo + 0.5,
-    offers: [offerId],
+    offers: [offerId.slice(0, 16)],
   });
   return consult({
     org: params.org,
@@ -470,6 +471,11 @@ async function reviewed(params: {
     answer: params.ruling === null ? null : { ruling: params.ruling },
     offerId,
   });
+}
+
+/** The engine's 64-hex offer digest; decisions render its first 16 characters. */
+function canonicalOfferId(): string {
+  return randomBytes(32).toString("hex");
 }
 
 /** An approval the stock `approve` authority gave; returns the consult id. */

@@ -2120,7 +2120,7 @@ mod tests {
             (warm_base_root_setup(true), 1, "prebuilt base verification"),
         ] {
             let err = domain_error(
-                "failed to fetch https://user:synthetic-password@example.invalid/packages",
+                "failed to fetch https://example.invalid/packages: synthetic-private-output",
                 Some(GraphQlExtension::ExecError {
                     cmd: vec!["sh".into(), "-c".into(), command],
                     exit_code,

@@ -1,46 +1,44 @@
 ##### Membership request protocol
 
-Audience providers support HTTP endpoints and local commands.
+Audience providers implement either HTTP endpoints or local executables.
 
-OpenAPPA can ask the membership service for a group's members or for the reader ID behind one member. The examples below show the request data and response data. For the complete JSON request and response format, see [The consult request](#the-consult-request).
+OpenAPPA queries membership services to expand group selectors into reader IDs or to resolve individual member IDs to canonical reader IDs. For the complete JSON wire schema, see [The consult request](#the-consult-request).
 
-Every request carries `declaration.templates`: the templates the policy declares for the provider. The service MUST compare that list with the templates it serves and MUST refuse the request when the lists differ, before it reads its credential or calls the provider. OpenAPPA treats the refusal as an operational failure of the service that names the provider; it records no decision.
+Consult requests include `declaration.templates` listing the declared templates for that provider. The service MUST validate that this declaration matches the templates it supports before evaluating credentials or upstream APIs, refusing requests on mismatch. Operational failures abort policy evaluation without recording an allowance.
 
-To read the members of the Slack `oncall` group, OpenAPPA sends:
+To query group membership for `user-group/oncall`, OpenAPPA sends:
 
 ```json
 {"selector": "user-group/oncall"}
 ```
 
-The service returns the members as reader IDs:
+The service returns reader IDs:
 
 ```json
 {"members": ["a@corp.com", "slack:U2"]}
 ```
 
-The service returns `{"members": []}` when a group has no members. This is a successful response.
+An empty group returns `{"members": []}`.
 
-To look up one member, OpenAPPA sends:
+To look up an individual member, OpenAPPA sends:
 
 ```json
 {"member": "slack:U1"}
 ```
 
-The service returns that member's reader ID under `principal`:
+The service returns the resolved reader ID:
 
 ```json
 {"principal": "a@corp.com"}
 ```
 
-If the service cannot find the member, it returns `{"principal": null}`. The member then keeps its ID as written. A non-null `principal` must satisfy the [reader ID rule](references/contracts/audiences.md#reader-ids).
+If the member cannot be resolved, the service returns `{"principal": null}`, and the identifier remains unchanged. Non-null `principal` values must conform to reader ID format rules.
 
-If the service fails, takes too long to respond, or returns an invalid answer, OpenAPPA cannot complete the audience check and stops the operation. OpenAPPA records membership responses with the decision that requested them.
+If the service fails, times out, or returns invalid data, the audience check cannot complete, and OpenAPPA denies the operation. OpenAPPA records all membership responses in the audit log alongside the associated decision.
 
 ### Annotator protocol
 
-OpenAPPA sends the selected call data and the annotator's instructions in a consult request with `kind = "annotation"`. `declaration` contains the instructions and permitted values; `artifact.args` contains the call data to classify.
-
-For the customer example, the request is:
+OpenAPPA transmits consult requests with `kind = "annotation"`. Policy rules and permits reside in `declaration`; call attributes reside in `artifact.args`:
 
 ```json
 {
@@ -59,7 +57,7 @@ For the customer example, the request is:
 }
 ```
 
-`artifact.context` carries the [context providers'](references/contracts/annotators.md#context-providers) answers. Without an `inputs` mapping, `declaration.inputs` is empty and `artifact.args` contains the complete call. For example, the `artifact` field contains:
+`artifact.context` contains [context provider](references/contracts/annotators.md#context-providers) outputs. When `inputs` is omitted, `declaration.inputs` is empty and `artifact.args` contains the complete call:
 
 ```json
 {
@@ -72,9 +70,9 @@ For the customer example, the request is:
 }
 ```
 
-The request does not include the trajectory's current audience, trust rank, or previous actions.
+Consult requests do not disclose the trajectory's current audience, trust rank, or history.
 
-For the customer request, the service returns this response to classify the result as internal and suspicious, with no call requirements or effects:
+Annotators respond with an `answer` object specifying `delta`, `requires`, and `emits`:
 
 ```json
 {
@@ -87,27 +85,91 @@ For the customer request, the service returns this response to classify the resu
 }
 ```
 
-The response uses `emits` for effects and `requires.history` for history checks. These names differ from the policy TOML fields.
-
-- `answer` must contain `delta`, `requires`, and `emits`, and can contain `forwards` and `evidence`. No other key is allowed.
-- `evidence` is an opaque string of at most 1,024 bytes. OpenAPPA does not read it. It is part of the call's identity: the same call with different `evidence` is a different proposal. OpenAPPA sends it to the call's [recorder](references/contracts/annotators.md#recorders).
-- `forwards` has the same shape and permits as `delta`. An omitted `forwards` forwards nothing.
-- `requires` must contain `history` and `attention` arrays, even when empty.
-- Audience and trust fields inside `delta`, `forwards`, and `requires` are optional. An omitted field adds no restriction or requirement.
+Protocol constraints:
+- `answer` must define `delta`, `requires`, and `emits`, and may include `forwards` and `evidence`. Unrecognized keys are rejected.
+- `evidence` is an optional opaque string (up to 1,024 bytes) recording provenance (such as a policy version or file hash). It is part of the recorded annotation and is forwarded to configured [recorders](references/contracts/annotators.md#recorders).
+- `forwards` uses the same structure and validation as `delta`.
+- `requires` must include `history` and `attention` arrays (even when empty).
 - `requires.audience` must contain exactly `contains`.
-- Each history entry is `{"contains":"<effect>"}` or `{"excludes":"<effect>"}`.
-- JSON audience values use `"public"` or a list of permitted audiences. Do not put `public` inside a JSON audience list.
-- A restricted list cannot repeat entries or contain both `self` and `internal`.
+- History checks use `{"contains":"<effect>"}` or `{"excludes":"<effect>"}`.
+- Audience arrays use `"public"` or a list of permitted audiences. `"public"` must not be placed inside an audience list.
+- Audience lists must not contain duplicate entries or combine `self` and `internal`.
 
-OpenAPPA rejects unknown keys, `null` values, empty audience objects, duplicate emitted effects, and values outside the permits. For a value outside the permits, the refusal names the field and the declaration list that does not contain it, such as `field=delta.audience allowed=declaration.audiences`. It never repeats the answered value. A built-in model returns only the contents of `answer`, without the surrounding `version` and `answer` fields.
+OpenAPPA rejects responses containing unknown keys, null values, empty audience objects, duplicate emitted effects, or values outside configured permits. If a response violates permits, OpenAPPA denies the call and logs the violating field and allowed set (e.g. `field=delta.audience allowed=declaration.audiences`) without echoing the unvetted value. Built-in model classifiers return the inner `answer` object directly.
 
-OpenAPPA uses the annotation only for the call it classified. Changing the call requires a new annotation. Rechecking or replaying the same recorded call reuses its annotation and membership responses.
+Annotations are bound strictly to the specific call evaluated. Any change to call arguments requires a fresh annotation. Replaying a recorded session reuses cached annotations and membership data without re-querying annotators.
 
-If the annotator fails or returns an invalid answer, the call does not run. The agent can propose it again. OpenAPPA checks that the answer uses permitted values; the annotator is responsible for classifying the call correctly.
+If an annotator fails, times out, or returns values outside its permits, the call is denied. OpenAPPA checks that the answer uses permitted values; the annotator is responsible for classifying the call correctly.
+
+### Test an annotator
+
+Use `appa runtime annotate` to test annotator classifications against sample tool calls offline. It exercises the production consult pathway (including declaration generation, request serialization, backend execution, and permits validation) without opening a trajectory or executing tools.
+
+```sh
+appa runtime [--config <path>] [--batteries-dir <dir>] annotate [--repeat <n>] [--concurrency <n>] < calls.jsonl
+```
+
+Standard input accepts newline-delimited JSON objects representing tool calls:
+
+| Field | Description |
+|---|---|
+| `id` | Call identifier echoed in output. |
+| `tool` | Tool name as declared in policy. |
+| `arguments` | Tool arguments object. |
+| `cwd` | Optional working directory forwarded to [context providers](references/contracts/annotators.md#context-providers). |
+
+Standard output yields newline-delimited JSON responses in arrival order:
+
+| `outcome` | Meaning | Diagnostic fields |
+|---|---|---|
+| `answer` | Annotator returned valid labels within permits. | `annotator`, `answer` |
+| `outside_mandate` | Response violated the protocol or exceeded permits (denied in production). | `annotator`, `answer` |
+| `no_answer` | Annotator failed to respond or timed out (denied in production). | `annotator`, `reason` |
+| `static` | Tool has a static contract; no annotator was consulted. | |
+| `unresolved` | Tool or argument pattern is not defined in policy. | `reason` |
+
+`--repeat <n>` runs each call `n` times to assess model classification consistency (default: 1). `--concurrency <n>` limits in-flight requests (default: 4).
+
+Example checking Google Drive tool calls against battery rules:
+
+```toml
+# appa.toml
+include = ["batteries/google-workspace/appa.toml"]
+
+[policy]
+version = 2
+
+[policy.audience]
+self = ["google-workspace:viewer"]
+internal = ["google-workspace:full-members"]
+```
+
+```sh
+cat > calls.jsonl <<'EOF'
+{"id":"org","tool":"mcp/claude_ai_Google_Drive/create_file","arguments":{"title":"t","textContent":"x","parentId":"<org-wide folder id>"}}
+{"id":"read","tool":"mcp/claude_ai_Google_Drive/read_file_content","arguments":{"fileId":"<file id>"}}
+EOF
+APPA_PROVIDER_GOOGLE_WORKSPACE_TOKEN=... appa runtime --config appa.toml annotate < calls.jsonl
+```
+
+Output:
+
+```json
+{"id":"read","repeat":0,"latency_ms":0,"outcome":"static"}
+{"id":"org","repeat":0,"latency_ms":387,"outcome":"answer","annotator":"google-workspace.drive-readers","answer":{"delta":{},"emits":["google-workspace.changed"],"requires":{"attention":[],"audience":{"contains":["internal"]},"history":[],"trust":"trusted"}}}
+```
+
+Without the token, the `org` line is a `no_answer` with the program's error:
+
+```json
+{"id":"org","repeat":0,"latency_ms":67,"outcome":"no_answer","annotator":"google-workspace.drive-readers","reason":"non_success status=1 detail=\"google-workspace.drive-readers: APPA_PROVIDER_GOOGLE_WORKSPACE_TOKEN is not set\""}
+```
+
+The command exits with status 0 after testing all input calls, regardless of individual outcomes. It exits with a non-zero status if the policy fails to load or if input JSON is malformed.
 
 ### Recorder protocol
 
-OpenAPPA sends a delivery after it records each batch of decisions and outcomes. A delivery is not a consult request, and it carries a label that OpenAPPA derived:
+OpenAPPA sends batch delivery notifications after committing decisions and call outcomes to the log. Deliveries contain engine-derived labels:
 
 ```json
 {
@@ -129,45 +191,43 @@ OpenAPPA sends a delivery after it records each batch of decisions and outcomes.
 }
 ```
 
-| Record | Fields | Meaning |
+| Record type | Fields | Meaning |
 |---|---|---|
-| `released` | `dispatch`, `tool`, `arguments`, `label`, `evidence` | OpenAPPA released the call. `label` is its published label. |
-| `outcome` | `dispatch`, `outcome` | The call ended: `success`, `failure`, or `indeterminate`. |
-| `unreleased` | `trajectory`, `batch`, `tool`, `arguments`, `evidence` | OpenAPPA decided the call's batch and did not release the call. |
+| `released` | `dispatch`, `tool`, `arguments`, `label`, `evidence` | The tool call was released for execution. `label` is its published label. |
+| `outcome` | `dispatch`, `outcome` | The tool call completed with status `success`, `failure`, or `indeterminate`. |
+| `unreleased` | `trajectory`, `batch`, `tool`, `arguments`, `evidence` | The batch was evaluated and the tool call was denied or suppressed. |
 
-`label.audience` is `"public"` or a list of clauses. Each clause is a list of audience entries; a reader belongs to the audience when every clause includes the reader. A single clause has the same form as an annotator's audience answer. `evidence` is the annotator's `evidence`, or `null`.
+`label.audience` is `"public"` or a list of conjunctive clauses. Each clause contains audience identifiers; a reader belongs to the audience only if included in every clause. `evidence` contains the annotator's `evidence` string, or `null`.
 
-The recorder returns `{"version":1,"answer":{}}`. OpenAPPA delivers each family's records in log order, at least once. A failed delivery stays for the next one. After a restart, OpenAPPA delivers each family again from its start, so a recorder MUST ignore a `dispatch` it already recorded.
+Recorders must respond with `{"version":1,"answer":{}}`. OpenAPPA delivers records in append-log order with at-least-once delivery semantics. Failed deliveries are retried on subsequent batches. Following a restart, OpenAPPA replays deliveries from the start of the trajectory family; recorders MUST ensure idempotent processing by deduplicating against `dispatch` identifiers.
 
 ### Sanitizer protocol
 
-A consult request tells the sanitizer what to change and supplies the data in `artifact.body`. The sanitizer returns the transformed data in `answer.body`:
+Consult requests supply input data in `artifact.body` alongside instructions in `declaration`. The sanitizer returns transformed output in `answer.body`:
 
-| Part | Fields |
-|---|---|
-| `declaration` | Instructions in `hint`, the permitted change in `permits`, and the data type in `on`. For `tool_input`, also the argument schema in `parameters`. |
-| `artifact` | The data in `body`, and the tool name in `tool` when known. |
-| `answer` | The transformed data in `body`. |
+| Section | Fields | Description |
+|---|---|---|
+| `declaration` | `hint`, `permits`, `on`, and `parameters` (for `tool_input` rewrites). | Policy boundaries and transformation instructions. |
+| `artifact` | `body` and `tool` (when known). | Input payload and tool identifier. |
+| `answer` | `body` | Transformed output payload. |
 
-In a request, `on` is one string: `tool_input` or `tool_output`. OpenAPPA assigns the returned data's audience or trust rank from `permits`. See [The consult request](#the-consult-request) for the complete JSON format and response requirements.
+In the request, `on` contains a single string (`"tool_input"` or `"tool_output"`). OpenAPPA applies the audience or trust rank specified in `permits` to the sanitized result. See [The consult request](#the-consult-request).
 
 ### Authority protocol
 
-OpenAPPA sends the authority the proposed tool call and the requirements that need approval. The consult request puts `hint` and `permits` in `declaration`. The `artifact` field contains the tool name in `tool`, its `arguments`, and the unmet `requirements`.
+OpenAPPA transmits consult requests detailing the proposed tool call and unmet preconditions. `declaration` carries `hint` and `permits`; `artifact` contains `tool`, `arguments`, and the `requirements` array:
 
-Each entry in `requirements` uses one of these forms:
-
-| Requirement | JSON form |
+| Precondition type | JSON structure in `requirements` |
 |---|---|
 | Trust | `{"kind":"trust","required":"trusted"}` |
 | Public audience | `{"kind":"audience","required":"public"}` |
-| Restricted audience | `{"kind":"audience","required":["internal","@finance","alice@corp.com"]}`; the array lists the audience entries that `contains` requires, in this order: the built-in audience, `@` references, then literal reader IDs. Only the entries after the `@` references are reader IDs. Each entry uses the spelling from the policy, the tool call arguments, or the annotation answer. OpenAPPA does not expand a group to its members. |
+| Restricted audience | `{"kind":"audience","required":["internal","@finance","alice@corp.com"]}` (ordered by built-in audience, `@` references, then literal reader IDs). |
 | Effect exclusion | `{"kind":"effect","excludes":"email.sent"}` |
 | Attention | `{"kind":"attention","mark":"finance-signoff"}` |
 
-The request describes the requirements to approve. It does not include the trajectory's current audience or trust rank, or the identities of its current readers.
+Consult requests do not disclose the trajectory's current label or existing audience members.
 
-The authority returns `ruling` as `approve` or `deny`, with an optional `reason`. For example:
+The authority responds with a `ruling` (`"approve"` or `"deny"`) and an optional `reason`:
 
 ```json
 {
@@ -179,11 +239,11 @@ The authority returns `ruling` as `approve` or `deny`, with an optional `reason`
 }
 ```
 
-See [The consult request](#the-consult-request) for the full request format.
+See [The consult request](#the-consult-request).
 
 ### The consult request
 
-A consult request is a JSON request that OpenAPPA sends to an external component. HTTP services and local programs receive the same format. This example asks `support-reviewer` to approve an email whose recipient is outside the current audience:
+Consult requests send a standardized JSON payload to external components across HTTP and local command transports:
 
 ```json
 {
@@ -202,31 +262,31 @@ A consult request is a JSON request that OpenAPPA sends to an external component
 }
 ```
 
-| Key | Meaning |
+| Key | Description |
 |---|---|
-| `version` | Protocol version. Must be `1`. |
-| `kind` | `authority`, `sanitizer`, `annotation`, `audience`, or `context`. |
-| `name` | The component name declared in the policy. |
-| `declaration` | Policy instructions and limits for the component. The agent does not supply them. |
-| `artifact` | Request data: the tool call to review, data to clean, or the selector or member to look up. |
+| `version` | Protocol version (must be `1`). |
+| `kind` | Component type: `authority`, `sanitizer`, `annotation`, `audience`, or `context`. |
+| `name` | Component identifier declared in policy. |
+| `declaration` | Policy constraints, permits, and hints for the component. |
+| `artifact` | Call data: proposed tool invocation, data payload, or membership selector. |
 
-Each component uses these fields differently:
+Payload structure by component kind:
 
-| Kind | `declaration` | `artifact` | `answer` |
+| Kind | `declaration` contents | `artifact` contents | Expected `answer` contents |
 |---|---|---|---|
 | `authority` | `hint`, `permits` | `tool`, `arguments`, `requirements` | `ruling`, optional `reason` |
-| `sanitizer` | `hint`, `on`, `permits`; `parameters` for input rewrites | `tool` when known, `body` | `body` |
+| `sanitizer` | `hint`, `on`, `permits`; `parameters` for input rewrites | `tool` (when known), `body` | `body` |
 | `annotation` | `hint`, optional `deployment_hint` and `context_hints`, `inputs`, `trust_ranks`, `audiences`, `attention_marks`, `effects` | `args`, `context` | `delta`, optional `forwards`, `requires`, `emits` |
 | `audience` | `templates` | `selector` or `member` | `members` or `principal` |
-| `context` | empty | `tool`, `arguments`, optional `cwd` | any JSON value, or `null` |
+| `context` | Empty | `tool`, `arguments`, optional `cwd` | Arbitrary JSON or `null` |
 
-For an audience request, `declaration.templates` lists the selector templates the policy declares for the provider under `selectors`, such as `viewer` and `user-group/<handle>`. The service MUST refuse a request whose templates differ from the ones it serves. It reads the requested selector or member ID from `artifact` and returns its result under `answer`.
+In audience requests, `declaration.templates` lists the selector templates declared for that provider. The service MUST reject requests if its supported templates do not match this list.
 
-OpenAPPA records membership responses with the decision that requested them. If that decision requires an approval or remedy, OpenAPPA reuses those responses when it continues the decision. A new decision can request updated membership. Replaying a recorded decision uses its saved responses without calling the membership service. Responses from unrelated decisions cannot be substituted.
+OpenAPPA pins membership responses in the audit record alongside the decision. If an evaluation pauses for approval or remediation, cached membership responses are reused when execution resumes. Fresh decisions execute new membership queries. Replaying recorded decisions reuses saved responses without contacting external services.
 
-A consult request does not include the agent's current audience, trust rank, previous actions, or user message. A [recorder delivery](#recorder-protocol) is not a consult request: it carries the label of each released call. The component processes the request data in `artifact` using the instructions and limits in `declaration`. A `context` request alone carries `cwd`, and a `context` answer is the one answer OpenAPPA does not validate: it is data for the annotator, not a decision.
+Consult requests never expose the agent's full trajectory label, history, or conversation transcript. Components process input data in `artifact` strictly within the bounds specified by `declaration`. Context requests uniquely include `cwd`, and context answers are passed directly to annotators without engine validation.
 
-The service or program returns `{"version":1,"answer":{...}}`. The fields inside `answer` must match the component's response format. Extra fields in the surrounding response object are not allowed.
+Components must respond with `{"version":1,"answer":{...}}` containing fields corresponding to their component type. Additional top-level fields are rejected.
 
-OpenAPPA rejects a response if the HTTP service reports an error, the program exits with a non-zero status, the request times out, or the response exceeds the size limit or has an invalid format. It cannot use that response to approve a call, deliver cleaned data, or annotate a tool.
+OpenAPPA rejects a response if the service returns an HTTP error, exits with a non-zero status code, times out, exceeds `max_body_bytes`, or returns malformed JSON.
 

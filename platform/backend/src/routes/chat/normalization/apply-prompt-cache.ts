@@ -84,8 +84,7 @@ function supportsOneHourCache(
 // Anthropic and Bedrock both reject a request with more than 4 cache
 // breakpoints. The AI SDK Anthropic provider drops the extra markers with only
 // a warning, newest message first, so an over-budget rolling marker would
-// silently disappear. Breakpoints already present (e.g.
-// `materializeAttachments` marks each Anthropic file/document part) count
+// silently disappear. Breakpoints already present on the messages count
 // against this budget, so the markers added here must fit in the remaining
 // budget.
 const MAX_CACHE_BREAKPOINTS = 4;
@@ -106,17 +105,22 @@ export function supportsBedrockCachePoint(model: string): boolean {
  *
  * A breakpoint caches everything rendered before it — the prefix is
  * `tools → system → messages` — so placing the markers on messages also caches
- * the system prompt and tools. Up to two breakpoints are added:
+ * the system prompt and tools. Up to three breakpoints are added, in priority
+ * order when the budget runs short:
  *   - last message: a rolling breakpoint that extends the cached prefix to the
  *     most recent turn (each turn writes the new tail; the next turn reads it);
+ *   - previous user turn (the last user message before the last assistant
+ *     message): the previous request's rolling breakpoint. That turn's tool
+ *     loop ran on raw tool results that replay strips, so its step entries
+ *     never match again; this keeps the turn-start entry reachable however
+ *     many blocks the tool loop added (providers look back only ~20 blocks);
  *   - first message: the stable prefix (tools + system + first turn) that never
  *     changes, so it stays a cache hit on every later turn.
  *
- * Last is prioritized over first when only one slot is left in the breakpoint
- * budget. Messages that already carry a breakpoint for this provider are left
+ * Messages that already carry a breakpoint for this provider are left
  * alone — their prefix is already cacheable and re-marking would waste budget.
  *
- * On models that support it the breakpoints use a 1-hour TTL; both breakpoints
+ * On models that support it the breakpoints use a 1-hour TTL; all of them
  * share the same TTL so there is no ordering constraint between them.
  *
  * No-op for providers other than Anthropic, Bedrock and OpenRouter (Anthropic
@@ -170,11 +174,10 @@ export function applyPromptCacheBreakpoints(params: {
     return messages;
   }
 
-  // Only opt into the 1h TTL when this request has no other breakpoints. Other
-  // breakpoints (e.g. `materializeAttachments`' per-part markers) use the 5m
-  // default, and Anthropic/Bedrock reject a longer TTL placed after a shorter
-  // one — so mixing 1h here with those 5m markers can fail the request. Staying
-  // uniformly 5m when any marker pre-exists keeps ordering valid.
+  // Only opt into the 1h TTL when this request has no other breakpoints. A
+  // pre-existing marker may use the 5m default, and Anthropic/Bedrock reject a
+  // longer TTL placed after a shorter one. Staying uniformly 5m when any marker
+  // pre-exists keeps ordering valid.
   const useOneHour =
     allowOneHourTtl &&
     !!model &&
@@ -185,9 +188,9 @@ export function applyPromptCacheBreakpoints(params: {
     : { type: config.type };
 
   const lastIndex = messages.length - 1;
-  // Prefer the rolling (last) breakpoint, then the stable (first) one. A single
-  // message collapses both candidates to index 0.
-  const candidates = lastIndex === 0 ? [0] : [lastIndex, 0];
+  const candidates = [
+    ...new Set([lastIndex, previousUserTurnIndex(messages), 0]),
+  ].filter((index) => index >= 0);
 
   const markedMessages = new Map<number, ModelMessage>();
   for (const index of candidates) {
@@ -295,6 +298,16 @@ function breakpointCount(
     }
   }
   return count;
+}
+
+// The last user message before the last assistant message, or -1.
+function previousUserTurnIndex(messages: ModelMessage[]): number {
+  const lastAssistant = messages.findLastIndex(
+    (message) => message.role === "assistant",
+  );
+  return messages
+    .slice(0, Math.max(lastAssistant, 0))
+    .findLastIndex((message) => message.role === "user");
 }
 
 // True when a message carries a document file part — a non-image `file` part.

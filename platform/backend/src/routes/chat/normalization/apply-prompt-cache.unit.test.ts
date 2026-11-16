@@ -31,8 +31,30 @@ function bedrockCachePoint(message: ModelMessage) {
   )?.bedrock?.cachePoint;
 }
 
+function toolStep(id: string): ModelMessage[] {
+  return [
+    {
+      role: "assistant",
+      content: [
+        { type: "tool-call", toolCallId: id, toolName: "inspect", input: {} },
+      ],
+    },
+    {
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: id,
+          toolName: "inspect",
+          output: { type: "text", value: `result ${id}` },
+        },
+      ],
+    },
+  ];
+}
+
 // A message whose content part already carries an Anthropic cache_control
-// marker, as `materializeAttachments` produces for file/document parts.
+// marker.
 function messageWithMarkedPart(text: string): ModelMessage {
   return {
     role: "user",
@@ -382,8 +404,8 @@ describe("applyPromptCacheBreakpoints", () => {
     expect(anthropicCacheControl(noModel)).toEqual({ type: "ephemeral" });
   });
 
-  it("stays 5m for a 1h-capable model when an attachment breakpoint already exists", () => {
-    // A 5m attachment marker placed before a 1h marker would violate the
+  it("stays 5m for a 1h-capable model when a breakpoint already exists", () => {
+    // A 5m marker placed before a 1h marker would violate the
     // provider's "longer TTL must precede shorter" rule, so the request that
     // already carries any breakpoint stays uniformly 5m.
     const result = applyPromptCacheBreakpoints({
@@ -479,28 +501,6 @@ describe("applyStepPromptCacheBreakpoint", () => {
     return marked;
   }
 
-  function toolStep(id: string): ModelMessage[] {
-    return [
-      {
-        role: "assistant",
-        content: [
-          { type: "tool-call", toolCallId: id, toolName: "inspect", input: {} },
-        ],
-      },
-      {
-        role: "tool",
-        content: [
-          {
-            type: "tool-result",
-            toolCallId: id,
-            toolName: "inspect",
-            output: { type: "text", value: `result ${id}` },
-          },
-        ],
-      },
-    ];
-  }
-
   it("marks only the newest message, with the 5m TTL", () => {
     // No other marker, as after compaction: the run-start policy would also
     // mark the first message, and with the 1h TTL, which writes every step at
@@ -565,5 +565,79 @@ describe("applyStepPromptCacheBreakpoint", () => {
         messages,
       }),
     ).toBe(messages);
+  });
+});
+
+describe("previous user turn breakpoint", () => {
+  function assistantText(text: string): ModelMessage {
+    return { role: "assistant", content: [{ type: "text", text }] };
+  }
+
+  function markedIndexes(messages: ModelMessage[]): number[] {
+    return messages.flatMap((message, index) =>
+      anthropicCacheControl(message) ? [index] : [],
+    );
+  }
+
+  // Turn 2 ran a long tool loop; turn 3 replays it.
+  const history: ModelMessage[] = [
+    userMessage("turn 1"),
+    assistantText("answer 1"),
+    userMessage("turn 2"),
+    ...Array.from({ length: 12 }, (_, i) => toolStep(`t${i}`)).flat(),
+    assistantText("answer 2"),
+    userMessage("turn 3"),
+  ];
+
+  it("marks the user message that started the previous turn", () => {
+    const result = applyPromptCacheBreakpoints({
+      provider: "anthropic",
+      messages: history,
+    });
+
+    expect(markedIndexes(result)).toEqual([0, 2, history.length - 1]);
+  });
+
+  it("prefers the previous turn over the first message when the budget is short", () => {
+    const messages = [
+      userMessage("turn 1"),
+      messageWithMarkedPart("note a"),
+      messageWithMarkedPart("note b"),
+      assistantText("answer 1"),
+      userMessage("turn 2"),
+      assistantText("answer 2"),
+      userMessage("turn 3"),
+    ];
+
+    const result = applyPromptCacheBreakpoints({
+      provider: "anthropic",
+      messages,
+    });
+
+    // The two notes carry part-level markers, leaving room for two more.
+    expect(markedIndexes(result)).toEqual([4, 6]);
+  });
+
+  it("leaves a slot for the tool-loop step marker", () => {
+    const initial = applyPromptCacheBreakpoints({
+      provider: "anthropic",
+      model: "claude-haiku-4-5",
+      messages: history,
+    });
+    const step = [...initial, ...toolStep("next")];
+
+    const result = applyStepPromptCacheBreakpoint({
+      provider: "anthropic",
+      model: "claude-haiku-4-5",
+      messages: step,
+    });
+
+    expect(markedIndexes(result)).toEqual([
+      0,
+      2,
+      history.length - 1,
+      step.length - 1,
+    ]);
+    expect(anthropicCacheControl(result[step.length - 1])).toEqual(EPHEMERAL);
   });
 });

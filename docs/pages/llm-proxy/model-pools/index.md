@@ -2,7 +2,8 @@
 title: Model Pools
 description: Serve one model name from several provider keys, with load balancing and failover
 order: 5
-lastUpdated: 2026-11-13
+lastUpdated: 2026-11-16
+beta: "Model Pools are in Beta."
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

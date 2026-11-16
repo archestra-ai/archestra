@@ -2,7 +2,8 @@
 title: Auto Routing
 description: Create auto routers that pick a fast, normal, or smart model for each session of agents, chats and apps, within a daily budget
 order: 6
-lastUpdated: 2026-11-13
+lastUpdated: 2026-11-16
+beta: "Auto Routing is in Beta."
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

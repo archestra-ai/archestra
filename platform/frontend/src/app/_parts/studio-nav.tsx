@@ -253,6 +253,8 @@ export const contentNavGroups: NavGroup[] = [
         icon: Layers,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/llm/model-pools"),
+        beta: true,
+        badgeLabel: "Beta",
       },
       {
         // The one row in this list that still covers two pages. Costs and
@@ -272,6 +274,8 @@ export const contentNavGroups: NavGroup[] = [
         icon: Shuffle,
         customIsActive: (pathname: string) =>
           pathname.startsWith(AUTO_ROUTING_URL),
+        beta: true,
+        badgeLabel: "Beta",
       },
     ],
   },

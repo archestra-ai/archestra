@@ -626,12 +626,13 @@ jobs:
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
       pin_release_images: true
 
-  attest-release-images:
-    name: Attest release images and chart
-    # This repository cannot write release names (only ci/ staging). Attest
-    # the staged digests under their public names and the chart by file name;
-    # publish-release-images then asks the release publisher to publish
-    # exactly those, and it verifies the attestations first.
+  release-subjects:
+    name: Collect release images and chart
+    # This repository cannot write release names (only ci/ staging).
+    # attest-release-images attests the staged digests under their public
+    # names and the chart by file name; publish-release-images then asks the
+    # release publisher to publish exactly those, and it verifies the
+    # attestations first.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     runs-on: ubuntu-latest
     # Holds the archestra-releaser App's key; main and release/* only.
@@ -649,11 +650,10 @@ jobs:
       - publish-platform-helm-chart
     permissions:
       contents: read # Check out the publication policy script.
-      id-token: write # Sign the build provenance attestation.
-      attestations: write # Store the build provenance attestation.
     outputs:
       images: ${{ steps.request.outputs.images }}
       latest: ${{ steps.request.outputs.latest }}
+      subjects: ${{ steps.subjects.outputs.subjects }}
     env:
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.release-please.outputs.platform_version }}
@@ -695,13 +695,15 @@ jobs:
           name: release-helm-chart
 
       - name: Collect release subjects
+        id: subjects
         shell: bash
-        run: bash .github/scripts/release-subjects.sh release-images ghcr.io/archestra-ai "archestra-platform-${VERSION}.tgz"
-
-      - name: Attest release images and chart
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-checksums: release-subjects.txt
+        run: |
+          bash .github/scripts/release-subjects.sh release-images ghcr.io/archestra-ai "archestra-platform-${VERSION}.tgz"
+          {
+            echo "subjects<<SUBJECTS"
+            cat release-subjects.txt
+            echo "SUBJECTS"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Decide whether the platform latest tag moves
         id: platform-latest
@@ -757,6 +759,19 @@ jobs:
           PLATFORM_LATEST: ${{ steps.platform-latest.outputs.move }}
         run: bash .github/scripts/release-request.sh release-images.json
 
+  # Signs in a job of its own that runs no build step (SLSA Build L3): no job
+  # that builds, relays or collects the release can sign its provenance.
+  attest-release-images:
+    name: Attest release images and chart
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
+    needs: [release-please, release-subjects]
+    permissions:
+      id-token: write # Sign the build provenance attestation.
+      attestations: write # Store the build provenance attestation.
+    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@0bd6a54bf206174fd0cebc3222def111651e91bb # v1.31.1
+    with:
+      subjects: ${{ needs.release-subjects.outputs.subjects }}
+
   # Hands the request to release-publisher and ends once its run exists. The
   # release waits for its approval (every release, RCs too) in the publisher,
   # for up to GitHub's 30 days; release-finalize.yml publishes the GitHub
@@ -768,7 +783,7 @@ jobs:
     concurrency:
       group: release-ghcr-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
       cancel-in-progress: false
-    needs: [release-please, attest-release-images]
+    needs: [release-please, release-subjects, attest-release-images]
     permissions:
       actions: read # Download the saved chart.
       id-token: write # sign the image contents attestations (release-publish.yml)
@@ -780,8 +795,8 @@ jobs:
       environment: releaser
       project: archestra
       version: ${{ needs.release-please.outputs.platform_version }}
-      images: ${{ needs.attest-release-images.outputs.images }}
-      latest: ${{ needs.attest-release-images.outputs.latest }}
+      images: ${{ needs.release-subjects.outputs.images }}
+      latest: ${{ needs.release-subjects.outputs.latest }}
       chart-artifact: release-helm-chart
       wait: false
     secrets:

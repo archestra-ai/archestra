@@ -126,8 +126,21 @@ describe("TestConnectionStep failure", () => {
     );
   });
 
-  it("reconnects the user's failed connection on Retry", async () => {
-    renderFailedStep({ serverType: "remote", status: undefined });
+  it.each([
+    { serverType: "remote", userConfig: null },
+    { serverType: "local", userConfig: null },
+    // Would prompt for a token on a first install; Retry keeps the stored one.
+    {
+      serverType: "remote",
+      userConfig: {
+        api_key: { type: "string", title: "API key", sensitive: true },
+      },
+    },
+  ] as const)("reconnects the user's failed $serverType connection on Retry", async ({
+    serverType,
+    userConfig,
+  }) => {
+    renderFailedStep({ serverType, status: undefined, userConfig });
 
     await userEvent.click(screen.getByRole("button", { name: /retry/i }));
 
@@ -139,9 +152,11 @@ describe("TestConnectionStep failure", () => {
 function renderFailedStep({
   serverType,
   status,
+  userConfig = null,
 }: {
   serverType: "local" | "remote";
   status: McpDeploymentStatusEntry | undefined;
+  userConfig?: Record<string, unknown> | null;
 }) {
   vi.mocked(useMcpServers).mockReturnValue({
     data: [
@@ -167,7 +182,7 @@ function renderFailedStep({
     name: "Orbit",
     serverType,
     localConfig: null,
-    userConfig: null,
+    userConfig,
     oauthConfig: null,
   } as unknown as CatalogItem;
 

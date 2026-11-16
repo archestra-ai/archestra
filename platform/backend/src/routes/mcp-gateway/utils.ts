@@ -143,10 +143,7 @@ import { describeToolsForCaller } from "@/services/mcp-install-tool-descriptions
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
-import {
-  namesFederatedIssuer,
-  verifyServiceAccountBearer,
-} from "@/services/workload-identity/federated-bearer";
+import { verifyServiceAccountBearer } from "@/services/workload-identity/federated-bearer";
 import { isPlatformSkillUri } from "@/skills/skill-uri";
 import {
   type AgentAccessContext,
@@ -258,7 +255,7 @@ export function describeGatewayAuthFailure(
 ): string {
   switch (reason) {
     case "idp_not_linked":
-      return `Invalid token for this profile. This gateway has no Identity Provider linked, so it cannot accept an external IdP JWT — link one to the gateway, or authenticate with an ${archestraMcpBranding.appName} token or OAuth.`;
+      return `Invalid token for this profile. This gateway has no Identity Provider linked, so it cannot accept an external IdP JWT — link one to the gateway, or authenticate with an ${archestraMcpBranding.appName} token or OAuth. A workload's own OIDC token works only when exactly one service account's federated credential trusts it.`;
     case "idp_misconfigured":
       return "Invalid token for this profile. The gateway's Identity Provider cannot be used to validate JWTs: it must be an OIDC provider with a client ID and a discoverable JWKS endpoint.";
     case "no_email_claim":
@@ -2396,16 +2393,10 @@ async function authenticateUngated(
 
   // A non-JWT that failed here was never a JWKS candidate, so an IdP-specific
   // reason would be misleading — it most likely meant to be an OAuth token.
-  // So would one for a workload's token a federated credential refused: it
-  // was never meant for the gateway's Identity Provider.
-  const explainAsExternalIdp =
-    !!externalIdpReason &&
-    isJwtShaped(tokenValue) &&
-    !(await namesFederatedIssuer(tokenValue));
   return {
     result: null,
     reason:
-      explainAsExternalIdp && externalIdpReason
+      externalIdpReason && isJwtShaped(tokenValue)
         ? externalIdpReason
         : "invalid_token",
   };

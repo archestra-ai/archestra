@@ -202,18 +202,13 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
   // hands off via the install deep link for that combination.
   const needsRegistryHandoff = !!item.oauthConfig && hasPromptedFields;
 
-  // Installing again returns the user's existing connection unchanged, so a
-  // failed one is reconnected instead: after fixing what made it fail (a
-  // server that was down, a trust policy), Retry tries again.
   const directInstall = () =>
-    target && ownsTarget && status === "error"
-      ? reinstallMutation.mutateAsync({ id: target.id, name: target.name })
-      : installMutation.mutateAsync({
-          name: item.name,
-          catalogId: item.id,
-          scope: "personal",
-          dontShowToast: true,
-        });
+    installMutation.mutateAsync({
+      name: item.name,
+      catalogId: item.id,
+      scope: "personal",
+      dontShowToast: true,
+    });
 
   const appName = useAppName();
   const isDesktopMcp = item.serverType === "desktop_mcp";
@@ -223,6 +218,14 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
     useDesktopDevices({ enabled: isDesktopMcp, live: false }),
   );
   const startInstall = () => {
+    // Installing again returns the user's existing connection unchanged, so
+    // Retry reconnects a failed one with what it already holds: after a
+    // server comes back or a trust policy is fixed, it tries again. OAuth
+    // keeps its sign-in, which renews what the connection holds.
+    if (target && ownsTarget && status === "error" && !item.oauthConfig) {
+      void reinstallMutation.mutateAsync({ id: target.id, name: target.name });
+      return;
+    }
     if (isDesktopMcp) {
       setFollowDesktopInstall(false);
       setOpenDialog("desktop");

@@ -8,6 +8,7 @@ import AuditLogModel from "@/models/audit-log";
 import ServiceAccountFederatedCredentialModel from "@/models/service-account-federated-credential";
 import {
   authenticateMCPGatewayRequest,
+  describeGatewayAuthFailure,
   validateMCPGatewayToken,
 } from "@/routes/mcp-gateway/utils";
 import { beforeAll, beforeEach, describe, expect, test } from "@/test";
@@ -176,12 +177,13 @@ describe("a workload's OIDC token as a bearer token", () => {
       expect.objectContaining({ reason: "matches_several_service_accounts" }),
       expect.objectContaining({ reason: "matches_several_service_accounts" }),
     ]);
-    // A workload's token was never meant for the gateway's Identity Provider,
-    // so the gateway does not tell its caller to link one.
-    expect(await authenticateMCPGatewayRequest(agent.id, token)).toEqual({
-      result: null,
-      reason: "invalid_token",
-    });
+    // The gateway's answer covers a refused workload token too, without
+    // revealing which issuers a federated credential names.
+    const outcome = await authenticateMCPGatewayRequest(agent.id, token);
+    expect(outcome.result).toBeNull();
+    expect(
+      outcome.reason && describeGatewayAuthFailure(outcome.reason),
+    ).toContain("exactly one service account's federated credential trusts it");
   });
 
   test("refuses a forged token naming a trusted issuer without auditing it", async ({

@@ -152,8 +152,9 @@ export function EnvironmentAccessSelect({
       <PopoverContent
         ref={contentRef}
         align="end"
+        collisionPadding={8}
         className={cn(
-          "max-h-(--radix-popover-content-available-height) w-[24rem] overflow-y-auto p-1",
+          "max-h-(--radix-popover-content-available-height) w-[min(24rem,calc(100vw-1rem))] overflow-y-auto p-1",
           mountedOpen && "!animate-none",
         )}
         onKeyDown={moveFocus}
@@ -224,7 +225,7 @@ export function EnvironmentAccessSelect({
                         {narrowed ? `${kinds.length} of ${total}` : "All"}
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                    <div className="grid grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-2">
                       {ENVIRONMENT_DEPLOY_KINDS.map((kind) => {
                         const checked = kinds.includes(kind);
                         const last = checked && kinds.length === 1;

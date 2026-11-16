@@ -317,7 +317,7 @@ it("revokes a service account's direct grant", async () => {
   );
 });
 
-it("limits an environment grant to the kinds of object chosen, and stores every kind as plain use", async () => {
+it("narrows an environment's Can use to the kinds of object chosen, and stores every kind as plain use", async () => {
   Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
   Element.prototype.scrollIntoView = vi.fn();
   const environmentEndpoint = `${origin}/api/resource-permissions/environment`;
@@ -372,34 +372,27 @@ it("limits an environment grant to the kinds of object chosen, and stores every 
   const user = userEvent.setup();
   renderEditor();
 
-  // "Can use" deploys everything, so no kinds are offered beside it.
-  const level = await screen.findByRole("combobox", {
-    name: "Permission for Build automation",
-  });
-  expect(
-    screen.queryByRole("button", { name: "Kinds Build automation can deploy" }),
-  ).not.toBeInTheDocument();
-  await user.click(level);
-  await user.click(
-    await screen.findByRole("option", { name: "Can deploy some" }),
-  );
-
-  // The limited level starts with one kind; MCP Apps are added beside it.
-  const kinds = await screen.findByRole("button", {
-    name: "Kinds Build automation can deploy",
-  });
-  expect(kinds).toHaveTextContent("Agents");
-  await user.click(kinds);
-  await user.click(
-    await screen.findByRole("menuitemcheckbox", { name: "MCP Apps" }),
-  );
+  // "Can use" deploys every kind until some are cleared beneath it.
+  const access = () =>
+    screen.findByRole("button", { name: "Permission for Build automation" });
+  expect(await access()).toHaveTextContent("Can use");
+  await user.click(await access());
+  expect(await screen.findByRole("radio", { name: "Can use" })).toBeChecked();
+  for (const name of [
+    "MCP gateways",
+    "MCP servers",
+    "Skills",
+    "Knowledge connectors",
+  ])
+    await user.click(await screen.findByRole("checkbox", { name }));
   // The last kind left cannot be cleared: deploying nothing is "Can read".
-  await user.click(screen.getByRole("menuitemcheckbox", { name: "Agents" }));
+  await user.click(await screen.findByRole("checkbox", { name: "Agents" }));
   expect(
-    screen.getByRole("menuitemcheckbox", { name: "MCP Apps" }),
-  ).toHaveAttribute("aria-disabled", "true");
-  await user.click(screen.getByRole("menuitemcheckbox", { name: "Agents" }));
+    await screen.findByRole("checkbox", { name: "MCP Apps" }),
+  ).toBeDisabled();
+  await user.click(await screen.findByRole("checkbox", { name: "Agents" }));
   await user.keyboard("{Escape}");
+  expect(await access()).toHaveTextContent("Can use · Agents, MCP Apps");
 
   await user.click(screen.getByRole("button", { name: "Save changes" }));
   await waitFor(() =>
@@ -410,23 +403,23 @@ it("limits an environment grant to the kinds of object chosen, and stores every 
     ]),
   );
 
-  // Checking every kind is "Can use": stored as the level, with no kinds list.
-  await user.click(
-    await screen.findByRole("button", {
-      name: "Kinds Build automation can deploy",
-    }),
-  );
+  // Choosing "Can use" again keeps the kinds it is narrowed to.
+  await user.click(await access());
+  await user.click(await screen.findByRole("radio", { name: "Can use" }));
+  expect(await access()).toHaveTextContent("Can use · Agents, MCP Apps");
+
+  // Checking every kind is plain "Can use", stored as the level.
+  await user.click(await access());
   for (const name of [
     "MCP gateways",
     "MCP servers",
     "Skills",
     "Knowledge connectors",
   ])
-    await user.click(await screen.findByRole("menuitemcheckbox", { name }));
-  await waitFor(() =>
-    expect(
-      screen.getByRole("combobox", { name: "Permission for Build automation" }),
-    ).toHaveTextContent("Can use"),
+    await user.click(await screen.findByRole("checkbox", { name }));
+  await user.keyboard("{Escape}");
+  await waitFor(async () =>
+    expect((await access()).textContent).toBe("Can use"),
   );
   await user.click(screen.getByRole("button", { name: "Save changes" }));
   await waitFor(() =>

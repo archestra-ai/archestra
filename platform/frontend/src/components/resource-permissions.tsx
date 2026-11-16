@@ -43,8 +43,9 @@ import { useFieldArray, useForm } from "react-hook-form";
 import { AccessAudienceHeader } from "@/components/audience-chip";
 import {
   deployKindsSummary,
-  EnvironmentDeployKindsPicker,
-} from "@/components/environment-deploy-kinds-picker";
+  ENVIRONMENT_USE_LEVEL,
+  EnvironmentAccessSelect,
+} from "@/components/environment-access-select";
 import { PermissionLevelSelect } from "@/components/permission-level-select";
 import { PermissionsSettingsSection } from "@/components/permissions-settings-section";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -374,27 +375,20 @@ function PermissionsEditor({
     actions: preset.actions,
     disabled: !canGrant(preset.actions),
   }));
-  // An environment has one more level, between reading it and deploying
-  // everything into it: deploying only the kinds of object chosen beside it.
+  // On an environment "Can use" is the level that deploys, and the kinds it
+  // covers are chosen beneath it. A viewer who can hand on only some kinds
+  // still offers it: choosing it grants the kinds they can.
   const levelOptions =
     policy.resource === "environment"
-      ? presetLevelOptions.flatMap((option) =>
-          option.value === "use"
-            ? [
-                {
-                  value: LIMITED_DEPLOY_LEVEL,
-                  label: LIMITED_DEPLOY_LABEL,
-                  description:
-                    "Deploy only the kinds of object you choose into this environment.",
-                  actions: environmentDeployGrantActions(
-                    grantableDeployKinds.slice(0, 1),
-                  ),
-                  disabled:
-                    !canGrant(["read"]) || grantableDeployKinds.length === 0,
-                },
-                option,
-              ]
-            : [option],
+      ? presetLevelOptions.map((option) =>
+          option.value !== ENVIRONMENT_USE_LEVEL || !option.disabled
+            ? option
+            : {
+                ...option,
+                actions: environmentDeployGrantActions(grantableDeployKinds),
+                disabled:
+                  !canGrant(["read"]) || grantableDeployKinds.length === 0,
+              },
         )
       : presetLevelOptions;
   // A grant to everyone or a role makes the object org-wide. Without the
@@ -419,10 +413,8 @@ function PermissionsEditor({
     }));
   };
   const mutation = useUpdateResourcePermissions(policy.resource, policy.scope);
-  // The recipient whose deploy-kinds list is open, as `type:id`.
-  const [deployKindsOpenFor, setDeployKindsOpenFor] = useState<string | null>(
-    null,
-  );
+  // The recipient whose environment access list is open, as `type:id`.
+  const [accessOpenFor, setAccessOpenFor] = useState<string | null>(null);
   const changedElsewhere = dirty && policy.revision !== form.watch("revision");
   const safety = getPermissionSafetyPreview({
     policy,
@@ -652,83 +644,97 @@ function PermissionsEditor({
               <>
                 {/* The trigger hugs its label, chevron right after it. */}
                 <div className="flex items-center">
-                  {presetFor(grant.actions, policy.resource) ===
-                    LIMITED_DEPLOY_LEVEL && (
-                    <EnvironmentDeployKindsPicker
-                      value={environmentDeployKinds(grant.actions)}
-                      grantable={grantableDeployKinds}
-                      disabled={!canManage || mutation.isPending}
-                      ariaLabel={`Kinds ${grant.name} can deploy`}
-                      open={
-                        deployKindsOpenFor ===
-                        `${grant.subject.type}:${grant.subject.id}`
-                      }
-                      onOpenChange={(open) =>
-                        setDeployKindsOpenFor(
-                          open
-                            ? `${grant.subject.type}:${grant.subject.id}`
-                            : null,
-                        )
-                      }
-                      onChange={(kinds) =>
+                  {policy.resource === "environment" &&
+                  environmentLevelFor(grant.actions) !== "custom" ? (
+                    <EnvironmentAccessSelect
+                      rowKey={`${grant.subject.type}:${grant.subject.id}`}
+                      name={grant.name}
+                      level={environmentLevelFor(grant.actions)}
+                      options={levelOptionsFor(grant.subject)}
+                      onLevelChange={(level) => {
+                        const choice = levelOptions.find(
+                          (option) => option.value === level,
+                        );
+                        if (choice)
+                          update(index, {
+                            ...grant,
+                            actions: [...choice.actions],
+                          });
+                      }}
+                      kinds={environmentDeployKinds(grant.actions)}
+                      onKindsChange={(kinds) =>
                         update(index, {
                           ...grant,
                           actions: environmentDeployGrantActions(kinds),
                         })
                       }
+                      grantableKinds={grantableDeployKinds}
+                      disabled={!canManage || mutation.isPending}
+                      open={
+                        accessOpenFor ===
+                        `${grant.subject.type}:${grant.subject.id}`
+                      }
+                      onOpenChange={(open) =>
+                        setAccessOpenFor(
+                          open
+                            ? `${grant.subject.type}:${grant.subject.id}`
+                            : null,
+                        )
+                      }
+                    />
+                  ) : (
+                    <PermissionLevelSelect
+                      disabled={!canManage || mutation.isPending}
+                      value={presetFor(grant.actions, policy.resource)}
+                      onValueChange={(level) => {
+                        const choice = levelOptions.find(
+                          (option) => option.value === level,
+                        );
+                        if (choice)
+                          update(index, {
+                            ...grant,
+                            actions: [...choice.actions],
+                          });
+                      }}
+                      options={levelOptionsFor(grant.subject)}
+                      ariaLabel={`Permission for ${grant.name}`}
+                      title={actionDetail(grant.actions, policy.resource)}
+                      valueLabel={
+                        presetFor(grant.actions, policy.resource) === "custom"
+                          ? actionSummary(grant.actions, policy.resource)
+                          : undefined
+                      }
+                      extraOption={
+                        presetFor(grant.actions, policy.resource) === "custom"
+                          ? {
+                              value: "custom",
+                              label: actionSummary(
+                                grant.actions,
+                                policy.resource,
+                              ),
+                            }
+                          : undefined
+                      }
+                      inline
+                      action={
+                        grant.subject.type === "user" && ownership.available
+                          ? {
+                              label: "Make owner",
+                              description: dirty
+                                ? "Save your changes first."
+                                : "Gets Full access. The current owner keeps Full access.",
+                              disabled: dirty || ownership.isPending,
+                              onSelect: () =>
+                                setPendingOwner({
+                                  id: grant.subject.id,
+                                  name: grant.name,
+                                }),
+                            }
+                          : undefined
+                      }
+                      className="h-11 min-h-11 max-w-full text-[13px] sm:h-7 sm:min-h-7"
                     />
                   )}
-                  <PermissionLevelSelect
-                    disabled={!canManage || mutation.isPending}
-                    value={presetFor(grant.actions, policy.resource)}
-                    onValueChange={(level) => {
-                      const choice = levelOptions.find(
-                        (option) => option.value === level,
-                      );
-                      if (choice)
-                        update(index, {
-                          ...grant,
-                          actions: [...choice.actions],
-                        });
-                    }}
-                    options={levelOptionsFor(grant.subject)}
-                    ariaLabel={`Permission for ${grant.name}`}
-                    title={actionDetail(grant.actions, policy.resource)}
-                    valueLabel={
-                      presetFor(grant.actions, policy.resource) === "custom"
-                        ? actionSummary(grant.actions, policy.resource)
-                        : undefined
-                    }
-                    extraOption={
-                      presetFor(grant.actions, policy.resource) === "custom"
-                        ? {
-                            value: "custom",
-                            label: actionSummary(
-                              grant.actions,
-                              policy.resource,
-                            ),
-                          }
-                        : undefined
-                    }
-                    inline
-                    action={
-                      grant.subject.type === "user" && ownership.available
-                        ? {
-                            label: "Make owner",
-                            description: dirty
-                              ? "Save your changes first."
-                              : "Gets Full access. The current owner keeps Full access.",
-                            disabled: dirty || ownership.isPending,
-                            onSelect: () =>
-                              setPendingOwner({
-                                id: grant.subject.id,
-                                name: grant.name,
-                              }),
-                          }
-                        : undefined
-                    }
-                    className="h-11 min-h-11 max-w-full text-[13px] sm:h-7 sm:min-h-7"
-                  />
                 </div>
                 <Button
                   type="button"
@@ -1139,6 +1145,15 @@ export function presetFor(
     : "custom";
 }
 /**
+ * The level an environment grant shows. A grant narrowed to some kinds is
+ * still "Can use": the kinds are chosen beneath that level, not beside it.
+ */
+function environmentLevelFor(actions: ResourcePermissionAction[]) {
+  const preset = presetFor(actions, "environment");
+  return preset === LIMITED_DEPLOY_LEVEL ? ENVIRONMENT_USE_LEVEL : preset;
+}
+
+/**
  * The preset label when the actions are one, otherwise the actions themselves.
  * A row states its access once: the picker carries it for a direct grant, this
  * carries it for a grant that is only being explained.
@@ -1152,7 +1167,8 @@ export function actionSummary(
     ([key]) => key === preset,
   )?.[1];
   if (choice) return choice.label;
-  if (preset === LIMITED_DEPLOY_LEVEL) return LIMITED_DEPLOY_LABEL;
+  if (preset === LIMITED_DEPLOY_LEVEL)
+    return `${resourcePermissionPresetsFor(resource)[ENVIRONMENT_USE_LEVEL]?.label ?? "Can use"} (${environmentDeployKinds(actions).length} of ${ENVIRONMENT_DEPLOY_KINDS.length} kinds)`;
   // A set that matches no preset gets one short word. Spelling out every
   // action here wrapped to three lines and pushed the row apart.
   return "Custom";
@@ -1173,7 +1189,6 @@ export function actionDetail(
 // The environment level between "Can read" and "Can use". It is not a preset:
 // its actions depend on the kinds chosen for the grant.
 const LIMITED_DEPLOY_LEVEL = "limited";
-const LIMITED_DEPLOY_LABEL = "Can deploy some";
 
 /** Read plus the deploy action of some kinds, and nothing else. */
 function isLimitedDeployGrant(actions: readonly ResourcePermissionAction[]) {

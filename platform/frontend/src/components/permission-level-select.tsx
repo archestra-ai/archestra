@@ -79,7 +79,7 @@ export function PermissionLevelSelect({
   // open, otherwise the chosen one.
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const selected = options.find((option) => option.value === value);
-  const SelectedIcon = selected ? levelIcon(selected) : null;
+  const SelectedIcon = selected ? permissionLevelIcon(selected) : null;
   const shown =
     options.find((option) => option.value === highlighted) ?? selected;
 
@@ -124,7 +124,7 @@ export function PermissionLevelSelect({
         className="w-[min(22rem,calc(100vw-2rem))]"
       >
         {options.map((option) => {
-          const Icon = levelIcon(option);
+          const Icon = permissionLevelIcon(option);
           return (
             <SelectItem
               key={option.value}
@@ -179,7 +179,7 @@ export function PermissionLevelLabel({
   title?: string;
   className?: string;
 }) {
-  const Icon = levelIcon({ actions });
+  const Icon = permissionLevelIcon({ actions });
   return (
     <span
       className={cn(
@@ -252,7 +252,10 @@ function LevelDetail({
   );
 }
 
-function levelIcon(option: Pick<PermissionLevelOption, "actions">): LucideIcon {
+/** The icon a level carries wherever levels are listed. */
+export function permissionLevelIcon(
+  option: Pick<PermissionLevelOption, "actions">,
+): LucideIcon {
   const has = (action: ResourcePermissionAction) =>
     option.actions.includes(action);
   if (has("configure-deployment-spec")) return Server;

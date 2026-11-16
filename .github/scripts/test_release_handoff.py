@@ -5,6 +5,7 @@ import datetime as dt
 import fnmatch
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -330,6 +331,65 @@ class WorkflowHandoffTests(unittest.TestCase):
         self.assertNotIn("ARCHESTRA_RELEASER_GITHUB_APP", native)
         self.assertNotIn("APP_PRIVATE_KEY", native)
         self.assertNotIn("actions: read", native)
+
+
+class RegistryResponse(io.BytesIO):
+    def __init__(self, body, headers=None):
+        super().__init__(body)
+        self.headers = headers or {}
+
+
+class PushIndexTests(unittest.TestCase):
+    """The release pushes the queue's signed multi-arch index, byte for byte."""
+
+    def selection(self):
+        proofs = {arch: fixture_archive(arch)[1] for arch in ("amd64", "arm64")}
+        data = HANDOFF.load_module("release-oci").multi_arch_index(proofs)
+        digest = "sha256:" + hashlib.sha256(data).hexdigest()
+        records = [{"image": "platform", "arch": arch, "oci": proof} for arch, proof in proofs.items()]
+        return {"index": {"records": records, "release_indexes": {"platform": {"digest": digest}}}}, data, digest
+
+    def push(self, selection, stored=None):
+        requests = []
+        def opener(request, timeout):
+            requests.append(request)
+            if request.full_url.startswith("https://ghcr.io/token?"):
+                return RegistryResponse(b'{"token": "bearer"}')
+            return RegistryResponse(b"", {"Docker-Content-Digest": stored})
+        result = HANDOFF.push_index(selection, "platform", "ghcr.io/archestra-ai/ci/platform", "1.5.0-rc.40",
+                                    "github-token", "archestra-releaser[bot]", opener=opener)
+        return result, requests
+
+    def test_pushes_the_index_the_queue_signed(self):
+        selection, data, digest = self.selection()
+        result, requests = self.push(selection, stored=digest)
+        self.assertEqual(result, digest)
+        grant, upload = requests
+        self.assertIn("scope=repository%3Aarchestra-ai%2Fci%2Fplatform%3Apull%2Cpush", grant.full_url)
+        self.assertEqual(upload.get_method(), "PUT")
+        self.assertEqual(upload.full_url, "https://ghcr.io/v2/archestra-ai/ci/platform/manifests/1.5.0-rc.40")
+        self.assertEqual(upload.data, data)
+        self.assertEqual(upload.get_header("Content-type"), "application/vnd.oci.image.index.v1+json")
+        self.assertEqual(upload.get_header("Authorization"), "Bearer bearer")
+
+    def test_an_index_the_queue_did_not_sign_pushes_nothing(self):
+        selection, _, digest = self.selection()
+        for signed in (None, "sha256:" + "0" * 64):
+            changed = deepcopy(selection)
+            changed["index"]["release_indexes"] = {} if signed is None else {"platform": {"digest": signed}}
+            with self.subTest(signed=signed), self.assertRaisesRegex(ValueError, "signed no release index"):
+                self.push(changed, stored=digest)
+
+    def test_a_registry_that_stores_other_bytes_fails(self):
+        selection, _, _ = self.selection()
+        with self.assertRaisesRegex(ValueError, "The registry stored"):
+            self.push(selection, stored="sha256:" + "0" * 64)
+
+    def test_only_staging_names_are_written(self):
+        selection, _, digest = self.selection()
+        with self.assertRaisesRegex(ValueError, "Unexpected release index destination"):
+            HANDOFF.push_index(selection, "platform", "docker.io/archestra/platform", "1.5.0", "t", "a",
+                               opener=lambda *args, **kwargs: self.fail("no request"))
 
 
 if __name__ == "__main__":

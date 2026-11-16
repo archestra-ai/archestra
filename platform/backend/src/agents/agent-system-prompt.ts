@@ -793,8 +793,8 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
   const runToolName = archestraMcpBranding.getToolName(
     TOOL_RUN_TOOL_SHORT_NAME,
   );
-  // Naming scaffold_app verbatim satisfies run_tool's names-seen-verbatim
-  // gate, so the model can start an app build without a search_tools
+  // Naming scaffold_app verbatim gives the model an exact name to pass to
+  // run_tool, so it can start an app build without a search_tools
   // round-trip. Emitted for every search_and_run_only agent regardless of
   // assignment: an agent that cannot dispatch it gets a clear refusal from
   // run_tool, which costs one turn in a rare configuration — cheaper than

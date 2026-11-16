@@ -95,6 +95,12 @@ export interface ArchestraContext {
    */
   elicitation?: Pick<ChatMcpElicitationBridge, "elicit">;
   /**
+   * Answers `elicitation/create` from an upstream MCP server that run_tool
+   * dispatches to, as a direct chat call would. Absent where no viewer can
+   * answer.
+   */
+  upstreamElicitation?: Pick<ChatMcpElicitationBridge, "createHandler">;
+  /**
    * Bridge that surfaces a delegated child agent's tool calls on the caller's
    * conversation surface. Present only when a chat stream is driving the call;
    * absent in headless executions (no conversation surface to render onto). One

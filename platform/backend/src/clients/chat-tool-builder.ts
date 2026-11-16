@@ -42,7 +42,10 @@ import {
   executeArchestraTool,
 } from "@/archestra-mcp-server";
 import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
-import { resolveRunToolDispatch } from "@/archestra-mcp-server/run-tool-target";
+import {
+  readRunToolArgs,
+  resolveRunToolDispatch,
+} from "@/archestra-mcp-server/run-tool-target";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
@@ -295,6 +298,7 @@ export function buildMcpGatewayTool(params: {
                 agentRuntimeTier: ctx.agentRuntimeTier,
                 abortSignal: ctx.abortSignal,
                 elicitation: ctx.elicitation,
+                upstreamElicitation: ctx.elicitation,
                 // EncryptedChat: never detach into a durable task — task rows
                 // persist tool results in plaintext. Forcing inline execution
                 // keeps the result inside the encrypted conversation only.
@@ -1714,6 +1718,25 @@ interface ToolHookContext {
 }
 
 /**
+ * The call a hook script sees: a run_tool dispatch is presented as its target
+ * tool and that tool's own arguments, so a hook keyed on a tool name fires the
+ * same whether the model called the tool directly or through run_tool.
+ */
+function hookToolCall(
+  toolName: string,
+  toolInput: unknown,
+): { toolName: string; toolInput: unknown } {
+  const dispatch = resolveRunToolDispatch({ toolName, args: toolInput });
+  if (dispatch.kind !== "target" || !isRecord(toolInput)) {
+    return { toolName, toolInput };
+  }
+  return {
+    toolName: dispatch.toolName,
+    toolInput: readRunToolArgs(toolInput.tool_args) ?? toolInput.tool_args,
+  };
+}
+
+/**
  * Fires the PreToolUse lifecycle hook before a tool executes. Returns a block
  * reason string when a hook blocks (the caller must NOT execute the tool and
  * should return a tool-result describing the block); returns null to proceed.
@@ -1725,7 +1748,11 @@ async function firePreToolUseHook(params: {
   toolInput: unknown;
   toolCallId?: string;
 }): Promise<string | null> {
-  const { ctx, toolName, toolInput, toolCallId } = params;
+  const { ctx, toolCallId } = params;
+  const { toolName, toolInput } = hookToolCall(
+    params.toolName,
+    params.toolInput,
+  );
   if ((!ctx.conversationId && !ctx.scopeKey) || ctx.suppressContentLogging) {
     // EncryptedChat: hook dispatch would hand tool args to the hook sandbox,
     // which persists its payloads into the durable replay log in plaintext.
@@ -1847,7 +1874,11 @@ async function firePostToolUseHook(params: {
   toolResponse: string;
   toolCallId?: string;
 }): Promise<string | null> {
-  const { ctx, toolName, toolInput, toolResponse, toolCallId } = params;
+  const { ctx, toolResponse, toolCallId } = params;
+  const { toolName, toolInput } = hookToolCall(
+    params.toolName,
+    params.toolInput,
+  );
   if ((!ctx.conversationId && !ctx.scopeKey) || ctx.suppressContentLogging) {
     // EncryptedChat: see firePreToolUseHook — hook payloads persist in plaintext.
     return null;

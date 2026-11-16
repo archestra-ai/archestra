@@ -4,6 +4,7 @@ import {
   type ArchestraToolShortName,
   getArchestraToolFullName,
   isAgentTool,
+  isSkillTool,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -336,11 +337,11 @@ async function dispatchTool({
   context: ArchestraContext;
 }): Promise<CallToolResult> {
   const isArchestraPrefixed = archestraMcpBranding.isToolName(effectiveName);
-  const isAgentDelegation = isAgentTool(effectiveName);
+  const isDelegation = isAgentTool(effectiveName) || isSkillTool(effectiveName);
   const isArchestraShortName = ARCHESTRA_SHORT_NAME_SET.has(effectiveName);
 
   const route: "archestra" | "third-party" =
-    isArchestraPrefixed || isAgentDelegation || isArchestraShortName
+    isArchestraPrefixed || isDelegation || isArchestraShortName
       ? "archestra"
       : "third-party";
 
@@ -576,6 +577,14 @@ async function dispatchTool({
         abortSignal: signal,
         // A detached call outlives the synchronous timeout by design.
         ...(detachable ? { upstreamTimeoutMs: TASK_TTL_MS } : {}),
+        ...(context.upstreamElicitation
+          ? {
+              elicitationHandler: context.upstreamElicitation.createHandler({
+                toolName: resolvedName,
+                toolCallId: context.currentToolCallId,
+              }),
+            }
+          : {}),
         // EncryptedChat: the persisted mcp_tool_calls row is encrypted under the
         // conversation key, or redacted when there is none to encrypt under.
         ...(context.suppressContentLogging

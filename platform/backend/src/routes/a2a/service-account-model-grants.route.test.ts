@@ -97,6 +97,7 @@ describe("service-account A2A private model grants over HTTP", () => {
         makeUser,
         makeMember,
         makeCustomRole,
+        makeTeam,
         makeServiceAccountToken,
         makeInternalAgent,
         makeSecret,
@@ -124,9 +125,11 @@ describe("service-account A2A private model grants over HTTP", () => {
         const owner = await makeUser();
         await makeMember(owner.id, org.id, { role: "admin" });
         const role = await makeCustomRole(org.id, { permission: {} });
+        const team = await makeTeam(org.id, owner.id);
         const { serviceAccount, value } = await makeServiceAccountToken({
           organizationId: org.id,
           role: role.role,
+          teamId: team.id,
         });
         const key = await makeLlmProviderApiKey(
           org.id,
@@ -184,6 +187,8 @@ describe("service-account A2A private model grants over HTTP", () => {
         if (!fireworks) {
           const mcpUrl = "https://synthetic-attribution.example/mcp";
           network.use(
+            http.get(mcpUrl, () => new HttpResponse(null, { status: 405 })),
+            http.delete(mcpUrl, () => new HttpResponse(null, { status: 200 })),
             http.post(mcpUrl, async ({ request }) => {
               const input = (await request.json()) as {
                 id?: number;
@@ -229,8 +234,16 @@ describe("service-account A2A private model grants over HTTP", () => {
           });
           const server = await makeMcpServer({
             catalogId: catalog.id,
+            name: "synthetic-org-install",
             serverType: "remote",
             scope: "org",
+          });
+          await makeMcpServer({
+            catalogId: catalog.id,
+            name: "synthetic-team-install",
+            serverType: "remote",
+            scope: "team",
+            teamId: team.id,
           });
           const tool = await makeTool({
             name: "synthetic-attribution__echo",
@@ -238,7 +251,10 @@ describe("service-account A2A private model grants over HTTP", () => {
             catalogId: catalog.id,
             parameters: { type: "object", properties: {} },
           });
-          await makeAgentTool(agent.id, tool.id, { mcpServerId: server.id });
+          await makeAgentTool(agent.id, tool.id, {
+            mcpServerId: server.id,
+            credentialResolutionMode: "dynamic",
+          });
         }
         network.use(
           http.post(`${appUrl}/${version}/a2a/${agent.id}`, () =>
@@ -430,6 +446,10 @@ describe("service-account A2A private model grants over HTTP", () => {
           expect(toolLogs).toHaveLength(1);
           expect(toolLogs[0]).toMatchObject({
             method: "tools/call",
+            mcpServerName:
+              credential === "service-account"
+                ? "synthetic-org-install"
+                : "synthetic-team-install",
             serviceAccountId: serviceAccount.id,
             userId: null,
             oauthClientId: expectedApp?.clientId ?? null,

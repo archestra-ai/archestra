@@ -1276,10 +1276,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         oauthClientId: mcpGwToken.oauthClientId,
         oauthExecution: mcpGwToken.oauthExecution,
         organizationId,
-        userId:
-          mcpGwToken.oauthClientId || mcpGwToken.serviceAccountId
-            ? undefined
-            : userId,
+        userId: mcpGwToken.oauthClientId ? undefined : userId,
         // Exact links to the LLM turn: the run's own session id and the
         // model's id for this call (the row's tool_call.id stays our own).
         ...(llmSessionId && { llmSessionId }),

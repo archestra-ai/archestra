@@ -61,6 +61,7 @@ export async function collectSreCandidates(
   const candidates = sreCandidates(
     {
       pods: pods.items,
+      podsComplete: pods.complete,
       deployments: deployments.items,
       statefulSets: statefulSets.items,
     },

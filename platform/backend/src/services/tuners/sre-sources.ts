@@ -22,6 +22,8 @@ import {
 
 export interface SreClusterSnapshot {
   pods: V1Pod[];
+  /** False when the pod listing was cut short; replica shortages are then not inferred. */
+  podsComplete: boolean;
   deployments: V1Deployment[];
   statefulSets: V1StatefulSet[];
 }
@@ -35,19 +37,20 @@ export function sreCandidates(
     (pod): OwnedPod => ({ pod, owner: resolvePodOwner(pod, deployments) }),
   );
   const podsByWorkload = groupPodsByWorkload(owned);
+  const workloads: ReplicaWorkload[] = snapshot.podsComplete
+    ? [
+        ...snapshot.deployments.map(
+          (object): ReplicaWorkload => ({ kind: "Deployment", object }),
+        ),
+        ...snapshot.statefulSets.map(
+          (object): ReplicaWorkload => ({ kind: "StatefulSet", object }),
+        ),
+      ]
+    : [];
   const findings = [
     ...owned.flatMap((ownedPod) => podFindings(ownedPod, now)),
-    ...snapshot.deployments.flatMap((d) =>
-      replicaFindings(
-        { kind: "Deployment", object: d },
-        { podsByWorkload, now },
-      ),
-    ),
-    ...snapshot.statefulSets.flatMap((s) =>
-      replicaFindings(
-        { kind: "StatefulSet", object: s },
-        { podsByWorkload, now },
-      ),
+    ...workloads.flatMap((workload) =>
+      replicaFindings(workload, { podsByWorkload, now }),
     ),
   ];
   return aggregate(findings);

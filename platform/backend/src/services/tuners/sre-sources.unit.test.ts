@@ -277,6 +277,15 @@ describe("sre_replicas_unavailable", () => {
     }
   });
 
+  test("infers no shortage from a pod listing that was cut short", () => {
+    const candidates = run({
+      podsComplete: false,
+      deployments: [apiDeployment({ replicas: 3, available: 0 })],
+      statefulSets: [dbStatefulSet({ replicas: 2, ready: 0 })],
+    });
+    expect(candidates).toEqual([]);
+  });
+
   test("uses ready replicas for a StatefulSet", () => {
     const candidates = run({
       statefulSets: [dbStatefulSet({ replicas: 2, ready: 0 })],
@@ -710,6 +719,7 @@ function run(snapshot: Partial<SreClusterSnapshot>) {
   return sreCandidates(
     {
       pods: snapshot.pods ?? [],
+      podsComplete: snapshot.podsComplete ?? true,
       deployments: snapshot.deployments ?? [],
       statefulSets: snapshot.statefulSets ?? [],
     },

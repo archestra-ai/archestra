@@ -59,7 +59,17 @@ export function useSession() {
       sessionConfirmation.set(!!data?.user);
       return data;
     },
-    staleTime: 5 * 60 * 1000,
+    // A signed-in session without an organization is a moment, not a state:
+    // the user just joined, and the server-side cache of their session can
+    // briefly lag the membership. Every organization-scoped screen reads as
+    // empty meanwhile, so it is never fresh, and the query checks again
+    // until the organization shows up.
+    staleTime: (query) =>
+      isAwaitingOrganization(query.state.data) ? 0 : 5 * 60 * 1000,
+    refetchInterval: (query) =>
+      isAwaitingOrganization(query.state.data)
+        ? AWAITING_ORGANIZATION_REFETCH_MS
+        : false,
     gcTime: 30 * 60 * 1000,
     // Keep focus refetching on so backgrounded tabs discover revoked or changed sessions promptly.
     refetchOnWindowFocus: true,
@@ -304,6 +314,20 @@ export function seedShellQueries(
 }
 
 // ===
+
+const AWAITING_ORGANIZATION_REFETCH_MS = 10_000;
+
+function isAwaitingOrganization(
+  data:
+    | {
+        user?: unknown;
+        session?: { activeOrganizationId?: string | null } | null;
+      }
+    | null
+    | undefined,
+): boolean {
+  return !!data?.user && !data.session?.activeOrganizationId;
+}
 
 type BootstrapData = NonNullable<
   Awaited<ReturnType<typeof archestraApiSdk.getBootstrap>>["data"]

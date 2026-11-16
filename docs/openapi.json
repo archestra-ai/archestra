@@ -58495,7 +58495,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -58505,7 +58505,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -65519,7 +65525,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -65529,7 +65535,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -78414,7 +78426,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -78424,7 +78436,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -108212,7 +108230,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -108222,7 +108240,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -139045,7 +139069,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         },
@@ -180511,6 +180541,20 @@
                           },
                           "canDeploy": {
                             "type": "boolean"
+                          },
+                          "deployKinds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "agent",
+                                "mcpGateway",
+                                "mcpRegistry",
+                                "skill",
+                                "app",
+                                "knowledgeSource"
+                              ]
+                            }
                           }
                         },
                         "required": [
@@ -180527,7 +180571,8 @@
                           "updatedAt",
                           "assignedCatalogCount",
                           "labels",
-                          "canDeploy"
+                          "canDeploy",
+                          "deployKinds"
                         ],
                         "additionalProperties": false
                       }
@@ -279576,7 +279621,13 @@
                             "update",
                             "delete",
                             "manage-permissions",
-                            "configure-deployment-spec"
+                            "configure-deployment-spec",
+                            "deploy-agent",
+                            "deploy-mcp-gateway",
+                            "deploy-mcp-registry",
+                            "deploy-skill",
+                            "deploy-app",
+                            "deploy-knowledge-source"
                           ]
                         }
                       }
@@ -280546,7 +280597,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -280556,7 +280607,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -281936,7 +281993,13 @@
                                 "update",
                                 "delete",
                                 "manage-permissions",
-                                "configure-deployment-spec"
+                                "configure-deployment-spec",
+                                "deploy-agent",
+                                "deploy-mcp-gateway",
+                                "deploy-mcp-registry",
+                                "deploy-skill",
+                                "deploy-app",
+                                "deploy-knowledge-source"
                               ]
                             }
                           },
@@ -285044,7 +285107,13 @@
                           "update",
                           "delete",
                           "manage-permissions",
-                          "configure-deployment-spec"
+                          "configure-deployment-spec",
+                          "deploy-agent",
+                          "deploy-mcp-gateway",
+                          "deploy-mcp-registry",
+                          "deploy-skill",
+                          "deploy-app",
+                          "deploy-knowledge-source"
                         ]
                       }
                     },
@@ -300674,7 +300743,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -300684,7 +300753,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -306443,7 +306518,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -306453,7 +306528,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -321556,7 +321637,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -321566,7 +321647,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -322510,7 +322597,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -322520,7 +322607,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -334686,7 +334779,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -334696,7 +334789,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -338347,7 +338446,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -338357,7 +338456,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -343933,7 +344038,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -343943,7 +344048,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -371494,7 +371605,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -371504,7 +371615,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -425897,7 +426014,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -425907,7 +426024,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -427290,7 +427413,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -427300,7 +427423,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -428659,7 +428788,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -428669,7 +428798,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -435561,7 +435696,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -435571,7 +435706,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -444030,7 +444171,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -444040,7 +444181,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -453480,7 +453627,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -453490,7 +453637,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -460897,7 +461050,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -460907,7 +461060,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -469281,7 +469440,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -469291,7 +469450,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -490668,7 +490833,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -490678,7 +490843,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -504475,7 +504646,13 @@
                           "update",
                           "delete",
                           "manage-permissions",
-                          "configure-deployment-spec"
+                          "configure-deployment-spec",
+                          "deploy-agent",
+                          "deploy-mcp-gateway",
+                          "deploy-mcp-registry",
+                          "deploy-skill",
+                          "deploy-app",
+                          "deploy-knowledge-source"
                         ]
                       }
                     },
@@ -505420,7 +505597,7 @@
                           },
                           "actions": {
                             "minItems": 1,
-                            "maxItems": 6,
+                            "maxItems": 8,
                             "type": "array",
                             "items": {
                               "type": "string",
@@ -505430,7 +505607,13 @@
                                 "update",
                                 "delete",
                                 "manage-permissions",
-                                "configure-deployment-spec"
+                                "configure-deployment-spec",
+                                "deploy-agent",
+                                "deploy-mcp-gateway",
+                                "deploy-mcp-registry",
+                                "deploy-skill",
+                                "deploy-app",
+                                "deploy-knowledge-source"
                               ]
                             }
                           },
@@ -505560,7 +505743,7 @@
                           },
                           "actions": {
                             "minItems": 1,
-                            "maxItems": 6,
+                            "maxItems": 8,
                             "type": "array",
                             "items": {
                               "type": "string",
@@ -505570,7 +505753,13 @@
                                 "update",
                                 "delete",
                                 "manage-permissions",
-                                "configure-deployment-spec"
+                                "configure-deployment-spec",
+                                "deploy-agent",
+                                "deploy-mcp-gateway",
+                                "deploy-mcp-registry",
+                                "deploy-skill",
+                                "deploy-app",
+                                "deploy-knowledge-source"
                               ]
                             }
                           },
@@ -505611,7 +505800,13 @@
                           "update",
                           "delete",
                           "manage-permissions",
-                          "configure-deployment-spec"
+                          "configure-deployment-spec",
+                          "deploy-agent",
+                          "deploy-mcp-gateway",
+                          "deploy-mcp-registry",
+                          "deploy-skill",
+                          "deploy-app",
+                          "deploy-knowledge-source"
                         ]
                       }
                     },
@@ -506113,7 +506308,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 8,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -506123,7 +506318,13 @@
                               "update",
                               "delete",
                               "manage-permissions",
-                              "configure-deployment-spec"
+                              "configure-deployment-spec",
+                              "deploy-agent",
+                              "deploy-mcp-gateway",
+                              "deploy-mcp-registry",
+                              "deploy-skill",
+                              "deploy-app",
+                              "deploy-knowledge-source"
                             ]
                           }
                         }
@@ -506369,7 +506570,7 @@
                           },
                           "actions": {
                             "minItems": 1,
-                            "maxItems": 6,
+                            "maxItems": 8,
                             "type": "array",
                             "items": {
                               "type": "string",
@@ -506379,7 +506580,13 @@
                                 "update",
                                 "delete",
                                 "manage-permissions",
-                                "configure-deployment-spec"
+                                "configure-deployment-spec",
+                                "deploy-agent",
+                                "deploy-mcp-gateway",
+                                "deploy-mcp-registry",
+                                "deploy-skill",
+                                "deploy-app",
+                                "deploy-knowledge-source"
                               ]
                             }
                           },
@@ -506509,7 +506716,7 @@
                           },
                           "actions": {
                             "minItems": 1,
-                            "maxItems": 6,
+                            "maxItems": 8,
                             "type": "array",
                             "items": {
                               "type": "string",
@@ -506519,7 +506726,13 @@
                                 "update",
                                 "delete",
                                 "manage-permissions",
-                                "configure-deployment-spec"
+                                "configure-deployment-spec",
+                                "deploy-agent",
+                                "deploy-mcp-gateway",
+                                "deploy-mcp-registry",
+                                "deploy-skill",
+                                "deploy-app",
+                                "deploy-knowledge-source"
                               ]
                             }
                           },
@@ -506560,7 +506773,13 @@
                           "update",
                           "delete",
                           "manage-permissions",
-                          "configure-deployment-spec"
+                          "configure-deployment-spec",
+                          "deploy-agent",
+                          "deploy-mcp-gateway",
+                          "deploy-mcp-registry",
+                          "deploy-skill",
+                          "deploy-app",
+                          "deploy-knowledge-source"
                         ]
                       }
                     },

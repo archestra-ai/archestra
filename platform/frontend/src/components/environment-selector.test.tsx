@@ -99,6 +99,9 @@ describe("EnvironmentSelector — saved value", () => {
             id: "env-restricted",
             name: "Restricted Environment",
             description: "",
+            // The viewer may read it but deploy no kind of object into it.
+            canDeploy: false,
+            deployKinds: [],
           },
         ],
       },

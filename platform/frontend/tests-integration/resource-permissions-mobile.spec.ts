@@ -237,12 +237,22 @@ test("phone controls stay reachable through the permission handoff confirmation"
     name: "Permission for Platform maintainers",
   });
   await expect(permission).toBeVisible();
+  // A phone row keeps the recipient, their access and Remove on one line:
+  // the name gives way, the controls stay whole and inside the screen.
   const nameBox = await dialog
     .getByText("Platform maintainers", { exact: true })
     .boundingBox();
   const controlBox = await permission.boundingBox();
-  expect(controlBox?.y).toBeGreaterThanOrEqual(
-    (nameBox?.y ?? 0) + (nameBox?.height ?? 0),
+  expect(nameBox?.y).toBeGreaterThanOrEqual(controlBox?.y ?? 0);
+  expect((nameBox?.y ?? 0) + (nameBox?.height ?? 0)).toBeLessThanOrEqual(
+    (controlBox?.y ?? 0) + (controlBox?.height ?? 0),
+  );
+  await expectInsideViewport(page, permission);
+  await expectInsideViewport(
+    page,
+    dialog.getByRole("button", {
+      name: "Remove direct access for Platform maintainers",
+    }),
   );
   await expect
     .poll(async () => (await permission.boundingBox())?.height ?? 0)

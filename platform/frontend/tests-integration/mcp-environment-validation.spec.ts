@@ -33,6 +33,14 @@ function envList(
       restricted: false,
       // Open environments answer "yes" for every member.
       canDeploy: true,
+      deployKinds: [
+        "agent",
+        "mcpGateway",
+        "mcpRegistry",
+        "skill",
+        "app",
+        "knowledgeSource",
+      ],
       sortOrder: 0,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",

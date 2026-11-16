@@ -27,7 +27,8 @@ export const ScopedResourceSchema = z.enum([
   // Retained only for decoding old policies during the startup conversion.
   "mcpOauthClient",
   "llmOauthClient",
-  // Deploying into an environment is `use` on that environment.
+  // Deploying into an environment is `use` on that environment, or one of the
+  // per-kind deploy actions when the grant is limited to some kinds of object.
   "environment",
   // A service account carries no audience of its own — the organization owns
   // every one of them — but it is still an object somebody has to be allowed
@@ -65,7 +66,59 @@ export const ResourcePermissionActionSchema = z.enum([
   // server into the cluster it runs on, so it sits above Full access rather
   // than inside it, and a creator's automatic Full access never carries it.
   "configure-deployment-spec",
+  // Environment only: deploy one kind of object into it. `use` deploys every
+  // kind; a grant holding some of these instead is limited to those kinds.
+  "deploy-agent",
+  "deploy-mcp-gateway",
+  "deploy-mcp-registry",
+  "deploy-skill",
+  "deploy-app",
+  "deploy-knowledge-source",
 ]);
+
+/**
+ * The kinds of object deployed into an environment, named by the role
+ * resource that creates the object.
+ */
+export const EnvironmentDeployKindSchema = z.enum([
+  "agent",
+  "mcpGateway",
+  "mcpRegistry",
+  "skill",
+  "app",
+  "knowledgeSource",
+]);
+
+export type EnvironmentDeployKind = z.infer<typeof EnvironmentDeployKindSchema>;
+
+export const ENVIRONMENT_DEPLOY_KINDS: readonly EnvironmentDeployKind[] =
+  EnvironmentDeployKindSchema.options;
+
+/** The action that deploys only one kind of object into an environment. */
+export const ENVIRONMENT_DEPLOY_ACTIONS = {
+  agent: "deploy-agent",
+  mcpGateway: "deploy-mcp-gateway",
+  mcpRegistry: "deploy-mcp-registry",
+  skill: "deploy-skill",
+  app: "deploy-app",
+  knowledgeSource: "deploy-knowledge-source",
+} as const satisfies Record<
+  EnvironmentDeployKind,
+  z.infer<typeof ResourcePermissionActionSchema>
+>;
+
+/** Plural, for the "limited to" list in the environment permissions editor. */
+export const ENVIRONMENT_DEPLOY_KIND_LABELS: Record<
+  EnvironmentDeployKind,
+  string
+> = {
+  agent: "Agents",
+  mcpGateway: "MCP gateways",
+  mcpRegistry: "MCP servers",
+  skill: "Skills",
+  app: "MCP Apps",
+  knowledgeSource: "Knowledge connectors",
+};
 
 /** Every selector is local to one resource type and one organization. */
 export const ResourcePermissionScopeSchema = z.union([
@@ -100,7 +153,7 @@ export const PermissionSubjectSchema = z.discriminatedUnion("type", [
 
 export const ResourcePermissionGrantSchema = z.object({
   subject: PermissionSubjectSchema,
-  actions: z.array(ResourcePermissionActionSchema).min(1).max(6),
+  actions: z.array(ResourcePermissionActionSchema).min(1).max(8),
 });
 
 export type ScopedResource = z.infer<typeof ScopedResourceSchema>;
@@ -346,6 +399,32 @@ export function resourcePermissionPresetsFor(
   return resourcePermissionPresets;
 }
 
+/**
+ * The kinds an environment grant's actions deploy. `use` deploys every kind,
+ * so the per-kind actions only count on a grant that lacks it.
+ */
+export function environmentDeployKinds(
+  actions: readonly ResourcePermissionAction[],
+): EnvironmentDeployKind[] {
+  if (actions.includes("use")) return [...ENVIRONMENT_DEPLOY_KINDS];
+  return ENVIRONMENT_DEPLOY_KINDS.filter((kind) =>
+    actions.includes(ENVIRONMENT_DEPLOY_ACTIONS[kind]),
+  );
+}
+
+/**
+ * The actions of an environment grant that deploys only `kinds`: read plus one
+ * action per kind. Every kind is plain `use`, so the two never differ in
+ * meaning; no kind is read alone.
+ */
+export function environmentDeployGrantActions(
+  kinds: readonly EnvironmentDeployKind[],
+): ResourcePermissionAction[] {
+  const held = ENVIRONMENT_DEPLOY_KINDS.filter((kind) => kinds.includes(kind));
+  if (held.length === ENVIRONMENT_DEPLOY_KINDS.length) return ["read", "use"];
+  return ["read", ...held.map((kind) => ENVIRONMENT_DEPLOY_ACTIONS[kind])];
+}
+
 /** The widest preset a resource offers: what its administrators hold. */
 export function topResourcePermissionPreset(
   resource?: ScopedResource,
@@ -364,9 +443,25 @@ export function widenToPreset(
   actions: readonly ResourcePermissionAction[],
   resource: ScopedResource,
 ): ResourcePermissionAction[] {
+  // An environment grant limited to some kinds of object is a level of its
+  // own between "Can read" and "Can use": it stays as it is rather than
+  // widening to every kind. Anything above read already deploys every kind.
+  let requested = actions;
+  if (resource === "environment") {
+    const kinds = environmentDeployKinds(actions);
+    const others = actions.filter((action) => !DEPLOY_ACTIONS.has(action));
+    if (
+      kinds.length > 0 &&
+      kinds.length < ENVIRONMENT_DEPLOY_KINDS.length &&
+      others.every((action) => action === "read")
+    )
+      return environmentDeployGrantActions(kinds);
+    if (kinds.length === ENVIRONMENT_DEPLOY_KINDS.length)
+      requested = [...others, "read", "use"];
+  }
   const presets = Object.values(resourcePermissionPresetsFor(resource));
   const offered = new Set(presets.flatMap((preset) => preset.actions));
-  const wanted = actions.filter((action) => offered.has(action));
+  const wanted = requested.filter((action) => offered.has(action));
   if (!wanted.length) return [];
   const preset =
     presets.find((candidate) =>
@@ -386,6 +481,10 @@ export function isResourcePermissionPreset(
     actions.every((action) => preset.includes(action))
   );
 }
+
+const DEPLOY_ACTIONS: ReadonlySet<ResourcePermissionAction> = new Set(
+  Object.values(ENVIRONMENT_DEPLOY_ACTIONS),
+);
 
 const MANAGED_RESOURCES: ReadonlySet<string> = new Set(
   ManagedResourceSchema.options,

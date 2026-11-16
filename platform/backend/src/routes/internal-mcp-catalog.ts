@@ -1055,6 +1055,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         environmentId: restBody.environmentId ?? null,
         organizationId: request.organizationId,
         userId: request.user.id,
+        resource: "mcpRegistry",
       });
 
       let clientSecretId: string | undefined;
@@ -2024,6 +2025,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           environmentId: restBody.environmentId ?? null,
           organizationId: request.organizationId,
           userId: request.user.id,
+          resource: "mcpRegistry",
         });
       }
 

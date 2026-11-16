@@ -36,7 +36,10 @@ Deploying into an environment requires a `use` grant on it. Set grants in the en
 
 A new environment is open to the whole organization. To lock one down, remove the organization grant and grant `use` to the people or teams who may deploy there. You can let a team deploy to `staging` without letting them near `production`, for example. One grant covers everything deployed there: MCP servers, agents, apps, gateways, and knowledge connectors.
 
-The Default environment is always open to anyone who can create the resource.
+**Can use** covers agents, MCP gateways, MCP servers, skills, apps, and knowledge connectors. To let someone deploy only some of these, such as agents and apps but not MCP servers, clear the other kinds under **Can use**.
+
+- Default stays open to anyone who can create the resource.
+- Roles that could deploy only some kinds into restricted environments before the upgrade to 1.4 keep those limits.
 
 ## Trusted Image Registries
 

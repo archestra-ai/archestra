@@ -907,60 +907,62 @@ WHERE resource = 'environment' AND scope = '*' AND legacy_sharing_migrated AND r
   sql.raw(`
 -- Deploying into a restricted environment was six role actions — one per kind
 -- of thing deployed — and not one of them could name an environment. It
--- becomes \`use\` on the environment instead, which is where the authority
+-- becomes a grant on the environment instead, which is where the authority
 -- always belonged: an environment is a place you deploy into.
 --
 -- The conversion grants it at \`*\`, because that is exactly the reach the
 -- retired actions had: holding \`agent:deploy-to-restricted\` unlocked EVERY
 -- restricted environment in the organization, never a named one. Nobody who
--- could deploy loses the ability. The one widening is a hand-authored role
--- that held a strict subset of the six: it could deploy some kinds of object
--- and not others, and that distinction does not survive the move. Every
--- built-in role is all-or-nothing (admin, platform_admin and editor held all
--- six; member held none), so a deployment on stock roles converts exactly.
+-- could deploy loses the ability, and nobody gains one.
+--
+-- A role that held all six gets \`use\`, which deploys every kind. A
+-- hand-authored role that held a strict subset could deploy some kinds of
+-- object and not others, so it gets the deploy action of each kind it held
+-- and no more. Every built-in role is all-or-nothing (admin, platform_admin
+-- and editor held all six; member held none).
 --
 -- Naming ONE environment is possible from here on, which the retired actions
 -- could never express.
-WITH holders AS (
-  SELECT o.id AS organization_id, grantee.id AS role_id
+WITH kinds(resource, action) AS (
+  VALUES ('agent', 'deploy-agent'), ('skill', 'deploy-skill'),
+    ('app', 'deploy-app'), ('mcpGateway', 'deploy-mcp-gateway'),
+    ('mcpRegistry', 'deploy-mcp-registry'),
+    ('knowledgeSource', 'deploy-knowledge-source')
+), custom AS (
+  -- The retired flags are removed once converted (retireConvertedRoleActions),
+  -- so a custom role is read here exactly once.
+  SELECT roles.organization_id, roles.id AS role_id,
+    CASE WHEN count(*) = (SELECT count(*) FROM kinds)
+      THEN ARRAY['read', 'use']
+      ELSE array_agg(kinds.action) || ARRAY['read'] END AS actions
+  FROM organization_role roles
+  JOIN kinds
+    ON COALESCE(roles.permission::jsonb -> kinds.resource, '[]'::jsonb)
+      ? 'deploy-to-restricted'
+  GROUP BY roles.organization_id, roles.id
+), holders AS (
+  -- Built-in roles keep their permissions in code, not in the role table, and
+  -- are seeded only until the organization's policy has been converted.
+  SELECT o.id AS organization_id, builtin.id AS role_id,
+    CASE WHEN builtin.id = 'editor' THEN ARRAY['read', 'use']
+      ELSE ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']
+    END AS actions
   FROM organization o
-  JOIN LATERAL (
-    -- Built-in roles keep their permissions in code, not in this table.
-    SELECT unnest(ARRAY['admin', 'platform_admin', 'editor']) AS id
-    UNION
-    SELECT roles.id FROM organization_role roles
-    WHERE roles.organization_id = o.id
-      AND EXISTS (
-        SELECT 1 FROM unnest(ARRAY[
-          'agent', 'skill', 'app', 'mcpGateway', 'mcpRegistry', 'knowledgeSource'
-        ]) AS deployable(resource)
-        WHERE COALESCE(roles.permission::jsonb -> deployable.resource, '[]'::jsonb)
-          ? 'deploy-to-restricted'
-      )
-  ) grantee ON true
+  CROSS JOIN (VALUES ('admin'), ('platform_admin'), ('editor')) builtin(id)
   WHERE NOT EXISTS (
     SELECT 1 FROM resource_permission_policies p
     WHERE p.organization_id = o.id AND p.resource = 'environment'
       AND p.scope = '*' AND p.legacy_sharing_migrated
-  ) OR EXISTS (
-    SELECT 1 FROM organization_role roles
-    WHERE roles.organization_id = o.id AND roles.id = grantee.id
-      AND EXISTS (
-        SELECT 1 FROM unnest(ARRAY[
-          'agent', 'skill', 'app', 'mcpGateway', 'mcpRegistry', 'knowledgeSource'
-        ]) AS deployable(resource)
-        WHERE COALESCE(roles.permission::jsonb->deployable.resource, '[]'::jsonb)
-          ? 'deploy-to-restricted'
-      )
   )
+  UNION ALL
+  SELECT custom.organization_id, custom.role_id, custom.actions
+  FROM custom JOIN organization o ON o.id = custom.organization_id
 ), entries AS (
   -- Merge rather than replace, and compare before writing: this runs at every
   -- start, and an unconditional write would raise the revision the permissions
   -- editor holds while somebody is editing.
   SELECT organization_id, 'role' AS subject_type, role_id AS subject_id,
-    unnest(CASE WHEN role_id IN ('admin', 'platform_admin')
-      THEN ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']
-      ELSE ARRAY['read', 'use'] END) AS action
+    unnest(actions) AS action
   FROM holders
   UNION ALL
   SELECT p.organization_id, g->'subject'->>'type', g->'subject'->>'id', action

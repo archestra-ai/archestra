@@ -481,6 +481,7 @@ async function planScalars(params: {
       environmentId: snapshot.environmentId,
       organizationId,
       userId,
+      resource: current.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
     });
     scalars.environmentId = snapshot.environmentId;
   }

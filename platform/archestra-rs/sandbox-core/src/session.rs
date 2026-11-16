@@ -639,6 +639,18 @@ mod tests {
     }
 
     #[test]
+    fn setup_command_failure_preserves_the_session_without_retrying() {
+        let err = SandboxError::CommandFailed {
+            exit_code: 100,
+            message: "sandbox base image setup failed".into(),
+        };
+        assert!(!is_engine_unreachable(&err));
+        assert_eq!(retry_reason(SessionOperation::Run, &err), None);
+        assert_eq!(retry_reason(SessionOperation::ReadArtifact, &err), None);
+        assert_eq!(retry_reason(SessionOperation::CheckSession, &err), None);
+    }
+
+    #[test]
     fn image_pull_failure_is_terminal_for_every_operation() {
         // the engine is healthy and the registry is unreachable from it, so a
         // fresh session would hit the same blocked pull.

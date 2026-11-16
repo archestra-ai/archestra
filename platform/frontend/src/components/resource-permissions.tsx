@@ -2,6 +2,10 @@
 "use client";
 
 import {
+  ENVIRONMENT_DEPLOY_ACTIONS,
+  ENVIRONMENT_DEPLOY_KINDS,
+  environmentDeployGrantActions,
+  environmentDeployKinds,
   grantsAudience,
   ORGANIZATION_WIDE_RESOURCES,
   type PermissionSubject,
@@ -37,6 +41,10 @@ import {
 import { createPortal } from "react-dom";
 import { useFieldArray, useForm } from "react-hook-form";
 import { AccessAudienceHeader } from "@/components/audience-chip";
+import {
+  deployKindsSummary,
+  EnvironmentDeployKindsPicker,
+} from "@/components/environment-deploy-kinds-picker";
 import { PermissionLevelSelect } from "@/components/permission-level-select";
 import { PermissionsSettingsSection } from "@/components/permissions-settings-section";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -354,13 +362,41 @@ function PermissionsEditor({
   // A level is offered only when the viewer holds every action in it.
   const canGrant = (actions: readonly ResourcePermissionAction[]) =>
     actions.every((action) => policy.effectiveActions.includes(action));
-  const levelOptions = Object.entries(presets).map(([value, preset]) => ({
+  // The kinds of object the viewer may let somebody deploy into an
+  // environment: every kind for a holder of `use`.
+  const grantableDeployKinds = ENVIRONMENT_DEPLOY_KINDS.filter((kind) =>
+    canGrant([ENVIRONMENT_DEPLOY_ACTIONS[kind]]),
+  );
+  const presetLevelOptions = Object.entries(presets).map(([value, preset]) => ({
     value,
     label: preset.label,
     description: presetDescription(value, policy.resource),
     actions: preset.actions,
     disabled: !canGrant(preset.actions),
   }));
+  // An environment has one more level, between reading it and deploying
+  // everything into it: deploying only the kinds of object chosen beside it.
+  const levelOptions =
+    policy.resource === "environment"
+      ? presetLevelOptions.flatMap((option) =>
+          option.value === "use"
+            ? [
+                {
+                  value: LIMITED_DEPLOY_LEVEL,
+                  label: LIMITED_DEPLOY_LABEL,
+                  description:
+                    "Deploy only the kinds of object you choose into this environment.",
+                  actions: environmentDeployGrantActions(
+                    grantableDeployKinds.slice(0, 1),
+                  ),
+                  disabled:
+                    !canGrant(["read"]) || grantableDeployKinds.length === 0,
+                },
+                option,
+              ]
+            : [option],
+        )
+      : presetLevelOptions;
   // A grant to everyone or a role makes the object org-wide. Without the
   // authority to do that, such a grant can stay, go lower, or go, but not up.
   const levelOptionsFor = (subject: PermissionSubject) => {
@@ -383,6 +419,10 @@ function PermissionsEditor({
     }));
   };
   const mutation = useUpdateResourcePermissions(policy.resource, policy.scope);
+  // The recipient whose deploy-kinds list is open, as `type:id`.
+  const [deployKindsOpenFor, setDeployKindsOpenFor] = useState<string | null>(
+    null,
+  );
   const changedElsewhere = dirty && policy.revision !== form.watch("revision");
   const safety = getPermissionSafetyPreview({
     policy,
@@ -611,14 +651,40 @@ function PermissionsEditor({
             ) : (
               <>
                 {/* The trigger hugs its label, chevron right after it. */}
-                <div className="flex">
+                <div className="flex items-center">
+                  {presetFor(grant.actions, policy.resource) ===
+                    LIMITED_DEPLOY_LEVEL && (
+                    <EnvironmentDeployKindsPicker
+                      value={environmentDeployKinds(grant.actions)}
+                      grantable={grantableDeployKinds}
+                      disabled={!canManage || mutation.isPending}
+                      ariaLabel={`Kinds ${grant.name} can deploy`}
+                      open={
+                        deployKindsOpenFor ===
+                        `${grant.subject.type}:${grant.subject.id}`
+                      }
+                      onOpenChange={(open) =>
+                        setDeployKindsOpenFor(
+                          open
+                            ? `${grant.subject.type}:${grant.subject.id}`
+                            : null,
+                        )
+                      }
+                      onChange={(kinds) =>
+                        update(index, {
+                          ...grant,
+                          actions: environmentDeployGrantActions(kinds),
+                        })
+                      }
+                    />
+                  )}
                   <PermissionLevelSelect
                     disabled={!canManage || mutation.isPending}
                     value={presetFor(grant.actions, policy.resource)}
-                    onValueChange={(preset) => {
-                      const choice = Object.entries(presets).find(
-                        ([key]) => key === preset,
-                      )?.[1];
+                    onValueChange={(level) => {
+                      const choice = levelOptions.find(
+                        (option) => option.value === level,
+                      );
                       if (choice)
                         update(index, {
                           ...grant,
@@ -1062,13 +1128,15 @@ export function presetFor(
   actions: ResourcePermissionAction[],
   resource?: ScopedResource,
 ) {
-  return (
-    Object.entries(resourcePermissionPresetsFor(resource)).find(
-      ([, preset]) =>
-        preset.actions.length === actions.length &&
-        preset.actions.every((action) => actions.includes(action)),
-    )?.[0] ?? "custom"
-  );
+  const preset = Object.entries(resourcePermissionPresetsFor(resource)).find(
+    ([, candidate]) =>
+      candidate.actions.length === actions.length &&
+      candidate.actions.every((action) => actions.includes(action)),
+  )?.[0];
+  if (preset) return preset;
+  return resource === "environment" && isLimitedDeployGrant(actions)
+    ? LIMITED_DEPLOY_LEVEL
+    : "custom";
 }
 /**
  * The preset label when the actions are one, otherwise the actions themselves.
@@ -1084,6 +1152,7 @@ export function actionSummary(
     ([key]) => key === preset,
   )?.[1];
   if (choice) return choice.label;
+  if (preset === LIMITED_DEPLOY_LEVEL) return LIMITED_DEPLOY_LABEL;
   // A set that matches no preset gets one short word. Spelling out every
   // action here wrapped to three lines and pushed the row apart.
   return "Custom";
@@ -1094,8 +1163,27 @@ export function actionDetail(
   actions: ResourcePermissionAction[],
   resource: ScopedResource,
 ) {
-  if (presetFor(actions, resource) !== "custom") return undefined;
+  const preset = presetFor(actions, resource);
+  if (preset === LIMITED_DEPLOY_LEVEL)
+    return `Can deploy: ${deployKindsSummary(environmentDeployKinds(actions))}`;
+  if (preset !== "custom") return undefined;
   return actions.map((action) => actionLabels[action]).join(", ");
+}
+
+// The environment level between "Can read" and "Can use". It is not a preset:
+// its actions depend on the kinds chosen for the grant.
+const LIMITED_DEPLOY_LEVEL = "limited";
+const LIMITED_DEPLOY_LABEL = "Can deploy some";
+
+/** Read plus the deploy action of some kinds, and nothing else. */
+function isLimitedDeployGrant(actions: readonly ResourcePermissionAction[]) {
+  const kinds = environmentDeployKinds(actions);
+  return (
+    kinds.length > 0 &&
+    !actions.includes("use") &&
+    actions.includes("read") &&
+    actions.length === kinds.length + 1
+  );
 }
 
 /** @public - shared with initial-resource-permissions.tsx */
@@ -1115,6 +1203,12 @@ const actionLabels: Record<ResourcePermissionAction, string> = {
   "manage-permissions": "Manage access",
   "configure-deployment-spec": "Configure deployment spec",
   configure: "Configure",
+  "deploy-agent": "Deploy agents",
+  "deploy-mcp-gateway": "Deploy MCP gateways",
+  "deploy-mcp-registry": "Deploy MCP servers",
+  "deploy-skill": "Deploy skills",
+  "deploy-app": "Deploy MCP Apps",
+  "deploy-knowledge-source": "Deploy knowledge connectors",
 };
 
 export const resourcePluralNames: Record<ScopedResource, string> = {

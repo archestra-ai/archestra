@@ -1,6 +1,10 @@
 "use client";
 
-import { E2eTestId, type Resource } from "@archestra/shared";
+import {
+  E2eTestId,
+  EnvironmentDeployKindSchema,
+  type Resource,
+} from "@archestra/shared";
 import Link from "next/link";
 import { type ReactNode, useId } from "react";
 import { FieldDescription } from "@/components/ui/field-description";
@@ -34,6 +38,11 @@ export function EnvironmentSelector(props: EnvironmentSelectorProps) {
   const { data: canManageEnvironments } = useHasPermissions({
     environment: ["update"],
   });
+  // Deploying is granted per kind of object, so the picker for one kind asks
+  // about that kind. The LLM proxy deploys as an agent, as the API gates it.
+  const deployKind = EnvironmentDeployKindSchema.safeParse(
+    resource === "llmProxy" ? "agent" : resource,
+  ).data;
   const generatedId = useId();
   const id = props.id ?? generatedId;
   const multiple = props.mode === "multiple";
@@ -77,7 +86,9 @@ export function EnvironmentSelector(props: EnvironmentSelectorProps) {
       description: environment.description ?? "",
       // Answered per environment by the API, so one restricted environment can
       // be offered while its neighbour stays disabled.
-      deployable: environment.canDeploy,
+      deployable: deployKind
+        ? environment.deployKinds.includes(deployKind)
+        : environment.canDeploy,
     })),
   ].map((option) => {
     const requiresPermission = !!resource && !option.deployable;

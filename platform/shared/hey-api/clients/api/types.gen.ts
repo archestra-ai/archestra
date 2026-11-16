@@ -16183,7 +16183,7 @@ export type CreateA2aRemoteAgentData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -17950,7 +17950,7 @@ export type CreateAgentData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         scope?: unknown;
         teams?: unknown;
@@ -21272,7 +21272,7 @@ export type CloneAgentData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         scope?: unknown;
         teams?: unknown;
@@ -30421,7 +30421,7 @@ export type CreateAppData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         name: string;
         slug?: string;
@@ -44712,7 +44712,7 @@ export type GetBootstrapResponses = {
             organizationId: string;
             resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
             scope: '*' | string;
-            action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure';
+            action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source';
         }>;
         organization: {
             id: string;
@@ -60005,6 +60005,7 @@ export type ListEnvironmentsResponses = {
                 valueId?: string;
             }>;
             canDeploy: boolean;
+            deployKinds: Array<'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'knowledgeSource'>;
         }>;
         defaultAssignedCatalogCount: number;
         resourceDefaults: {
@@ -62949,7 +62950,7 @@ export type InstallCopilotGithubAppData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         replaceKeyId?: string;
         name?: string;
@@ -63068,7 +63069,7 @@ export type ConnectCopilotGithubAppCredentialData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         name?: string;
     };
@@ -63372,7 +63373,7 @@ export type ConnectExistingCopilotGithubAppData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         name?: string;
     };
@@ -91510,7 +91511,7 @@ export type GetInternalMcpCatalogResponses = {
         appId?: string | null;
         appEnabled?: boolean | null;
         imageApprovalRequired?: boolean;
-        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
     }>;
 };
 
@@ -91671,7 +91672,7 @@ export type CreateInternalMcpCatalogItemData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -92091,7 +92092,7 @@ export type SearchMcpRegistryResponses = {
                 reason: string;
                 mutedAt: string;
             }>;
-            effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
             imageApprovalRequired: boolean;
             bindsCredential: boolean;
             enterpriseManaged: boolean;
@@ -93006,7 +93007,7 @@ export type GetInternalMcpCatalogItemResponses = {
         skillCount?: number;
         providesUi?: boolean;
         providesSkills?: boolean;
-        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         imageApprovalRequired?: boolean;
     };
 };
@@ -98485,7 +98486,7 @@ export type CreateKnowledgeBaseData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -99885,7 +99886,7 @@ export type CreateConnectorData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -103770,7 +103771,7 @@ export type UploadKnowledgeFileData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -104026,7 +104027,7 @@ export type PromoteAttachmentToKnowledgeFileData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         filename?: string;
         directoryId?: string | null;
@@ -107835,7 +107836,7 @@ export type CreateLlmProviderApiKeyData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -117979,7 +117980,7 @@ export type CreateOauthClientData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -133779,7 +133780,7 @@ export type CreatePluginData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -134102,7 +134103,7 @@ export type ImportGithubPluginMarketplaceData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         syncInterval?: '15m' | '1h' | '1d' | null;
     };
@@ -134415,7 +134416,7 @@ export type ImportGithubPluginData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         approvedCommitSha: string;
         trackingRef?: string | null;
@@ -136313,7 +136314,7 @@ export type CreateProjectData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -138562,7 +138563,7 @@ export type CreateRuntimeCredentialData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -141106,7 +141107,7 @@ export type CreateServiceAccountData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -143256,7 +143257,7 @@ export type CreateSkillData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -145483,7 +145484,7 @@ export type ImportGithubSkillsData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
         /**
          * Pull schedule for the imported skills. Every import is synced from the repo and read-only in the app until disconnected. Defaults to daily.
@@ -151776,7 +151777,7 @@ export type CreateVirtualApiKeyData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path?: never;
@@ -156680,7 +156681,7 @@ export type GetScopedCapabilitiesResponses = {
         organizationId: string;
         resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
         scope: '*' | string;
-        action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure';
+        action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source';
     }>;
 };
 
@@ -156909,7 +156910,7 @@ export type GetResourcePermissionsResponses = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
             name: string;
         }>;
         inheritedGrants: Array<{
@@ -156932,11 +156933,11 @@ export type GetResourcePermissionsResponses = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
             name: string;
             sourceScope?: '*' | string;
         }>;
-        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         canShareOrganizationWide: boolean;
         actorSubjects: Array<{
             type: 'user';
@@ -156985,7 +156986,7 @@ export type UpdateResourcePermissionsData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         }>;
     };
     path: {
@@ -157094,7 +157095,7 @@ export type UpdateResourcePermissionsResponses = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
             name: string;
         }>;
         inheritedGrants: Array<{
@@ -157117,11 +157118,11 @@ export type UpdateResourcePermissionsResponses = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
             name: string;
             sourceScope?: '*' | string;
         }>;
-        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
+        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure' | 'deploy-agent' | 'deploy-mcp-gateway' | 'deploy-mcp-registry' | 'deploy-skill' | 'deploy-app' | 'deploy-knowledge-source'>;
         canShareOrganizationWide: boolean;
         actorSubjects: Array<{
             type: 'user';

@@ -5,6 +5,7 @@ import { AgentModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   createRestrictedEnvironment,
+  grantEnvironmentDeployKinds,
   grantEnvironmentUse,
 } from "@/test/environments";
 import type { User } from "@/types";
@@ -15,9 +16,9 @@ import type { User } from "@/types";
  * it on a `use` grant for that environment — exactly like the MCP-catalog
  * assignment path, see internal-mcp-catalog.restricted-environment.test.ts.
  *
- * The axis under test is the environment, not the kind of thing deployed: a
- * grant on one restricted environment must not unlock its neighbour, and the
- * same grant serves an agent and an MCP gateway alike.
+ * A grant on one restricted environment must not unlock its neighbour. A `use`
+ * grant serves an agent and an MCP gateway alike; a grant limited to one of
+ * the two kinds serves only that kind.
  *
  * `@/auth` is fully mocked so the agent-type permission stack always grants,
  * isolating the environment gate.
@@ -205,5 +206,42 @@ describe("Agent routes - restricted environment assignment guard", () => {
     });
     expect(granted.statusCode).toBe(200);
     expect(granted.json().environmentId).toBe(restricted.id);
+  });
+
+  test("a grant limited to agents lets the caller put an agent in a RESTRICTED env and refuses an MCP gateway", async () => {
+    const restricted = await makeRestrictedEnvironment();
+    await grantEnvironmentDeployKinds({
+      organizationId,
+      environmentId: restricted.id,
+      userId: user.id,
+      kinds: ["agent"],
+    });
+    const create = (agentType: "agent" | "mcp_gateway") =>
+      app.inject({
+        method: "POST",
+        url: "/api/agents",
+        payload: {
+          name: `limited-${crypto.randomUUID().slice(0, 8)}`,
+          agentType,
+          labels: [],
+          knowledgeBaseIds: [],
+          connectorIds: [],
+          environmentId: restricted.id,
+        },
+      });
+
+    const agent = await create("agent");
+    expect(agent.statusCode).toBe(200);
+    expect(agent.json().environmentId).toBe(restricted.id);
+    expect((await create("mcp_gateway")).statusCode).toBe(403);
+
+    // Moving an existing agent in follows the same grant.
+    const existing = await makeOrgAgent();
+    const moved = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${existing.id}`,
+      payload: { environmentId: restricted.id },
+    });
+    expect(moved.statusCode).toBe(200);
   });
 });

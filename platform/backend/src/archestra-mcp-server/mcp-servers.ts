@@ -1206,6 +1206,7 @@ async function handleCreateMcpServer(
         environmentId: targetEnvironmentId,
         organizationId,
         userId: context.userId,
+        resource: "mcpRegistry",
       });
     } catch (error) {
       return errorResult(

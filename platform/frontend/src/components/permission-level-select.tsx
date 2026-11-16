@@ -258,14 +258,14 @@ function levelIcon(option: Pick<PermissionLevelOption, "actions">): LucideIcon {
   if (has("configure-deployment-spec")) return Server;
   if (has("manage-permissions")) return KeyRound;
   if (has("update") || has("configure")) return Pencil;
-  if (has("use")) return Play;
+  if (has("use") || option.actions.some(isDeployAction)) return Play;
   return Eye;
 }
 
 // The action item's value: never a level, so the select never shows it.
 const ACTION_VALUE = "__action";
 
-const actionOrder: ResourcePermissionAction[] = [
+const actionOrder = [
   "read",
   "use",
   "configure",
@@ -273,9 +273,11 @@ const actionOrder: ResourcePermissionAction[] = [
   "delete",
   "manage-permissions",
   "configure-deployment-spec",
-];
+] as const satisfies readonly ResourcePermissionAction[];
 
-const actionChipLabels: Record<ResourcePermissionAction, string> = {
+// The per-kind deploy actions of an environment are chosen beside the level,
+// not listed as capabilities of it, so they carry no chip.
+const actionChipLabels: Record<(typeof actionOrder)[number], string> = {
   read: "Read",
   use: "Use",
   update: "Update",
@@ -284,3 +286,7 @@ const actionChipLabels: Record<ResourcePermissionAction, string> = {
   "configure-deployment-spec": "Deploy",
   configure: "Configure",
 };
+
+function isDeployAction(action: ResourcePermissionAction): boolean {
+  return action.startsWith("deploy-");
+}

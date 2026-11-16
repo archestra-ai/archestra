@@ -9,7 +9,7 @@ test("runtime notice stacks its action and opens diagnostics on mobile", async (
     method: "get",
     url: "/api/user/permissions",
     body: makeUserPermissions({
-      agent: ["read", "create", "update", "delete", "configure-runtime"],
+      agent: ["read", "create", "update", "delete"],
     }),
   });
   await page.setViewportSize({ width: 375, height: 812 });

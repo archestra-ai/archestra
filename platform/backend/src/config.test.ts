@@ -57,9 +57,6 @@ import config, {
   parseFileStorageProvider,
   parseFileStorageS3Config,
   parseFrontendBaseUrl,
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   parseHelmReleaseName,
   // SPDX-SnippetEnd
   parseK8sResourceQuantity,
@@ -76,6 +73,10 @@ import config, {
   parseNonNegativeInt,
   parseOpenAppaConfig,
   parseOpenAppaPolicyCheckName,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  parseOptionalNamespace,
   parseOptionalPort,
   parseOtelCaptureContent,
   parseProcessType,
@@ -84,6 +85,7 @@ import config, {
   parseSampleRate,
   parseSandboxMemoryMaxBytes,
   parseShutdownSeconds,
+  parseSpiffeTrustDomain,
   parseSreApiServerCidrs,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
@@ -535,6 +537,37 @@ describe("getRumOtlpAuthHeaders", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       "OTEL authentication misconfigured: both ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
     );
+  });
+});
+
+describe("parseSpiffeTrustDomain", () => {
+  test("defaults to the frontend's hostname", () => {
+    expect(
+      parseSpiffeTrustDomain({
+        rawValue: undefined,
+        frontendBaseUrl: "https://archestra.example.com:8443",
+      }),
+    ).toBe("archestra.example.com");
+  });
+
+  test("takes a configured trust domain", () => {
+    expect(
+      parseSpiffeTrustDomain({
+        rawValue: " prod.example.org ",
+        frontendBaseUrl: "https://archestra.example.com",
+      }),
+    ).toBe("prod.example.org");
+  });
+
+  test("rejects a value that is not a trust domain", () => {
+    for (const rawValue of ["Example.com", "spiffe://example.com", "a b"]) {
+      expect(() =>
+        parseSpiffeTrustDomain({
+          rawValue,
+          frontendBaseUrl: "https://archestra.example.com",
+        }),
+      ).toThrow(/SPIFFE trust domain/);
+    }
   });
 });
 
@@ -3065,6 +3098,62 @@ describe("parseMcpIdleHibernationSeconds", () => {
   });
 });
 // SPDX-SnippetEnd
+
+describe("parseOptionalNamespace", () => {
+  test("takes a valid namespace name", () => {
+    expect(
+      parseOptionalNamespace(
+        "agent-runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBe("agent-runtimes");
+    expect(
+      parseOptionalNamespace(
+        "  agent-runtimes  ",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBe("agent-runtimes");
+  });
+
+  test("unset or blank leaves runs in their fallback namespace", () => {
+    expect(
+      parseOptionalNamespace(
+        undefined,
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace("   ", "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE"),
+    ).toBeUndefined();
+  });
+
+  test("ignores a name Kubernetes would reject", () => {
+    expect(
+      parseOptionalNamespace(
+        "Agent-Runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "agent_runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "-agent-runtimes",
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseOptionalNamespace(
+        "a".repeat(64),
+        "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+      ),
+    ).toBeUndefined();
+  });
+});
 
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

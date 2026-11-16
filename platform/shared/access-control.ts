@@ -28,7 +28,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   ...(defaultStatements as unknown as Record<string, Action[]>),
 
   // Agents
-  agent: ["read", "create", "delete", "configure-runtime"],
+  agent: ["read", "create", "delete"],
   skill: ["read", "create", "delete"],
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
@@ -316,6 +316,7 @@ const SCOPED_RESOURCE_ROLE_ACTIONS: Partial<Record<ScopedResource, Resource>> =
     knowledgeFile: "knowledgeSource",
     mcpGateway: "mcpGateway",
     externalAgent: "agent",
+    agentRuntime: "organizationSettings",
   };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
@@ -338,8 +339,6 @@ export const permissionDescriptions: Record<string, string> = {
   "agent:read":
     "Open Agents, and use the code sandboxes and files of agents you can use",
   "agent:create": "Create new agents",
-  "agent:configure-runtime":
-    "Create runtime-backed agents and change or remove their runtime configuration",
   "agent:delete": "Open the trash of deleted agents",
   "skill:read": "Open Skills",
   "skill:create": "Create new agent skills",
@@ -546,7 +545,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgentRuntimeTiers]: {},
   [RouteId.ListAgentRuntimeTemplates]: {},
   [RouteId.ListBuiltInAgentRuntimeSettings]: {},
-  [RouteId.GetAgentRuntimeTemplate]: {}, // Scoped create/update check in the handler.
+  [RouteId.GetAgentRuntimeTemplate]: {}, // Scoped agentRuntime:use check in the handler.
+  [RouteId.ListAgentRuntimeAccess]: {},
+  [RouteId.ApplyAgentRuntimeToAgents]: { organizationSettings: ["update"] },
+  [RouteId.CountAgentsBehindRuntime]: { organizationSettings: ["update"] },
   [RouteId.GetRuntimeTemplateSettings]: { organizationSettings: ["update"] },
   [RouteId.SaveRuntimeTemplateSettings]: { organizationSettings: ["update"] },
   /** Names the default model for every member, so "Organization default" reads the same for all. */
@@ -684,6 +686,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgent]: {},
   // Agent read access is checked in the handler (requireReadableAgent).
   [RouteId.GetAgentDefaultSuggestedPrompts]: {},
+  // Agent read access is checked in the handler (requireReadableAgent); a
+  // change also takes identityProvider:update, checked by the binding guard.
+  [RouteId.GetAgentIdentityBindings]: {},
+  [RouteId.ReplaceAgentIdentityBindings]: {},
   // Agent type and instance visibility are dynamic and checked by PinAgent's
   // handler. Unpin is deliberately ungated beyond authentication so a stale
   // pin can be cleared after access is lost.
@@ -1230,6 +1236,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // Public: the OIDC token in the body is the proof, checked in the handler
   // against the account's federated credentials. The authnz layer exempts it.
   [RouteId.ExchangeWorkloadIdentityToken]: {},
+  // Public: verifiers fetch the SPIFFE issuer's keys to trust agents' SVIDs.
+  [RouteId.GetSpiffeDiscoveryDocument]: {},
+  [RouteId.GetSpiffeJwks]: {},
+  [RouteId.GetSpiffeTrustBundle]: {},
   // SPDX-SnippetEnd
   [RouteId.GetAllVirtualApiKeys]: {},
   [RouteId.GetVirtualApiKeyLabelKeys]: { llmVirtualKey: ["read"] },

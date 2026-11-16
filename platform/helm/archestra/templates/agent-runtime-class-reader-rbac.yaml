@@ -1,0 +1,39 @@
+{{- /*
+The platform checks that the RuntimeClass in ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME
+exists before it launches an unprivileged Agent Runtime run, so a typo fails the run
+with a clear reason instead of a pod Kubernetes never creates. RuntimeClasses are
+cluster-scoped, so this grants get on that one named RuntimeClass only. The name
+carries the release namespace so two releases in one cluster never share the object.
+Off by default: creating a ClusterRole needs cluster-scoped RBAC rights that the
+identity running `helm upgrade` often lacks.
+*/}}
+{{- $runtimeClassName := trim (toString (default "" (get .Values.archestra.env "ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME"))) }}
+{{- if and .Values.archestra.orchestrator.enabled .Values.archestra.orchestrator.kubernetes.rbac.create .Values.archestra.orchestrator.kubernetes.rbac.runtimeClassReader.create $runtimeClassName }}
+{{- $roleName := printf "%s-%s-runtime-class-reader" (include "archestra-platform.fullname" .) .Release.Namespace }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $roleName }}
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+rules:
+- apiGroups: ["node.k8s.io"]
+  resources: ["runtimeclasses"]
+  resourceNames: [{{ $runtimeClassName | quote }}]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $roleName }}
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "archestra-platform.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ $roleName }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

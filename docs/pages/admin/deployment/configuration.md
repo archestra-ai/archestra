@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 8
-lastUpdated: 2026-11-11
+lastUpdated: 2026-11-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -46,7 +46,13 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 - **`ARCHESTRA_DATABASE_IAM_AUTH_ENABLED`** - Signs a fresh 15-minute Amazon RDS or Aurora IAM token for each new PostgreSQL connection in the query pool, cache pool, LISTEN/NOTIFY client, and migration Job, keeping TLS certificate and hostname verification with the RDS CA bundle.
   - Default: `false`
   - Values: `true`, `false`
-  - In Helm, set `archestra.database.iamAuth.enabled: true`. See [Amazon RDS IAM Authentication](/docs/admin/deployment/database#amazon-rds-iam-authentication).
+  - In Helm, set `archestra.database.iamAuth.enabled: true`. See [Amazon RDS and Aurora](/docs/admin/deployment/database/aws).
+
+- **`ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED`** - Signs in to Azure Database for PostgreSQL flexible server with a Microsoft Entra ID access token for the pod's Azure identity on each new PostgreSQL connection in the query pool, cache pool, LISTEN/NOTIFY client, and migration Job, keeping TLS certificate and hostname verification.
+  - Default: `false`
+  - Values: `true`, `false`
+  - Put the managed identity's name as the user in [`ARCHESTRA_DATABASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_URL). Cannot be combined with [`ARCHESTRA_DATABASE_IAM_AUTH_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_IAM_AUTH_ENABLED).
+  - In Helm, set `archestra.database.entraAuth.enabled: true`. See [Azure Database for PostgreSQL](/docs/admin/deployment/database/azure).
 
 - **`ARCHESTRA_DATABASE_AWS_REGION`** - AWS region used to sign RDS IAM database authentication tokens.
   - Default: derived from an `*.rds.amazonaws.com` database hostname, falling back to `AWS_REGION` or `AWS_DEFAULT_REGION`
@@ -106,7 +112,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
   - Also turns on [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) when it is left blank. Set to `false`, it stays off.
 
-- **`ARCHESTRA_RELEASE_IMAGE_DIGESTS`** - Digests of the images released with this version: the MCP server base, the p4 shim, and the maintained agent images. The Helm chart of every release sets it, so those images run exactly as released, pinned by digest instead of a tag that could move. To check their signatures, or admit only those images, see [Verify Archestra Images](/docs/admin/deployment/production#verify-archestra-images).
+- **`ARCHESTRA_RELEASE_IMAGE_DIGESTS`** - Digests of the images released with this version: the MCP server base, the p4 shim, and the maintained agent images. The Helm chart of every release sets it, so those images run exactly as released, pinned by digest instead of a tag that could move. To check their signatures, or admit only those images, see [Verify Releases](/docs/admin/deployment/verify-releases).
   - Default: unset (the Docker quickstart and charts built outside a release use the version tags)
   - Leave it to the chart. A mirror set with [`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY), or an image set with [`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE) or [`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE), runs exactly as you set it. To pin a mirrored image, set its digest in that value: `registry.example.com/mcp-server-base:1.6.0@sha256:…`.
 
@@ -223,6 +229,11 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 - **`ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL`** - Skips the sign-in page in development by signing in as the user with this email.
   - Default: unset
   - Ignored in production builds. The session has that user's normal permissions.
+
+- **`ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN`** - SPIFFE trust domain of agents' SPIFFE IDs (`spiffe://<trust domain>/agent/<agent ID>`). See [SPIFFE Agent Identities](/docs/agents/identity/spiffe).
+  - Default: the hostname of [`ARCHESTRA_FRONTEND_URL`](/docs/admin/deployment/configuration#ARCHESTRA_FRONTEND_URL)
+  - Values: lowercase letters, digits, dots, dashes, and underscores
+  - Changing it changes every agent's SPIFFE ID, so update the policies that name them.
 
 ## Encryption and Secrets
 
@@ -841,6 +852,12 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Default: unset (the editor takes free text)
   - Values: comma-separated namespaces, for example `staging,production`
 
+- **`ARCHESTRA_ORCHESTRATOR_K8S_RETIRED_NAMESPACES`** - Namespaces workloads ran in before a namespace change. The platform cleans up what it left there.
+  - Default: unset
+  - Values: comma-separated namespaces, for example `archestra-mcp-old`. A namespace that is still in use is ignored.
+  - Removes MCP servers, warm pools, and code sandbox engines with their disks at once. Agent Runtime sessions there keep running until they end. Then it deletes its runtime owner Role there, so Kubernetes removes the rest, and logs that the namespace is clean. Only objects this install created are deleted.
+  - The Helm chart sets it from `archestra.orchestrator.kubernetes.rbac.retiredNamespaces` and keeps the platform's Roles in those namespaces. Remove a namespace from the list after the platform logs that it is clean. See [Cluster Security](/docs/admin/deployment/production#cluster-security).
+
 - **`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS`** - Cluster resolver addresses that [environment](/docs/admin/environments) egress policies allow DNS to.
   - Default: unset (discovery reads the `kube-system/kube-dns` Service when permitted, then falls back to the platform pod's `/etc/resolv.conf` when running in-cluster)
   - Values: comma-separated IP addresses, for example `172.20.0.10`. Helm also accepts a list under `archestra.orchestrator.kubernetes.clusterDnsIps`.
@@ -1008,6 +1025,11 @@ Archestra creates one Dagger engine per organization and per environment. Each e
   - Values: comma-separated CIDRs, for example `100.68.0.0/16,34.118.224.0/20`. Invalid entries are ignored and logged.
   - Engines without a [network policy](/docs/admin/environments) already block private, link-local, and cloud-metadata ranges. Add your cluster's Service and Pod CIDRs when they fall outside those ranges.
 
+- **`ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE`** - Runs every code sandbox engine in its own namespace, apart from MCP servers. Engines run privileged, so this lets the MCP namespaces enforce a stricter Pod Security level.
+  - Default: unset (each engine runs in its [environment's](/docs/admin/environments) namespace, or else [`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE))
+  - When set, it wins over environment namespaces. Each environment still gets its own engine and egress policy there. At startup, the platform removes engines from the namespaces they ran in before.
+  - The Helm chart sets it from `archestra.orchestrator.kubernetes.daggerRuntimeNamespace` and grants the platform ServiceAccount access there. Create the namespace first.
+
 - **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_NODE_SELECTOR`** - Schedules engines onto a dedicated node pool.
   - Default: unset (engines use the platform pod's `nodeSelector` and `tolerations`)
   - Values: comma-separated `key=value` pairs, for example `archestra-sandbox=true`. Each pair also adds a matching `NoSchedule` toleration.
@@ -1057,6 +1079,7 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Lets Agent administrators enable privileged runtime pods, which have node-level access.
   - Default: `false`
   - Values: `true`, `false`
+  - Turning it off also stops Agents already set to privileged: their new runs and follow-up turns fail until an Agent administrator turns privileged mode off.
 
 - **`ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL`** - URL a runtime pod uses to reach the LLM proxy and MCP gateway. It must be reachable from inside the cluster.
   - Default: [`ARCHESTRA_INTERNAL_API_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_INTERNAL_API_BASE_URL)
@@ -1089,13 +1112,23 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
 - **`ARCHESTRA_AGENT_RUNTIME_IMAGE_PREFETCH_ENABLED`** - Pulls every catalog Agent image onto each runtime node at startup and after each upgrade, so the first run of an Agent does not wait for its image. Turn it off when node disk or registry bandwidth is tight; each run then pulls only its own image.
   - Default: `true`
 
+- **`ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE`** - Runs Agent Runtime sessions and warm pools in their own namespace, apart from MCP servers, so each can get its own Pod Security, NetworkPolicy, and RBAC. An Agent whose [environment](/docs/admin/environments) names a namespace still runs there.
+  - Default: unset (the default environment's namespace, or else [`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE))
+  - The Helm chart sets it from `archestra.orchestrator.kubernetes.agentRuntimeNamespace` and grants the platform ServiceAccount access there. Create the namespace first.
+
 - **`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`** - Schedules runtime pods onto a dedicated node pool.
   - Default: unset (scheduled like any other pod)
   - Values: comma-separated `key=value` pairs, for example `archestra-agent-runtime=true`. Each pair also adds a matching `NoSchedule` toleration.
 
+- **`ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR`** - Schedules [privileged](/docs/agents/runtime/setup#privileged-containers) runtime pods onto their own node pool, away from unprivileged runs and other workloads.
+  - Default: unset (privileged pods use [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR))
+  - Values: comma-separated `key=value` pairs, for example `archestra-agent-runtime-privileged=true`. Each pair also adds a matching `NoSchedule` toleration, so taint the pool with the same pairs.
+  - The [runtime image cache](/docs/agents/runtime/setup#runtime-image-cache) fills only the [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR) pool, so the first privileged run on a new node pulls its image.
+
 - **`ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME`** - RuntimeClass for unprivileged runtime pods, such as `gvisor`, so a run does not share the node's kernel.
   - Default: unset (the cluster's default runtime)
   - Privileged runtime pods ignore it, because gVisor cannot run privileged containers. The cluster needs nodes that serve the RuntimeClass. See [Sandboxed Runtime](/docs/agents/runtime/setup#sandboxed-runtime).
+  - If the RuntimeClass does not exist, unprivileged runs fail at once. To let the platform check, grant its ServiceAccount `get` on this RuntimeClass, or set `archestra.orchestrator.kubernetes.rbac.runtimeClassReader.create: true` in the Helm chart (this creates a ClusterRole, so `helm upgrade` needs cluster-scoped RBAC rights). Without the read, runs start unchecked.
 
 - **`ARCHESTRA_AGENT_RUNTIME_PLATFORM_POD_SELECTOR`** - Label selector for the platform's API pods. Runtime pods may send traffic only to pods that match.
   - Default: `archestra.io/platform-api=true` (set on API pods by the Helm chart)

@@ -241,6 +241,8 @@ const layerTable = [
       // identity provider check and the team access to a model.
       "src/routes/proxy/utils/model-team-access.ts",
       "src/services/apps/app-mcp-backing.ts",
+      // The tool-name prefix allocation the app MCP backing mints with.
+      "src/services/mcp-tool-names.ts",
       "src/services/credential-resource-permissions.ts",
       "src/services/identity-providers/linked-idp-auth.ts",
       "src/services/mcp-advanced-settings.ts",
@@ -729,10 +731,12 @@ const layerTable = [
       "src/services/github-pat.ts",
       "src/services/identity-providers/access-token-refresh.ts",
       "src/services/identity-providers/enterprise-managed/authorization.ts",
+      "src/services/identity-providers/enterprise-managed/client-authentication.ts",
       "src/services/identity-providers/enterprise-managed/exchange-strategies/entra-obo-strategy.ts",
       "src/services/identity-providers/enterprise-managed/exchange-strategies/okta-managed-credential-exchange.ts",
       "src/services/identity-providers/enterprise-managed/exchange-strategies/rfc8693-token-exchange.ts",
       "src/services/identity-providers/enterprise-managed/exchange.ts",
+      "src/services/identity-providers/enterprise-managed/spiffe-issuer.ts",
       "src/services/identity-providers/oidc.ts",
       "src/services/identity-providers/session-token.ts",
       "src/services/instance-analytics.ts",

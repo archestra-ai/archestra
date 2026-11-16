@@ -143,6 +143,27 @@ const frontendBaseUrl = parseFrontendBaseUrl(
   process.env.ARCHESTRA_FRONTEND_URL,
 );
 
+/**
+ * Parse `ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN`, the SPIFFE trust domain
+ * agents' SPIFFE IDs live in (`spiffe://<trust domain>/agent/<id>`). Defaults
+ * to the frontend's hostname. A trust domain is lowercase letters, digits,
+ * dots, dashes and underscores (SPIFFE ID standard, section 2.1).
+ * @public — exported for testability
+ */
+export function parseSpiffeTrustDomain(params: {
+  rawValue: string | undefined;
+  frontendBaseUrl: string;
+}): string {
+  const trustDomain =
+    params.rawValue?.trim() || new URL(params.frontendBaseUrl).hostname;
+  if (!/^[a-z0-9._-]+$/.test(trustDomain)) {
+    throw new Error(
+      `ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN must be a SPIFFE trust domain: lowercase letters, digits, dots, dashes and underscores (got "${trustDomain}")`,
+    );
+  }
+  return trustDomain;
+}
+
 /** @public — validates an operator-provided webhook base URL. */
 export function parseChatopsWebhookBaseUrl(rawValue: string | undefined) {
   const trimmed = rawValue?.trim();
@@ -1893,6 +1914,32 @@ export const parseHelmReleaseName = (
 // SPDX-SnippetEnd
 
 /**
+ * Parses an optional workload namespace setting such as
+ * ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE. A value that is not a valid Kubernetes
+ * namespace name (a DNS-1123 label) is ignored with a warning, so workloads
+ * keep their namespace instead of failing on every launch.
+ *
+ * @public — exported for testability
+ */
+export const parseOptionalNamespace = (
+  envValue: string | undefined,
+  envName: string,
+): string | undefined => {
+  const namespace = envValue?.trim();
+  if (!namespace) return undefined;
+  if (
+    namespace.length > 63 ||
+    !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(namespace)
+  ) {
+    logger.warn(
+      `Ignoring ${envName} "${namespace}": not a valid Kubernetes namespace name (lowercase alphanumerics and "-", at most 63 characters)`,
+    );
+    return undefined;
+  }
+  return namespace;
+};
+
+/**
  * resolves the Dagger runner host. A misconfigured host returns `undefined`
  * (and logs) rather than throwing — config is built at module import, so a
  * throw here would crash the whole backend over one optional feature.
@@ -2572,6 +2619,12 @@ const config = {
   },
   openappa,
   frontendBaseUrl,
+  agentIdentity: {
+    spiffeTrustDomain: parseSpiffeTrustDomain({
+      rawValue: process.env.ARCHESTRA_AGENT_IDENTITY_SPIFFE_TRUST_DOMAIN,
+      frontendBaseUrl,
+    }),
+  },
   api: {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),
@@ -2741,6 +2794,16 @@ const config = {
    * cluster serves the Agent Sandbox API (see `k8s/agent-runtime/sandbox-api`).
    */
   agentRuntime: {
+    /**
+     * Namespace for Agent Runtime pods whose Agent's Environment sets none,
+     * so runs can live apart from MCP servers. An Environment's own namespace
+     * still wins; unset falls back to the organization's default Environment
+     * namespace, then ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE.
+     */
+    namespace: parseOptionalNamespace(
+      process.env.ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE,
+      "ARCHESTRA_AGENT_RUNTIME_K8S_NAMESPACE",
+    ),
     /** Ready spare workspaces per compatible runtime configuration. */
     warmPoolSize: parseNonNegativeInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE,
@@ -2842,6 +2905,18 @@ const config = {
       process.env.ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR,
       {},
       "ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR",
+    ),
+    /**
+     * Node pool for privileged Agent Runtime pods only, in the same key=value
+     * form as `nodeSelector` (each pair also becomes a NoSchedule
+     * toleration). Docker-in-Docker runs have node-level access, so a
+     * dedicated tainted pool keeps them away from unprivileged runs and other
+     * workloads. Empty (the default) places privileged runs with `nodeSelector`.
+     */
+    privilegedNodeSelector: parseLabelSelector(
+      process.env.ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR,
+      {},
+      "ARCHESTRA_AGENT_RUNTIME_PRIVILEGED_NODE_SELECTOR",
     ),
     /**
      * RuntimeClass for unprivileged Agent Runtime pods, such as `gvisor` on a
@@ -2983,6 +3058,8 @@ const config = {
       process.env.ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS,
     ),
     iamAuthEnabled: process.env.ARCHESTRA_DATABASE_IAM_AUTH_ENABLED === "true",
+    entraAuthEnabled:
+      process.env.ARCHESTRA_DATABASE_ENTRA_AUTH_ENABLED === "true",
     awsRegion: process.env.ARCHESTRA_DATABASE_AWS_REGION?.trim() || "",
   },
   // Cost/billing behavior for LLM interactions. Kept separate from `llm` (which
@@ -3581,6 +3658,12 @@ const config = {
       environmentNamespaces: parseCommaSeparatedList(
         process.env.ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES ?? "",
       ),
+      // Namespaces workloads ran in before a namespace change (Helm
+      // rbac.retiredNamespaces). The platform removes what it left there and
+      // lets Agent Runtime sessions finish, then logs that it is done.
+      retiredNamespaces: parseCommaSeparatedList(
+        process.env.ARCHESTRA_ORCHESTRATOR_K8S_RETIRED_NAMESPACES ?? "",
+      ),
     },
   },
   /**
@@ -3673,6 +3756,18 @@ const config = {
   daggerRuntime: {
     enabled: daggerRuntimeEnabled,
     runnerHost: daggerRuntimeRunnerHost,
+    /**
+     * Namespace for the code sandbox's Dagger engines, apart from MCP
+     * servers. Engines run privileged, and Pod Security is per namespace, so
+     * sharing one forces the MCP namespace to allow `privileged`. When set,
+     * every engine runs here, whatever its Environment's namespace; each
+     * Environment still gets its own engine and egress policy. Unset keeps
+     * engines in their Environment's namespace (or the orchestrator's).
+     */
+    namespace: parseOptionalNamespace(
+      process.env.ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE,
+      "ARCHESTRA_DAGGER_RUNTIME_K8S_NAMESPACE",
+    ),
     cliBin:
       process.env.ARCHESTRA_DAGGER_RUNTIME_CLI_BIN ||
       process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||

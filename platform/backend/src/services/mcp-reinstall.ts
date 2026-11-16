@@ -12,6 +12,7 @@ import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
 import { recordInstallToolDescriptions } from "@/services/mcp-install-tool-descriptions";
+import { mintCatalogToolNames } from "@/services/mcp-tool-names";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import type {
   InternalMcpCatalog,
@@ -292,6 +293,7 @@ export function onlyForwardCompatibleEnvDiff(
       deploymentSpecYaml: cat.deploymentSpecYaml ?? "",
       oauthConfig: cat.oauthConfig ?? null,
       enterpriseManagedConfig: cat.enterpriseManagedConfig ?? null,
+      awsIamConfig: cat.awsIamConfig ?? null,
       // localConfig minus environment (covered by steps 1, 1b, 2 above).
       localConfig: cat.localConfig
         ? {
@@ -531,9 +533,12 @@ async function syncToolsForServer(
     return { created, updated: [], unchanged, deleted: [] };
   }
 
-  const toolNamePrefix = catalogItem.name;
+  const toolNameFor = await mintCatalogToolNames({
+    catalogId: catalogItem.id,
+    rawToolNames: tools.map((tool) => tool.name),
+  });
   const toolsToSync = tools.map((tool) => ({
-    name: ToolModel.slugifyName(toolNamePrefix, tool.name),
+    name: toolNameFor(tool.name),
     description: tool.description,
     parameters: tool.inputSchema,
     meta: {

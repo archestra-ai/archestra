@@ -2,6 +2,9 @@ export const RouteId = {
   ListAgentRuntimeTemplates: "listAgentRuntimeTemplates",
   ListBuiltInAgentRuntimeSettings: "listBuiltInAgentRuntimeSettings",
   GetAgentRuntimeTemplate: "getAgentRuntimeTemplate",
+  ListAgentRuntimeAccess: "listAgentRuntimeAccess",
+  ApplyAgentRuntimeToAgents: "applyAgentRuntimeToAgents",
+  CountAgentsBehindRuntime: "countAgentsBehindRuntime",
   GetRuntimeTemplateSettings: "getRuntimeTemplateSettings",
   SaveRuntimeTemplateSettings: "saveRuntimeTemplateSettings",
   AzureAudioSpeechWithDefaultAgent: "azureAudioSpeechWithDefaultAgent",
@@ -53,6 +56,8 @@ export const RouteId = {
   CloneAgent: "cloneAgent",
   GetAgent: "getAgent",
   GetAgentDefaultSuggestedPrompts: "getAgentDefaultSuggestedPrompts",
+  GetAgentIdentityBindings: "getAgentIdentityBindings",
+  ReplaceAgentIdentityBindings: "replaceAgentIdentityBindings",
   PinAgent: "pinAgent",
   UnpinAgent: "unpinAgent",
   GetDefaultMcpGateway: "getDefaultMcpGateway",
@@ -622,6 +627,9 @@ export const RouteId = {
   DeleteServiceAccountFederatedCredential:
     "deleteServiceAccountFederatedCredential",
   ExchangeWorkloadIdentityToken: "exchangeWorkloadIdentityToken",
+  GetSpiffeDiscoveryDocument: "getSpiffeDiscoveryDocument",
+  GetSpiffeJwks: "getSpiffeJwks",
+  GetSpiffeTrustBundle: "getSpiffeTrustBundle",
 
   // Agent Runtime
   GetAgentRuntimePreflight: "getAgentRuntimePreflight",

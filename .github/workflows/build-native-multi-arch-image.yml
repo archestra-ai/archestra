@@ -130,7 +130,7 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}
-        uses: archestra-ai/.github/actions/google-auth@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
+        uses: archestra-ai/.github/actions/google-auth@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -184,7 +184,7 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.push_image && inputs.auth_provider == 'gar' }}
-        uses: archestra-ai/.github/actions/google-auth@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
+        uses: archestra-ai/.github/actions/google-auth@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -314,6 +314,7 @@ jobs:
       contents: read # Required to download per-arch digests and publish the merged manifest.
       packages: write # Publish images and caches using the repository token.
       id-token: write # Required for Workload Identity Federation when pushing the manifest.
+      attestations: write # Attest the pushed CI image.
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -341,7 +342,7 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}
-        uses: archestra-ai/.github/actions/google-auth@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
+        uses: archestra-ai/.github/actions/google-auth@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -439,6 +440,28 @@ jobs:
           IMAGE_REGISTRY: ${{ inputs.image_registry }}
           IMAGE_NAME: ${{ inputs.image_name }}
           VERSION: ${{ inputs.version }}
+
+      # Attest CI images so Dockerfiles that build on them can verify them
+      # (the organization supply-chain policy's base-image check). A release
+      # build is attested by release-please.yml before it is published.
+      - name: Resolve manifest digest
+        id: manifest
+        if: ${{ !startsWith(inputs.checkout_ref, 'platform-v') }}
+        shell: bash
+        env:
+          IMAGE: ${{ inputs.image_registry }}/${{ inputs.image_name }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest}}' \
+            | jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Attest CI image
+        if: ${{ !startsWith(inputs.checkout_ref, 'platform-v') }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ inputs.image_registry }}/${{ inputs.image_name }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
 
       - name: Preserve release image reference
         if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}

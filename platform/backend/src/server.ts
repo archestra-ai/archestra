@@ -84,10 +84,12 @@ import { enterpriseTier } from "@/enterprise-tier";
 // biome-ignore lint/style/noRestrictedImports: runtime-gated image prefetch
 import { agentImagePrefetcher } from "@/k8s/agent-runtime/image-prefetch.ee";
 // SPDX-SnippetEnd
+import { agentRuntimeClassDetector } from "@/k8s/agent-runtime/runtime-class";
 import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { agentWarmPoolManager } from "@/k8s/agent-runtime/warm-pool";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+import { retiredNamespaceDrainer } from "@/k8s/retired-namespaces";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import { initAuditDecisions } from "@/middleware/audit-decisions";
@@ -104,6 +106,7 @@ import { reportAbnormalPreviousTermination } from "@/observability/previous-term
 import { rumExporter } from "@/observability/rum/exporter.ee";
 import { createCachedOpenApiRouteHandler } from "@/openapi/cached-openapi-route";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   declareOpenappaInstalls,
   openappaReadiness,
@@ -114,6 +117,7 @@ import { initializeLlmProxyPlugins } from "@/proxy/plugins/registry";
 import guardrailsNoopAnnotatorRoutes from "@/routes/guardrails-policy/guardrails-noop-annotator.routes";
 import { captureClientRuntimeEvidence } from "@/routes/proxy/utils/client-runtime-evidence";
 import { activeChatRunService } from "@/services/active-chat-run";
+import { ensureAgentRuntimeLockUpgrade } from "@/services/agent-runtime/agent-runtime-lock-upgrade";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import {
   APP_BASE_CSS_PATH,
@@ -128,6 +132,7 @@ import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
 import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
 import { mcpImageUpdateChecker } from "@/services/mcp-image-update-checker";
+import { reconcileCatalogToolPrefixes } from "@/services/mcp-tool-names";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { initializeManagedPlaywrightRuntime } from "@/services/playwright-runtime";
 import { ensureScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
@@ -184,7 +189,10 @@ import {
   beginLlmProxyDrain,
   drainLlmProxyRequests,
 } from "./server/llm-proxy-drain";
-import { drainBackgroundWork } from "./utils/background-work";
+import {
+  drainBackgroundWork,
+  trackBackgroundWork,
+} from "./utils/background-work";
 
 async function flushShutdownTelemetry(): Promise<void> {
   if (!isMainModule) return;
@@ -954,6 +962,21 @@ const startWebServer = async () => {
 
     await seedRequiredStartingData();
 
+    // Move tools whose names were cut and hashed to fit the 64-character
+    // limit (and apps' launch tools) to their catalog item's allocated
+    // prefix, before OpenAPPA reads tool prefixes below.
+    const renamedToolCatalogIds = await reconcileCatalogToolPrefixes().catch(
+      (error) => {
+        logger.error({ error }, "Failed to reconcile catalog tool prefixes");
+        return [];
+      },
+    );
+    for (const catalogId of renamedToolCatalogIds) {
+      trackBackgroundWork(
+        openappaBatteriesService.onCatalogToolsChanged(catalogId),
+      );
+    }
+
     // Carry the legacy OpenAPPA battery installs into the policy text, before
     // the runtime opens and before the periodic recompile is registered below:
     // a recompose rewrites those rows from the text and deletes every row the
@@ -988,6 +1011,8 @@ const startWebServer = async () => {
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     // Complete the one-time permission upgrade before admitting API traffic.
     await ensureScopedResourcePermissionCutover();
+    // Runtimes locked before runtime permissions become those permissions.
+    await ensureAgentRuntimeLockUpgrade();
     // SPDX-SnippetEnd
 
     // Initialize metrics with keys of custom agent labels
@@ -1133,6 +1158,9 @@ const startWebServer = async () => {
     // API. The loops below start regardless and idle until it does, so
     // installing the controller later needs no restart.
     void agentSandboxApi.refresh();
+    // A missing RuntimeClass would leave every unprivileged run waiting for a
+    // pod Kubernetes refuses to create; say so at startup, not per run.
+    void agentRuntimeClassDetector.checkAtStartup();
     agentRunReconciler.start();
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -1140,6 +1168,7 @@ const startWebServer = async () => {
     agentImagePrefetcher.start();
     // SPDX-SnippetEnd
     agentWarmPoolManager.start();
+    retiredNamespaceDrainer.start();
 
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
@@ -1363,6 +1392,7 @@ function registerWebServerShutdown(
     agentImagePrefetcher.stop();
     // SPDX-SnippetEnd
     agentWarmPoolManager.stop();
+    retiredNamespaceDrainer.stop();
 
     // Fail this pod's in-flight chat runs first: a long SSE stream keeps Fastify
     // connections open, so waiting for fastify.close() risks SIGKILL before the

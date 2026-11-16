@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Ban,
   ChevronDown,
+  Cloud,
   Code,
   ExternalLink,
   Globe,
@@ -21,6 +22,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -125,6 +127,13 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
+
+const AwsIamAuthFields = dynamic(() =>
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
+  import("./aws-iam-auth-fields.ee").then((m) => ({
+    default: m.AwsIamAuthFields,
+  })),
+);
 
 // Markdown renderer for catalog-supplied setup instructions shown atop the form.
 const INSTRUCTIONS_MARKDOWN_COMPONENTS: Components = {
@@ -364,6 +373,13 @@ export function McpCatalogForm({
     const previousAuthMethod = form.getValues("authMethod");
     if (nextAuthMethod === previousAuthMethod) return;
     form.setValue("authMethod", nextAuthMethod, { shouldDirty: true });
+    if (nextAuthMethod === "aws_iam" && !form.getValues("awsIamConfig")) {
+      form.setValue(
+        "awsIamConfig",
+        { roleArn: "", region: "", service: "bedrock-agentcore" },
+        { shouldDirty: true },
+      );
+    }
 
     if (nextAuthMethod === "none" || nextAuthMethod === "auth_header") {
       form.setValue("requiresAuth", nextAuthMethod === "auth_header", {
@@ -559,7 +575,8 @@ export function McpCatalogForm({
       isReallyDirty(dirtyFields.authHeaderName) ||
       isReallyDirty(dirtyFields.includeBearerPrefix) ||
       isReallyDirty(dirtyFields.oauthConfig) ||
-      isReallyDirty(dirtyFields.enterpriseManagedConfig));
+      isReallyDirty(dirtyFields.enterpriseManagedConfig) ||
+      isReallyDirty(dirtyFields.awsIamConfig));
   // Env-var dirtiness alone isn't enough to require reinstall — adding an
   // OPTIONAL prompted env var leaves existing installs valid (they just
   // don't fill the new var). Mirror the backend's `promptedEnvVarsChanged`
@@ -1651,6 +1668,20 @@ export function McpCatalogForm({
                           disabledReason: enterpriseAuthDisabledReason,
                         },
                         {
+                          value: "aws_iam",
+                          title: "AWS IAM (SigV4)",
+                          description:
+                            "Each agent assumes an IAM role to call AWS",
+                          icon: <Cloud className="h-4 w-4" />,
+                          available:
+                            currentServerType === "remote" &&
+                            isEnterpriseCoreEnabled,
+                          disabledReason:
+                            currentServerType === "remote"
+                              ? enterpriseAuthDisabledReason
+                              : null,
+                        },
+                        {
                           value: "bearer",
                           title: "Access token header (legacy)",
                           description:
@@ -2095,6 +2126,10 @@ export function McpCatalogForm({
                                   </div>
                                 </div>
                               )}
+                              {authMethod === "aws_iam" && (
+                                <AwsIamAuthFields form={form} />
+                              )}
+
                               {authMethod === "oauth_client_credentials" && (
                                 <div className="space-y-4 border-t pt-5">
                                   <div>

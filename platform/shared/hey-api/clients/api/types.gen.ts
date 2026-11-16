@@ -16183,7 +16183,7 @@ export type CreateA2aRemoteAgentData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
     };
     path?: never;
@@ -17204,7 +17204,6 @@ export type GetAgentCatalogResponses = {
                 modelPoolId: string | null;
                 autoRouterId: string | null;
                 identityProviderId: string | null;
-                entraAgentIdentityId: string | null;
                 environmentId: string | null;
                 networkPolicy?: {
                     egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -17606,7 +17605,6 @@ export type GetAgentsResponses = {
             modelPoolId: string | null;
             autoRouterId: string | null;
             identityProviderId: string | null;
-            entraAgentIdentityId: string | null;
             environmentId: string | null;
             networkPolicy?: {
                 egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -17775,7 +17773,6 @@ export type CreateAgentData = {
         modelPoolId?: string | null;
         autoRouterId?: string | null;
         identityProviderId?: string | null;
-        entraAgentIdentityId?: string | null;
         environmentId?: string | null;
         networkPolicy?: {
             egressMode?: 'off' | 'restricted' | 'unrestricted';
@@ -17953,7 +17950,7 @@ export type CreateAgentData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
         scope?: unknown;
         teams?: unknown;
@@ -18059,7 +18056,6 @@ export type CreateAgentResponses = {
         modelPoolId: string | null;
         autoRouterId: string | null;
         identityProviderId: string | null;
-        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -19338,7 +19334,6 @@ export type GetDefaultMcpGatewayResponses = {
         modelPoolId: string | null;
         autoRouterId: string | null;
         identityProviderId: string | null;
-        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -19659,7 +19654,6 @@ export type ImportAgentResponses = {
             modelPoolId: string | null;
             autoRouterId: string | null;
             identityProviderId: string | null;
-            entraAgentIdentityId: string | null;
             environmentId: string | null;
             networkPolicy?: {
                 egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -19989,7 +19983,6 @@ export type GetAgentResponses = {
         modelPoolId: string | null;
         autoRouterId: string | null;
         identityProviderId: string | null;
-        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -20140,7 +20133,6 @@ export type UpdateAgentData = {
         modelPoolId?: string | null;
         autoRouterId?: string | null;
         identityProviderId?: string | null;
-        entraAgentIdentityId?: string | null;
         environmentId?: string | null;
         networkPolicy?: {
             egressMode?: 'off' | 'restricted' | 'unrestricted';
@@ -20330,7 +20322,6 @@ export type UpdateAgentResponses = {
         modelPoolId: string | null;
         autoRouterId: string | null;
         identityProviderId: string | null;
-        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -20461,6 +20452,193 @@ export type UpdateAgentResponses = {
 };
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
+
+export type GetAgentIdentityBindingsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/identity-bindings';
+};
+
+export type GetAgentIdentityBindingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentIdentityBindingsError = GetAgentIdentityBindingsErrors[keyof GetAgentIdentityBindingsErrors];
+
+export type GetAgentIdentityBindingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        bindings: Array<{
+            identityProviderId: string;
+            externalId: string;
+        }>;
+    };
+};
+
+export type GetAgentIdentityBindingsResponse = GetAgentIdentityBindingsResponses[keyof GetAgentIdentityBindingsResponses];
+
+export type ReplaceAgentIdentityBindingsData = {
+    body: {
+        bindings: Array<{
+            identityProviderId: string;
+            externalId: string;
+        }>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/identity-bindings';
+};
+
+export type ReplaceAgentIdentityBindingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ReplaceAgentIdentityBindingsError = ReplaceAgentIdentityBindingsErrors[keyof ReplaceAgentIdentityBindingsErrors];
+
+export type ReplaceAgentIdentityBindingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        bindings: Array<{
+            identityProviderId: string;
+            externalId: string;
+        }>;
+    };
+};
+
+export type ReplaceAgentIdentityBindingsResponse = ReplaceAgentIdentityBindingsResponses[keyof ReplaceAgentIdentityBindingsResponses];
 
 export type GetAgentDefaultSuggestedPromptsData = {
     body?: never;
@@ -20941,7 +21119,6 @@ export type RestoreAgentVersionResponses = {
         modelPoolId: string | null;
         autoRouterId: string | null;
         identityProviderId: string | null;
-        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -21095,7 +21272,7 @@ export type CloneAgentData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
         scope?: unknown;
         teams?: unknown;
@@ -21203,7 +21380,6 @@ export type CloneAgentResponses = {
         modelPoolId: string | null;
         autoRouterId: string | null;
         identityProviderId: string | null;
-        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -23701,7 +23877,6 @@ export type RestoreAgentResponses = {
         modelPoolId: string | null;
         autoRouterId: string | null;
         identityProviderId: string | null;
-        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -26890,7 +27065,6 @@ export type ListAgentRuntimeTemplatesResponses = {
         icon: string | null;
         hidden: boolean;
         position: number;
-        locked: boolean;
         image: string;
     }>;
 };
@@ -26977,7 +27151,6 @@ export type ListBuiltInAgentRuntimeSettingsResponses = {
      * Default Response
      */
     200: Array<{
-        locked: boolean;
         settings: {
             tier?: string | null;
             maxTier?: string | null;
@@ -26993,6 +27166,273 @@ export type ListBuiltInAgentRuntimeSettingsResponses = {
 };
 
 export type ListBuiltInAgentRuntimeSettingsResponse = ListBuiltInAgentRuntimeSettingsResponses[keyof ListBuiltInAgentRuntimeSettingsResponses];
+
+export type ListAgentRuntimeAccessData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime-templates/access';
+};
+
+export type ListAgentRuntimeAccessErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListAgentRuntimeAccessError = ListAgentRuntimeAccessErrors[keyof ListAgentRuntimeAccessErrors];
+
+export type ListAgentRuntimeAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        runtimes: Array<{
+            id: string;
+            canUse: boolean;
+            canConfigure: boolean;
+        }>;
+        canConfigureAny: boolean;
+    };
+};
+
+export type ListAgentRuntimeAccessResponse = ListAgentRuntimeAccessResponses[keyof ListAgentRuntimeAccessResponses];
+
+export type CountAgentsBehindRuntimeData = {
+    body?: never;
+    path: {
+        id: 'claude-code' | 'codex' | 'opencode' | 'hermes' | 'openclaw' | 'grok' | 'kimi' | 'copilot' | string;
+    };
+    query?: never;
+    url: '/api/agent-runtime-templates/{id}/apply-to-agents';
+};
+
+export type CountAgentsBehindRuntimeErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CountAgentsBehindRuntimeError = CountAgentsBehindRuntimeErrors[keyof CountAgentsBehindRuntimeErrors];
+
+export type CountAgentsBehindRuntimeResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        agents: number;
+    };
+};
+
+export type CountAgentsBehindRuntimeResponse = CountAgentsBehindRuntimeResponses[keyof CountAgentsBehindRuntimeResponses];
+
+export type ApplyAgentRuntimeToAgentsData = {
+    body?: never;
+    path: {
+        id: 'claude-code' | 'codex' | 'opencode' | 'hermes' | 'openclaw' | 'grok' | 'kimi' | 'copilot' | string;
+    };
+    query?: never;
+    url: '/api/agent-runtime-templates/{id}/apply-to-agents';
+};
+
+export type ApplyAgentRuntimeToAgentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ApplyAgentRuntimeToAgentsError = ApplyAgentRuntimeToAgentsErrors[keyof ApplyAgentRuntimeToAgentsErrors];
+
+export type ApplyAgentRuntimeToAgentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        updated: number;
+    };
+};
+
+export type ApplyAgentRuntimeToAgentsResponse = ApplyAgentRuntimeToAgentsResponses[keyof ApplyAgentRuntimeToAgentsResponses];
 
 export type GetRuntimeTemplateSettingsData = {
     body?: never;
@@ -27082,7 +27522,6 @@ export type GetRuntimeTemplateSettingsResponses = {
             icon: string | null;
             hidden: boolean;
             position: number;
-            locked: boolean;
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -27117,7 +27556,6 @@ export type GetRuntimeTemplateSettingsResponses = {
         }>;
         builtIns: {
             [key: string]: {
-                locked: boolean;
                 settings: {
                     tier?: string | null;
                     maxTier?: string | null;
@@ -27179,7 +27617,6 @@ export type SaveRuntimeTemplateSettingsData = {
             icon: string | null;
             hidden: boolean;
             position: number;
-            locked?: boolean;
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -27214,7 +27651,6 @@ export type SaveRuntimeTemplateSettingsData = {
         }>;
         builtIns?: {
             [key: string]: {
-                locked: boolean;
                 settings: {
                     tier?: string | null;
                     maxTier?: string | null;
@@ -27348,7 +27784,6 @@ export type SaveRuntimeTemplateSettingsResponses = {
             icon: string | null;
             hidden: boolean;
             position: number;
-            locked: boolean;
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -27383,7 +27818,6 @@ export type SaveRuntimeTemplateSettingsResponses = {
         }>;
         builtIns: {
             [key: string]: {
-                locked: boolean;
                 settings: {
                     tier?: string | null;
                     maxTier?: string | null;
@@ -27523,7 +27957,6 @@ export type GetAgentRuntimeTemplateResponses = {
         icon: string | null;
         hidden: boolean;
         position: number;
-        locked: boolean;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -29988,7 +30421,7 @@ export type CreateAppData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
         name: string;
         slug?: string;
@@ -44273,13 +44706,13 @@ export type GetBootstrapResponses = {
      */
     200: {
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         scopedCapabilities: Array<{
             organizationId: string;
-            resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
+            resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
             scope: '*' | string;
-            action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
+            action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure';
         }>;
         organization: {
             id: string;
@@ -44444,6 +44877,12 @@ export type GetBootstrapResponses = {
             features: {
                 betaEnabled: boolean;
                 orchestratorK8sRuntime: boolean;
+                agentIdentitySpiffe: {
+                    trustDomain: string;
+                    issuer: string;
+                    jwksUri: string;
+                    bundleUri: string;
+                };
                 mcpIdleHibernationBetaEnabled: boolean;
                 sandbox: boolean;
                 agentRuntime: boolean;
@@ -44839,7 +45278,6 @@ export type GetNewChatBootstrapResponses = {
                 modelPoolId: string | null;
                 autoRouterId: string | null;
                 identityProviderId: string | null;
-                entraAgentIdentityId: string | null;
                 environmentId: string | null;
                 networkPolicy?: {
                     egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -45438,7 +45876,6 @@ export type GetConversationBootstrapResponses = {
                     modelPoolId: string | null;
                     autoRouterId: string | null;
                     identityProviderId: string | null;
-                    entraAgentIdentityId: string | null;
                     environmentId: string | null;
                     networkPolicy?: {
                         egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -54231,6 +54668,12 @@ export type GetConfigResponses = {
         features: {
             betaEnabled: boolean;
             orchestratorK8sRuntime: boolean;
+            agentIdentitySpiffe: {
+                trustDomain: string;
+                issuer: string;
+                jwksUri: string;
+                bundleUri: string;
+            };
             mcpIdleHibernationBetaEnabled: boolean;
             sandbox: boolean;
             agentRuntime: boolean;
@@ -62506,7 +62949,7 @@ export type InstallCopilotGithubAppData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
         replaceKeyId?: string;
         name?: string;
@@ -62625,7 +63068,7 @@ export type ConnectCopilotGithubAppCredentialData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
         name?: string;
     };
@@ -62929,7 +63372,7 @@ export type ConnectExistingCopilotGithubAppData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
         name?: string;
     };
@@ -90900,6 +91343,7 @@ export type GetInternalMcpCatalogResponses = {
     200: Array<{
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -91014,6 +91458,12 @@ export type GetInternalMcpCatalogResponses = {
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
         } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
+        } | null;
         icon: string | null;
         organizationId: string | null;
         authorId: string | null;
@@ -91060,7 +91510,7 @@ export type GetInternalMcpCatalogResponses = {
         appId?: string | null;
         appEnabled?: boolean | null;
         imageApprovalRequired?: boolean;
-        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
     }>;
 };
 
@@ -91185,6 +91635,12 @@ export type CreateInternalMcpCatalogItemData = {
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
         } | null;
+        awsIamConfig?: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
+        } | null;
         icon?: string | null;
         clonedFrom?: string | null;
         environmentId?: string | null;
@@ -91215,7 +91671,7 @@ export type CreateInternalMcpCatalogItemData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
     };
     path?: never;
@@ -91298,6 +91754,7 @@ export type CreateInternalMcpCatalogItemResponses = {
     200: {
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -91411,6 +91868,12 @@ export type CreateInternalMcpCatalogItemResponses = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon: string | null;
         organizationId: string | null;
@@ -91628,7 +92091,7 @@ export type SearchMcpRegistryResponses = {
                 reason: string;
                 mutedAt: string;
             }>;
-            effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
             imageApprovalRequired: boolean;
             bindsCredential: boolean;
             enterpriseManaged: boolean;
@@ -91955,6 +92418,7 @@ export type GetMcpRegistryIssueIndexResponses = {
             name: string;
             serverType: 'local' | 'remote' | 'builtin' | 'app' | 'desktop_mcp';
             multitenant: boolean;
+            toolPrefix?: string;
             dynamicConnectionMcpServerId?: string;
             environmentId?: string;
             authorId?: string;
@@ -92386,6 +92850,7 @@ export type GetInternalMcpCatalogItemResponses = {
     200: {
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -92500,6 +92965,12 @@ export type GetInternalMcpCatalogItemResponses = {
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
         } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
+        } | null;
         icon: string | null;
         organizationId: string | null;
         authorId: string | null;
@@ -92535,7 +93006,7 @@ export type GetInternalMcpCatalogItemResponses = {
         skillCount?: number;
         providesUi?: boolean;
         providesSkills?: boolean;
-        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         imageApprovalRequired?: boolean;
     };
 };
@@ -92659,6 +93130,12 @@ export type UpdateInternalMcpCatalogItemData = {
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
         } | null;
+        awsIamConfig?: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
+        } | null;
         icon?: string | null;
         environmentId?: string | null;
         catalogReinstallRequired?: boolean;
@@ -92753,6 +93230,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
     200: {
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -92866,6 +93344,12 @@ export type UpdateInternalMcpCatalogItemResponses = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon: string | null;
         organizationId: string | null;
@@ -93455,6 +93939,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
     200: Array<{
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -93568,6 +94053,12 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon: string | null;
         organizationId: string | null;
@@ -93689,6 +94180,7 @@ export type ApproveCatalogItemImageResponses = {
     200: {
         id: string;
         name: string;
+        toolPrefix: string | null;
         version: string | null;
         description: string | null;
         instructions: string | null;
@@ -93802,6 +94294,12 @@ export type ApproveCatalogItemImageResponses = {
             responseFieldPath?: string;
             fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
             cacheTtlSeconds?: number;
+        } | null;
+        awsIamConfig: {
+            roleArn: string;
+            region: string;
+            service: string;
+            audience?: string;
         } | null;
         icon: string | null;
         organizationId: string | null;
@@ -97987,7 +98485,7 @@ export type CreateKnowledgeBaseData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
     };
     path?: never;
@@ -99387,7 +99885,7 @@ export type CreateConnectorData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
     };
     path?: never;
@@ -103272,7 +103770,7 @@ export type UploadKnowledgeFileData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
     };
     path?: never;
@@ -103528,7 +104026,7 @@ export type PromoteAttachmentToKnowledgeFileData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
         filename?: string;
         directoryId?: string | null;
@@ -107337,7 +107835,7 @@ export type CreateLlmProviderApiKeyData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
     };
     path?: never;
@@ -110946,7 +111444,8 @@ export type GetMcpToolCallsResponses = {
             oauthClientId: string | null;
             source: 'api' | 'chat';
             credentialClientId: string | null;
-            credentialClientType: 'identity_provider' | 'mcp_server' | 'entra_agent_identity';
+            credentialClientType: 'identity_provider' | 'mcp_server' | 'entra_agent_identity' | 'okta_ai_agent';
+            credentialActorClientId: string | null;
             durationMs: number | null;
             createdAt: string;
             userName: string | null;
@@ -111072,7 +111571,8 @@ export type GetMcpToolCallResponses = {
         oauthClientId: string | null;
         source: 'api' | 'chat';
         credentialClientId: string | null;
-        credentialClientType: 'identity_provider' | 'mcp_server' | 'entra_agent_identity';
+        credentialClientType: 'identity_provider' | 'mcp_server' | 'entra_agent_identity' | 'okta_ai_agent';
+        credentialActorClientId: string | null;
         durationMs: number | null;
         createdAt: string;
         userName: string | null;
@@ -117479,7 +117979,7 @@ export type CreateOauthClientData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
     };
     path?: never;
@@ -127445,7 +127945,7 @@ export type GetRolesResponses = {
             name: string;
             description: string | null;
             permission: {
-                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
             };
             createdAt: string;
             updatedAt: string | null;
@@ -127469,7 +127969,7 @@ export type CreateRoleData = {
         name: string;
         description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
     };
     path?: never;
@@ -127556,7 +128056,7 @@ export type CreateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -127748,7 +128248,7 @@ export type GetRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -127763,7 +128263,7 @@ export type UpdateRoleData = {
         name?: string;
         description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
     };
     path: {
@@ -127855,7 +128355,7 @@ export type UpdateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -133279,7 +133779,7 @@ export type CreatePluginData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
     };
     path?: never;
@@ -133602,7 +134102,7 @@ export type ImportGithubPluginMarketplaceData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
         syncInterval?: '15m' | '1h' | '1d' | null;
     };
@@ -133915,7 +134415,7 @@ export type ImportGithubPluginData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
         approvedCommitSha: string;
         trackingRef?: string | null;
@@ -135813,7 +136313,7 @@ export type CreateProjectData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
     };
     path?: never;
@@ -138062,7 +138562,7 @@ export type CreateRuntimeCredentialData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
     };
     path?: never;
@@ -140606,7 +141106,7 @@ export type CreateServiceAccountData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
     };
     path?: never;
@@ -142756,7 +143256,7 @@ export type CreateSkillData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
     };
     path?: never;
@@ -144983,7 +145483,7 @@ export type ImportGithubSkillsData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
         /**
          * Pull schedule for the imported skills. Every import is synced from the repo and read-only in the app until disconnected. Defaults to daily.
@@ -150431,7 +150931,7 @@ export type GetUserPermissionSourcesResponses = {
             name: string;
         } | null;
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
     }>;
 };
@@ -150518,7 +151018,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
     };
 };
 
@@ -151276,7 +151776,7 @@ export type CreateVirtualApiKeyData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
     };
     path?: never;
@@ -154434,6 +154934,14 @@ export type GetIdentityProvidersResponses = {
                     blueprintScope?: string;
                     requireAgentIdentity?: boolean;
                 };
+                agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -154533,7 +155041,7 @@ export type GetIdentityProvidersResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
-        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     }>;
 };
 
@@ -154578,6 +155086,14 @@ export type CreateIdentityProviderData = {
                     certificateThumbprint?: string;
                     blueprintScope?: string;
                     requireAgentIdentity?: boolean;
+                };
+                agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
                 };
             };
             /**
@@ -154795,6 +155311,14 @@ export type CreateIdentityProviderResponses = {
                     blueprintScope?: string;
                     requireAgentIdentity?: boolean;
                 };
+                agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -154894,7 +155418,7 @@ export type CreateIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
-        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 
@@ -155468,6 +155992,14 @@ export type GetIdentityProviderResponses = {
                     blueprintScope?: string;
                     requireAgentIdentity?: boolean;
                 };
+                agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -155567,7 +156099,7 @@ export type GetIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
-        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 
@@ -155612,6 +156144,14 @@ export type UpdateIdentityProviderData = {
                     certificateThumbprint?: string;
                     blueprintScope?: string;
                     requireAgentIdentity?: boolean;
+                };
+                agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
                 };
             };
             /**
@@ -155830,6 +156370,14 @@ export type UpdateIdentityProviderResponses = {
                     blueprintScope?: string;
                     requireAgentIdentity?: boolean;
                 };
+                agentIdentity?: {
+                    source?: 'client' | 'spiffe';
+                    spiffeAudience?: string;
+                    privateKeyPem?: string;
+                    privateKeyId?: string;
+                    requireAgentIdentity?: boolean;
+                    actorTokenScope?: string;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -155929,7 +156477,7 @@ export type UpdateIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
-        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.agentIdentity.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 
@@ -155938,7 +156486,7 @@ export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[key
 export type SearchInitialPermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
     };
     query?: {
         query?: string;
@@ -156130,9 +156678,9 @@ export type GetScopedCapabilitiesResponses = {
      */
     200: Array<{
         organizationId: string;
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
         scope: '*' | string;
-        action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
+        action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure';
     }>;
 };
 
@@ -156141,7 +156689,7 @@ export type GetScopedCapabilitiesResponse = GetScopedCapabilitiesResponses[keyof
 export type SearchResourcePermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
         scope: '*' | string;
     };
     query?: {
@@ -156256,7 +156804,7 @@ export type SearchResourcePermissionSubjectsResponse = SearchResourcePermissionS
 export type GetResourcePermissionsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
         scope: '*' | string;
     };
     query?: never;
@@ -156336,7 +156884,7 @@ export type GetResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
         scope: '*' | string;
         name: string;
         ownerId: string | null;
@@ -156361,7 +156909,7 @@ export type GetResourcePermissionsResponses = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
             name: string;
         }>;
         inheritedGrants: Array<{
@@ -156384,11 +156932,11 @@ export type GetResourcePermissionsResponses = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
             name: string;
             sourceScope?: '*' | string;
         }>;
-        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         canShareOrganizationWide: boolean;
         actorSubjects: Array<{
             type: 'user';
@@ -156437,11 +156985,11 @@ export type UpdateResourcePermissionsData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         }>;
     };
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
         scope: '*' | string;
     };
     query?: never;
@@ -156521,7 +157069,7 @@ export type UpdateResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'agentRuntime' | 'serviceAccount' | 'credential';
         scope: '*' | string;
         name: string;
         ownerId: string | null;
@@ -156546,7 +157094,7 @@ export type UpdateResourcePermissionsResponses = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
             name: string;
         }>;
         inheritedGrants: Array<{
@@ -156569,11 +157117,11 @@ export type UpdateResourcePermissionsResponses = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
             name: string;
             sourceScope?: '*' | string;
         }>;
-        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec' | 'configure'>;
         canShareOrganizationWide: boolean;
         actorSubjects: Array<{
             type: 'user';
@@ -157097,6 +157645,273 @@ export type UpdateServiceAccountFederatedCredentialResponses = {
 };
 
 export type UpdateServiceAccountFederatedCredentialResponse = UpdateServiceAccountFederatedCredentialResponses[keyof UpdateServiceAccountFederatedCredentialResponses];
+
+export type GetSpiffeDiscoveryDocumentData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-identity/spiffe/.well-known/openid-configuration';
+};
+
+export type GetSpiffeDiscoveryDocumentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSpiffeDiscoveryDocumentError = GetSpiffeDiscoveryDocumentErrors[keyof GetSpiffeDiscoveryDocumentErrors];
+
+export type GetSpiffeDiscoveryDocumentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        issuer: string;
+        jwks_uri: string;
+        id_token_signing_alg_values_supported: Array<string>;
+        response_types_supported: Array<string>;
+        subject_types_supported: Array<string>;
+    };
+};
+
+export type GetSpiffeDiscoveryDocumentResponse = GetSpiffeDiscoveryDocumentResponses[keyof GetSpiffeDiscoveryDocumentResponses];
+
+export type GetSpiffeJwksData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-identity/spiffe/keys';
+};
+
+export type GetSpiffeJwksErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSpiffeJwksError = GetSpiffeJwksErrors[keyof GetSpiffeJwksErrors];
+
+export type GetSpiffeJwksResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        keys: Array<{
+            [key: string]: unknown;
+        }>;
+    };
+};
+
+export type GetSpiffeJwksResponse = GetSpiffeJwksResponses[keyof GetSpiffeJwksResponses];
+
+export type GetSpiffeTrustBundleData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-identity/spiffe/bundle';
+};
+
+export type GetSpiffeTrustBundleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSpiffeTrustBundleError = GetSpiffeTrustBundleErrors[keyof GetSpiffeTrustBundleErrors];
+
+export type GetSpiffeTrustBundleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        keys: Array<{
+            [key: string]: unknown;
+        }>;
+        spiffe_refresh_hint: number;
+    };
+};
+
+export type GetSpiffeTrustBundleResponse = GetSpiffeTrustBundleResponses[keyof GetSpiffeTrustBundleResponses];
 
 export type ExchangeWorkloadIdentityTokenData = {
     body: {

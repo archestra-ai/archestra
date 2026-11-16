@@ -112,6 +112,7 @@
     "src/routes/user-token.ts",
     "src/routes/user.ts",
     "src/routes/virtual-api-key/virtual-api-key.routes.ts",
+    "src/routes/agent-identity/spiffe.routes.ts",
     "src/routes/workload-identity/workload-identity.routes.ts",
     "src/routes/xai-subscription-auth/xai-subscription-auth.routes.ts"
   ],

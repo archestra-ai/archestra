@@ -24,6 +24,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   agentRuntimeTiersSeed,
   makeOrganization,
+  teamsSeed,
 } from "@/mocks/data/organization";
 import { RuntimeTemplateSection } from "./runtime-template-section";
 
@@ -31,10 +32,18 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("sonner");
+// The list's Permissions button reads the URL for its deep link.
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/settings/agents/runtimes",
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 type Settings = archestraApiTypes.GetRuntimeTemplateSettingsResponses["200"];
 let settings: Settings;
 let overrides: archestraApiTypes.SaveRuntimeTemplateSettingsData["body"]["popularAgentOverrides"];
+let agentsBehind: number;
+let applied: string[];
 const server = setupServer(
   http.get("http://localhost:9000/api/organization", () =>
     HttpResponse.json(makeOrganization({ popularAgentOverrides: overrides })),
@@ -56,6 +65,38 @@ const server = setupServer(
   http.get("http://localhost:9000/api/organization/agent-runtime-tiers", () =>
     HttpResponse.json(agentRuntimeTiersSeed),
   ),
+  http.get("http://localhost:9000/api/teams", () =>
+    HttpResponse.json(teamsSeed),
+  ),
+  // A runtime's own permissions: none beyond the admin's.
+  http.get(
+    "http://localhost:9000/api/resource-permissions/:resource/:scope",
+    ({ params }) =>
+      HttpResponse.json({
+        resource: params.resource,
+        scope: params.scope,
+        name: "",
+        revision: 0,
+        actorSubjects: [],
+        canShareOrganizationWide: true,
+        grants: [],
+        inheritedGrants: [],
+        effectiveActions: ["read", "use", "configure", "manage-permissions"],
+      }),
+  ),
+  http.get(
+    "http://localhost:9000/api/agent-runtime-templates/:id/apply-to-agents",
+    () => HttpResponse.json({ agents: agentsBehind }),
+  ),
+  http.post(
+    "http://localhost:9000/api/agent-runtime-templates/:id/apply-to-agents",
+    ({ params }) => {
+      applied.push(String(params.id));
+      const updated = agentsBehind;
+      agentsBehind = 0;
+      return HttpResponse.json({ updated });
+    },
+  ),
   http.put(
     "http://localhost:9000/api/agent-runtime-templates/settings",
     async ({ request }) => {
@@ -74,10 +115,7 @@ const server = setupServer(
         );
       settings = {
         revision: body.revision + 1,
-        templates: body.templates.map((item) => ({
-          ...item,
-          locked: item.locked ?? false,
-        })),
+        templates: body.templates,
         builtIns: body.builtIns ?? {},
         popularAgentOverrides: body.popularAgentOverrides,
       };
@@ -97,6 +135,8 @@ beforeEach(() => {
     popularAgentOverrides: null,
   };
   overrides = null;
+  agentsBehind = 0;
+  applied = [];
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "admin" } },
@@ -132,18 +172,21 @@ function mount() {
 }
 
 describe("RuntimeTemplateSection", () => {
-  it("edits and locks a built-in runtime's settings", async () => {
+  it("edits a built-in runtime's settings, then updates the agents on older ones", async () => {
     const user = userEvent.setup();
     mount();
-    await user.click(
-      await screen.findByRole("button", { name: "Actions for Claude Code" }),
-    );
-    await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit Claude Code" });
-    await user.click(
-      within(dialog).getByRole("button", { name: /^Claude account/ }),
-    );
-    await user.click(within(dialog).getByRole("button", { name: /^Limits/ }));
+    const openClaudeCode = async () => {
+      await user.click(
+        await screen.findByRole("button", { name: "Actions for Claude Code" }),
+      );
+      await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
+      const dialog = screen.getByRole("dialog", { name: "Edit Claude Code" });
+      await user.click(
+        within(dialog).getByRole("button", { name: "Runtime settings" }),
+      );
+      return dialog;
+    };
+    let dialog = await openClaudeCode();
     await user.click(
       within(dialog).getByRole("combobox", { name: "Claude account" }),
     );
@@ -152,27 +195,39 @@ describe("RuntimeTemplateSection", () => {
       within(dialog).getByRole("spinbutton", { name: /Maximum duration/ }),
       "8",
     );
-    await user.click(
-      within(dialog).getByRole("switch", { name: "Lock settings" }),
-    );
+    // Existing agents follow only saved settings.
+    expect(
+      within(dialog).getByText(/Updates use the saved settings/),
+    ).toBeInTheDocument();
     await user.click(
       within(dialog).getByRole("button", { name: "Save runtime" }),
     );
-    expect(
-      within(
-        screen.getByRole("list", { name: "Available runtimes" }),
-      ).getByText("Locked"),
-    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(settings.builtIns["claude-code"]).toMatchObject({
-        locked: true,
         settings: {
           ttlHours: 8,
           claudeCode: { authentication: "provider" },
         },
       }),
     );
+
+    agentsBehind = 2;
+    dialog = await openClaudeCode();
+    expect(
+      await within(dialog).findByText(
+        "2 agents on Claude Code still use older settings",
+      ),
+    ).toBeInTheDocument();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Update 2 agents" }),
+    );
+    await waitFor(() => expect(applied).toEqual(["claude-code"]));
+    expect(
+      await within(dialog).findByText(
+        "Every agent on Claude Code already uses these settings.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("keeps sparse legacy saved positions ahead of unpositioned built-ins", async () => {
@@ -255,6 +310,10 @@ describe("RuntimeTemplateSection", () => {
         name: "Cancel",
       }),
     );
+    // A typed-in runtime asks before it is thrown away.
+    await user.click(
+      await screen.findByRole("button", { name: "Discard changes" }),
+    );
     await user.click(add);
     await user.click(
       screen.getByRole("menuitem", { name: "Create custom runtime…" }),
@@ -268,6 +327,7 @@ describe("RuntimeTemplateSection", () => {
       screen.getByRole("textbox", { name: "Description" }),
       "Standard development tools",
     );
+    await user.click(screen.getByRole("button", { name: "Runtime settings" }));
     await user.type(
       screen.getByRole("textbox", { name: "Container image" }),
       "registry.example.com/engineering:v1",
@@ -309,7 +369,6 @@ describe("RuntimeTemplateSection", () => {
         description: "Development",
         icon: null,
         hidden: false,
-        locked: false,
         position: 0,
         runtime: {
           ...buildCustomAgentRuntime({ image: "registry.example.com/dev:v1" }),
@@ -426,7 +485,6 @@ describe("RuntimeTemplateSection", () => {
       description: "Existing configuration",
       icon: null,
       hidden: false,
-      locked: false,
       position,
       runtime: {
         ...buildCustomAgentRuntime({
@@ -449,6 +507,7 @@ describe("RuntimeTemplateSection", () => {
       screen.getByRole("textbox", { name: "Name" }),
       "New workspace",
     );
+    await user.click(screen.getByRole("button", { name: "Runtime settings" }));
     await user.type(
       screen.getByRole("textbox", { name: "Container image" }),
       "registry.example.com/new:v1",

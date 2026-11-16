@@ -2366,6 +2366,35 @@ describe("APPA feature boundary", () => {
     );
   });
 
+  test("settles a detached spawn launch with outcome unknown so an ephemeral child can close its dispatch", async () => {
+    native.dispatchHook.mockResolvedValue(JSON.stringify({ decision: "ack" }));
+    await processProxyResults({
+      session,
+      canonicalize: (name) => name,
+      classifySpawnResult: (answer) =>
+        answer.name === "archestra__start_agent_run" ? "detached" : undefined,
+      results: [
+        {
+          id: "spawn",
+          name: "archestra__start_agent_run",
+          content: '{"run_id":"run-1","state":"submitted"}',
+          isError: false,
+        },
+      ],
+    });
+    expect(
+      native.dispatchHook.mock.calls.map((call) => JSON.parse(call[0] ?? "{}")),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: "tool_result",
+          tool_call_id: "spawn",
+          outcome: "unknown",
+        }),
+      ]),
+    );
+  });
+
   test("returns the child start contract for host delivery without treating it as a refusal", async () => {
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({

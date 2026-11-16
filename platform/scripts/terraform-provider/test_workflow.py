@@ -43,12 +43,12 @@ process.stdout.write(String(vm.runInNewContext(condition, {github:{repository, r
         release = (ROOT / '.github/workflows/release-finalize.yml').read_text()
         job = release.split('  update-terraform-provider:\n', 1)[1]
         job = re.split(r'^  [\w-]+:\n', job, maxsplit=1, flags=re.M)[0]
-        self.assertRegex(job, r'needs:\n      - finalize\n')
+        self.assertRegex(job, r'needs:\n      - publish\n')
         self.assertRegex(job, r'permissions:\n      actions: write # .*\n    steps:')
         self.assertIn('run: gh workflow run update-terraform-provider.yml --ref main\n', job)
         self.assertNotIn('secrets.', job)
         condition = re.search(r'^    if: \$\{\{ (.+) \}\}$', job, re.M)[1]
-        # `published` is the finalize job's output: true only when it published
+        # `published` is the publish job's output: true only when it published
         # a draft (a skipped or failed job has no output).
         for ref, published, expected in (
             ('refs/heads/main', 'true', 'true'),
@@ -59,7 +59,7 @@ process.stdout.write(String(vm.runInNewContext(condition, {github:{repository, r
             actual = subprocess.check_output(['node', '-e', '''
 const vm = require('node:vm');
 const [condition, ref, published] = process.argv.slice(1);
-process.stdout.write(String(vm.runInNewContext(condition, {github:{ref}, needs:{finalize:{outputs:{published}}}})));
+process.stdout.write(String(vm.runInNewContext(condition, {github:{ref}, needs:{publish:{outputs:{published}}}})));
 ''', condition, ref, published], text=True)
             self.assertEqual(actual, expected, (ref, published))
         updater = (ROOT / '.github/workflows/update-terraform-provider.yml').read_text()

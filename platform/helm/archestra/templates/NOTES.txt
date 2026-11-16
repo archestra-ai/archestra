@@ -24,9 +24,10 @@ Background worker: running in-process (worker Deployment disabled)
 {{- end }}
 
 {{- $iamAuth := (.Values.archestra.database).iamAuth | default dict }}
+{{- $entraAuth := (.Values.archestra.database).entraAuth | default dict }}
 {{- if or .Values.postgresql.external_database_url (not .Values.postgresql.enabled) }}
 
-Using external PostgreSQL database{{- if $iamAuth.enabled }} (RDS IAM authentication enabled){{- end }}
+Using external PostgreSQL database{{- if $iamAuth.enabled }} (RDS IAM authentication enabled){{- else if $entraAuth.enabled }} (Microsoft Entra ID authentication enabled){{- end }}
 {{- else }}
 
 Using internal PostgreSQL database:
@@ -60,4 +61,14 @@ Registry migration notice:
   New companion images are published at ghcr.io/archestra-ai.
   Update these overrides to use this release's images, or your internal mirror.
   Existing versions remain available at their original addresses.
+{{- end }}
+
+{{- /* Remove after 1.5.0, when the Artifact Registry chart stops getting versions. */}}
+{{- if semverCompare "<1.5.1-0" .Chart.Version }}
+
+Chart registry notice:
+  This chart is published at oci://ghcr.io/archestra-ai/helm-charts/archestra-platform.
+  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform
+  gets no versions after 1.5.0. If you install, upgrade, or sync (Argo CD, Flux, Terraform)
+  from that address, switch to the GHCR address. Versions already there stay available.
 {{- end }}

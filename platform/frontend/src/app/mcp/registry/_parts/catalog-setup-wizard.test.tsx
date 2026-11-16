@@ -1,6 +1,7 @@
 import type { McpDeploymentStatusEntry } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSession } from "@/lib/auth/auth.query";
 import {
@@ -26,8 +27,12 @@ vi.mock("./local-server-install-dialog", () => ({
 vi.mock("@/components/oauth-confirmation-dialog", () => ({
   OAuthConfirmationDialog: () => null,
 }));
+// The install and reinstall requests are the network boundary.
+const install = vi.hoisted(() => vi.fn());
+const reinstall = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/mcp/mcp-server.query", () => ({
-  useInstallMcpServer: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useInstallMcpServer: () => ({ mutateAsync: install, isPending: false }),
+  useReinstallMcpServer: () => ({ mutateAsync: reinstall, isPending: false }),
   useMcpDeploymentStatuses: vi.fn(),
   useMcpInstallationStatusCacheSync: vi.fn(),
   useMcpServers: vi.fn(),
@@ -64,6 +69,8 @@ const CRASH_LOOP: McpDeploymentStatusEntry = {
 
 beforeEach(() => {
   wsHandlers.clear();
+  install.mockReset();
+  reinstall.mockReset();
   vi.mocked(websocketService.send).mockClear();
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "user-1" } },
@@ -118,14 +125,38 @@ describe("TestConnectionStep failure", () => {
       expect.objectContaining({ type: "subscribe_mcp_logs" }),
     );
   });
+
+  it.each([
+    { serverType: "remote", userConfig: null },
+    { serverType: "local", userConfig: null },
+    // Would prompt for a token on a first install; Retry keeps the stored one.
+    {
+      serverType: "remote",
+      userConfig: {
+        api_key: { type: "string", title: "API key", sensitive: true },
+      },
+    },
+  ] as const)("reconnects the user's failed $serverType connection on Retry", async ({
+    serverType,
+    userConfig,
+  }) => {
+    renderFailedStep({ serverType, status: undefined, userConfig });
+
+    await userEvent.click(screen.getByRole("button", { name: /retry/i }));
+
+    expect(reinstall).toHaveBeenCalledWith({ id: "install-1", name: "Orbit" });
+    expect(install).not.toHaveBeenCalled();
+  });
 });
 
 function renderFailedStep({
   serverType,
   status,
+  userConfig = null,
 }: {
   serverType: "local" | "remote";
   status: McpDeploymentStatusEntry | undefined;
+  userConfig?: Record<string, unknown> | null;
 }) {
   vi.mocked(useMcpServers).mockReturnValue({
     data: [
@@ -151,7 +182,7 @@ function renderFailedStep({
     name: "Orbit",
     serverType,
     localConfig: null,
-    userConfig: null,
+    userConfig,
     oauthConfig: null,
   } as unknown as CatalogItem;
 

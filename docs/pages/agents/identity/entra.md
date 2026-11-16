@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Entra Agent ID"
 description: "Give each agent its own Microsoft Entra identity, so consent and sign-in logs apply per agent"
-order: 3
-lastUpdated: 2026-11-09
+order: 1
+lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -138,7 +138,7 @@ Create one agent identity per Archestra agent, and grant it only the APIs that a
 
 Point Archestra at the blueprint, so it can request a token for each agent identity.
 
-1. Go to **Settings → Identity Providers**, click **Edit** on **Microsoft Entra ID**, and open **Tool Authentication**.
+1. Go to **Settings → Identity Providers**, click **Edit** on **Microsoft Entra ID**, and open **Tool Access**.
 2. Under **Entra Agent ID**, paste `<blueprint-id>` into **Agent Identity Blueprint Client ID**.
 3. Paste the certificate's private key into **Certificate Private Key** and its thumbprint into **Certificate Thumbprint**. To test with a secret, use **Blueprint Client Secret** instead.
 4. Click **Update Provider**.
@@ -147,18 +147,14 @@ Stored secrets stay hidden. Leave a secret blank to keep it.
 
 ## Bind Agents and Gateways
 
-Once a blueprint is set, every agent and MCP Gateway shows **Entra agent identity app ID** under **Identity**. For what an agent acts as overall, see [Agent Identity](/docs/agents/identity).
+Once a blueprint is set, an agent or MCP Gateway whose identity provider is your Entra provider shows **Entra agent identity app ID** under **Identity**.
 
 1. Open an agent's **Advanced** step, or a gateway's **Settings** tab.
-2. Under **Identity**, paste `<agent-identity-id>` into **Entra agent identity app ID**, and click **Save changes**.
+2. Under **Identity**, pick your Entra provider under **Identity Provider**, paste `<agent-identity-id>` into **Entra agent identity app ID**, and click **Save changes**.
 
 To check it works, call a tool on an MCP server that uses [IdP token exchange](/docs/mcp/authentication/idp-token-exchange). Open the call in the [MCP Gateway logs](/docs/admin/logs): **Token issued to** shows **Entra agent identity** and its ID.
 
-What to know:
-
-- Changing a binding takes [`identityProvider:update`](/docs/reference/permissions#identityProvider:update), because it decides which Entra consents the tool calls run under.
-- Each agent identity binds to one agent or gateway only.
-- Cloning or importing an agent does not copy its binding.
+Who may bind an agent, and what binding does not do, is on [Agent Identity](/docs/agents/identity#give-each-agent-its-own-identity).
 
 ## Require an Agent Identity
 
@@ -178,5 +174,5 @@ By default, a tool call from an agent without an agent identity runs as the iden
 | `AADSTS700027` (certificate not registered) | Check the thumbprint matches the blueprint's certificate. A new certificate can take a few minutes to work. |
 | "…blueprint has no client secret or certificate" | Set **Certificate Private Key** or **Blueprint Client Secret** under **Entra Agent ID** |
 | "This agent is bound to a Microsoft Entra agent identity, but…" | Set **Agent Identity Blueprint Client ID** on the identity provider |
-| "This identity provider requires every agent to act through its own Microsoft Entra agent identity" | Bind the agent, or uncheck **Require an agent identity** |
+| "This identity provider requires every agent to act through its own identity" | Bind the agent, or uncheck **Require an agent identity** |
 | An Entra error that names no agent identity of yours | Check **Entra agent identity app ID** is the agent identity's ID. A wrong ID can fail with an unrelated error, such as `AADSTS50076`. |

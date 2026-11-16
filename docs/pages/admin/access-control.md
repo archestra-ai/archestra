@@ -2,7 +2,7 @@
 title: Access Control
 description: Share resources and assign organization roles
 order: 2
-lastUpdated: 2026-11-05
+lastUpdated: 2026-11-14
 ---
 
 Give people **Can use** on an agent to let them run it without changing it. Give them **Can update** when they need to edit it.
@@ -66,7 +66,7 @@ You need **Manage access** on the item to share it. To share every current and f
 
 Sharing with everyone or a role also requires that permission or **Full access** on every item of that kind. You cannot grant access you do not hold.
 
-Sharing an agent does not share its MCP servers. Share the servers separately so the person can use their tools. MCP registry entries have an extra **Full access + deploy** level for changing deployments and secret sources; see [server permissions](/docs/mcp/servers).
+Sharing an agent does not share its MCP servers. Share the servers separately so the person can use their tools. MCP registry entries have an extra **Full access + deploy** level for changing deployments and secret sources; see [server permissions](/docs/mcp/servers). Agent Runtimes have a **Can use and configure** level instead of **Can update**; see [who can use each runtime](/docs/agents/runtime#choose-who-can-use-each-runtime).
 
 ### Share Across Teams
 

@@ -848,6 +848,68 @@ describe("buildAgentRunLaunchSpec", () => {
     ).rejects.toMatchObject({ statusCode: 409 });
   });
 
+  test("refuses a privileged Agent once the operator disables privileged runs", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const privileged = {
+      ...runtime(setup.agent, "openai_chat"),
+      privileged: true,
+    };
+    const launch = () =>
+      buildAgentRunLaunchSpec({
+        runtime: privileged,
+        limits: resolveAgentRunLimits({ tiers: TIERS, runtime: privileged }),
+        taskId: crypto.randomUUID(),
+        runId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actor: {
+          id: setup.user.id,
+          kind: "user",
+          organizationId: setup.agent.organizationId,
+        },
+        organizationId: setup.agent.organizationId,
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        runMode: "one_shot",
+      });
+    const previous = config.agentRuntime.allowPrivileged;
+    try {
+      // The Agent was saved while privileged runs were allowed.
+      config.agentRuntime.allowPrivileged = true;
+      expect((await launch()).spec.privileged).toBe(true);
+
+      config.agentRuntime.allowPrivileged = false;
+      const providerKeyId = setup.agent.llmApiKeyId as string;
+      const keysBefore =
+        await VirtualApiKeyModel.countByProviderApiKeyId(providerKeyId);
+      await expect(launch()).rejects.toMatchObject({
+        statusCode: 403,
+        message: expect.stringContaining("privileged"),
+      });
+      // Refused before anything was minted for the run.
+      expect(
+        await VirtualApiKeyModel.countByProviderApiKeyId(providerKeyId),
+      ).toBe(keysBefore);
+    } finally {
+      config.agentRuntime.allowPrivileged = previous;
+    }
+  });
+
   test("rejects a Responses-only model for a Chat Completions image", async ({
     makeOrganization,
     makeAdmin,

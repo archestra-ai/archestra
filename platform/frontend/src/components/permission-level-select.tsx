@@ -257,7 +257,7 @@ function levelIcon(option: Pick<PermissionLevelOption, "actions">): LucideIcon {
     option.actions.includes(action);
   if (has("configure-deployment-spec")) return Server;
   if (has("manage-permissions")) return KeyRound;
-  if (has("update")) return Pencil;
+  if (has("update") || has("configure")) return Pencil;
   if (has("use")) return Play;
   return Eye;
 }
@@ -268,6 +268,7 @@ const ACTION_VALUE = "__action";
 const actionOrder: ResourcePermissionAction[] = [
   "read",
   "use",
+  "configure",
   "update",
   "delete",
   "manage-permissions",
@@ -281,4 +282,5 @@ const actionChipLabels: Record<ResourcePermissionAction, string> = {
   delete: "Delete",
   "manage-permissions": "Manage access",
   "configure-deployment-spec": "Deploy",
+  configure: "Configure",
 };

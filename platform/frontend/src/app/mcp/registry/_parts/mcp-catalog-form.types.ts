@@ -221,12 +221,23 @@ const activeAuthFormSchema = z
       "oauth_client_credentials",
       "enterprise_managed",
       "idp_jwt",
+      "aws_iam",
     ]),
     includeBearerPrefix: z.boolean(),
     authHeaderName: headerNameSchema.optional().or(z.literal("")),
     additionalHeaders: z.array(additionalHeaderSchema).optional(),
     oauthConfig: oauthConfigSchema.optional(),
     enterpriseManagedConfig: enterpriseManagedConfigSchema
+      .nullable()
+      .optional(),
+    // AWS IAM (SigV4) sign-in; checked below when it is the chosen method.
+    awsIamConfig: z
+      .object({
+        roleArn: z.string(),
+        region: z.string(),
+        service: z.string(),
+        audience: z.string().optional(),
+      })
       .nullable()
       .optional(),
     localConfig: LocalConfigFormSchema.optional(),
@@ -356,6 +367,36 @@ const activeAuthFormSchema = z
       path: ["localConfig", "transportType"],
     },
   )
+  .superRefine((data, ctx) => {
+    if (data.authMethod !== "aws_iam") return;
+    const aws = data.awsIamConfig;
+    const checks: Array<[keyof NonNullable<typeof aws>, RegExp, string]> = [
+      [
+        "roleArn",
+        /^arn:aws[a-z-]*:iam::\d{12}:role\/[\w+=,.@/-]{1,512}$/,
+        "Enter an IAM role ARN, such as arn:aws:iam::123456789012:role/agents.",
+      ],
+      [
+        "region",
+        /^[a-z]{2}(-[a-z]+)+-\d{1,2}$/,
+        "Enter an AWS region, such as us-east-1.",
+      ],
+      [
+        "service",
+        /^[a-z0-9-]{1,64}$/,
+        "Enter the SigV4 service name, such as bedrock-agentcore.",
+      ],
+    ];
+    for (const [field, pattern, message] of checks) {
+      if (!pattern.test((aws?.[field] ?? "").trim())) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message,
+          path: ["awsIamConfig", field],
+        });
+      }
+    }
+  })
   .superRefine((data, ctx) => {
     if (
       (data.authMethod === "enterprise_managed" ||

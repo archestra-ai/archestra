@@ -90,7 +90,6 @@ export function EntraAgentIdFields(props: {
             <FormDescription>
               For testing. In production, use a certificate below instead.
             </FormDescription>
-            <StoredNote stored={secretStored} />
             <FormControl>
               <SecretInput
                 placeholder={secretStored ? "••••••••" : "Optional"}
@@ -98,12 +97,13 @@ export function EntraAgentIdFields(props: {
                 value={field.value ?? ""}
               />
             </FormControl>
+            <StoredNote stored={secretStored} />
             <FormMessage />
           </FormItem>
         )}
       />
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid items-start gap-4 md:grid-cols-2">
         <FormField
           control={form.control}
           name="oidcConfig.enterpriseManagedCredentials.entraAgentId.certificateThumbprint"
@@ -158,7 +158,6 @@ export function EntraAgentIdFields(props: {
               PKCS#8 PEM key of the certificate uploaded to the blueprint. Used
               instead of the client secret when set.
             </FormDescription>
-            <StoredNote stored={privateKeyStored} />
             <FormControl>
               <SecretTextarea
                 placeholder={
@@ -169,6 +168,7 @@ export function EntraAgentIdFields(props: {
                 value={field.value ?? ""}
               />
             </FormControl>
+            <StoredNote stored={privateKeyStored} />
             <FormMessage />
           </FormItem>
         )}
@@ -201,10 +201,5 @@ export function EntraAgentIdFields(props: {
 
 function StoredNote({ stored }: { stored: boolean }) {
   if (!stored) return null;
-  return (
-    <FormDescription>
-      A value is already stored. Leave blank to keep it, or enter a new value to
-      replace.
-    </FormDescription>
-  );
+  return <FormDescription>Stored. Leave blank to keep it.</FormDescription>;
 }

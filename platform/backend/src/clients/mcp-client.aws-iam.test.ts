@@ -19,6 +19,8 @@ const ROLE_ARN = "arn:aws:iam::123456789012:role/archestra-agents";
 
 /** The access key each tool call was signed with, by the call's argument. */
 let signedCalls: { caller: unknown; accessKey: string | undefined }[];
+/** The access key each tools/list was signed with. */
+let listedBy: (string | undefined)[];
 
 // biome-ignore lint/correctness/useHookAtTopLevel: registers test lifecycle hooks, not a React hook
 useMswServer(
@@ -53,6 +55,13 @@ useMswServer(
         },
       });
     }
+    if (message.method === "tools/list") {
+      listedBy.push(
+        request.headers
+          .get("authorization")
+          ?.match(/Credential=([^/]+)\//)?.[1],
+      );
+    }
     if (message.method !== "tools/call") {
       return HttpResponse.json({
         jsonrpc: "2.0",
@@ -77,6 +86,7 @@ useMswServer(
 describe("tool calls to an AWS IAM MCP server", () => {
   beforeEach(() => {
     signedCalls = [];
+    listedBy = [];
     awsIamMcpSigner.clearCache();
   });
 
@@ -119,6 +129,28 @@ describe("tool calls to an AWS IAM MCP server", () => {
         accessKey: `key-archestra-agents-agent-${agent.id}`,
       })),
     );
+  });
+
+  test("discovery signs as the platform, and a session for no agent fails closed", async ({
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    const { server } = await installAwsServer(user.id);
+    const listTools = (
+      caller: Parameters<typeof mcpClient.withSkillsSession>[0]["caller"],
+    ) =>
+      mcpClient.withSkillsSession({
+        caller,
+        mcpServerId: server.id,
+        run: (client) => client.listTools(),
+      });
+
+    await listTools({ kind: "internal", purpose: "skills-discovery" });
+    expect(listedBy).toEqual(["key-archestra-agents-platform"]);
+
+    await expect(
+      listTools({ kind: "caller", userId: user.id }),
+    ).rejects.toThrow("this call has no agent");
   });
 
   test("a changed role is used from the next call on", async ({ makeUser }) => {

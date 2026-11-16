@@ -4864,11 +4864,7 @@ class McpClient {
         options?.tokenAuth,
         enterpriseTransportCredential ?? undefined,
         undefined,
-        // An AWS IAM server is reached here only as the agent that owns the
-        // call; without one, the transport fails closed.
-        options?.owner?.type === "agent"
-          ? { agentId: options.owner.id }
-          : undefined,
+        awsIamIdentityFor(options),
       );
       const client = new Client(
         buildMcpClientInfo(options?.clientName ?? "archestra-app-runner"),
@@ -7030,6 +7026,26 @@ function awsIamConnectionSegment(params: {
     .digest("hex")
     .slice(0, 16);
   return `aws:${params.ownerKey}:${settings}`;
+}
+
+/**
+ * Who a direct server session to an AWS IAM server signs as: the agent that
+ * owns it, or the platform for maintenance that only reads what the server
+ * advertises. Anything else has no identity, so its transport fails closed.
+ */
+function awsIamIdentityFor(options: {
+  caller: GatedCaller;
+  owner?: ToolOwner;
+}): AwsIamIdentity | undefined {
+  if (options.owner?.type === "agent") return { agentId: options.owner.id };
+  if (
+    options.caller.kind === "internal" &&
+    (options.caller.purpose === "tool-discovery" ||
+      options.caller.purpose === "skills-discovery")
+  ) {
+    return "platform";
+  }
+  return undefined;
 }
 
 function requireAwsIamIdentity(identity: AwsIamIdentity | undefined) {

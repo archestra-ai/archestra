@@ -146,17 +146,13 @@ describe("scoped RBAC final cutover", () => {
   });
 
   /**
-   * The one shape the deploy conversion cannot carry across unchanged.
-   *
    * `deploy-to-restricted` discriminated on the kind of object deployed, so a
    * role could be allowed to put an agent in a restricted environment while
-   * being refused an MCP server there. `environment:use` discriminates on the
-   * environment instead, and there is no room in a policy key for both axes.
-   * A partial holder therefore comes out of the conversion able to deploy
-   * anything into a restricted environment. This test exists to make that
-   * widening deliberate and visible rather than a surprise in production.
+   * being refused an MCP server there. The conversion carries that across: a
+   * role holding the action on some kinds gets the matching deploy actions on
+   * every environment, not `use`, which would deploy every kind.
    */
-  test("a role holding deploy-to-restricted on one resource gains use on every environment", async ({
+  test("a role holding deploy-to-restricted on one resource keeps that one kind on every environment", async ({
     makeOrganization,
     makeCustomRole,
   }) => {
@@ -173,11 +169,13 @@ describe("scoped RBAC final cutover", () => {
       scope: "*",
     });
     expect(
-      policy?.grants.find(
-        (grant) =>
-          grant.subject.type === "role" && grant.subject.id === partial.id,
-      )?.actions,
-    ).toEqual(["read", "use"]);
+      policy?.grants
+        .find(
+          (grant) =>
+            grant.subject.type === "role" && grant.subject.id === partial.id,
+        )
+        ?.actions.toSorted(),
+    ).toEqual(["deploy-agent", "read"]);
 
     // And the role action it replaces is gone, so nothing reads it twice.
     const [row] = await db

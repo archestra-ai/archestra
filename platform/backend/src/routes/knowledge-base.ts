@@ -3429,7 +3429,12 @@ async function assertEnvironmentAssignable(params: {
   environmentId: string | null;
 }): Promise<void> {
   const { userId, organizationId, environmentId } = params;
-  await assertCanAssignEnvironment({ environmentId, organizationId, userId });
+  await assertCanAssignEnvironment({
+    environmentId,
+    organizationId,
+    userId,
+    resource: "knowledgeSource",
+  });
 }
 
 /**

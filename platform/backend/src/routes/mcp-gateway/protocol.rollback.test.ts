@@ -187,6 +187,14 @@ describe("deriveRequestTargetName", () => {
     ).toBe("ui://app/main");
   });
 
+  test("reads the task id from the task methods", () => {
+    for (const method of ["tasks/get", "tasks/update", "tasks/cancel"]) {
+      expect(
+        deriveRequestTargetName({ method, params: { taskId: "task-1" } }),
+      ).toBe("task-1");
+    }
+  });
+
   test("methods addressing no single target have no name", () => {
     expect(deriveRequestTargetName({ method: "tools/list" })).toBeUndefined();
   });
@@ -260,6 +268,38 @@ describe("validateRoutingHeaders", () => {
 
     expect(error).toMatchObject({ code: -32020 });
     expect(error?.message).toContain("addresses no named target");
+  });
+
+  test("a task method that names its task in the name header is accepted", () => {
+    // A Tasks client sends the task id as `Mcp-Name` on every poll.
+    expect(
+      validateRoutingHeaders({
+        headers: { "mcp-method": "tasks/get", "mcp-name": "task-1" },
+        body: {
+          jsonrpc: "2.0",
+          method: "tasks/get",
+          params: { taskId: "task-1" },
+          id: 1,
+        },
+        resolution: declaredStateless,
+      }),
+    ).toBeNull();
+  });
+
+  test("a task method whose name header names another task is rejected", () => {
+    const error = validateRoutingHeaders({
+      headers: { "mcp-method": "tasks/get", "mcp-name": "task-2" },
+      body: {
+        jsonrpc: "2.0",
+        method: "tasks/get",
+        params: { taskId: "task-1" },
+        id: 1,
+      },
+      resolution: declaredStateless,
+    });
+
+    expect(error).toMatchObject({ code: -32020 });
+    expect(error?.message).toContain("does not match request target");
   });
 
   test("a declared stateless request missing the method header is rejected", () => {

@@ -103,7 +103,7 @@ type TestCallToolHandler = (
   content: Array<{ type: string; text: string }>;
   isError?: boolean;
   resultType?: string;
-  task?: { taskId: string };
+  taskId?: string;
   structuredContent?: { items?: unknown[] };
 }>;
 
@@ -4092,40 +4092,38 @@ describe("createAgentServer tools/list", () => {
         { sendRequest: vi.fn() },
       );
       expect(result.resultType).toBe("task");
-      expect(result.task?.taskId).toBeDefined();
+      expect(result.taskId).toBeDefined();
       await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
       rejectExecution(error);
       await vi.waitFor(async () => {
         const state = await handleTaskMethod({
           body: {
             method: "tasks/get",
-            params: { taskId: result.task?.taskId },
+            params: { taskId: result.taskId },
           },
           agentId: agent.id,
           principal: "anonymous",
         });
         expect(state).toMatchObject({
-          result: {
-            task:
-              error instanceof McpServerStoppedError
-                ? {
-                    status: "failed",
-                    error: { code: -32603, message: error.message },
-                  }
-                : {
-                    status: "completed",
-                    result: {
-                      resultType: "complete",
-                      isError: true,
-                      content: [
-                        {
-                          type: "text",
-                          text: "Error: An internal error occurred while executing tool",
-                        },
-                      ],
-                    },
+          result:
+            error instanceof McpServerStoppedError
+              ? {
+                  status: "failed",
+                  error: { code: -32603, message: error.message },
+                }
+              : {
+                  status: "completed",
+                  result: {
+                    resultType: "complete",
+                    isError: true,
+                    content: [
+                      {
+                        type: "text",
+                        text: "Error: An internal error occurred while executing tool",
+                      },
+                    ],
                   },
-          },
+                },
         });
         expect(JSON.stringify(state)).not.toContain("PRIVATE_SENTINEL");
       });

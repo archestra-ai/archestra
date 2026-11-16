@@ -167517,12 +167517,8 @@
                               ],
                               "additionalProperties": false
                             },
-                            "mcpIdleHibernationOffered": {
-                              "type": "boolean"
-                            },
                             "mcpIdleHibernationBetaEnabled": {
-                              "type": "boolean",
-                              "description": "Deprecated: use mcpIdleHibernationOffered. Same value."
+                              "type": "boolean"
                             },
                             "sandbox": {
                               "type": "boolean"
@@ -167713,7 +167709,6 @@
                             "betaEnabled",
                             "orchestratorK8sRuntime",
                             "agentIdentitySpiffe",
-                            "mcpIdleHibernationOffered",
                             "mcpIdleHibernationBetaEnabled",
                             "sandbox",
                             "agentRuntime",
@@ -205446,12 +205441,8 @@
                           ],
                           "additionalProperties": false
                         },
-                        "mcpIdleHibernationOffered": {
-                          "type": "boolean"
-                        },
                         "mcpIdleHibernationBetaEnabled": {
-                          "type": "boolean",
-                          "description": "Deprecated: use mcpIdleHibernationOffered. Same value."
+                          "type": "boolean"
                         },
                         "sandbox": {
                           "type": "boolean"
@@ -205642,7 +205633,6 @@
                         "betaEnabled",
                         "orchestratorK8sRuntime",
                         "agentIdentitySpiffe",
-                        "mcpIdleHibernationOffered",
                         "mcpIdleHibernationBetaEnabled",
                         "sandbox",
                         "agentRuntime",

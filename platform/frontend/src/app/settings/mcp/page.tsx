@@ -51,7 +51,7 @@ export default function McpSettingsPage() {
   const enterpriseCoreActive = useEnterpriseFeature("core");
   // With the operator's kill switch set, the deployment does not offer idle
   // hibernation, and the setting does not exist on this page at all.
-  const hibernationOffered = useFeature("mcpIdleHibernationOffered");
+  const hibernationOffered = useFeature("mcpIdleHibernationBetaEnabled");
   // SPDX-SnippetEnd
   const updateMcpSettingsMutation = useUpdateMcpSettings(
     "MCP settings updated",

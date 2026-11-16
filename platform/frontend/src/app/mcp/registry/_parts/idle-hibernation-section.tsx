@@ -42,7 +42,7 @@ export function IdleHibernationSection({ item }: { item: CatalogItem }) {
   const { data: organization } = useOrganization();
   const enterpriseCoreActive = useEnterpriseFeature("core");
   // With the operator's kill switch set, the control does not exist.
-  const hibernationOffered = useFeature("mcpIdleHibernationOffered");
+  const hibernationOffered = useFeature("mcpIdleHibernationBetaEnabled");
   const { canModify } = useCanModifyCatalogItem(item);
   const updateMutation = useUpdateInternalMcpCatalogItem();
   // Only this item's installs, narrowed on the server.

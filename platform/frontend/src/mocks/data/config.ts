@@ -40,7 +40,6 @@ export function makeConfig(
         jwksUri: "http://localhost:3000/api/agent-identity/spiffe/keys",
         bundleUri: "http://localhost:3000/api/agent-identity/spiffe/bundle",
       },
-      mcpIdleHibernationOffered: false,
       mcpIdleHibernationBetaEnabled: false,
       sandbox: false,
       agentRuntime: false,

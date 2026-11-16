@@ -16,7 +16,7 @@ test("keeps idle-hibernation configuration inside narrow registry forms", async 
     await page.request.get(`${UI_BASE_URL}/api/config`)
   ).json();
   test.skip(
-    !config.features?.mcpIdleHibernationOffered ||
+    !config.features?.mcpIdleHibernationBetaEnabled ||
       !config.enterpriseFeatures?.core,
     "Requires idle hibernation offered and enterprise core",
   );

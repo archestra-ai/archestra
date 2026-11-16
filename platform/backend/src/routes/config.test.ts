@@ -66,15 +66,12 @@ describe("config routes", () => {
       const offered = (
         await app.inject({ method: "GET", url: "/api/config" })
       ).json();
-      expect(offered.features.mcpIdleHibernationOffered).toBe(true);
-      // The deprecated beta-era field keeps the same value for older clients.
       expect(offered.features.mcpIdleHibernationBetaEnabled).toBe(true);
 
       config.orchestrator.mcpIdleHibernation.hardDisabled = true;
       const killed = (
         await app.inject({ method: "GET", url: "/api/config" })
       ).json();
-      expect(killed.features.mcpIdleHibernationOffered).toBe(false);
       expect(killed.features.mcpIdleHibernationBetaEnabled).toBe(false);
     } finally {
       config.beta = originalBeta;
@@ -208,7 +205,6 @@ describe("config routes", () => {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      mcpIdleHibernationOffered: expect.any(Boolean),
       mcpIdleHibernationBetaEnabled: expect.any(Boolean),
       // SPDX-SnippetEnd
     });

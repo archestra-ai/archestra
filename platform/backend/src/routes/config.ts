@@ -115,13 +115,11 @@ export const ConfigResponseSchema = z.strictObject({
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // Deployment-level gate for MCP idle hibernation (the operator kill
-    // switch); the licence and the organization toggle sit behind it.
-    mcpIdleHibernationOffered: z.boolean(),
-    /** @deprecated Use `mcpIdleHibernationOffered`; same value. */
-    mcpIdleHibernationBetaEnabled: z
-      .boolean()
-      .describe("Deprecated: use mcpIdleHibernationOffered. Same value."),
+    // Deployment-level gate for MCP idle hibernation: false only when the
+    // operator kill switch is set. The licence and the organization toggle
+    // sit behind it. The name dates from the beta release and stays for
+    // client compatibility.
+    mcpIdleHibernationBetaEnabled: z.boolean(),
     /** BETA: MCP registry attention and alert dismissal surfaces. */
     // SPDX-SnippetEnd
     sandbox: z.boolean(),
@@ -256,8 +254,6 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       // An operator's hard kill switch must take the settings toggle and the
       // per-server control with it, or the UI renders an operational
       // feature nothing behind it will ever run.
-      mcpIdleHibernationOffered: isIdleHibernationOffered(),
-      // Kept for API compatibility with clients of the beta release.
       mcpIdleHibernationBetaEnabled: isIdleHibernationOffered(),
       // SPDX-SnippetEnd
       sandbox: skillSandboxRuntimeService.isEnabled,

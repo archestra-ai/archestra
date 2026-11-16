@@ -1,34 +1,42 @@
 {
   "schema": 1,
-  "sourceSha": "d6eaf5e6a2e1f8e3b35a16fc4348b87bd7c0f1f4",
-  "baseSha": "2c61eeb2f725d94c636898b48345af9cb0490821",
-  "runId": 43752147869,
+  "sourceSha": "e4118cd27d5d0d785373a98e5eecef879fd871b2",
+  "baseSha": "c762c76e3fd0a6cd7d6366416c9ca6f43e5cafd8",
+  "runId": 43867482616,
   "attempt": 1,
-  "platformTree": "55905698eb7c6f18709b26e93aa17aa363dc43c2",
+  "platformTree": "23dad15969b03de3310491f358c8a16b28411851",
   "files": [
     {
       "path": "docs/openapi.json",
-      "blob": "fc9748b430e0a455efe07092a6294ffdc0afb716"
+      "blob": "2b3b13f0ddb8b2b01589abee0317fd8d0b83a81f"
     },
     {
       "path": "docs/assets/automated_screenshots/knowledge_connectors.dark.webp",
-      "blob": "16eeb942f2ab9eaefb1aa0fb2a89b87156caf11d"
+      "blob": "fefe3bce91d60d833a5bb6a21632d5841c39749a"
     },
     {
       "path": "docs/assets/automated_screenshots/knowledge_connectors.webp",
-      "blob": "105e523d5d1f1b441db4e2e571266eea50ebdf43"
+      "blob": "c60048055c0c39ada810aa67a65eebd1e6c204c2"
     },
     {
       "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.dark.webp",
-      "blob": "843d1aac70c3547ec19c6da3944c8644437940a7"
+      "blob": "f4b37c6c12c399198b05c80a234aa6e29974b0e6"
     },
     {
       "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.webp",
-      "blob": "00b98a89bd1a572ba97eff47ac245c91f02edae0"
+      "blob": "36477ec17d317e4be4e9906994c431b8b14f3248"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/mcp-servers-adding_remote.dark.webp",
+      "blob": "14ac090f7dc61b0a392f355704cf80ad0a180ee4"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/mcp-servers-adding_remote.webp",
+      "blob": "f3eb801be6cf9329a9874a6a94bcc5b3f750767b"
     },
     {
       "path": "docs/pages/admin/performance-benchmarks.md",
-      "blob": "b5cbdf792efb982c808fcc5a576b001bb84923c7"
+      "blob": "7818f175090d3a8c1ae3d72970a36630ca653333"
     }
   ]
 }

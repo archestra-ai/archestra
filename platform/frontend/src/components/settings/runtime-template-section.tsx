@@ -29,14 +29,13 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   Box,
   ChevronDown,
-  Code,
   GripVertical,
   MoreHorizontal,
   Pencil,
   Plus,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import {
   CatalogAgentIcon,
@@ -51,7 +50,6 @@ import {
   RuntimeKindLabel,
   type TemplateDraft,
 } from "@/components/settings/runtime-template-dialogs";
-import { SettingsSaveBar } from "@/components/settings/settings-block";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -61,7 +59,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { runtimeTemplatePosition } from "@/lib/agent-runtime-template-order";
 import {
@@ -103,8 +103,12 @@ export function RuntimeTemplateSection({
   const save = useSaveRuntimeTemplateSettings();
   const images = useAgentCatalogImages();
   const appName = useAppName();
+  const customImagesId = useId();
   const builtIns = getAgentCatalogTemplates(images, appName);
-  const [draft, setDraft] = useState<SaveBody | null>(null);
+  // The change being saved, shown at once and dropped when the save
+  // settles: a success replaces it with the saved settings, a failure puts
+  // the list back as it was.
+  const [pending, setPending] = useState<SaveBody | null>(null);
   const [editing, setEditing] = useState<TemplateDraft | "new" | null>(null);
   const [editingBuiltIn, setEditingBuiltIn] = useState<AgentCatalogId | null>(
     null,
@@ -117,15 +121,13 @@ export function RuntimeTemplateSection({
       ? settings.data.popularAgentOverrides
       : (organization?.popularAgentOverrides ?? null),
   };
-  const state = draft ?? saved;
+  const state = pending ?? saved;
   const editable =
     canUpdate === true &&
     !disabled &&
     !!settings.data &&
     !!organization &&
     !save.isPending;
-  const hasChanges =
-    draft !== null && JSON.stringify(draft) !== JSON.stringify(saved);
   const rows: Row[] = [
     ...AGENT_CATALOG_IDS.map((id) => ({
       id,
@@ -159,6 +161,15 @@ export function RuntimeTemplateSection({
     }),
   );
 
+  /** Every change to the list saves at once; there is no draft to keep. */
+  function commit(next: SaveBody, onSaved?: () => void) {
+    if (!editable) return;
+    setPending(next);
+    save.mutate(next, {
+      onSuccess: onSaved,
+      onSettled: () => setPending(null),
+    });
+  }
   function position(id: string) {
     return runtimeTemplatePosition(
       id,
@@ -167,8 +178,7 @@ export function RuntimeTemplateSection({
     );
   }
   function reorder(ids: string[]) {
-    if (!editable) return;
-    setDraft(
+    commit(
       withRuntimeOrder(state, [...ids, ...removedRows.map((row) => row.id)]),
     );
   }
@@ -191,8 +201,7 @@ export function RuntimeTemplateSection({
       );
   }
   function setCustomImageAvailable(visible: boolean) {
-    if (!editable) return;
-    setDraft({
+    commit({
       ...state,
       popularAgentOverrides: {
         ...state.popularAgentOverrides,
@@ -201,7 +210,6 @@ export function RuntimeTemplateSection({
     });
   }
   function setAvailable(row: Row, visible: boolean) {
-    if (!editable) return;
     const next = row.builtIn
       ? {
           ...state,
@@ -219,7 +227,7 @@ export function RuntimeTemplateSection({
             item.id === row.id ? { ...item, hidden: !visible } : item,
           ),
         };
-    setDraft(
+    commit(
       visible
         ? withRuntimeOrder(next, [
             ...visibleRows.map((item) => item.id),
@@ -234,8 +242,8 @@ export function RuntimeTemplateSection({
 
   return (
     <section id="popular-agents" className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
           <h3 className="text-sm font-medium">Available runtimes</h3>
           <p className="max-w-2xl text-sm text-muted-foreground">
             The runtimes people can pick when creating an agent. Who can use
@@ -243,7 +251,7 @@ export function RuntimeTemplateSection({
             permissions.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <ResourceListActions resource="agentRuntime" />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -254,7 +262,7 @@ export function RuntimeTemplateSection({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
-              {(removedRows.length > 0 || customImageHidden) && (
+              {removedRows.length > 0 && (
                 <>
                   <DropdownMenuLabel>Removed runtimes</DropdownMenuLabel>
                   {removedRows.map((row) => (
@@ -272,17 +280,6 @@ export function RuntimeTemplateSection({
                       <Plus className="ml-auto size-3.5" />
                     </DropdownMenuItem>
                   ))}
-                  {customImageHidden && (
-                    <DropdownMenuItem
-                      onSelect={() => setCustomImageAvailable(true)}
-                    >
-                      <Code className="size-4 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate">
-                        {CUSTOM_IMAGE_NAME}
-                      </span>
-                      <Plus className="ml-auto size-3.5" />
-                    </DropdownMenuItem>
-                  )}
                   <DropdownMenuSeparator />
                 </>
               )}
@@ -340,28 +337,30 @@ export function RuntimeTemplateSection({
               </ul>
             </SortableContext>
           </DndContext>
-          {!customImageHidden && (
-            <CustomImageRow
-              disabled={!editable}
-              bordered={visibleRows.length > 0}
-              onRemove={() => setCustomImageAvailable(false)}
-            />
-          )}
-          {!visibleRows.length && customImageHidden && (
+          {!visibleRows.length && (
             <p className="px-4 py-8 text-center text-sm text-muted-foreground">
               No runtimes offered. Add a runtime to get started.
             </p>
           )}
         </div>
       )}
-      <SettingsSaveBar
-        hasChanges={hasChanges}
-        isSaving={save.isPending}
-        disabledSave={!editable}
-        permissions={{ organizationSettings: ["update"] }}
-        onSave={() => save.mutate(state, { onSuccess: () => setDraft(null) })}
-        onCancel={() => setDraft(null)}
-      />
+      {/* Not a runtime: the choice to run an image that is none of them. */}
+      <div className="flex items-center justify-between gap-4 rounded-lg border bg-card px-4 py-3">
+        <div className="min-w-0 space-y-0.5">
+          <Label htmlFor={customImagesId}>Allow custom images</Label>
+          <p className="text-xs text-muted-foreground">
+            Offers a Custom image choice when creating an agent, for people who
+            can configure any runtime to run their own container image and
+            command. Turning it off keeps existing agents as they are.
+          </p>
+        </div>
+        <Switch
+          id={customImagesId}
+          checked={!customImageHidden}
+          disabled={!editable}
+          onCheckedChange={setCustomImageAvailable}
+        />
+      </div>
       {editingBuiltIn !== null && (
         <BuiltInRuntimeDialog
           id={editingBuiltIn}
@@ -369,17 +368,19 @@ export function RuntimeTemplateSection({
             kind: "built-in",
             id: editingBuiltIn,
           })}
-          hasUnsavedChanges={hasChanges}
+          isSaving={save.isPending}
           image={images[editingBuiltIn]}
           value={state.builtIns?.[editingBuiltIn]}
           onClose={() => setEditingBuiltIn(null)}
-          onSave={(builtIn) => {
-            setDraft({
-              ...state,
-              builtIns: { ...state.builtIns, [editingBuiltIn]: builtIn },
-            });
-            setEditingBuiltIn(null);
-          }}
+          onSave={(builtIn) =>
+            commit(
+              {
+                ...state,
+                builtIns: { ...state.builtIns, [editingBuiltIn]: builtIn },
+              },
+              () => setEditingBuiltIn(null),
+            )
+          }
         />
       )}
       {editing !== null && (
@@ -392,7 +393,7 @@ export function RuntimeTemplateSection({
               ? editing.id
               : null
           }
-          hasUnsavedChanges={hasChanges}
+          isSaving={save.isPending}
           names={rows
             .filter((row) => row.id !== (editing === "new" ? null : editing.id))
             .map((row) => row.name)}
@@ -407,7 +408,7 @@ export function RuntimeTemplateSection({
                       item.id === template.id ? template : item,
                     ),
             };
-            setDraft(
+            commit(
               editing === "new"
                 ? withRuntimeOrder(next, [
                     ...visibleRows.map((row) => row.id),
@@ -415,8 +416,8 @@ export function RuntimeTemplateSection({
                     ...removedRows.map((row) => row.id),
                   ])
                 : next,
+              () => setEditing(null),
             );
-            setEditing(null);
           }}
         />
       )}
@@ -521,65 +522,6 @@ function RuntimeTemplateRow({
     </li>
   );
 }
-
-/**
- * The choice to run an image that is none of the runtimes above. It sits
- * last in the catalog and has no settings of its own, so it can only be
- * taken off the list.
- */
-function CustomImageRow({
-  disabled,
-  bordered,
-  onRemove,
-}: {
-  disabled: boolean;
-  bordered: boolean;
-  onRemove: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-2 bg-card py-2.5 pl-1.5 pr-2",
-        bordered && "border-t",
-      )}
-    >
-      <span className="size-5 shrink-0" />
-      <span className="flex size-7 shrink-0 items-center justify-center">
-        <Code className="size-4 text-muted-foreground" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <span className="truncate text-sm font-medium">
-          {CUSTOM_IMAGE_NAME}
-        </span>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-          Lets people who can configure any runtime run their own container
-          image and command.
-        </p>
-      </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            disabled={disabled}
-            size="icon-xs"
-            variant="ghost"
-            className="text-muted-foreground"
-            aria-label={`Actions for ${CUSTOM_IMAGE_NAME}`}
-          >
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={onRemove}>
-            <X className="size-3.5" />
-            Remove from list
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
-}
-
-const CUSTOM_IMAGE_NAME = "Custom image";
 
 function RuntimeMark({ row }: { row: Row }) {
   if (row.builtIn)

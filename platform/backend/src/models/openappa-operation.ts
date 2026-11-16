@@ -59,7 +59,9 @@ class OpenAppaOperationModel {
         JOIN ${consults} AS c
           ON c.organization_id = ${params.organizationId}
           AND c.created_at >= ${since}
-          AND c.offer_id = offer->>'offer_id'
+          -- Decisions carry the rendered offer id, a prefix of the canonical one a consult stores.
+          AND offer->>'offer_id' <> ''
+          AND starts_with(c.offer_id, offer->>'offer_id')
           AND c.outcome = 'answered'
         GROUP BY b.session_id, b.operation_id
       )

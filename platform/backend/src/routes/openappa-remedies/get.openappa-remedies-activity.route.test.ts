@@ -187,21 +187,25 @@ describe("GET /api/openappa/remedies/activity", () => {
       }),
     ]);
     await db.insert(schema.openappaExternalConsultsTable).values([
-      consult({ offerId: "offer-a", role: "authority", createdAt: twoDaysAgo }),
       consult({
-        offerId: "offer-b",
+        offerId: canonical("offer-a"),
+        role: "authority",
+        createdAt: twoDaysAgo,
+      }),
+      consult({
+        offerId: canonical("offer-b"),
         role: "authority",
         createdAt: twoDaysAgo,
         answer: { ruling: "deny" },
       }),
       consult({
-        offerId: "offer-d1",
+        offerId: canonical("offer-d1"),
         role: "sanitizer",
         createdAt: today,
         answer: null,
       }),
       consult({
-        offerId: "offer-e",
+        offerId: canonical("offer-e"),
         role: "authority",
         createdAt: today,
         outcome: "timeout",
@@ -226,3 +230,8 @@ describe("GET /api/openappa/remedies/activity", () => {
     ).toBe(5);
   });
 });
+
+/** Consults store the canonical offer id; decisions render a prefix of it. */
+function canonical(rendered: string): string {
+  return `${rendered}${"0".repeat(48)}`;
+}

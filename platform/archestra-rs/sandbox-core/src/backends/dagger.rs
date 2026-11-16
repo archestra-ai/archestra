@@ -747,6 +747,8 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
         container = container.with_exec(vec!["sh".to_string(), "-c".to_string(), user_setup]);
     }
 
+    // Log the mapped setup error instead of raw package output: custom base
+    // images can print credentials. Keep only the stage, exit code and guidance here.
     container
         .sync()
         .await

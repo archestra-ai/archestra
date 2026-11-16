@@ -1,5 +1,5 @@
 {
-  "id": "a2fb0dd8-6fd0-495e-b301-d44242c6d170",
+  "id": "cdb46d1a-0348-4f04-936c-01675e9bb5bb",
   "prevId": "c8eb16cd-4f61-4ede-8337-389399599c74",
   "version": "7",
   "dialect": "postgresql",
@@ -18012,12 +18012,6 @@
           "notNull": true,
           "default": false
         },
-        "site_name": {
-          "name": "site_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "is_primary": {
           "name": "is_primary",
           "type": "boolean",
@@ -18096,19 +18090,13 @@
           "method": "btree",
           "with": {}
         },
-        "chat_api_keys_system_site_unique": {
-          "name": "chat_api_keys_system_site_unique",
+        "chat_api_keys_system_unique": {
+          "name": "chat_api_keys_system_unique",
           "columns": [
             {
               "expression": "provider",
               "isExpression": false,
               "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "coalesce(\"site_name\", '')",
-              "asc": true,
-              "isExpression": true,
               "nulls": "last"
             }
           ],

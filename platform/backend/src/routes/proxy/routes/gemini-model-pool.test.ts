@@ -1126,8 +1126,9 @@ poolTest(
         return HttpResponse.json(answer());
       }),
     );
+    // Outside Vertex mode this site has no credentials for a keyless key.
     const response = await pool.ask();
-    expect(response.statusCode).toBe(500);
+    expect(response.statusCode).toBe(503);
     expect(hits).toBe(0);
   },
 );

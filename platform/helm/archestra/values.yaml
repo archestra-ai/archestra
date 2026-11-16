@@ -709,18 +709,18 @@ archestra:
   # This install's identity when several installs ("sites"), for example one
   # per cloud, share one database. Leave empty for a single install.
   site:
-    # Unique among the sites: lowercase letters, digits and dashes. Provider
-    # keys a site serves (a keyless Vertex AI key, say) carry this name, and
-    # the other sites relay calls on those keys to it.
+    # Unique among the sites: lowercase letters, digits and dashes. Each site
+    # calls LLM providers itself, with the cloud credentials of its own
+    # environment for keyless providers.
     name: ""
     # primary (default) owns the schema and the encryption key. secondary
     # never migrates (the migration Job is skipped), only verifies the
     # encryption key, and refuses to start on another version than the
     # primary's. Use the primary's database URL and auth Secret.
     role: ""
-    # Base URL the other sites reach this site's backend on, for relayed
-    # calls, e.g. http://archestra.internal.example.com:9000. Each request
-    # is signed with a key derived from the shared auth secret.
+    # Base URL the other sites reach this site's backend on, e.g.
+    # http://archestra.internal.example.com:9000. Recorded in the site
+    # registry; no feature calls other sites yet.
     internalUrl: ""
 
   # Configuration for the MCP Server Runtime

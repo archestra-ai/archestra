@@ -72,8 +72,8 @@ Several installs can share one database, each in its own cluster or cloud. See [
   - Values: `primary`, `secondary`
   - A secondary never runs migrations (the Helm chart skips the migration Job), only verifies the encryption key and refuses to start on another version than the primary's. In Helm, set `archestra.site.role`.
 
-- **`ARCHESTRA_SITE_INTERNAL_URL`** - The base URL other sites reach this site's backend on, to relay provider calls on the keys it serves.
-  - Default: none; other sites can't relay to this one
+- **`ARCHESTRA_SITE_INTERNAL_URL`** - The base URL other sites reach this site's backend on. Recorded in the site registry; no feature calls other sites yet.
+  - Default: none
   - Values: `http://archestra.gcp.internal:9000`
   - In Helm, set `archestra.site.internalUrl`.
 

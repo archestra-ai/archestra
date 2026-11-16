@@ -834,7 +834,6 @@ const layerTable = [
           "src/routes/proxy/passthrough-log.ts",
           "src/routes/proxy/provider-file-handler.ts",
           "src/routes/proxy/realtime/openai-realtime-proxy.ts",
-          "src/routes/proxy/remote-site-transport.ts",
           "src/routes/proxy/routes/audio.ts",
           "src/routes/proxy/routes/model-router.ts",
           "src/routes/proxy/stream-keepalive.ts",

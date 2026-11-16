@@ -45145,7 +45145,6 @@ export type GetNewChatBootstrapResponses = {
                 [key: string]: string;
             } | null;
             isSystem: boolean;
-            siteName: string | null;
             isPrimary: boolean;
             requiresReauthentication?: boolean;
             createdByServiceAccountId: string | null;
@@ -45188,7 +45187,6 @@ export type GetNewChatBootstrapResponses = {
                 [key: string]: string;
             } | null;
             isSystem: boolean;
-            siteName: string | null;
             isPrimary: boolean;
             requiresReauthentication?: boolean;
             createdByServiceAccountId: string | null;
@@ -45745,7 +45743,6 @@ export type GetConversationBootstrapResponses = {
                     [key: string]: string;
                 } | null;
                 isSystem: boolean;
-                siteName: string | null;
                 isPrimary: boolean;
                 requiresReauthentication?: boolean;
                 createdByServiceAccountId: string | null;
@@ -45788,7 +45785,6 @@ export type GetConversationBootstrapResponses = {
                     [key: string]: string;
                 } | null;
                 isSystem: boolean;
-                siteName: string | null;
                 isPrimary: boolean;
                 requiresReauthentication?: boolean;
                 createdByServiceAccountId: string | null;
@@ -107761,7 +107757,6 @@ export type GetLlmProviderApiKeysResponses = {
             [key: string]: string;
         } | null;
         isSystem: boolean;
-        siteName: string | null;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
         createdByServiceAccountId: string | null;
@@ -107935,7 +107930,6 @@ export type CreateLlmProviderApiKeyResponses = {
             [key: string]: string;
         } | null;
         isSystem: boolean;
-        siteName: string | null;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
         createdByServiceAccountId: string | null;
@@ -108064,7 +108058,6 @@ export type GetAvailableLlmProviderApiKeysResponses = {
             [key: string]: string;
         } | null;
         isSystem: boolean;
-        siteName: string | null;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
         createdByServiceAccountId: string | null;
@@ -108280,7 +108273,6 @@ export type GetLlmProviderApiKeyResponses = {
             [key: string]: string;
         } | null;
         isSystem: boolean;
-        siteName: string | null;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
         createdByServiceAccountId: string | null;
@@ -108429,7 +108421,6 @@ export type UpdateLlmProviderApiKeyResponses = {
             [key: string]: string;
         } | null;
         isSystem: boolean;
-        siteName: string | null;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
         createdByServiceAccountId: string | null;
@@ -108559,7 +108550,6 @@ export type ReconnectLlmProviderApiKeyResponses = {
             [key: string]: string;
         } | null;
         isSystem: boolean;
-        siteName: string | null;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
         createdByServiceAccountId: string | null;

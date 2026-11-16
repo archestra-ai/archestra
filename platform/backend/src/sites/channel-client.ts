@@ -4,9 +4,9 @@ import { SITE_TOKEN_HEADER, signSiteToken } from "./channel-auth";
 import { listSites, siteUnavailableReason } from "./registry";
 
 /**
- * A site can't be reached for relayed work. Carries a 503 `status` so a model
- * pool moves on to its next member and a direct request gets a clear answer.
- * Deliberately not an `ApiError`: those mean "don't fail over".
+ * A site can't be reached for work sent to it. Carries a 503 `status`, and
+ * is deliberately not an `ApiError`, so a caller with alternatives can move
+ * on to the next one.
  *
  * @public — for callers that tell an unavailable site apart
  */
@@ -26,7 +26,7 @@ export class SiteUnavailableError extends Error {
  * token. Resolves with the raw response (any status) for the caller to read,
  * stream or map; rejects with `SiteUnavailableError` when the site is not
  * registered, draining, stale or unreachable. `what` names the work in error
- * messages, e.g. `Provider key "Vertex AI (Gemini)"`.
+ * messages, e.g. `MCP server "github"`.
  */
 export async function postToSite(params: {
   siteName: string;
@@ -38,13 +38,13 @@ export async function postToSite(params: {
 }): Promise<Response> {
   const { siteName, path, what, signal } = params;
   if (siteName === config.site.name)
-    throw new Error(`Refusing to relay to this site itself (${siteName})`);
+    throw new Error(`Refusing to send work to this site itself (${siteName})`);
   const site = (await listSites()).get(siteName);
   const unavailable = siteUnavailableReason(site);
   if (!site || unavailable)
     throw new SiteUnavailableError(
       siteName,
-      `${what} is served by site "${siteName}", which ${unavailable}`,
+      `${what} needs site "${siteName}", which ${unavailable}`,
     );
   const body = JSON.stringify(params.body);
   try {
@@ -61,34 +61,11 @@ export async function postToSite(params: {
     if (signal?.aborted) throw error;
     throw new SiteUnavailableError(
       siteName,
-      `${what} is served by site "${siteName}", which is unreachable at ${site.internalUrl}: ${
+      `${what} needs site "${siteName}", which is unreachable at ${site.internalUrl}: ${
         error instanceof Error
           ? ((error.cause as Error | undefined)?.message ?? error.message)
           : String(error)
       }`,
     );
-  }
-}
-
-/** The `data:` payloads of a server-sent event stream, parsed as JSON. */
-export async function* readSseJson(
-  body: ReadableStream<Uint8Array>,
-): AsyncGenerator<unknown> {
-  const decoder = new TextDecoder();
-  let buffer = "";
-  for await (const bytes of body as unknown as AsyncIterable<Uint8Array>) {
-    buffer += decoder.decode(bytes, { stream: true });
-    let end = buffer.indexOf("\n\n");
-    while (end !== -1) {
-      const event = buffer.slice(0, end);
-      buffer = buffer.slice(end + 2);
-      const data = event
-        .split("\n")
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).trimStart())
-        .join("\n");
-      if (data) yield JSON.parse(data);
-      end = buffer.indexOf("\n\n");
-    }
   }
 }

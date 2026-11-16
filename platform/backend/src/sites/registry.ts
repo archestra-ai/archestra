@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@archestra/shared";
 import { getAppVersion } from "@/app-version";
 import config from "@/config";
 import logger from "@/logging";
@@ -25,9 +26,20 @@ export function currentSiteName(): string {
   return config.site.name;
 }
 
-/** Null (any site) and this site's own name are served here. */
-export function isServedHere(siteName: string | null | undefined): boolean {
-  return !siteName || siteName === config.site.name;
+/**
+ * Whether this site can call a provider with this key. A system key is
+ * keyless (Vertex AI or Bedrock through the cloud identity of the
+ * environment), so it works only on sites whose environment enables that
+ * provider; a key with a stored secret works on any site.
+ */
+export function canCallHere(key: {
+  isSystem: boolean;
+  provider: SupportedProvider;
+}): boolean {
+  return (
+    !key.isSystem ||
+    systemKeyManager.getEnabledProviders().includes(key.provider)
+  );
 }
 
 /** What this site can reach, from its own environment. */
@@ -72,7 +84,7 @@ export function clearSitesCache(): void {
   cache = undefined;
 }
 
-/** Why a site can't take relayed work right now, or null when it can. */
+/** Why a site can't take work over the channel right now, or null when it can. */
 export function siteUnavailableReason(
   site: Site | undefined,
   now = Date.now(),

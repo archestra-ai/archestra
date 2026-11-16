@@ -3,8 +3,11 @@
 A **site** is one Archestra install (one Helm release, usually one cluster or
 cloud). Several sites can share one PostgreSQL database. This module is the
 shared layer they coordinate through: who each site is, which sites are alive,
-and a signed channel to send work to another site. Features build on it; the
-LLM proxy's relay (`routes/proxy/remote-site-transport.ts`) is the first.
+and a signed channel to send work to another site. The LLM proxy uses the
+identity and registry only: every site calls providers directly, the way
+several LiteLLM instances share one database. Nothing calls the channel yet;
+it is here for features that must run work on a particular site (for example
+MCP servers deployed to one cluster).
 
 User docs: `docs/pages/admin/deployment/multi-site.md`.
 
@@ -26,7 +29,7 @@ primary site named `default` and needs no configuration.
 On startup the web process upserts its row (name, role, internal URL, version,
 capabilities) and refreshes `last_seen_at` every 15 s. A site whose heartbeat
 is older than 45 s, that is draining, or that has no internal URL can't take
-relayed work (`siteUnavailableReason`). `listSites()` caches the table for 5 s
+work over the channel (`siteUnavailableReason`). `listSites()` caches the table for 5 s
 per process, since a site may be far from the database.
 
 Capabilities are detected from the site's own environment
@@ -34,21 +37,28 @@ Capabilities are detected from the site's own environment
 your feature needs to route on (for example whether the site can run
 Kubernetes workloads) to `SiteCapabilities` in `types/site.ts`.
 
-## Ownership
+## LLM providers across sites
 
-A row that only one site can act on names that site. `isServedHere(siteName)`
-is true for `null` (any site) and for this site's own name. For LLM provider
-keys (`chat_api_keys.site_name`):
+Every site calls providers itself, so a request is served where it lands.
 
-- a keyless system key names the site whose environment provides its cloud
-  identity, set by `services/system-key-manager.ts`; a site only creates,
-  renames, syncs and deletes its own (a key from before sites existed has no
-  site and is claimed by the first site that enables the provider);
-- the scheduled model sync (`services/model-sync-schedule.ts`) only syncs keys
-  this site serves;
-- keys with a stored secret have no site: any site may call with them.
+- Keys with a stored secret work on every site.
+- A system key is keyless: it uses the cloud identity of the environment
+  (Vertex AI workload identity, Bedrock IAM, Azure Entra ID). There is one per
+  provider, shared by all sites. `canCallHere(key)` is true only on sites whose
+  environment enables that provider, and each site lists its keyless providers
+  in its registry row (`capabilities.keylessProviders`).
+- Where a site can't call a key: model pools and auto routing skip that
+  member or tier (`routes/proxy/model-pool-failover.ts`,
+  `auto-routing/router.ts`); a request on that key alone gets a 503 naming the
+  site; the scheduled model sync leaves the key to a site that can call it.
+- A site that disables a keyless provider deletes the shared key only when no
+  other registered site enables it (`services/system-key-manager.ts`).
+- Model pool health: a timeout or unreachable provider benches the member on
+  this site only, since it is about this site's network path; rate limits,
+  auth and quota errors bench it on every site.
 
-Apply the same rule to your own reconcilers: act only on rows this site serves.
+To call a provider from a site in another cloud, give that site federated
+credentials for it (see the user docs).
 
 ## Channel (`channel-auth.ts`, `channel-client.ts`, `routes/site-channel.ts`)
 
@@ -65,26 +75,23 @@ const response = await postToSite({
   siteName: "gcp-us",
   path: "/my-feature/do-thing",
   body: { ... },
-  what: `MCP server "${name}"`, // names the work in "is served by site X, which ..." errors
+  what: `MCP server "${name}"`, // names the work in "needs site X, which ..." errors
   signal,
 });
 ```
 
 `postToSite` throws `SiteUnavailableError` (HTTP-like `status` 503, not an
 `ApiError`) when the site is unknown, stale, draining or unreachable, with a
-message an admin can act on. For streams, answer with server-sent events and
-read them with `readSseJson`.
+message an admin can act on.
 
 To serve a call, register a route inside `routes/site-channel.ts` and start the
 handler with `readSignedJson(request, reply)`: it verifies the token over the
 raw body, answers 401 when it is refused, and returns the parsed body and the
-sending site. Keep the work done there to the part only this site can do;
-logging, limits and spend stay on the site that received the user's request,
-so nothing is recorded twice.
+sending site. Keep the work done there to the part only this site can do,
+and record logs, limits and spend on one side only.
 
 ## Not here yet
 
-Admin UI (Sites page, site field on provider keys, site filter on logs),
-`servedBySite` on interactions and spans, an outbound tunnel for sites that
-can't accept inbound connections, and a mode where a site needs no database
-login of its own.
+Admin UI (Sites page, site filter on logs), the site on interactions and
+spans, an outbound tunnel for sites that can't accept inbound connections, and
+a mode where a site needs no database login of its own.

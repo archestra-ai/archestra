@@ -386,11 +386,7 @@ export async function resolveBestAvailableLlm(params: {
     }
 
     // Fallback: check system keys (e.g., Vertex AI using ADC without an API key)
-    // Only a key this site serves: the direct path can't relay to another.
-    const systemKey = await LlmProviderApiKeyModel.findSystemKey(
-      provider,
-      config.site.name,
-    );
+    const systemKey = await LlmProviderApiKeyModel.findSystemKey(provider);
     if (systemKey) {
       const bestModel = await LlmProviderApiKeyModelLinkModel.getBestModel(
         systemKey.id,

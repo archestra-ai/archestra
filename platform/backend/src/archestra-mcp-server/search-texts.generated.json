@@ -68,7 +68,7 @@
     "searchText": "copy file between chat and open app, transfer attachment into app file store, export app output to chat files panel, open file in app, save app result, download, project files, rename destination, overwrite existing file"
   },
   "create_agent": {
-    "definitionHash": "64d91310761633e082c726f455d0d9e599626eb4fdd3e01f1cc851bddcd791f6",
+    "definitionHash": "2444476ae628b41ecb4d481d97172b488397d2da75f4ee346d615e3efdfef40a",
     "searchText": "create new AI agent assistant, set name description system prompt, model API key, assign MCP tools, knowledge bases connectors, sub-agent delegation, labels emoji icon, suggested prompts, container runtime Claude Code Codex custom image, network egress policy, sharing permissions grants users teams"
   },
   "create_guardrails_repository": {
@@ -80,11 +80,11 @@
     "searchText": "create agent lifecycle hook, add Python or shell script, session start, pre tool use, post tool use, block or validate tool calls, inject context at conversation start, tool call guardrail, audit tool results, pip requirements, enable hook"
   },
   "create_knowledge_base": {
-    "definitionHash": "2f8ab777561a27d8cb11a6ad54f738b15b8bbcb20615c56d2be226d0d5e6b9c5",
+    "definitionHash": "27bde5a2597598ee7efdd3112ed5cd60840f5c4e642e005342e418e02ca67c09",
     "searchText": "create new knowledge base, organize knowledge connectors, name description, initial access grants permissions for users, teams, service accounts, OAuth clients, roles, organization; read use update delete manage permissions; set up RAG document collection sharing"
   },
   "create_knowledge_connector": {
-    "definitionHash": "7bff80879bf079d499d45d374927f34ed4567f52252789eed39fee9182e92a8d",
+    "definitionHash": "cacdb0b4b581cdf39d7782513f2aaa5d1c8d3e8c9a95d39c154e6ca4b22f42cb",
     "searchText": "create knowledge connector, add data source integration, ingest sync documents from Jira, Confluence, Google Drive, provider configuration, initial access grants for users, teams, roles, service accounts, organization, mirror source document permissions, RAG knowledge base setup"
   },
   "create_limit": {
@@ -92,15 +92,15 @@
     "searchText": "create usage limit, LLM spend budget cap, cost limit, rate limit requests per minute, token quota, MCP server tool call limit, per organization team user agent virtual key environment, model-specific, hourly daily weekly monthly reset, hard block or soft alert"
   },
   "create_mcp_gateway": {
-    "definitionHash": "6babdee5848a6a37b45183c82609f3c1addaed0649ca185edf1dc1869ce90408",
+    "definitionHash": "541d201cdbb3f57f9444e3f49e256e35eaae37fb3f4d3e84963fbab4b440f6d7",
     "searchText": "create new MCP gateway, set up Model Context Protocol server endpoint, assign knowledge bases and connectors, key-value labels, subagent delegation, tool exposure mode, search and run tools, initial access grants permissions for users, teams, roles, service accounts, OAuth clients, organization"
   },
   "create_mcp_server": {
-    "definitionHash": "dccbe750c1803d66fb30827f4bb48780e90fffff709f6bd3a4736f680d504d99",
+    "definitionHash": "3ea672ed3cd7a9534a3703bb05aa81e0ef8130605ce3ad8dd408649708f5fed0",
     "searchText": "create register add MCP server private registry catalog, local Kubernetes pod or remote HTTP URL, command arguments environment variables secrets, Docker image, image pull policy, OAuth authentication headers, streamable-http stdio transport, share grants users teams roles permissions, labels, deploy custom tool server"
   },
   "create_plugin": {
-    "definitionHash": "8ade40011f34f8e88ca3b2683dbd9de794a1983c7b8015448dcff75cb07ffe49",
+    "definitionHash": "fac38a7454b1ea78d97b23cf60fd0bd453a133a7cb5dbda73eca1f8957562a22",
     "searchText": "create plugin from file set, upload plugin files path content, publish coding agent extension for Claude Code, Claude Desktop, Codex, Copilot CLI, Cursor, hooks configuration, POSIX Windows platforms, share access grants users teams roles organization permissions, executable file mode, base64"
   },
   "create_project_from_conversation": {
@@ -116,7 +116,7 @@
     "searchText": "create scheduled task, recurring agent run, cron job schedule, timezone, prompt message template, automate daily weekly report, remind agent periodically, enable schedule, project agent automation trigger, timer"
   },
   "create_skill": {
-    "definitionHash": "0fd1281a7c050d205b27f3650c2e7a1cd384325f7f116e23588bcd9c0b357bc1",
+    "definitionHash": "cd37aa7a01d30bf1c9afa6065bb1cae33f8763d21bdaf3442a3cce63a84de939",
     "searchText": "create new agent skill from SKILL.md manifest, YAML frontmatter name description, markdown instructions, Handlebars templated body, allowed tools, bundled files references scripts assets, personal skill, chat slash command, initial permission grants for users teams roles organization, save custom reusable prompt workflow"
   },
   "create_team": {
@@ -568,7 +568,7 @@
     "searchText": "save file, write inline text or base64 content to persistent conversation files, create note or summary document, store snippet, overwrite replace existing file, filename, MIME type, save to project files, upload binary attachment"
   },
   "scaffold_app": {
-    "definitionHash": "17fcc867e9c2d86149fcca03e2db8e74e8a9cb20986c951fd6d3a6ca1715383f",
+    "definitionHash": "05c4f974ed0f8b99c48de4449de28a07215f91598aaad1b8d462b6c309c51aa5",
     "searchText": "create new interactive app, build custom UI, dashboard, form, tracker, game, starter template HTML, scaffold web app, assign MCP tools, sharing permissions grants users teams roles, iframe camera microphone geolocation clipboard, emoji icon, labels, link to project"
   },
   "search_files": {

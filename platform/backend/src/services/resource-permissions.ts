@@ -2,6 +2,9 @@
 import {
   canDelegateScopedPermissions,
   DEFAULT_CREDENTIAL_GRANTS,
+  ENVIRONMENT_DEPLOY_ACTIONS,
+  ENVIRONMENT_DEPLOY_KINDS,
+  type EnvironmentDeployKind,
   hasScopedPermission,
   isBuiltInCatalogId,
   isManagedResource,
@@ -320,19 +323,46 @@ export class ResourcePermissions {
     };
   }
 
-  /** Check a list of organization-owned environments with one policy read. */
-  static async getUsableEnvironmentIds(params: {
+  /**
+   * The kinds of object the caller may deploy into each of a list of
+   * organization-owned environments, with one policy read. An environment the
+   * caller may deploy nothing into maps to an empty list.
+   */
+  static async getEnvironmentDeployKinds(params: {
     organizationId: string;
     userId: string;
     environmentIds: string[];
-  }): Promise<Set<string>> {
-    return ResourcePermissions.getPermittedIds({
-      organizationId: params.organizationId,
-      userId: params.userId,
-      resource: "environment",
-      scopes: params.environmentIds,
-      action: "use",
+  }): Promise<Map<string, EnvironmentDeployKind[]>> {
+    const none = new Map<string, EnvironmentDeployKind[]>(
+      params.environmentIds.map((id) => [id, []]),
+    );
+    if (params.environmentIds.length === 0) return none;
+    const subjects = await ResourcePermissions.getSubjects(params);
+    if (subjects.length === 0) return none;
+    const grants = expandScopedGrants({
+      policies: await ResourcePermissionPolicyModel.findApplicableBatch({
+        organizationId: params.organizationId,
+        resource: "environment",
+        scopes: params.environmentIds,
+      }),
+      subjectKeys: new Set(subjects.map(subjectKey)),
     });
+    return new Map(
+      params.environmentIds.map((scope) => [
+        scope,
+        ENVIRONMENT_DEPLOY_KINDS.filter((kind) =>
+          hasScopedPermission({
+            grants,
+            required: {
+              organizationId: params.organizationId,
+              resource: "environment",
+              scope,
+              action: ENVIRONMENT_DEPLOY_ACTIONS[kind],
+            },
+          }),
+        ),
+      ]),
+    );
   }
 
   /** The objects among `scopes` the caller holds `action` on, in one policy read. */
@@ -1374,7 +1404,7 @@ function expandScopedGrants(params: {
       return [];
     return policy.grants.flatMap((grant) =>
       params.subjectKeys.has(subjectKey(grant.subject))
-        ? grant.actions.flatMap((action) => {
+        ? heldActions(resource, grant.actions).flatMap((action) => {
             // Historical documents can retain actions removed from the API.
             // Ignore those without widening the remaining grant to a preset.
             const parsed = ResourcePermissionActionSchema.safeParse(action);
@@ -1392,6 +1422,21 @@ function expandScopedGrants(params: {
         : [],
     );
   });
+}
+
+/**
+ * The actions a stored grant confers. `use` on an environment deploys every
+ * kind of object, so it also holds each per-kind deploy action: whoever may
+ * deploy anything may deploy one kind, and may hand that one kind on.
+ */
+function heldActions(
+  resource: ScopedResource,
+  actions: readonly ResourcePermissionAction[],
+): readonly ResourcePermissionAction[] {
+  if (resource !== "environment" || !actions.includes("use")) return actions;
+  return [
+    ...new Set([...actions, ...Object.values(ENVIRONMENT_DEPLOY_ACTIONS)]),
+  ];
 }
 
 function inheritedPolicyGrants(params: {

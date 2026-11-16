@@ -50,7 +50,10 @@ Restrict who can deploy into production through the environment's [permissions](
 2. Remove the grant to **Everyone in the organization** that new environments start with.
 3. Grant **Can use** to the people or teams allowed to deploy there.
 
-The grant covers agents, MCP servers, apps, gateways, and knowledge connectors. Default stays open to anyone who can create the resource.
+**Can use** covers agents, MCP gateways, MCP servers, skills, apps, and knowledge connectors. To let someone deploy only some of these, such as agents and apps but not MCP servers, clear the other kinds under **Can use**.
+
+- Default stays open to anyone who can create the resource.
+- Roles that could deploy only some kinds into restricted environments before the upgrade to 1.4 keep those limits.
 
 ## Trusted Image Registries
 

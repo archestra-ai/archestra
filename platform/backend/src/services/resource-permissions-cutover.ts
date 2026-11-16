@@ -14,21 +14,19 @@ import StartupMigrationModel from "@/models/startup-migration";
 
 /** Run once per database, including when multiple web replicas start together. */
 export async function ensureScopedResourcePermissionCutover(): Promise<void> {
-  let waiting = false;
-  while (
-    !(await StartupMigrationModel.tryRun({
-      id: "scoped-resource-permissions-v1",
-      migrate: runScopedResourcePermissionCutover,
-    }))
-  ) {
-    if (!waiting) {
-      logger.info(
-        "[ResourcePermissions] Waiting for the permission upgrade on another replica",
-      );
-      waiting = true;
-    }
-    await sleep(1000);
-  }
+  await runOnceAcrossReplicas({
+    id: CUTOVER_STARTUP_MIGRATION_ID,
+    migrate: runScopedResourcePermissionCutover,
+  });
+  // A separate step rather than a change to the conversion above: a
+  // deployment that converted before the fix has already recorded the
+  // conversion as done and would never run it again.
+  await runOnceAcrossReplicas({
+    id: "resource-permission-author-grants-v1",
+    migrate: async (tx) => {
+      await tx.execute(CONVERTED_AUTHOR_GRANTS);
+    },
+  });
 }
 
 /**
@@ -1283,3 +1281,97 @@ ON CONFLICT (organization_id, resource, scope) DO UPDATE
 SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resource_permission_policies.revision + 1, updated_at = now()
 WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
 `);
+
+// ===========================================================================
+// Internal helpers
+// ===========================================================================
+
+const CUTOVER_STARTUP_MIGRATION_ID = "scoped-resource-permissions-v1";
+
+// restoreConvertedAuthorGrants
+const CONVERTED_AUTHOR_GRANTS = sql.raw(`
+-- Whoever creates an object gets full access to it (createInitial), whatever
+-- its audience. The conversion above kept that only for personal objects, so
+-- an object shared with a team or the organization before the upgrade lists
+-- no author, while one created since does. This gives those authors the same
+-- full access a new object's author gets.
+--
+-- Only policies the conversion wrote and nobody has saved since are touched:
+-- an author removed in the permissions editor stays removed. The hour after
+-- the recorded conversion covers its own writes, which carry the time of each
+-- statement rather than the transaction's start. An author who has left the
+-- organization gets nothing, and built-in agents keep the grants they were
+-- seeded with. When no conversion is recorded, nothing changes.
+WITH conversion AS (
+  SELECT completed_at FROM startup_migrations WHERE id = '${CUTOVER_STARTUP_MIGRATION_ID}'
+), authors AS (
+  SELECT a.organization_id, CASE WHEN a.agent_type = 'mcp_gateway' THEN 'mcpGateway' ELSE 'agent' END AS resource,
+    a.id::text AS scope, a.author_id
+  FROM agents a WHERE a.agent_type IN ('agent', 'profile', 'mcp_gateway') AND NOT a.built_in
+  UNION ALL
+  SELECT s.organization_id, 'skill', s.id::text, s.author_id FROM skills s
+  UNION ALL
+  SELECT o.id, 'mcpRegistry', c.id::text, c.author_id
+  FROM internal_mcp_catalog c
+  JOIN organization o ON c.organization_id = o.id OR c.organization_id IS NULL
+  WHERE c.server_type <> 'app' AND c.parent_catalog_item_id IS NULL
+  UNION ALL
+  SELECT a.organization_id, 'app', a.id::text, a.author_id FROM apps a
+  UNION ALL
+  SELECT pl.organization_id, 'plugin', pl.id::text, pl.author_id FROM plugins pl
+  UNION ALL
+  SELECT v.organization_id, 'llmVirtualKey', v.id::text, v.author_id FROM virtual_api_keys v
+  UNION ALL
+  SELECT r.organization_id, 'externalAgent', r.id::text, r.author_id FROM a2a_remote_agents r
+  UNION ALL
+  SELECT f.organization_id, 'knowledgeFile', f.id::text, f.uploaded_by FROM kb_files f
+), targets AS (
+  SELECT p.organization_id, p.resource, p.scope, au.author_id, p.grants
+  FROM authors au
+  JOIN member m ON m.organization_id = au.organization_id AND m.user_id = au.author_id
+  JOIN resource_permission_policies p ON p.organization_id = au.organization_id
+    AND p.resource = au.resource AND p.scope = au.scope
+  CROSS JOIN conversion
+  WHERE p.legacy_sharing_migrated
+    AND p.updated_at <= conversion.completed_at + interval '1 hour'
+    AND NOT EXISTS (
+      SELECT 1 FROM jsonb_array_elements(p.grants) g
+      WHERE g->'subject'->>'type' = 'user' AND g->'subject'->>'id' = au.author_id
+        AND g->'actions' @> '["read", "use", "update", "delete", "manage-permissions"]'::jsonb
+    )
+), merged AS (
+  SELECT t.organization_id, t.resource, t.scope,
+    jsonb_agg(entry ORDER BY entry->'subject'->>'type', entry->'subject'->>'id') AS grants
+  FROM targets t
+  CROSS JOIN LATERAL (
+    SELECT g AS entry FROM jsonb_array_elements(t.grants) g
+    WHERE NOT (g->'subject'->>'type' = 'user' AND g->'subject'->>'id' = t.author_id)
+    UNION ALL
+    SELECT jsonb_build_object(
+      'subject', jsonb_build_object('type', 'user', 'id', t.author_id),
+      'actions', '["delete", "manage-permissions", "read", "update", "use"]'::jsonb)
+  ) entries
+  GROUP BY t.organization_id, t.resource, t.scope
+)
+UPDATE resource_permission_policies p
+SET grants = merged.grants, revision = p.revision + 1, updated_at = now()
+FROM merged
+WHERE p.organization_id = merged.organization_id AND p.resource = merged.resource
+  AND p.scope = merged.scope;
+`);
+
+async function runOnceAcrossReplicas(params: {
+  id: string;
+  migrate: (tx: Transaction) => Promise<void>;
+}): Promise<void> {
+  let waiting = false;
+  while (!(await StartupMigrationModel.tryRun(params))) {
+    if (!waiting) {
+      logger.info(
+        "[ResourcePermissions] Waiting for the permission upgrade on another replica",
+      );
+      waiting = true;
+    }
+    await sleep(1000);
+  }
+}

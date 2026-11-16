@@ -4,8 +4,8 @@ A **site** is one Archestra install (one Helm release, usually one cluster or
 cloud). Several sites can share one PostgreSQL database. This module is the
 shared layer they coordinate through: who each site is, which sites are alive,
 and a signed channel to send work to another site. The LLM proxy uses the
-identity and registry only: every site calls providers directly, the way
-several LiteLLM instances share one database. Nothing calls the channel yet;
+identity and registry only: every site calls providers directly. Nothing
+calls the channel yet;
 it is here for features that must run work on a particular site (for example
 MCP servers deployed to one cluster).
 

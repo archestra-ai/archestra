@@ -2678,10 +2678,9 @@ describe("McpClient", () => {
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
         // Demand tracking is inert while idle hibernation is off — only the
-        // sweeper reads it — so the wake/skip tests below need the beta flag
-        // on, an organization that has opted into it, and the process-local
-        // mirror the synchronous stamp path reads primed from that row.
-        config.orchestrator.mcpIdleHibernation.betaEnabled = true;
+        // sweeper reads it — so the wake/skip tests below need an
+        // organization that has opted into it, and the process-local mirror
+        // the synchronous stamp path reads primed from that row.
         await makeOrganization({ mcpIdleHibernationEnabled: true });
         await OrganizationModel.getMcpIdleHibernationEnabled();
         // SPDX-SnippetEnd
@@ -10774,7 +10773,6 @@ describe("readResource (assignment + all-tools dynamic access, end to end)", () 
     });
     await makeAgentTool(agent.id, tool.id, { mcpServerId: server.id });
 
-    config.orchestrator.mcpIdleHibernation.betaEnabled = true;
     // The gate, not the plumbing, is stubbed: this test is about WHERE the
     // wake sits relative to the demand scope, not about toggle hydration.
     const syncMirror = vi
@@ -10805,7 +10803,6 @@ describe("readResource (assignment + all-tools dynamic access, end to end)", () 
       expect(result).toEqual(RESOURCE_CONTENTS);
       expect(atWake).toEqual({ active: 1, persisted: 1 });
     } finally {
-      config.orchestrator.mcpIdleHibernation.betaEnabled = false;
       syncMirror.mockRestore();
       updateLastUsed.mockRestore();
     }

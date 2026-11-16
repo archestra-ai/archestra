@@ -15,11 +15,7 @@ test("keeps idle-hibernation configuration inside narrow registry forms", async 
   const config = await (
     await page.request.get(`${UI_BASE_URL}/api/config`)
   ).json();
-  test.skip(
-    !config.features?.mcpIdleHibernationBetaEnabled ||
-      !config.enterpriseFeatures?.core,
-    "Requires idle-hibernation beta and enterprise core",
-  );
+  test.skip(!config.enterpriseFeatures?.core, "Requires enterprise core");
   const organization = await (
     await page.request.get(`${UI_BASE_URL}/api/organization`)
   ).json();

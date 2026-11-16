@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 8
-lastUpdated: 2026-11-15
+lastUpdated: 2026-11-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -905,7 +905,7 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Default: `1800` (30 minutes)
   - Values: `0`, or `120` and above. Lower values are raised to `120`.
   - `0` turns hibernation off for the whole deployment, whatever the organization setting.
-  - Hibernation also needs [`ARCHESTRA_BETA=true`](/docs/admin/deployment/configuration#ARCHESTRA_BETA), an enterprise license, and the organization setting turned on.
+  - Hibernation also needs an enterprise license and the organization setting turned on.
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED`** - Caches MCP server images on every node with a DaemonSet, so hibernated servers wake without pulling from the registry.
   - Default: `true`

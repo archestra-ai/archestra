@@ -15,12 +15,6 @@ import config from "@/config";
 import { isEncryptedChatEnabled } from "@/content-encryption/encrypted-chat";
 import { enterpriseTier } from "@/enterprise-tier";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-// biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
-import { isIdleHibernationOffered } from "@/k8s/mcp-server-runtime/hibernation.ee";
-// SPDX-SnippetEnd
 import {
   getGoogleDriveOAuthRedirectUri,
   isGoogleDriveOAuthConfigured,
@@ -115,10 +109,15 @@ export const ConfigResponseSchema = z.strictObject({
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // Deployment-level gate for MCP idle hibernation (the beta flag
-    // AND the operator kill switch); the licence and the
-    // organization toggle sit behind it.
-    mcpIdleHibernationBetaEnabled: z.boolean(),
+    /**
+     * @deprecated MCP idle hibernation is generally available. Kept in the
+     * contract only for clients of the beta release.
+     */
+    mcpIdleHibernationBetaEnabled: z.boolean().optional().meta({
+      deprecated: true,
+      description:
+        "Deprecated. Always true: MCP idle hibernation is generally available. Kept for backward compatibility.",
+    }),
     /** BETA: MCP registry attention and alert dismissal surfaces. */
     // SPDX-SnippetEnd
     sandbox: z.boolean(),
@@ -250,11 +249,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      // The whole deployment-level gate, not the beta flag alone: an
-      // operator's hard kill switch must take the settings toggle and the
-      // per-server control with it, or the UI renders an operational
-      // feature nothing behind it will ever run.
-      mcpIdleHibernationBetaEnabled: isIdleHibernationOffered(),
+      mcpIdleHibernationBetaEnabled: true,
       // SPDX-SnippetEnd
       sandbox: skillSandboxRuntimeService.isEnabled,
       agentRuntime: isAnyAgentRuntimeBackendDriverEnabled(),

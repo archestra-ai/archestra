@@ -312,10 +312,6 @@ function makeManager(cluster: FakeK8sCluster) {
     }),
   } as unknown as k8s.CustomObjectsApi;
 
-  // Idle hibernation ships behind a beta flag that is off by default, and the
-  // sweeper re-reads it on every tick — without it nothing in this seam sleeps.
-  config.orchestrator.mcpIdleHibernation.betaEnabled = true;
-
   const manager = new McpServerRuntimeManager();
   const internals = manager as unknown as ManagerInternals;
   internals.k8sApi = coreApi;
@@ -1155,7 +1151,6 @@ test.for([
   const organization = await makeOrganization({
     mcpIdleHibernationEnabled: hibernationEnabled,
   });
-  config.orchestrator.mcpIdleHibernation.betaEnabled = hibernationEnabled;
   const owner = await makeUser();
   await RuntimeCredentialDefinitionModel.create({
     organizationId: organization.id,
@@ -1208,7 +1203,6 @@ test.for([
     },
   });
   const { manager } = makeManager(cluster);
-  config.orchestrator.mcpIdleHibernation.betaEnabled = hibernationEnabled;
   let finish: (() => void) | undefined;
   let started: (() => void) | undefined;
   const active = new Promise<void>((resolve) => {

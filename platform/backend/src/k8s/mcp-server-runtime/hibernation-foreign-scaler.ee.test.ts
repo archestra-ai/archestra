@@ -242,8 +242,6 @@ function makeManager(cluster: FakeK8sCluster) {
     }),
   } as unknown as k8s.CustomObjectsApi;
 
-  config.orchestrator.mcpIdleHibernation.betaEnabled = true;
-
   const manager = new McpServerRuntimeManager();
   const internals = manager as unknown as ManagerInternals;
   internals.k8sApi = coreApi;

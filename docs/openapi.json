@@ -167518,6 +167518,8 @@
                               "additionalProperties": false
                             },
                             "mcpIdleHibernationBetaEnabled": {
+                              "deprecated": true,
+                              "description": "Deprecated. Always true: MCP idle hibernation is generally available. Kept for backward compatibility.",
                               "type": "boolean"
                             },
                             "sandbox": {
@@ -167709,7 +167711,6 @@
                             "betaEnabled",
                             "orchestratorK8sRuntime",
                             "agentIdentitySpiffe",
-                            "mcpIdleHibernationBetaEnabled",
                             "sandbox",
                             "agentRuntime",
                             "agentRuntimeCatalogImages",
@@ -205442,6 +205443,8 @@
                           "additionalProperties": false
                         },
                         "mcpIdleHibernationBetaEnabled": {
+                          "deprecated": true,
+                          "description": "Deprecated. Always true: MCP idle hibernation is generally available. Kept for backward compatibility.",
                           "type": "boolean"
                         },
                         "sandbox": {
@@ -205633,7 +205636,6 @@
                         "betaEnabled",
                         "orchestratorK8sRuntime",
                         "agentIdentitySpiffe",
-                        "mcpIdleHibernationBetaEnabled",
                         "sandbox",
                         "agentRuntime",
                         "agentRuntimeCatalogImages",

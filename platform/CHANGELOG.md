@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0-rc.36](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.35...platform-v1.5.0-rc.36) (2026-11-16)
+
+
+### Bug Fixes
+
+* **agent-runtime:** check the RuntimeClass with a dry-run pod instead of a cluster-scoped read ([#10779](https://github.com/archestra-ai/archestra/issues/10779)) ([87b17d2](https://github.com/archestra-ai/archestra/commit/87b17d21b2ff0f88c4c5d260cc195790d60ea585))
+
 ## [1.5.0-rc.35](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.34...platform-v1.5.0-rc.35) (2026-11-16)
 
 

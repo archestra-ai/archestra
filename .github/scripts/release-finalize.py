@@ -1,26 +1,14 @@
 #!/usr/bin/env python3
-"""Find the handed-off release requests that release-finalize.yml finishes.
+"""Decide when a push may recover a draft release, and record the holds that
+stop it.
 
 A Release Please run hands its request to release-publisher and ends
-(publish-release-images, `wait: false`); the release waits for its approval
-in the publisher. release-finalize.yml then publishes the GitHub release once
-the publisher run has succeeded. Two ways start it:
+(publish-release-images, `wait: false`); release-finalize.yml publishes the
+GitHub release once the publisher run succeeds (archestra-ai/.github
+release-finalize.yml finds and checks the request). A later push on the same
+line may recover a draft release that never got there. These modes decide
+whether it may:
 
-- Release Gate dispatches it on the release branch with `request_id`
-  (`<run>-<attempt>`) when the publisher run for that request succeeds.
-- A schedule sweeps (on main) for draft releases whose publisher run has
-  succeeded, and dispatches it on each request's branch, in case Release
-  Gate missed one.
-
-Neither is trusted. `request` reads everything from this repository's own
-release run and its `release-request-<attempt>` artifact; the finalize job
-then checks the publisher run and the public names (release-publish-verify)
-before it writes anything.
-
-  request  REQUEST_ID, GH_REPO, GITHUB_REF_NAME, REQUEST_DIR, GITHUB_OUTPUT
-           (GH_TOKEN: this repository, actions read and push access)
-  sweep    GH_REPO, PUBLISHER_REPOSITORY, PUBLISHER_TOKEN, GITHUB_OUTPUT
-           (GH_TOKEN: this repository, push access and actions write)
   recovery-hold
            GH_REPO, GITHUB_REF_NAME, PUBLISHER_REPOSITORY, PUBLISHER_TOKEN,
            VERSION, RELEASE_SHA, DRAFT_CREATED_AT, RETRY_HELD
@@ -44,12 +32,9 @@ import re
 import subprocess
 import sys
 
-REQUEST_ID = re.compile(r"([1-9][0-9]*)-([1-9][0-9]*)")
 VERSION = re.compile(r"\d+\.\d+\.\d+(?:-rc\.\d+)?")
 RELEASE_WORKFLOW = ".github/workflows/release-please.yml"
-RELEASE_BRANCH = re.compile(r"main|release/\d+\.\d+")
 REQUESTER = "archestra-releaser[bot]"
-PROJECT = "archestra"
 PUBLISH_TITLE = re.compile(r"Publish archestra (\S+) \[([1-9][0-9]*-[1-9][0-9]*)\]")
 SHA = re.compile(r"[0-9a-f]{40}")
 # release-handoff.py's MAX_AGE: a recovery selects only queue scans this fresh.
@@ -63,69 +48,6 @@ def command(*args, token=None):
 
 def api(path, token=None):
     return json.loads(command("gh", "api", path, token=token))
-
-
-def download(repository, run_id, name, directory):
-    command("gh", "run", "download", str(run_id), "--repo", repository, "--name", name, "--dir", str(directory))
-
-
-def resolve(repository, branch, request_id, directory, request=api, fetch=download):
-    """The handed-off request `request_id` of this repository's release run on
-    `branch`, and whether its draft release still needs publishing."""
-    match = REQUEST_ID.fullmatch(request_id or "")
-    if not match:
-        raise ValueError("request_id must be <run id>-<run attempt>")
-    if not RELEASE_BRANCH.fullmatch(branch):
-        raise ValueError(f"Releases finish only on main or release/X.Y, not {branch}")
-    run_id, attempt = int(match.group(1)), int(match.group(2))
-    run = request(f"repos/{repository}/actions/runs/{run_id}")
-    if (run.get("path") != RELEASE_WORKFLOW or run.get("head_branch") != branch
-            or run.get("event") not in ("push", "workflow_dispatch")
-            or run["repository"]["full_name"] != repository or run.get("run_attempt", 0) < attempt):
-        raise ValueError(f"Run {run_id} is not a {RELEASE_WORKFLOW} run on {branch}")
-    fetch(repository, run_id, f"release-request-{attempt}", directory)
-    payload = json.loads((Path(directory) / "request.json").read_text())
-    version = payload.get("version", "")
-    if (payload.get("project") != PROJECT or payload.get("request_id") != request_id
-            or not VERSION.fullmatch(version) or payload.get("smoke")):
-        raise ValueError(f"The kept request of run {run_id} attempt {attempt} is not an archestra release")
-    tag = f"platform-v{version}"
-    drafts = {release["tag_name"]: release for release in request(f"repos/{repository}/releases?per_page=100")}
-    release = drafts.get(tag)
-    if release is None:
-        raise ValueError(f"No release {tag}")
-    return {"run_id": run_id, "attempt": attempt, "version": version, "tag_name": tag,
-            "publish": bool(release.get("draft")), "request_file": str(Path(directory) / "request.json")}
-
-
-def sweep(repository, publisher, publisher_token, request=api):
-    """(branch, request id) for each draft release whose newest publisher run
-    succeeded, newest request first."""
-    drafts = {release["tag_name"].removeprefix("platform-v") for release in
-              request(f"repos/{repository}/releases?per_page=100")
-              if release.get("draft") and re.fullmatch(r"platform-v" + VERSION.pattern, release["tag_name"])}
-    if not drafts:
-        return []
-    runs = request(f"repos/{publisher}/actions/workflows/publish.yml/runs"
-                   "?event=repository_dispatch&branch=main&per_page=100", token=publisher_token)["workflow_runs"]
-    newest = {}
-    for run in runs:
-        title = PUBLISH_TITLE.fullmatch(run.get("display_title") or "")
-        if not title or title.group(1) not in drafts or (run.get("triggering_actor") or {}).get("login") != REQUESTER:
-            continue
-        # The newest request for a version decides: an older success must not
-        # finish a version whose latest request was rejected or failed.
-        if title.group(1) not in newest or run["created_at"] > newest[title.group(1)]["created_at"]:
-            newest[title.group(1)] = run
-    found = []
-    for version, run in sorted(newest.items()):
-        if run.get("status") != "completed" or run.get("conclusion") != "success":
-            continue
-        request_id = PUBLISH_TITLE.fullmatch(run["display_title"]).group(2)
-        source = request(f"repos/{repository}/actions/runs/{request_id.split('-')[0]}")
-        if source.get("path") == RELEASE_WORKFLOW and RELEASE_BRANCH.fullmatch(source.get("head_branch") or ""):
-            found.append((source["head_branch"], request_id))
-    return found
 
 
 def held_artifact(version, release_sha):
@@ -255,21 +177,7 @@ def main():
     mode = sys.argv[1]
     environment = os.environ
     repository = environment["GH_REPO"]
-    if mode == "request":
-        result = resolve(repository, environment["GITHUB_REF_NAME"], environment["REQUEST_ID"],
-                         environment["REQUEST_DIR"])
-        with open(environment["GITHUB_OUTPUT"], "a") as output:
-            for key, value in result.items():
-                output.write(f"{key}={str(value).lower() if isinstance(value, bool) else value}\n")
-        print(f"Request {environment['REQUEST_ID']}: {result['tag_name']}"
-              + ("" if result["publish"] else " is already published"))
-    elif mode == "sweep":
-        for branch, request_id in sweep(repository, environment["PUBLISHER_REPOSITORY"],
-                                        environment["PUBLISHER_TOKEN"]):
-            print(f"Finishing request {request_id} on {branch}")
-            command("gh", "workflow", "run", "release-finalize.yml", "--repo", repository, "--ref", branch,
-                    "-f", f"request_id={request_id}")
-    elif mode == "recovery-hold":
+    if mode == "recovery-hold":
         version = environment["VERSION"]
         hold = recovery_hold(repository, environment["GITHUB_REF_NAME"], version, environment["RELEASE_SHA"],
                              environment["DRAFT_CREATED_AT"], environment["PUBLISHER_REPOSITORY"],

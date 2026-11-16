@@ -152,24 +152,43 @@ test("builds the MCP service-account index without blocking writes and recovers 
   const seedStarted = Date.now();
   await database.query(
     `
-    INSERT INTO mcp_tool_calls (service_account_id, payload)
-    SELECT CASE WHEN value % 100 = 0 THEN $1::uuid ELSE NULL END,
-           repeat(md5(value::text), 8)
+    INSERT INTO mcp_tool_calls (payload)
+    SELECT repeat(md5(value::text), 8)
     FROM generate_series(1, 1000000) AS value
   `,
-    [account],
   );
   const seededMs = Date.now() - seedStarted;
   await database.query("ANALYZE mcp_tool_calls");
-  await fixture.addIndexAndLaterMigration();
+  await fixture.addAttributionAndLaterMigration();
 
-  await holder.query("BEGIN");
-  await holder.query(
-    "INSERT INTO mcp_tool_calls (payload) VALUES ('older writer')",
-  );
+  // An older snapshot on another table lets ADD COLUMN commit, then holds the
+  // concurrent build at its snapshot wait without blocking log inserts.
+  await holder.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
+  await holder.query("SELECT id FROM service_accounts");
   const holderStarted = Date.now();
   const interrupted = startMigration();
   const buildPid = await waitForIndexBuild(database);
+  const buildPhase = (
+    await database.query(
+      "SELECT phase FROM pg_stat_progress_create_index WHERE pid = $1",
+      [buildPid],
+    )
+  ).rows[0].phase;
+  assert.equal(buildPhase, "waiting for old snapshots");
+  assert.equal(
+    (
+      await database.query(
+        "SELECT count(*)::int AS count FROM mcp_tool_calls WHERE service_account_id IS NOT NULL",
+      )
+    ).rows[0].count,
+    0,
+    "historical rows must remain unattributed",
+  );
+  await database.query(
+    `INSERT INTO mcp_tool_calls (service_account_id, payload)
+     SELECT $1, 'new attributed log' FROM generate_series(1, 10000)`,
+    [account],
+  );
   await writer.query("SET statement_timeout = '1s'");
   const waitingSince = Date.now();
   let writes = 0;
@@ -212,13 +231,33 @@ test("builds the MCP service-account index without blocking writes and recovers 
   assert.equal(
     (
       await database.query(
+        "SELECT count(*)::int AS count FROM drizzle.__drizzle_migrations",
+      )
+    ).rows[0].count,
+    1,
+    "the failed combined migration must not be recorded despite its committed DDL",
+  );
+  assert.deepEqual(
+    (
+      await database.query(
+        `SELECT convalidated, confdeltype FROM pg_constraint
+         WHERE conrelid = 'mcp_tool_calls'::regclass
+           AND conname = 'mcp_tool_calls_service_account_id_service_accounts_id_fk'`,
+      )
+    ).rows,
+    [{ convalidated: false, confdeltype: "n" }],
+    "the unvalidated SET NULL foreign key must survive the interrupted build",
+  );
+  assert.equal(
+    (
+      await database.query(
         "SELECT to_regclass('after_mcp_index_probe') AS name",
       )
     ).rows[0].name,
     null,
   );
   await holder.query("COMMIT");
-  const heldWriterMs = Date.now() - holderStarted;
+  const heldSnapshotMs = Date.now() - holderStarted;
 
   const recoveryStarted = Date.now();
   const recovered = await startMigration().done;
@@ -243,7 +282,7 @@ test("builds the MCP service-account index without blocking writes and recovers 
         "SELECT count(*)::int AS count FROM drizzle.__drizzle_migrations",
       )
     ).rows[0].count,
-    4,
+    3,
   );
   const rerun = await startMigration().done;
   assert.equal(rerun.code, 0, rerun.output);
@@ -266,7 +305,7 @@ test("builds the MCP service-account index without blocking writes and recovers 
   const beforeDelete = (
     await database.query("SELECT count(*)::int AS count FROM mcp_tool_calls")
   ).rows[0].count;
-  assert.equal(beforeDelete, 1_000_001 + writes);
+  assert.equal(beforeDelete, 1_010_000 + writes);
   await database.query("DELETE FROM service_accounts WHERE id = $1", [account]);
   assert.equal(
     (await database.query("SELECT count(*)::int AS count FROM mcp_tool_calls"))
@@ -294,7 +333,10 @@ test("builds the MCP service-account index without blocking writes and recovers 
         .server_version,
       seededRows: 1_000_000,
       seededMs,
-      heldWriterMs,
+      heldSnapshotMs,
+      buildPhase,
+      newAttributedRows: 10_000,
+      committedDdlReplayed: true,
       concurrentWrites: writes,
       maxWriteMs,
       recoveryMs,
@@ -344,19 +386,12 @@ export default defineConfig({ dialect: "postgresql", out: "./src/database/migrat
   const sourceJournal = JSON.parse(
     await readFile(path.join(source, "meta/_journal.json"), "utf8"),
   );
-  const column = sourceJournal.entries.find(
-    (entry) => entry.tag === "0644_foamy_norman_osborn",
+  const attribution = sourceJournal.entries.find(
+    (entry) => entry.tag === "0646_a2a_service_account_attribution",
   );
-  const index = sourceJournal.entries.find(
-    (entry) => entry.tag === "0645_bitter_venom",
-  );
-  assert.ok(
-    column && index,
-    "the actual column and index migrations must be present",
-  );
+  assert.ok(attribution, "the actual combined migration must be present");
   const entries = [
     { idx: 0, version: "7", when: 1000, tag: "bootstrap", breakpoints: true },
-    { ...column, idx: 1 },
   ];
   const writeJournal = () =>
     writeFile(
@@ -368,18 +403,14 @@ export default defineConfig({ dialect: "postgresql", out: "./src/database/migrat
     `CREATE TABLE service_accounts (id uuid PRIMARY KEY);--> statement-breakpoint
 CREATE TABLE mcp_tool_calls (id bigserial PRIMARY KEY, payload text, created_at timestamptz NOT NULL DEFAULT now());`,
   );
-  await copyFile(
-    path.join(source, `${column.tag}.sql`),
-    path.join(migrations, `${column.tag}.sql`),
-  );
   await writeJournal();
   return {
     root,
     directory,
-    async addIndexAndLaterMigration() {
+    async addAttributionAndLaterMigration() {
       await copyFile(
-        path.join(source, `${index.tag}.sql`),
-        path.join(migrations, `${index.tag}.sql`),
+        path.join(source, `${attribution.tag}.sql`),
+        path.join(migrations, `${attribution.tag}.sql`),
       );
       await writeFile(
         path.join(migrations, "after_index.sql"),
@@ -387,11 +418,11 @@ CREATE TABLE mcp_tool_calls (id bigserial PRIMARY KEY, payload text, created_at 
 INSERT INTO after_mcp_index_probe VALUES (current_setting('lock_timeout'));`,
       );
       entries.push(
-        { ...index, idx: 2 },
+        { ...attribution, idx: 1 },
         {
-          idx: 3,
+          idx: 2,
           version: "7",
-          when: index.when + 1,
+          when: attribution.when + 1,
           tag: "after_index",
           breakpoints: true,
         },

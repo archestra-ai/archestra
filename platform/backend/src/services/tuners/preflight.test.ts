@@ -141,7 +141,7 @@ describe("runTunerPreflight", () => {
     expect(after?.status).toBe("resolved");
   });
 
-  test("a second delivery of the same run does nothing", async ({
+  test("a redelivered run resumes from its recorded scan", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -160,10 +160,58 @@ describe("runTunerPreflight", () => {
     await preflight(tuner);
     await seedDenials(tuner.organizationId);
 
-    expect(await preflight(tuner)).toEqual({ type: "duplicate" });
+    expect(await preflight(tuner)).toEqual({
+      type: "settled",
+      outcome: "no_candidates",
+    });
     expect(await recordOf(tuner.runId)).toEqual({
       outcome: "no_candidates",
       candidates: [],
+    });
+
+    const later = await appaTuner({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+    });
+    await seedDenials(later.organizationId);
+    await preflight(later);
+    expect(await preflight(later)).toMatchObject({ type: "run_agent" });
+  });
+
+  test("hands the agent at most 25 candidates, most severe first", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const tuner = await appaTuner({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+    });
+    for (let index = 0; index < 26; index += 1) {
+      await seedDenials(tuner.organizationId, `tool_${index}`);
+    }
+    for (let round = 0; round < 3; round += 1) {
+      await seedDenials(tuner.organizationId, "tool_25");
+    }
+
+    await preflight(tuner);
+
+    const record = await recordOf(tuner.runId);
+    expect(record?.candidates).toHaveLength(25);
+    expect(record?.candidates[0]).toMatchObject({
+      fingerprint: "appa_repeated_denials:tool_25",
+      severity: "critical",
     });
   });
 
@@ -268,7 +316,7 @@ async function recordOf(runId: string) {
 }
 
 /** Five policy denials of one tool across two sessions: one candidate. */
-async function seedDenials(organizationId: string) {
+async function seedDenials(organizationId: string, tool = DENIED_TOOL) {
   for (const [index, session] of ["s1", "s1", "s1", "s2", "s2"].entries()) {
     await db.insert(schema.openappaOperationsTable).values({
       organizationId,
@@ -276,7 +324,7 @@ async function seedDenials(organizationId: string) {
       operationId: `call:${crypto.randomUUID()}`,
       root: "root",
       status: "complete",
-      input: { semantic: { event: "tool_call", tool: DENIED_TOOL } },
+      input: { semantic: { event: "tool_call", tool } },
       decision: { decision: "deny_call", offers: [] },
       createdAt: new Date(Date.now() - (index + 1) * 60 * 60 * 1000),
     });

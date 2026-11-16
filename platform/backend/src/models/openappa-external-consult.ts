@@ -164,6 +164,12 @@ class OpenappaExternalConsultModel {
           AND c.role = 'authority'
           AND c.backend = 'hitl'
           AND c.outcome = 'answered'
+      ),
+      ranked AS (
+        SELECT ruled.*,
+          ROW_NUMBER() OVER (PARTITION BY tool, ruling ORDER BY created_at DESC, id DESC) AS rn
+        FROM ruled
+        WHERE tool IS NOT NULL AND tool <> ''
       )
       SELECT tool,
         COUNT(*) FILTER (WHERE ruling = 'approve')::int AS approved,
@@ -173,11 +179,10 @@ class OpenappaExternalConsultModel {
         MIN(created_at) AS first_at,
         MAX(created_at) AS last_at,
         COALESCE(to_jsonb((ARRAY_AGG(id::text ORDER BY created_at DESC, id DESC)
-          FILTER (WHERE ruling = 'approve'))[1:${params.evidenceLimit}::int]), '[]'::jsonb) AS approved_ids,
+          FILTER (WHERE ruling = 'approve' AND rn <= ${params.evidenceLimit}::int))[1:${params.evidenceLimit}::int]), '[]'::jsonb) AS approved_ids,
         COALESCE(to_jsonb((ARRAY_AGG(id::text ORDER BY created_at DESC, id DESC)
-          FILTER (WHERE ruling = 'deny'))[1:${params.evidenceLimit}::int]), '[]'::jsonb) AS denied_ids
-      FROM ruled
-      WHERE tool IS NOT NULL AND tool <> ''
+          FILTER (WHERE ruling = 'deny' AND rn <= ${params.evidenceLimit}::int))[1:${params.evidenceLimit}::int]), '[]'::jsonb) AS denied_ids
+      FROM ranked
       GROUP BY tool
       ORDER BY COUNT(*) DESC, tool
       LIMIT ${params.limit}
@@ -209,15 +214,21 @@ class OpenappaExternalConsultModel {
           AND c.role = 'authority'
           AND c.backend = 'stock'
           AND c.outcome = 'answered'
+      ),
+      ranked AS (
+        SELECT approved.*,
+          ROW_NUMBER() OVER (PARTITION BY tool ORDER BY created_at DESC, id DESC) AS rn
+        FROM approved
+        WHERE tool IS NOT NULL AND tool <> ''
       )
       SELECT tool,
         COUNT(*)::int AS approvals,
         COUNT(DISTINCT session_id)::int AS sessions,
         MIN(created_at) AS first_at,
         MAX(created_at) AS last_at,
-        to_jsonb((ARRAY_AGG(id::text ORDER BY created_at DESC, id DESC))[1:${params.evidenceLimit}::int]) AS recent_ids
-      FROM approved
-      WHERE tool IS NOT NULL AND tool <> ''
+        COALESCE(to_jsonb((ARRAY_AGG(id::text ORDER BY created_at DESC, id DESC)
+          FILTER (WHERE rn <= ${params.evidenceLimit}::int))[1:${params.evidenceLimit}::int]), '[]'::jsonb) AS recent_ids
+      FROM ranked
       GROUP BY tool
       ORDER BY approvals DESC, tool
       LIMIT ${params.limit}

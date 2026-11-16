@@ -151375,6 +151375,7 @@ export type ListTunerSuggestionsResponses = {
                 publication: {
                     number: number;
                     url: string;
+                    repo: string;
                 } | null;
             };
             status: 'open' | 'done' | 'rejected' | 'published' | 'effective' | 'resolved';
@@ -151542,6 +151543,7 @@ export type MarkTunerSuggestionDoneResponses = {
             publication: {
                 number: number;
                 url: string;
+                repo: string;
             } | null;
         };
         status: 'open' | 'done' | 'rejected' | 'published' | 'effective' | 'resolved';
@@ -151700,6 +151702,7 @@ export type RejectTunerSuggestionResponses = {
             publication: {
                 number: number;
                 url: string;
+                repo: string;
             } | null;
         };
         status: 'open' | 'done' | 'rejected' | 'published' | 'effective' | 'resolved';
@@ -151856,6 +151859,7 @@ export type ApplyTunerSuggestionResponses = {
             publication: {
                 number: number;
                 url: string;
+                repo: string;
             } | null;
         };
         status: 'open' | 'done' | 'rejected' | 'published' | 'effective' | 'resolved';
@@ -152012,6 +152016,7 @@ export type RefreshTunerSuggestionResponses = {
             publication: {
                 number: number;
                 url: string;
+                repo: string;
             } | null;
         };
         status: 'open' | 'done' | 'rejected' | 'published' | 'effective' | 'resolved';

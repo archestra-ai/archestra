@@ -216,8 +216,79 @@ describe("TunerSuggestionModel", () => {
     const released = await TunerSuggestionModel.releaseClaim({
       id: created.suggestion.id,
       organizationId,
+      publication: null,
     });
     expect(released?.status).toBe("open");
+  });
+
+  test("settling an old change request leaves a newer apply alone", async ({
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const { propose, organizationId, userId } = await setup({
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+      makeOrganization,
+      makeUser,
+    });
+    const created = await propose(candidate());
+    if (created.type !== "created") throw new Error("expected created");
+    const id = created.suggestion.id;
+    const publish = async (number: number) => {
+      await TunerSuggestionModel.claimForApply({ id, organizationId, userId });
+      return TunerSuggestionModel.recordPublication({
+        id,
+        organizationId,
+        action: {
+          type: "policy_change",
+          expectedRevision: 1,
+          edits: [{ oldText: "a", newText: "b" }],
+          gate: {
+            verification: "unverified",
+            reasons: ["no_saved_validations"],
+            files: [],
+            suiteVersion: null,
+          },
+          publication: {
+            number,
+            url: `https://example.com/pr/${number}`,
+            repo: "o/r",
+          },
+        },
+      });
+    };
+    await publish(1);
+    await TunerSuggestionModel.releaseClaim({
+      id,
+      organizationId,
+      publication: 1,
+    });
+    await publish(2);
+
+    expect(
+      await TunerSuggestionModel.releaseClaim({
+        id,
+        organizationId,
+        publication: 1,
+      }),
+    ).toBeNull();
+    expect(
+      await TunerSuggestionModel.markEffective({
+        id,
+        organizationId,
+        userId: null,
+        publication: 1,
+      }),
+    ).toBeNull();
+    const effective = await TunerSuggestionModel.markEffective({
+      id,
+      organizationId,
+      userId: null,
+      publication: 2,
+    });
+    expect(effective?.status).toBe("effective");
   });
 
   test("done and rejected suppress the fingerprint; a higher severity re-opens", async ({

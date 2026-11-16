@@ -369,6 +369,12 @@ export default class OpenAppaYellModel {
             kinds.map((kind) => sql`${kind}`),
             sql`, `,
           )})
+      ),
+      ranked AS (
+        SELECT named.*,
+          ROW_NUMBER() OVER (PARTITION BY tool ORDER BY created_at DESC, id DESC) AS rn
+        FROM named
+        WHERE tool <> ''
       )
       SELECT tool,
         COUNT(DISTINCT id)::int AS yells,
@@ -377,9 +383,9 @@ export default class OpenAppaYellModel {
         MIN(created_at) AS first_at,
         MAX(created_at) AS last_at,
         to_jsonb(ARRAY_AGG(DISTINCT kind)) AS kinds,
-        to_jsonb((ARRAY_AGG(id::text ORDER BY created_at DESC, id DESC))[1:${params.evidenceLimit}::int]) AS recent_ids
-      FROM named
-      WHERE tool <> ''
+        COALESCE(to_jsonb((ARRAY_AGG(id::text ORDER BY created_at DESC, id DESC)
+          FILTER (WHERE rn <= ${params.evidenceLimit}::int))[1:${params.evidenceLimit}::int]), '[]'::jsonb) AS recent_ids
+      FROM ranked
       GROUP BY tool
       ORDER BY yells DESC, tool
       LIMIT ${params.limit}

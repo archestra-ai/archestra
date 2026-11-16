@@ -5,7 +5,7 @@ import {
   loadKubeConfig,
   withK8sApiRetry,
 } from "@/k8s/shared";
-import type { TunerCandidate } from "@/types/tuner";
+import type { TunerCandidateScan } from "@/types/tuner";
 import { type SreClusterSnapshot, sreCandidates } from "./sre-sources";
 
 class SreClusterNotConfiguredError extends Error {
@@ -20,7 +20,7 @@ class SreClusterNotConfiguredError extends Error {
 /** Scans the MCP-server namespace and the platform's own namespace. */
 export async function collectSreCandidates(
   now: Date,
-): Promise<TunerCandidate[]> {
+): Promise<TunerCandidateScan> {
   if (!isK8sConfigured()) {
     throw new SreClusterNotConfiguredError();
   }
@@ -52,7 +52,7 @@ export async function collectSreCandidates(
     }),
   );
 
-  return sreCandidates(
+  const candidates = sreCandidates(
     {
       pods: snapshots.flatMap((s) => s.pods),
       deployments: snapshots.flatMap((s) => s.deployments),
@@ -60,4 +60,5 @@ export async function collectSreCandidates(
     },
     now,
   );
+  return { candidates, complete: true };
 }

@@ -334,7 +334,7 @@ describe("collectAppaCandidates", () => {
 
     expect(
       await collectAppaCandidates({ organizationId: org, now: new Date() }),
-    ).toEqual([]);
+    ).toEqual({ candidates: [], complete: true });
   });
 
   test("ignores another organization's rows", async ({ makeOrganization }) => {
@@ -360,7 +360,7 @@ describe("collectAppaCandidates", () => {
 
     expect(
       await collectAppaCandidates({ organizationId: org, now: new Date() }),
-    ).toEqual([]);
+    ).toEqual({ candidates: [], complete: true });
     expect(
       new Set(
         (
@@ -368,7 +368,7 @@ describe("collectAppaCandidates", () => {
             organizationId: other,
             now: new Date(),
           })
-        ).map((c) => c.source),
+        ).candidates.map((c) => c.source),
       ),
     ).toEqual(
       new Set([
@@ -389,8 +389,11 @@ async function candidatesOf(
   organizationId: string,
   source: TunerCandidateSource,
 ): Promise<TunerCandidate[]> {
-  const all = await collectAppaCandidates({ organizationId, now: new Date() });
-  return all.filter((candidate) => candidate.source === source);
+  const { candidates } = await collectAppaCandidates({
+    organizationId,
+    now: new Date(),
+  });
+  return candidates.filter((candidate) => candidate.source === source);
 }
 
 function hoursAgo(hours: number): Date {

@@ -1,5 +1,14 @@
 import type { PaginationQuery } from "@archestra/shared";
-import { and, count, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  inArray,
+  notInArray,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import {
   createPaginatedResult,
@@ -237,19 +246,31 @@ class TunerSuggestionModel {
     });
   }
 
-  /** Returns a claimed suggestion to `open` after its apply failed. */
+  /**
+   * Returns a published suggestion to `open` and forgets its publication.
+   * `publication` names the change request the caller saw (null: the claim
+   * before anything was published), so a stale caller cannot release a newer
+   * apply.
+   */
   static async releaseClaim(params: {
     id: string;
     organizationId: string;
+    publication: number | null;
   }): Promise<TunerSuggestion | null> {
     return transition({
       id: params.id,
       organizationId: params.organizationId,
       from: "published",
-      set: { status: "open", statusChangedBy: null },
+      where: publicationIs(params.publication),
+      set: {
+        status: "open",
+        statusChangedBy: null,
+        action: sql`jsonb_set(${table.action}, '{publication}', 'null'::jsonb)`,
+      },
     });
   }
 
+  /** Records the change request of a claim that has none yet. */
   static async recordPublication(params: {
     id: string;
     organizationId: string;
@@ -263,21 +284,25 @@ class TunerSuggestionModel {
           eq(table.id, params.id),
           eq(table.organizationId, params.organizationId),
           eq(table.status, "published"),
+          publicationIs(null),
         ),
       )
       .returning();
     return row ?? null;
   }
 
+  /** `publication` as for `releaseClaim`. */
   static async markEffective(params: {
     id: string;
     organizationId: string;
     userId: string | null;
+    publication: number | null;
   }): Promise<TunerSuggestion | null> {
     return transition({
       id: params.id,
       organizationId: params.organizationId,
       from: "published",
+      where: publicationIs(params.publication),
       set: { status: "effective", statusChangedBy: params.userId },
     });
   }
@@ -337,10 +362,12 @@ async function transition(params: {
   id: string;
   organizationId: string;
   from: TunerSuggestionStatus;
+  where?: SQL;
   set: {
     status: TunerSuggestionStatus;
     statusChangedBy: string | null;
     comment?: string | null;
+    action?: SQL;
   };
   now?: Date;
 }): Promise<TunerSuggestion | null> {
@@ -364,11 +391,16 @@ async function transition(params: {
           eq(table.id, params.id),
           eq(table.organizationId, params.organizationId),
           eq(table.status, params.from),
+          params.where,
         ),
       )
       .returning();
     return row ?? null;
   });
+}
+
+function publicationIs(number: number | null): SQL {
+  return sql`(${table.action}->'publication'->>'number')::int IS NOT DISTINCT FROM ${number}::int`;
 }
 
 async function historyByFingerprint(

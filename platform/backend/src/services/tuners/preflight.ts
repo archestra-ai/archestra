@@ -1,7 +1,13 @@
 import logger from "@/logging";
 import { ScheduleTriggerRunModel, TunerSuggestionModel } from "@/models";
 import type { ScheduleTrigger } from "@/types/schedule-trigger";
-import type { TunerCandidate, TunerKind, TunerRunOutcome } from "@/types/tuner";
+import {
+  severityRank,
+  type TunerCandidate,
+  type TunerKind,
+  type TunerRunOutcome,
+  type TunerRunRecord,
+} from "@/types/tuner";
 import type { TunerSuggestion } from "@/types/tuner-suggestion";
 import {
   EMPTY_FINGERPRINT_HISTORY,
@@ -11,19 +17,17 @@ import { hasTunerAccess } from "./access";
 import { TUNERS } from "./registry";
 
 export type TunerPreflight =
-  /** Another delivery of this run already scanned; do nothing. */
-  | { type: "duplicate" }
   /** Nothing for the agent to look at; the run succeeds without it. */
   | { type: "settled"; outcome: Exclude<TunerRunOutcome, "agent_ran"> }
   | { type: "run_agent"; message: string };
 
-const HISTORY_PER_FINGERPRINT = 3;
-
 /**
  * Everything a tuner run does before its agent: recheck who it runs as and
- * what it runs, collect candidates in code, claim the run, resolve what
- * vanished, and drop what history suppresses. A collection error throws
- * before anything is written, so it never resolves a suggestion.
+ * what it runs, collect candidates in code, record the scan on the run,
+ * resolve what vanished, and drop what history suppresses. A collection error
+ * throws before anything is written, so it never resolves a suggestion. A
+ * redelivered run (its first attempt died after recording the scan) resumes
+ * from the recorded scan instead of scanning again.
  */
 export async function runTunerPreflight(params: {
   runId: string;
@@ -54,12 +58,18 @@ export async function runTunerPreflight(params: {
     throw new Error("A tuner agent must not run in an Agent Runtime");
   }
 
-  const collected = await tuner.collect({ organizationId, now });
+  const recorded = (await ScheduleTriggerRunModel.findById(params.runId))
+    ?.tuner;
+  if (recorded) {
+    return proceed({ organizationId, trigger, record: recorded });
+  }
+
+  const scan = await tuner.collect({ organizationId, now });
   const history = await TunerSuggestionModel.historyByFingerprint({
     organizationId,
-    fingerprints: collected.map((c) => c.fingerprint),
+    fingerprints: scan.candidates.map((c) => c.fingerprint),
   });
-  const forAgent = collected.filter(
+  const fresh = scan.candidates.filter(
     (candidate) =>
       suppressionVerdict(
         history.get(candidate.fingerprint) ?? EMPTY_FINGERPRINT_HISTORY,
@@ -67,40 +77,63 @@ export async function runTunerPreflight(params: {
         now,
       ).type !== "suppressed",
   );
-  const outcome: TunerRunOutcome =
-    collected.length === 0
-      ? "no_candidates"
-      : forAgent.length === 0
-        ? "all_suppressed"
-        : "agent_ran";
+  const forAgent = [...fresh]
+    .sort((a, b) => severityRank(b.severity) - severityRank(a.severity))
+    .slice(0, MAX_CANDIDATES_PER_RUN);
+  const record: TunerRunRecord = {
+    outcome:
+      scan.candidates.length === 0
+        ? "no_candidates"
+        : forAgent.length === 0
+          ? "all_suppressed"
+          : "agent_ran",
+    candidates: forAgent,
+  };
 
   if (
     !(await ScheduleTriggerRunModel.claimTunerScan({
       runId: params.runId,
-      record: { outcome, candidates: forAgent },
+      record,
     }))
   ) {
-    return { type: "duplicate" };
+    throw new Error("Another attempt of this tuner run recorded its scan");
   }
 
-  const resolved = await TunerSuggestionModel.resolveVanished({
-    organizationId,
-    tunerKind: trigger.tunerKind,
-    present: collected.map((c) => c.fingerprint),
-    now,
-  });
+  // A scan that hit a read limit cannot tell a vanished issue from an unread one.
+  const resolved = scan.complete
+    ? await TunerSuggestionModel.resolveVanished({
+        organizationId,
+        tunerKind: trigger.tunerKind,
+        present: scan.candidates.map((c) => c.fingerprint),
+        now,
+      })
+    : 0;
   await tuner.settle({ organizationId, userId: trigger.actorUserId });
   logger.info(
     {
       runId: params.runId,
       tunerKind: trigger.tunerKind,
-      collected: collected.length,
+      collected: scan.candidates.length,
+      complete: scan.complete,
+      fresh: fresh.length,
       forAgent: forAgent.length,
       resolved,
     },
     "Tuner preflight finished",
   );
+  return proceed({ organizationId, trigger, record });
+}
 
+/** Unsuppressed candidates handed to the agent per run, most severe first. */
+const MAX_CANDIDATES_PER_RUN = 25;
+const HISTORY_PER_FINGERPRINT = 3;
+
+async function proceed(params: {
+  organizationId: string;
+  trigger: ScheduleTrigger;
+  record: TunerRunRecord;
+}): Promise<TunerPreflight> {
+  const { outcome, candidates } = params.record;
   switch (outcome) {
     case "no_candidates":
     case "all_suppressed":
@@ -109,11 +142,11 @@ export async function runTunerPreflight(params: {
       return {
         type: "run_agent",
         message: tunerMessage({
-          instructions: trigger.messageTemplate,
-          candidates: forAgent,
+          instructions: params.trigger.messageTemplate,
+          candidates,
           recent: await TunerSuggestionModel.recentByFingerprint({
-            organizationId,
-            fingerprints: forAgent.map((c) => c.fingerprint),
+            organizationId: params.organizationId,
+            fingerprints: candidates.map((c) => c.fingerprint),
             perFingerprint: HISTORY_PER_FINGERPRINT,
           }),
         }),

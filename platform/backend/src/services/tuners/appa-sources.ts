@@ -3,6 +3,7 @@ import OpenAppaOperationModel from "@/models/openappa-operation";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import {
   type TunerCandidate,
+  type TunerCandidateScan,
   type TunerCandidateSource,
   type TunerEvidenceRef,
   type TunerSeverity,
@@ -17,7 +18,7 @@ import {
 export async function collectAppaCandidates(params: {
   organizationId: string;
   now: Date;
-}): Promise<TunerCandidate[]> {
+}): Promise<TunerCandidateScan> {
   const window = {
     organizationId: params.organizationId,
     since: new Date(params.now.getTime() - WINDOW_DAYS * DAY_MS),
@@ -38,11 +39,14 @@ export async function collectAppaCandidates(params: {
     OpenAppaYellModel.unresolvedAgentYells({
       ...window,
       since: new Date(0),
-      limit: CANDIDATES_PER_SOURCE,
+      limit: TOOL_SCAN_LIMIT,
     }),
   ]);
+  const complete = [hitl, denied, stock, waivers, agentYells].every(
+    (rows) => rows.length < TOOL_SCAN_LIMIT,
+  );
 
-  return [
+  const candidates = [
     ...top(
       hitl
         .filter(
@@ -144,6 +148,7 @@ export async function collectAppaCandidates(params: {
         ),
     ),
   ];
+  return { candidates, complete };
 }
 
 // =============================================================================
@@ -155,8 +160,7 @@ type Counted = { candidate: TunerCandidate; count: number };
 
 const WINDOW_DAYS = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const CANDIDATES_PER_SOURCE = 50;
-/** Tools read per source before thresholds apply; well above any real count. */
+/** Rows read per source; a scan that fills it is incomplete. */
 const TOOL_SCAN_LIMIT = 500;
 const EVIDENCE_LIMIT = 5;
 /** A count this many times its threshold raises the severity one level. */
@@ -198,7 +202,6 @@ function candidate(params: {
 function top(counted: Counted[]): TunerCandidate[] {
   return [...counted]
     .sort((a, b) => b.count - a.count)
-    .slice(0, CANDIDATES_PER_SOURCE)
     .map((entry) => entry.candidate);
 }
 

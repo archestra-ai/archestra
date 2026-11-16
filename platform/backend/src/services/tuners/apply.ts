@@ -1,6 +1,7 @@
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import { TunerSuggestionModel } from "@/models";
+import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import {
   getOpenAppaPolicyChangeStatus,
   publishOpenAppaPolicyChange,
@@ -52,7 +53,7 @@ export async function applyPolicySuggestion(params: {
       summary: suggestion.rationale,
     });
   } catch (error) {
-    await TunerSuggestionModel.releaseClaim(params);
+    await TunerSuggestionModel.releaseClaim({ ...params, publication: null });
     throw error;
   }
 
@@ -61,14 +62,18 @@ export async function applyPolicySuggestion(params: {
       case "revision":
         return TunerSuggestionModel.markEffective({
           ...params,
-          userId: params.userId,
+          publication: null,
         });
       case "pull_request":
         return TunerSuggestionModel.recordPublication({
           ...params,
           action: {
             ...action,
-            publication: { number: published.number, url: published.url },
+            publication: {
+              number: published.number,
+              url: published.url,
+              repo: published.repo,
+            },
           },
         });
     }
@@ -80,7 +85,9 @@ export async function applyPolicySuggestion(params: {
 
 /**
  * Moves a published change on once its change request settles: merged and
- * applied by Git sync → effective; closed unmerged → open again.
+ * applied by Git sync → effective; closed unmerged → open again. A claim left
+ * without a change request by an interrupted apply returns to open once it is
+ * clearly abandoned.
  */
 export async function refreshPolicySuggestion(params: {
   id: string;
@@ -89,11 +96,32 @@ export async function refreshPolicySuggestion(params: {
 }): Promise<TunerSuggestion> {
   const suggestion = await TunerSuggestionModel.findById(params);
   if (!suggestion) throw new ApiError(404, "Suggestion not found");
-  const publication =
-    suggestion.action.type === "policy_change"
-      ? suggestion.action.publication
-      : null;
-  if (suggestion.status !== "published" || !publication) return suggestion;
+  if (
+    suggestion.status !== "published" ||
+    suggestion.action.type !== "policy_change"
+  ) {
+    return suggestion;
+  }
+  const publication = suggestion.action.publication;
+  if (!publication) {
+    const abandoned =
+      Date.now() - suggestion.statusChangedAt.getTime() > ABANDONED_CLAIM_MS;
+    return abandoned
+      ? ((await TunerSuggestionModel.releaseClaim({
+          id: params.id,
+          organizationId: params.organizationId,
+          publication: null,
+        })) ?? suggestion)
+      : suggestion;
+  }
+  const source = await OpenAppaGithubSyncModel.find(params.organizationId);
+  if (source?.repo !== publication.repo) {
+    logger.warn(
+      { suggestionId: suggestion.id, repo: publication.repo },
+      "Git sync no longer points at the repository of a published tuner change",
+    );
+    return suggestion;
+  }
 
   const status = await getOpenAppaPolicyChangeStatus({
     organizationId: params.organizationId,
@@ -106,9 +134,14 @@ export async function refreshPolicySuggestion(params: {
           id: params.id,
           organizationId: params.organizationId,
           userId: null,
+          publication: publication.number,
         })
       : status.state === "closed"
-        ? await TunerSuggestionModel.releaseClaim(params)
+        ? await TunerSuggestionModel.releaseClaim({
+            id: params.id,
+            organizationId: params.organizationId,
+            publication: publication.number,
+          })
         : null;
   return moved ?? suggestion;
 }
@@ -132,3 +165,6 @@ export async function refreshPublishedPolicyChanges(params: {
     }
   }
 }
+
+/** Far longer than any apply takes; an older claim without a change request was interrupted. */
+const ABANDONED_CLAIM_MS = 15 * 60 * 1000;

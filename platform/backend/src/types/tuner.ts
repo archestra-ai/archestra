@@ -82,6 +82,15 @@ export const TunerCandidateSchema = z.object({
 });
 export type TunerCandidate = z.infer<typeof TunerCandidateSchema>;
 
+/**
+ * A tuner's collected candidates. `complete` is false when a source hit its
+ * read limit: candidates past it exist but are unknown.
+ */
+export type TunerCandidateScan = {
+  candidates: TunerCandidate[];
+  complete: boolean;
+};
+
 export const TunerRunOutcomeSchema = z.enum([
   "no_candidates",
   "all_suppressed",
@@ -122,6 +131,8 @@ export type TunerGateResult = z.infer<typeof TunerGateResultSchema>;
 export const TunerPolicyPublicationSchema = z.object({
   number: z.number().int().positive(),
   url: z.string().url(),
+  /** The Git sync repository the change request was opened in. */
+  repo: z.string(),
 });
 
 export const TunerSuggestedActionSchema = z.discriminatedUnion("type", [

@@ -6,7 +6,6 @@ import type { TunerKind, TunerRunRecord } from "@/types/tuner";
 /** A schedule run whose trigger runs a tuner, read fresh from the database. */
 export interface TunerRunScope {
   runId: string;
-  triggerId: string;
   organizationId: string;
   tunerKind: TunerKind;
   agentId: string;
@@ -33,7 +32,6 @@ export async function findTunerRun(
   }
   return {
     runId: run.id,
-    triggerId: trigger.id,
     organizationId: run.organizationId,
     tunerKind: trigger.tunerKind,
     agentId: trigger.agentId,

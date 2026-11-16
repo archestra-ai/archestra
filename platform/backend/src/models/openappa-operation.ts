@@ -104,18 +104,23 @@ class OpenAppaOperationModel {
           AND o.status = 'complete'
           AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'tool_call'
           AND o.decision->>'decision' = 'deny_call'
+      ),
+      ranked AS (
+        SELECT denied.*,
+          ROW_NUMBER() OVER (PARTITION BY tool ORDER BY created_at DESC, operation_id DESC) AS rn
+        FROM denied
+        WHERE tool IS NOT NULL AND tool <> ''
       )
       SELECT tool,
         COUNT(*)::int AS denials,
         COUNT(DISTINCT session_id)::int AS sessions,
         MIN(created_at) AS first_at,
         MAX(created_at) AS last_at,
-        to_jsonb((ARRAY_AGG(
+        COALESCE(to_jsonb((ARRAY_AGG(
           jsonb_build_object('sessionId', session_id, 'operationId', operation_id)
           ORDER BY created_at DESC, operation_id DESC
-        ))[1:${params.evidenceLimit}::int]) AS recent
-      FROM denied
-      WHERE tool IS NOT NULL AND tool <> ''
+        ) FILTER (WHERE rn <= ${params.evidenceLimit}::int))[1:${params.evidenceLimit}::int]), '[]'::jsonb) AS recent
+      FROM ranked
       GROUP BY tool
       ORDER BY denials DESC, tool
       LIMIT ${params.limit}

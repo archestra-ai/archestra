@@ -584218,11 +584218,15 @@
                                       "url": {
                                         "type": "string",
                                         "format": "uri"
+                                      },
+                                      "repo": {
+                                        "type": "string"
                                       }
                                     },
                                     "required": [
                                       "number",
-                                      "url"
+                                      "url",
+                                      "repo"
                                     ],
                                     "additionalProperties": false
                                   }
@@ -584947,11 +584951,15 @@
                                 "url": {
                                   "type": "string",
                                   "format": "uri"
+                                },
+                                "repo": {
+                                  "type": "string"
                                 }
                               },
                               "required": [
                                 "number",
-                                "url"
+                                "url",
+                                "repo"
                               ],
                               "additionalProperties": false
                             }
@@ -585631,11 +585639,15 @@
                                 "url": {
                                   "type": "string",
                                   "format": "uri"
+                                },
+                                "repo": {
+                                  "type": "string"
                                 }
                               },
                               "required": [
                                 "number",
-                                "url"
+                                "url",
+                                "repo"
                               ],
                               "additionalProperties": false
                             }
@@ -586294,11 +586306,15 @@
                                 "url": {
                                   "type": "string",
                                   "format": "uri"
+                                },
+                                "repo": {
+                                  "type": "string"
                                 }
                               },
                               "required": [
                                 "number",
-                                "url"
+                                "url",
+                                "repo"
                               ],
                               "additionalProperties": false
                             }
@@ -586957,11 +586973,15 @@
                                 "url": {
                                   "type": "string",
                                   "format": "uri"
+                                },
+                                "repo": {
+                                  "type": "string"
                                 }
                               },
                               "required": [
                                 "number",
-                                "url"
+                                "url",
+                                "repo"
                               ],
                               "additionalProperties": false
                             }

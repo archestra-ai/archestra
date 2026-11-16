@@ -9,7 +9,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import { useInteractionAutoRouting } from "@/lib/interactions/interaction.query";
 import { useModelPools } from "@/lib/model-pools.query";
 import { formatLatency } from "@/lib/utils/format-duration";
@@ -216,14 +215,12 @@ function PoolSection({
   row: InteractionSummary;
   requests: InteractionSummary[];
 }) {
-  // Model pools are a beta feature: while it is off, their API is gone.
-  const poolsEnabled = useFeature("llmModelPoolsEnabled") === true;
   const { data: canReadPools } = useHasPermissions({ llmModel: ["read"] });
   const { data: pools = [], isSuccess: poolsLoaded } = useModelPools({
-    enabled: poolsEnabled && Boolean(canReadPools) && Boolean(row.modelPoolId),
+    enabled: Boolean(canReadPools) && Boolean(row.modelPoolId),
     toastOnError: false,
   });
-  if (!row.modelPoolId || !poolsEnabled) return null;
+  if (!row.modelPoolId) return null;
   const pool = pools.find((candidate) => candidate.id === row.modelPoolId);
   const members = pool?.members ?? [];
   // Without the pool config (no access, or not loaded) names are unknown, not

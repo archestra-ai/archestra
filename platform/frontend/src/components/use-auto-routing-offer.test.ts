@@ -33,7 +33,6 @@ const router = (
     ...overrides,
   }) as OfferedRouter;
 const base = {
-  featureEnabled: true,
   routers: [router("auto")],
   virtualApiKeyId: null,
   routableModels,
@@ -41,10 +40,7 @@ const base = {
 };
 
 describe("autoRoutingOffer", () => {
-  it("offers nothing while the alpha is off or the routers are unavailable", () => {
-    expect(autoRoutingOffer({ ...base, featureEnabled: false })).toEqual({
-      kind: "none",
-    });
+  it("offers nothing while the routers are unavailable", () => {
     expect(autoRoutingOffer({ ...base, routers: null })).toEqual({
       kind: "none",
     });

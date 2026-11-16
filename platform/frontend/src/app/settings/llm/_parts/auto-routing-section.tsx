@@ -9,15 +9,13 @@ import {
   useAutoRoutingState,
   useUpdateAutoRoutingState,
 } from "@/lib/auto-routing.query";
-import { useFeature } from "@/lib/config/config.query";
 
 /**
  * Whether the organization's auto routers are offered and answer requests.
  * The routers themselves are set up on the Auto Routing page.
  */
 export function AutoRoutingSection() {
-  const featureEnabled = useFeature("autoRoutingEnabled") === true;
-  const { data: state } = useAutoRoutingState({ enabled: featureEnabled });
+  const { data: state } = useAutoRoutingState();
   const update = useUpdateAutoRoutingState();
 
   const saved = state?.enabled ?? false;
@@ -31,7 +29,7 @@ export function AutoRoutingSection() {
     setEnabled(saved);
   }, [saved]);
 
-  if (!featureEnabled || !state) return null;
+  if (!state) return null;
 
   return (
     <>

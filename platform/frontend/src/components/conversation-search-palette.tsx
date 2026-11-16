@@ -18,7 +18,6 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AUTO_ROUTING_URL,
   chatsNavItems,
   contentNavGroups,
   isNavItemPermitted,
@@ -151,7 +150,6 @@ function useNavigationDestinations(
   permissionMap: Record<string, boolean> | null,
 ) {
   const openappaEnabled = useFeature("openappaEnabled");
-  const autoRoutingEnabled = useFeature("autoRoutingEnabled");
   const { visible: showConnect } = useConnectNavigation();
 
   return useMemo(() => {
@@ -170,9 +168,6 @@ function useNavigationDestinations(
           return showConnect;
         }
         if (item.url === "/openappa" && openappaEnabled !== true) return false;
-        if (item.url === AUTO_ROUTING_URL && autoRoutingEnabled !== true) {
-          return false;
-        }
         return isNavItemPermitted(item, permissionMap);
       })
       .map((item) => ({
@@ -182,7 +177,7 @@ function useNavigationDestinations(
         keywords: NAVIGATION_KEYWORDS[item.url] ?? "",
         href: item.url,
       }));
-  }, [permissionMap, openappaEnabled, autoRoutingEnabled, showConnect]);
+  }, [permissionMap, openappaEnabled, showConnect]);
 }
 
 interface ConversationSearchPaletteProps {

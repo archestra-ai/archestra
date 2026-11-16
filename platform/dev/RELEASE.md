@@ -220,7 +220,7 @@ Merging a release PR on `release/X.Y` builds and publishes the release automatic
 
 1. [ ] Confirm all build jobs and **Publish release** completed successfully.
 2. [ ] Download the `release-helm-chart` and `release-image-*` workflow artifacts for verification.
-3. [ ] Install the saved chart in a test environment with `ARCHESTRA_BETA=false`. Confirm image digests match the build.
+3. [ ] Install the saved chart in a test environment. Confirm image digests match the build.
 4. [ ] Verify a clean install and an upgrade from the previous stable version:
    - Verify database migrations, sign-in, chat, MCP tools, LLM proxy, and background workers.
    - Confirm existing data remains intact after upgrade.

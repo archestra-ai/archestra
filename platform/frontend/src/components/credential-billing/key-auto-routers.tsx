@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/collapsible";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useAutoRouters } from "@/lib/auto-routing.query";
-import { useFeature } from "@/lib/config/config.query";
 import { cn } from "@/lib/utils/tailwind";
 
 const TIERS = [
@@ -40,10 +39,9 @@ export function KeyAutoRouters({
   /** What the routers were added to. */
   noun?: "key" | "client";
 }) {
-  const featureEnabled = useFeature("autoRoutingEnabled") === true;
-  const { data: routers = [] } = useAutoRouters({ enabled: featureEnabled });
+  const { data: routers = [] } = useAutoRouters();
   const [open, setOpen] = useState(false);
-  if (!featureEnabled || routers.length === 0) return null;
+  if (routers.length === 0) return null;
   const onKey = routers.filter((router) =>
     virtualApiKeyId
       ? router.virtualApiKeyIds.includes(virtualApiKeyId)

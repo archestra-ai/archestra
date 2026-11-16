@@ -1,6 +1,5 @@
 import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
 import { userHasPermission } from "@/auth";
-import config from "@/config";
 import { ModelPoolModel } from "@/models";
 import { ApiError } from "@/types";
 
@@ -18,10 +17,6 @@ export async function assertCanGrantModelPools(params: {
 }): Promise<void> {
   const { modelPoolIds } = params;
   if (modelPoolIds === undefined) return;
-  if (!config.llmProxy.modelPoolsEnabled) {
-    if (modelPoolIds.length === 0) return;
-    throw new ApiError(400, "Model pools are not enabled");
-  }
   const allowed = await userHasPermission(
     params.userId,
     params.organizationId,

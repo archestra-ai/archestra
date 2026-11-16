@@ -710,6 +710,18 @@ export const handlers: HttpHandler[] = [
   }),
   // Agent forms and the chat model menu name the organization default.
   ...getJson("/api/organization/default-model", organizationDefaultModelSeed),
+  // Model pickers, key forms and the connect steps list pools and auto
+  // routers on every deployment. The seeded organization has none, with auto
+  // routing off.
+  ...getJson("/api/model-pools", []),
+  ...getJson("/api/model-pools/available", []),
+  ...getJson("/api/auto-routing/routers", []),
+  ...getJson("/api/auto-routing/routers/available", []),
+  ...getJson("/api/auto-routing/state", {
+    enabled: false,
+    eligibleApiKeyIds: [],
+    decisionProviders: [],
+  }),
   ...getJson("/api/organization/agent-runtime-tiers", agentRuntimeTiersSeed),
   // The agent settings page checks which runtime agents run on the default.
   ...getJson("/api/organization/agent-settings/default-model-dependents", {

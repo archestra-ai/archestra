@@ -5,7 +5,6 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import { type AutoRouter, useAutoRouters } from "@/lib/auto-routing.query";
-import { useFeature } from "@/lib/config/config.query";
 
 type AutoRoutingTier = keyof AutoRouter["tiers"];
 const TIERS: AutoRoutingTier[] = ["fast", "normal", "smart"];
@@ -25,7 +24,7 @@ interface RoutableModel {
 
 /** What the request example offers for auto routing. */
 export type AutoRoutingOffer =
-  /** Nothing: the alpha is off, or the credential has no router that is set up. */
+  /** Nothing: the credential has no router that is set up. */
   | { kind: "none" }
   /** The routers the credential can call, each on the endpoint every tier model serves. */
   | {
@@ -57,14 +56,12 @@ export type AutoRoutingOffer =
  * can't take Responses.
  */
 export function autoRoutingOffer({
-  featureEnabled,
   routers,
   virtualApiKeyId,
   grantedRouterIds = null,
   routableModels,
   modelsPending,
 }: {
-  featureEnabled: boolean;
   routers: readonly OfferedRouter[] | null | undefined;
   /** The virtual key the example is for; null for any other credential. */
   virtualApiKeyId: string | null;
@@ -73,7 +70,7 @@ export function autoRoutingOffer({
   routableModels: readonly RoutableModel[];
   modelsPending: boolean;
 }): AutoRoutingOffer {
-  if (!featureEnabled || !routers) return { kind: "none" };
+  if (!routers) return { kind: "none" };
   const ready = routers.filter(
     (router) =>
       router.enabled && TIERS.every((tier) => router.tiers[tier] !== null),
@@ -176,13 +173,9 @@ export function useAutoRoutingOffer({
   routableModels: readonly RoutableModel[];
   modelsPending: boolean;
 }): AutoRoutingOffer {
-  const featureEnabled = useFeature("autoRoutingEnabled") === true;
-  const { data: routers } = useAutoRouters({
-    enabled: enabled && featureEnabled,
-  });
+  const { data: routers } = useAutoRouters({ enabled });
   if (!enabled) return { kind: "none" };
   return autoRoutingOffer({
-    featureEnabled,
     routers,
     virtualApiKeyId,
     grantedRouterIds,

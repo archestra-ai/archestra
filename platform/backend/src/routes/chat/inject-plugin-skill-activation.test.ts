@@ -1,13 +1,8 @@
 import { ADMIN_ROLE_NAME, type ChatMessage } from "@archestra/shared";
-import config from "@/config";
 import { AgentModel, PluginModel, PluginSkillUsageEventModel } from "@/models";
-import { accessGrants, beforeEach, expect, test } from "@/test";
+import { accessGrants, expect, test } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { injectPluginSkillActivation } from "./inject-skill-activation";
-
-beforeEach(() => {
-  config.beta = false;
-});
 
 test("injects and counts an accessible plugin Skill attachment", async ({
   makeAgent,

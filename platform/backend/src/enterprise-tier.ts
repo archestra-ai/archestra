@@ -58,7 +58,7 @@ class EnterpriseTierService {
     return config.enterpriseFeatures.core || this.isSmallTeam();
   }
 
-  /** The OpenAPPA integration needs the beta flag and the enterprise license. */
+  /** The OpenAPPA integration needs the enterprise license. */
   isOpenappaActive(): boolean {
     return (
       config.openappa.enabled &&

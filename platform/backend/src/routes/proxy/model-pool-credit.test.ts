@@ -1,7 +1,6 @@
 import { APIError as AnthropicAPIError } from "@anthropic-ai/sdk";
 import { APIError as OpenAIAPIError } from "openai";
 import { vi } from "vitest";
-import config from "@/config";
 import ModelPoolModel from "@/models/model-pool";
 import { expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -81,7 +80,6 @@ for (const cooldownSeconds of [undefined, 120]) {
     makeOrganization,
     makeLlmProviderApiKey,
   }) => {
-    config.llmProxy.modelPoolsEnabled = true;
     const org = await makeOrganization();
     const key = await makeLlmProviderApiKey(org.id, null, {
       provider: "openai",

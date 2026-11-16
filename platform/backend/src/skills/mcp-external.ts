@@ -5,7 +5,6 @@ import { z } from "zod";
 import { callerOf } from "@/auth/permission-gated";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import type { DirectServerSession } from "@/clients/mcp-server-extensions";
-import config from "@/config";
 import logger from "@/logging";
 import { McpCatalogSkillModel } from "@/models";
 import type { ResolvedEnterpriseTransportCredential } from "@/services/identity-providers/enterprise-managed/broker";
@@ -61,7 +60,6 @@ async function syncMcpCatalogSkillMetadata(params: {
   owner?: ToolOwner;
   tokenAuth?: TokenAuthContext;
 }): Promise<void> {
-  if (!config.mcpGateway.skillsEnabled) return;
   const generation = await McpCatalogSkillModel.beginRefresh(params.catalogId);
   if (generation === null) return;
   const skills = await mcpClient.withSkillsSession({
@@ -121,9 +119,6 @@ export async function readExternalMcpSkill(params: {
     kind: ReturnType<typeof deriveSkillFileKind>;
   }>;
 }> {
-  if (!config.mcpGateway.skillsEnabled) {
-    throw new ApiError(404, "Skills over MCP is not enabled");
-  }
   return mcpClient.withSkillsSession({
     caller: callerOf(params.tokenAuth),
     mcpServerId: params.mcpServerId,

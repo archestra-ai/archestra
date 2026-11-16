@@ -7,7 +7,6 @@ import {
 } from "@archestra/shared";
 import { SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
 
-import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { MCP_TASKS_EXTENSION_ID } from "./tasks";
 
@@ -270,13 +269,9 @@ export function buildGatewayServerCapabilities(
       ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
       ...MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
       // Declared on both revisions (the methods carry no per-request
-      // capability mechanics), gated solely on the deployment flag. The method
-      // dispatch reads the same predicate, so a client never sees a capability
-      // whose methods are absent. Nothing else has to be ready: publication
+      // capability mechanics). Nothing else has to be ready: publication
       // digests are computed and persisted on the first read that needs them.
-      ...(skillsSurfaceEnabled()
-        ? MCP_SKILLS_SERVER_EXTENSION_CAPABILITIES
-        : {}),
+      ...MCP_SKILLS_SERVER_EXTENSION_CAPABILITIES,
     },
     prompts: {},
     tools: {

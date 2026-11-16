@@ -1,19 +1,10 @@
-import config from "@/config";
 import OrganizationModel from "@/models/organization";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 import { ensureAutoRouter } from "@/test/auto-routing";
 import type { GatewayAgent } from "@/types";
 import { agentAutoRouterId } from "./organization-default";
 
 describe("agentAutoRouterId", () => {
-  const deployed = config.autoRouting.enabled;
-  beforeEach(() => {
-    config.autoRouting.enabled = true;
-  });
-  afterEach(() => {
-    config.autoRouting.enabled = deployed;
-  });
-
   const inherits = {
     autoRouterId: null,
     llmApiKeyId: null,
@@ -60,7 +51,7 @@ describe("agentAutoRouterId", () => {
     }
   });
 
-  test("an Agent Runtime agent, or a deployment without auto routing, never uses a router", async ({
+  test("an Agent Runtime agent never uses a router", async ({
     makeOrganization,
   }) => {
     const { id } = await makeOrganization();
@@ -72,10 +63,6 @@ describe("agentAutoRouterId", () => {
         { ...inherits, autoRouterId: router.id, runtime },
         id,
       ),
-    ).toBeNull();
-    config.autoRouting.enabled = false;
-    expect(
-      await agentAutoRouterId({ ...inherits, autoRouterId: router.id }, id),
     ).toBeNull();
   });
 });

@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import config from "@/config";
 import db, { schema } from "@/database";
 import AutoRouterModel from "@/models/auto-router";
 import RoutingDecisionModel from "@/models/routing-decision";
@@ -23,7 +22,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 describe("auto routing dispatcher", () => {
   let autoRoutingDispatcher: AutoRoutingDispatcher;
   beforeEach(() => {
-    config.autoRouting.enabled = true;
     autoRoutingDispatcher = new AutoRoutingDispatcher(() => 0);
   });
 
@@ -103,17 +101,6 @@ describe("auto routing dispatcher", () => {
     expect(await queuedFits(clean.routerId)).toBe(0);
     expect(await queuedFits(disabled.routerId)).toBe(0);
     expect(await queuedFits(noBudget.routerId)).toBe(0);
-  });
-
-  test("enqueues nothing while the feature is off", async ({
-    makeOrganization,
-  }) => {
-    const { routerId } = await configuredOrganization(makeOrganization);
-    config.autoRouting.enabled = false;
-
-    await autoRoutingDispatcher.dispatch();
-
-    expect(await queuedFits(routerId)).toBe(0);
   });
 
   test("keeps one queued fit per router across dispatches", async ({

@@ -8,7 +8,6 @@ import {
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
-import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -334,8 +333,7 @@ async function injectExternalMcpSkillActivationForLastMessage({
   provider: SupportedProvider;
   model: string;
 }): Promise<ChatMessage[]> {
-  if (!config.mcpGateway.skillsEnabled || agentId === undefined)
-    return messages;
+  if (agentId === undefined) return messages;
   const lastUserIndex = messages.findLastIndex(
     (message) => message.role === "user",
   );

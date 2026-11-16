@@ -9,11 +9,6 @@ import { PLUGIN_DELIVERY_MAX_COUNT, type User } from "@/types";
 
 vi.mock("@/auth");
 vi.mock("@/cache-manager");
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    beta: false,
-  }),
-);
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
 

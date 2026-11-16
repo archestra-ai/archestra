@@ -33,7 +33,6 @@ import {
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import mcpClient from "@/clients/mcp-client";
-import config from "@/config";
 import db, { schema } from "@/database";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { McpCatalogSkillModel, McpServerModel, ToolModel } from "@/models";
@@ -1664,8 +1663,6 @@ describe("mcp-reinstall", () => {
       makeMcpServer,
       makeOrganization,
     }) => {
-      const originalEnabled = config.mcpGateway.skillsEnabled;
-      config.mcpGateway.skillsEnabled = true;
       const org = await makeOrganization();
       const catalog = await makeInternalMcpCatalog({
         organizationId: org.id,
@@ -1700,11 +1697,7 @@ describe("mcp-reinstall", () => {
           ),
       );
 
-      try {
-        await reloadToolsForServer(server);
-      } finally {
-        config.mcpGateway.skillsEnabled = originalEnabled;
-      }
+      await reloadToolsForServer(server);
 
       expect(
         (await McpCatalogSkillModel.findByCatalogIds([catalog.id])).map(

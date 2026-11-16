@@ -106,12 +106,6 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 
 ## General
 
-- **`ARCHESTRA_BETA`** - Turns on beta features.
-  - Default: `false`
-  - Values: `true`, `false`
-  - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
-  - Also turns on [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) when it is left blank. Set to `false`, it stays off.
-
 - **`ARCHESTRA_RELEASE_IMAGE_DIGESTS`** - Digests of the images released with this version: the MCP server base, the p4 shim, and the maintained agent images. The Helm chart of every release sets it, so those images run exactly as released, pinned by digest instead of a tag that could move. To check their signatures, or admit only those images, see [Verify Releases](/docs/admin/deployment/verify-releases).
   - Default: unset (the Docker quickstart and charts built outside a release use the version tags)
   - Leave it to the chart. A mirror set with [`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY), or an image set with [`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE) or [`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE), runs exactly as you set it. To pin a mirrored image, set its digest in that value: `registry.example.com/mcp-server-base:1.6.0@sha256:…`.
@@ -565,10 +559,6 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_JEV_BASE_URL`** - Full Jev decisions endpoint. See [Jev](/docs/llm-proxy/providers#jev).
   - Default: `https://api.typesafe.ai/v1/systemone`
 
-- **`ARCHESTRA_AUTO_ROUTING_ENABLED`** - Turns on the beta [Auto Routing](/docs/llm-proxy/auto-routing) model for the Unified Model API.
-  - Default: unset (off)
-  - Values: `true`, `false`. Blank follows [`ARCHESTRA_BETA`](/docs/admin/deployment/configuration#ARCHESTRA_BETA).
-
 - **`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`** - How long the session scorer may take before the router falls back to the normal model.
   - Default: `2000`
 
@@ -646,10 +636,6 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Default: `true`
   - Values: `true`, `false` (all traffic is metered)
   - Archestra records Anthropic requests paid from extra usage credits, after the subscription allowance runs out, as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
-
-- **`ARCHESTRA_LLM_MODEL_POOLS_ENABLED`** - Turns on beta model pools: a model name served by several provider keys, with failover between them.
-  - Default: unset (follows [`ARCHESTRA_BETA`](/docs/admin/deployment/configuration#ARCHESTRA_BETA))
-  - Values: `true`, `false`. While it is off, the Model Pools page and its API are hidden, and requests for a pool's name are not routed to the pool. Saved pools are kept.
 
 ## Chat
 
@@ -1266,7 +1252,7 @@ These configure the OAuth client for the Google Drive connector's [individual au
 ### M-Files
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`** - Turns on the beta [M-Files connector](/docs/knowledge/connectors/m-files).
-  - Default: unset (follows [`ARCHESTRA_BETA`](/docs/admin/deployment/configuration#ARCHESTRA_BETA))
+  - Default: `false`
   - Values: `true`, `false`. Existing M-Files connectors keep syncing while it is off.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_PACKAGE_DIR`** - Directory that serves the VAF Add On package to the install script and the connector form.

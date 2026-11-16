@@ -1,7 +1,6 @@
 import { vi } from "vitest";
 import { auth as betterAuth } from "@/auth/better-auth";
 import { authPlugin } from "@/auth/fastify-plugin/plugin";
-import config from "@/config";
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
@@ -20,7 +19,6 @@ import {
 describe("GET /api/organization/default-model", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
-  const autoRoutingDeployed = config.autoRouting.enabled;
 
   beforeEach(
     async ({
@@ -30,7 +28,6 @@ describe("GET /api/organization/default-model", () => {
       makeMember,
       makeSession,
     }) => {
-      config.autoRouting.enabled = true;
       organizationId = (await makeOrganization()).id;
       const user = await makeUser();
       // A member who may use agents but not read the auto routers.
@@ -53,7 +50,6 @@ describe("GET /api/organization/default-model", () => {
   );
 
   afterEach(async () => {
-    config.autoRouting.enabled = autoRoutingDeployed;
     await app.close();
     vi.restoreAllMocks();
   });

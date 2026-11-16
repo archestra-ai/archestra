@@ -9,7 +9,6 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
-import config from "@/config";
 import {
   AppAccessModel,
   SkillTeamModel,
@@ -131,9 +130,6 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Choose a label value or unassigned, not both");
       return StatisticsModel.getProxyCostStatistics({
         ...query,
-        // Pools are a beta feature; while it is off there is nothing to group.
-        includeModelPools:
-          query.includeModelPools && config.llmProxy.modelPoolsEnabled,
         organizationId,
         ...(await ownProxyUsageScope(request)),
       });

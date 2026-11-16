@@ -363,8 +363,7 @@ async function usableModelPoolId(params: {
   caller: ModelPoolCaller;
   requestedModel?: string | null;
 }): Promise<string | undefined> {
-  if (!config.llmProxy.modelPoolsEnabled || !params.requestedModel)
-    return undefined;
+  if (!params.requestedModel) return undefined;
   const pool = await ModelPoolModel.findByName({
     organizationId: params.organizationId,
     name: stripClaudeContextVariantSuffix(params.requestedModel),

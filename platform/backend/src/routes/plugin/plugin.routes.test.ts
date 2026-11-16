@@ -1,6 +1,5 @@
 import { PLUGIN_MARKETPLACE_IMPORT_LIMIT } from "@archestra/shared";
 import { vi } from "vitest";
-import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
@@ -23,7 +22,6 @@ import type { CreatePlugin, User } from "@/types";
 import pluginRoutes from "./plugin.routes";
 
 beforeEach(() => {
-  config.beta = false;
   grantEverywhere(["plugin"]);
 });
 

@@ -1604,7 +1604,6 @@ async function handleObservedLLMProxy<
         : null;
     const autoRouteWire =
       internalCall &&
-      config.autoRouting.enabled &&
       autoRouterId !== null &&
       resolvedAgent.runtime === null &&
       !modelPoolPlan

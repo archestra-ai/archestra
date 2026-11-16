@@ -3,7 +3,6 @@ import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { vi } from "vitest";
-import config from "@/config";
 import { withDbTransaction } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -28,10 +27,6 @@ import {
   type TestAccess,
   test,
 } from "@/test";
-
-beforeEach(() => {
-  config.beta = false;
-});
 
 async function seedSkill(params: {
   organizationId: string;

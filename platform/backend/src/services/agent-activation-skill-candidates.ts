@@ -1,6 +1,5 @@
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import type { RequestLookups } from "@/auth/request-lookups";
-import config from "@/config";
 import { AgentModel } from "@/models";
 import { listPluginSkills } from "@/plugins/plugin-skills";
 import { listExternalMcpSkills } from "@/services/external-mcp-skills";
@@ -71,14 +70,12 @@ export async function listPolicyIndependentAvailableAgentSkills(
       lookups: params.lookups,
       includeContent: params.includeContent,
     }),
-    config.mcpGateway.skillsEnabled
-      ? listExternalMcpSkills({
-          organizationId: params.organizationId,
-          userId: params.userId,
-          isMcpServerAdmin: await isMcpServerAdmin(params),
-          environmentId,
-        })
-      : [],
+    listExternalMcpSkills({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      isMcpServerAdmin: await isMcpServerAdmin(params),
+      environmentId,
+    }),
     listPluginSkills({
       organizationId: params.organizationId,
       userId: params.userId,

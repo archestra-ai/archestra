@@ -5,7 +5,6 @@ import {
   isLogContentNotStored,
 } from "@archestra/shared";
 import { Semaphore } from "@/agents/chatops/utils";
-import config from "@/config";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import AutoRouterModel from "@/models/auto-router";
@@ -195,7 +194,6 @@ export async function describeBackfill(
 export async function runBackfill(params?: {
   timeBudgetMs?: number;
 }): Promise<void> {
-  if (!config.autoRouting.enabled) return;
   const backfill = await RoutingBackfillModel.claimNext({
     owner: WORKER_ID,
     leaseTtlSeconds: LEASE_TTL_SECONDS,

@@ -1,6 +1,5 @@
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
-import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import InteractionModel from "@/models/interaction";
 import ModelModel from "@/models/model";
@@ -26,7 +25,6 @@ for (const stream of [false, true]) {
         makeSecret,
         makeLlmProviderApiKey,
       }) => {
-        config.llmProxy.modelPoolsEnabled = true;
         const org = await makeOrganization();
         const agent = await makeAgent({
           organizationId: org.id,

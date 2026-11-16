@@ -1,14 +1,9 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
-import config from "@/config";
 import { PluginModel, SkillShareLinkModel } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import skillShareRoutes from "./skill-share.routes";
 import { seedSkill } from "./skill-share.test-helpers";
-
-beforeEach(() => {
-  config.beta = false;
-});
 
 describe("POST /api/skill-share-links/:id/rotate", () => {
   const ctx = useRouteTestApp(skillShareRoutes);

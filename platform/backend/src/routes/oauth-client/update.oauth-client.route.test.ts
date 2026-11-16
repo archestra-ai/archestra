@@ -1,6 +1,5 @@
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
-import config from "@/config";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import ManagedOauthClientModel from "@/models/managed-oauth-client";
@@ -181,60 +180,55 @@ test("model pools are kept on the client and need permission to change", async (
   makeSecret,
   makeLlmProviderApiKey,
 }) => {
-  config.llmProxy.modelPoolsEnabled = true;
-  try {
-    const member = await makeMember(ctx.user.id, ctx.organizationId, {
-      role: "member",
+  const member = await makeMember(ctx.user.id, ctx.organizationId, {
+    role: "member",
+  });
+  const secret = await makeSecret();
+  const key = await makeLlmProviderApiKey(ctx.organizationId, secret.id, {
+    provider: "openai",
+  });
+  const pool = await ModelPoolModel.create({
+    organizationId: ctx.organizationId,
+    input: {
+      name: "gpt-pool",
+      members: [
+        {
+          providerApiKeyId: key.id,
+          modelId: "gpt-4o",
+          priority: 1,
+          weight: 1,
+          enabled: true,
+        },
+      ],
+    },
+  });
+  const { oauthClient } = await ManagedOauthClientModel.create({
+    organizationId: ctx.organizationId,
+    authorId: ctx.user.id,
+    name: "Pool client",
+    providerApiKeys: [{ provider: "openai", providerApiKeyId: key.id }],
+  });
+  const update = (payload: Record<string, unknown>) =>
+    ctx.app.inject({
+      method: "PUT",
+      url: `/api/oauth-clients/${oauthClient.id}`,
+      payload: { name: oauthClient.name, scopes: ["llm:proxy"], ...payload },
     });
-    const secret = await makeSecret();
-    const key = await makeLlmProviderApiKey(ctx.organizationId, secret.id, {
-      provider: "openai",
-    });
-    const pool = await ModelPoolModel.create({
-      organizationId: ctx.organizationId,
-      input: {
-        name: "gpt-pool",
-        members: [
-          {
-            providerApiKeyId: key.id,
-            modelId: "gpt-4o",
-            priority: 1,
-            weight: 1,
-            enabled: true,
-          },
-        ],
-      },
-    });
-    const { oauthClient } = await ManagedOauthClientModel.create({
-      organizationId: ctx.organizationId,
-      authorId: ctx.user.id,
-      name: "Pool client",
-      providerApiKeys: [{ provider: "openai", providerApiKeyId: key.id }],
-    });
-    const update = (payload: Record<string, unknown>) =>
-      ctx.app.inject({
-        method: "PUT",
-        url: `/api/oauth-clients/${oauthClient.id}`,
-        payload: { name: oauthClient.name, scopes: ["llm:proxy"], ...payload },
-      });
 
-    expect((await update({ modelPoolIds: [pool.id] })).statusCode).toBe(403);
-    await db
-      .update(schema.membersTable)
-      .set({ role: "admin" })
-      .where(eq(schema.membersTable.id, member.id));
-    const granted = await update({ modelPoolIds: [pool.id] });
-    expect(granted.statusCode, granted.body).toBe(200);
-    expect(granted.json().modelPoolIds).toEqual([pool.id]);
-    // Omitted on another edit, the pools stay.
-    const renamed = await update({ name: "Renamed pool client" });
-    expect(renamed.json().modelPoolIds).toEqual([pool.id]);
-    expect(
-      (await update({ modelPoolIds: [crypto.randomUUID()] })).statusCode,
-    ).toBe(400);
-  } finally {
-    config.llmProxy.modelPoolsEnabled = false;
-  }
+  expect((await update({ modelPoolIds: [pool.id] })).statusCode).toBe(403);
+  await db
+    .update(schema.membersTable)
+    .set({ role: "admin" })
+    .where(eq(schema.membersTable.id, member.id));
+  const granted = await update({ modelPoolIds: [pool.id] });
+  expect(granted.statusCode, granted.body).toBe(200);
+  expect(granted.json().modelPoolIds).toEqual([pool.id]);
+  // Omitted on another edit, the pools stay.
+  const renamed = await update({ name: "Renamed pool client" });
+  expect(renamed.json().modelPoolIds).toEqual([pool.id]);
+  expect(
+    (await update({ modelPoolIds: [crypto.randomUUID()] })).statusCode,
+  ).toBe(400);
 });
 
 test("auto routers are kept on the client and need permission to change", async ({
@@ -242,45 +236,39 @@ test("auto routers are kept on the client and need permission to change", async 
   makeSecret,
   makeLlmProviderApiKey,
 }) => {
-  const wasEnabled = config.autoRouting.enabled;
-  config.autoRouting.enabled = true;
-  try {
-    const member = await makeMember(ctx.user.id, ctx.organizationId, {
-      role: "member",
+  const member = await makeMember(ctx.user.id, ctx.organizationId, {
+    role: "member",
+  });
+  const secret = await makeSecret();
+  const key = await makeLlmProviderApiKey(ctx.organizationId, secret.id, {
+    provider: "openai",
+  });
+  const router = await ensureAutoRouter(ctx.organizationId);
+  const { oauthClient } = await ManagedOauthClientModel.create({
+    organizationId: ctx.organizationId,
+    authorId: ctx.user.id,
+    name: "Router client",
+    providerApiKeys: [{ provider: "openai", providerApiKeyId: key.id }],
+  });
+  const update = (payload: Record<string, unknown>) =>
+    ctx.app.inject({
+      method: "PUT",
+      url: `/api/oauth-clients/${oauthClient.id}`,
+      payload: { name: oauthClient.name, scopes: ["llm:proxy"], ...payload },
     });
-    const secret = await makeSecret();
-    const key = await makeLlmProviderApiKey(ctx.organizationId, secret.id, {
-      provider: "openai",
-    });
-    const router = await ensureAutoRouter(ctx.organizationId);
-    const { oauthClient } = await ManagedOauthClientModel.create({
-      organizationId: ctx.organizationId,
-      authorId: ctx.user.id,
-      name: "Router client",
-      providerApiKeys: [{ provider: "openai", providerApiKeyId: key.id }],
-    });
-    const update = (payload: Record<string, unknown>) =>
-      ctx.app.inject({
-        method: "PUT",
-        url: `/api/oauth-clients/${oauthClient.id}`,
-        payload: { name: oauthClient.name, scopes: ["llm:proxy"], ...payload },
-      });
 
-    expect((await update({ autoRouterIds: [router.id] })).statusCode).toBe(403);
-    await db
-      .update(schema.membersTable)
-      .set({ role: "admin" })
-      .where(eq(schema.membersTable.id, member.id));
-    const granted = await update({ autoRouterIds: [router.id] });
-    expect(granted.statusCode, granted.body).toBe(200);
-    expect(granted.json().autoRouterIds).toEqual([router.id]);
-    // Omitted on another edit, the routers stay.
-    const renamed = await update({ name: "Renamed router client" });
-    expect(renamed.json().autoRouterIds).toEqual([router.id]);
-    expect(
-      (await update({ autoRouterIds: [crypto.randomUUID()] })).statusCode,
-    ).toBe(400);
-  } finally {
-    config.autoRouting.enabled = wasEnabled;
-  }
+  expect((await update({ autoRouterIds: [router.id] })).statusCode).toBe(403);
+  await db
+    .update(schema.membersTable)
+    .set({ role: "admin" })
+    .where(eq(schema.membersTable.id, member.id));
+  const granted = await update({ autoRouterIds: [router.id] });
+  expect(granted.statusCode, granted.body).toBe(200);
+  expect(granted.json().autoRouterIds).toEqual([router.id]);
+  // Omitted on another edit, the routers stay.
+  const renamed = await update({ name: "Renamed router client" });
+  expect(renamed.json().autoRouterIds).toEqual([router.id]);
+  expect(
+    (await update({ autoRouterIds: [crypto.randomUUID()] })).statusCode,
+  ).toBe(400);
 });

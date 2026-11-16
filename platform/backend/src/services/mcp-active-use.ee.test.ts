@@ -107,15 +107,17 @@ describe("mcpActiveUseTracker", () => {
       const id = nextServerId();
       config.orchestrator.mcpIdleHibernation.hardDisabled = true;
       updateLastUsed.mockRejectedValue(new Error("database unavailable"));
+      const operation = vi.fn(async () => "tool-result");
 
       await expect(
-        mcpActiveUseTracker.trackActiveUse(id, async () => "tool-result"),
+        mcpActiveUseTracker.trackActiveUse(id, operation),
       ).rejects.toThrow(
         "refusing to run while other replicas may see it as idle",
       );
       await mcpActiveUseTracker.stampIfEnabled(id);
       await drainBackgroundWork();
       expect(updateLastUsed).toHaveBeenCalledWith(id);
+      expect(operation).not.toHaveBeenCalled();
       expect(mcpActiveUseTracker.getActiveUseCount(id)).toBe(0);
     });
 

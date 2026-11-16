@@ -1,10 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import config from "@/config";
 import db, { schema } from "@/database";
 import InteractionModel from "@/models/interaction";
 import RoutingDecisionModel from "@/models/routing-decision";
-import { beforeEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 import {
   configureAutoRouter,
   makeScorerVersion,
@@ -19,10 +18,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe("GET /api/auto-routing/routers/:id/usage", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
-  beforeEach(() => {
-    config.autoRouting.enabled = true;
-  });
-
   test("sums the last week per tier and prices the same tokens at the smart model", async ({
     makeAgent,
   }) => {

@@ -1501,8 +1501,6 @@ describe("GET /api/connection-setups/script/:token", () => {
     "claude-code",
     "grok-build",
   ] as const)("%s excludes unsupported plugins or re-validates plugin:admin before rendering executable hooks", async (clientId) => {
-    const originalFeatureState = config.beta;
-    config.beta = false;
     const plugin = await PluginModel.create({
       organizationId,
       userId: user.id,
@@ -1549,32 +1547,28 @@ describe("GET /api/connection-setups/script/:token", () => {
         ),
       ),
     );
-    try {
-      mockUserHasPermission.mockResolvedValue(false);
-      if (clientId === "grok-build") {
-        const response = await fetchScript(rawToken);
-        expect(response.statusCode, response.body).toBe(200);
-        expect(response.body).not.toContain(plugin.pluginSlug);
-        return;
-      }
-      expect((await fetchScript(rawToken)).statusCode).toBe(410);
-
-      mockUserHasPermission.mockResolvedValue(true);
-      const { OrganizationModel } = await import("@/models");
-      await OrganizationModel.patch(organizationId, {
-        connectionPluginsEnabled: false,
-      });
-      expect((await fetchScript(rawToken)).statusCode).toBe(410);
-
-      await OrganizationModel.patch(organizationId, {
-        connectionPluginsEnabled: true,
-      });
-      const allowed = await fetchScript(rawToken);
-      expect(allowed.statusCode).toBe(200);
-      expect(allowed.body).toContain(plugin.pluginSlug);
-    } finally {
-      config.beta = originalFeatureState;
+    mockUserHasPermission.mockResolvedValue(false);
+    if (clientId === "grok-build") {
+      const response = await fetchScript(rawToken);
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).not.toContain(plugin.pluginSlug);
+      return;
     }
+    expect((await fetchScript(rawToken)).statusCode).toBe(410);
+
+    mockUserHasPermission.mockResolvedValue(true);
+    const { OrganizationModel } = await import("@/models");
+    await OrganizationModel.patch(organizationId, {
+      connectionPluginsEnabled: false,
+    });
+    expect((await fetchScript(rawToken)).statusCode).toBe(410);
+
+    await OrganizationModel.patch(organizationId, {
+      connectionPluginsEnabled: true,
+    });
+    const allowed = await fetchScript(rawToken);
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.body).toContain(plugin.pluginSlug);
   });
 
   test("410s when the creator's org membership is gone", async ({

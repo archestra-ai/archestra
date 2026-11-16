@@ -1,7 +1,6 @@
 import { memberPermissions } from "@archestra/shared/access-control";
 import { vi } from "vitest";
 import { RequestLookups } from "@/auth/request-lookups";
-import config from "@/config";
 import { PluginModel, PluginSkillUsageEventModel } from "@/models";
 import { listPluginSkills } from "@/plugins/plugin-skills";
 import {
@@ -81,8 +80,6 @@ function stePlugin(overrides: Partial<CreatePlugin> = {}): CreatePlugin {
 
 describe("plugin Skill routes", () => {
   const ctx = useRouteTestApp(pluginSkillRoutes);
-  let originalEnabled: boolean;
-
   let pluginAdmin: boolean;
 
   beforeEach(async ({ makeCustomRole, makeMember }) => {
@@ -93,14 +90,11 @@ describe("plugin Skill routes", () => {
       permission: { ...memberPermissions, plugin: ["read"] },
     });
     await makeMember(ctx.user.id, ctx.organizationId, { role: reader.role });
-    originalEnabled = config.beta;
-    config.beta = false;
     pluginAdmin = false;
     grantEverywhere(["plugin"], () => pluginAdmin);
   });
 
   afterEach(() => {
-    config.beta = originalEnabled;
     vi.restoreAllMocks();
   });
 
@@ -115,9 +109,7 @@ describe("plugin Skill routes", () => {
     return plugin;
   }
 
-  test("routes are available with beta disabled", async () => {
-    config.beta = false;
-
+  test("lists no plugin skills and 404s an unknown plugin when none exist", async () => {
     const list = await ctx.app.inject({
       method: "GET",
       url: "/api/skills/plugins",

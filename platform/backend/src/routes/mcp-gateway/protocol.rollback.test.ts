@@ -11,7 +11,6 @@ import type { IncomingHttpHeaders } from "node:http";
 
 import { MCP_SKILLS_EXTENSION_ID } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
-import config from "@/config";
 import {
   buildDiscoverResult,
   buildGatewayServerCapabilities,
@@ -440,25 +439,10 @@ describe("server/discover", () => {
     );
   });
 
-  test("the skills extension is advertised only while the surface is enabled", () => {
-    // The capability declaration and the method dispatch read one predicate so
-    // a client is never shown a capability whose methods are absent. Both
-    // directions are pinned: advertising `skills/*` while dispatch is off
-    // makes every call answer -32601, and the reverse ships the feature dead.
-    const original = config.mcpGateway.skillsEnabled;
-    try {
-      config.mcpGateway.skillsEnabled = false;
-      expect(buildGatewayServerCapabilities().extensions).not.toHaveProperty(
-        MCP_SKILLS_EXTENSION_ID,
-      );
-
-      config.mcpGateway.skillsEnabled = true;
-      expect(buildGatewayServerCapabilities().extensions).toHaveProperty(
-        MCP_SKILLS_EXTENSION_ID,
-      );
-    } finally {
-      config.mcpGateway.skillsEnabled = original;
-    }
+  test("capabilities carry the skills extension", () => {
+    expect(buildGatewayServerCapabilities().extensions).toHaveProperty(
+      MCP_SKILLS_EXTENSION_ID,
+    );
   });
 });
 

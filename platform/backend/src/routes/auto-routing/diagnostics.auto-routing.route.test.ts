@@ -38,7 +38,6 @@ function session(i: number, client = i % 3 === 0 ? "codex" : "claude-code") {
 describe("GET /api/auto-routing/routers/:id/diagnostics", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
   beforeEach(() => {
-    config.autoRouting.enabled = true;
     config.autoRouting.minSessions = 30;
   });
 
@@ -260,16 +259,13 @@ describe("GET /api/auto-routing/routers/:id/diagnostics", () => {
     expect(response.json()).toEqual({ status: "cold_start" });
   });
 
-  test("runs one per router at a time and is not found while the feature is off", async () => {
+  test("runs one per router at a time", async () => {
     await withActivePlan();
 
     const statuses = (await Promise.all([diagnostics(), diagnostics()])).map(
       (response) => response.statusCode,
     );
     expect(statuses.sort()).toEqual([200, 429]);
-
-    config.autoRouting.enabled = false;
-    expect((await diagnostics()).statusCode).toBe(404);
   });
 
   test("refuses runs beyond the process-wide limit", async () => {

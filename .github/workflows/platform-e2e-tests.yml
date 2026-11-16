@@ -907,10 +907,6 @@ jobs:
       - name: Start lite e2e stack
         env:
           PLATFORM_IMAGE: ${{ steps.load-platform-image.outputs.image-tag }}
-          # OpenAPPA follows the beta master switch, off here: with it on the
-          # proxy rejects tool-declaring requests these specs send. The
-          # OpenAPPA specs run on their own stack in the quickstart job.
-          ARCHESTRA_BETA: "false"
           # The embedded Kind cluster pulls the MCP server base image straight
           # from the (anonymous-pull) registry, so trusted runs can use the
           # image this workflow just built. Untrusted PRs don't push to the
@@ -1092,7 +1088,6 @@ jobs:
         continue-on-error: true
         env:
           PLATFORM_IMAGE: ${{ steps.load-openappa-image.outputs.image-tag }}
-          ARCHESTRA_BETA: "true"
           # Same MCP server base image choice as the lite job.
           # supply-chain-policy: allow-latest quickstart needs a published public fallback
           MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && env.RELEASED_MCP_SERVER_BASE_IMAGE || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}

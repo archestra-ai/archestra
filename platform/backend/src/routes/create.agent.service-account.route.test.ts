@@ -34,12 +34,6 @@ import skillRoutes from "./skill/skill.routes";
 import virtualApiKeyRoutes from "./virtual-api-key/virtual-api-key.routes";
 
 vi.mock("@/observability");
-vi.mock("@/config", async () => ({
-  ...(await vi.importActual<typeof import("@/config")>("@/config")),
-  ...(await (
-    await import("@/test/mocks/config")
-  ).configModuleMock({ beta: false })),
-}));
 
 describe("Resource creation with service-account authentication", () => {
   let app: FastifyInstanceWithZod;

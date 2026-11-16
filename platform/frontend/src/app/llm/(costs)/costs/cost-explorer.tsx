@@ -32,7 +32,6 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useTeamLimitAccess } from "@/lib/limits-access";
 import { useProxyLabelKeys } from "@/lib/proxy-label-costs.query";
@@ -90,7 +89,6 @@ export default function CostExplorer() {
   const appName = useAppName();
   const { data: canReadApps } = useHasPermissions({ app: ["read"] });
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
-  const poolsEnabled = useFeature("llmModelPoolsEnabled") === true;
   const limitsAccess = useTeamLimitAccess();
   const { data: canReadCosts, isPending: isCostAccessPending } =
     useHasPermissions({ llmCost: ["read"] });
@@ -103,8 +101,7 @@ export default function CostExplorer() {
   const canGroup = (group: DimId) =>
     (!teamScoped || TEAM_SCOPED_GROUPS.includes(group)) &&
     (group !== "app" || canReadApps) &&
-    (group !== "skill" || canReadSkills) &&
-    (group !== "pool" || poolsEnabled);
+    (group !== "skill" || canReadSkills);
   const [explorer, setExplorer] = useExplorerUrlState({
     keys: EXPLORER_URL_KEYS,
     decode: decodeCostExplorer,

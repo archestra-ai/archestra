@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-test("plugins navigation and authoring work with beta disabled", async ({
+test("plugins navigation and authoring ignore the plugins feature flag", async ({
   page,
   mswControl,
   request,
@@ -12,7 +12,7 @@ test("plugins navigation and authoring work with beta disabled", async ({
       url: "/api/config",
       body: {
         ...config,
-        features: { ...config.features, betaEnabled: false, plugins: false },
+        features: { ...config.features, plugins: false },
       },
     },
     { method: "get", url: "/api/plugins", body: [] },
@@ -35,7 +35,7 @@ test("plugins navigation and authoring work with beta disabled", async ({
   ).toHaveCount(0);
 });
 
-test("Skills shows plugin-backed instructions with beta disabled", async ({
+test("Skills shows plugin-backed instructions whatever the plugins feature flag", async ({
   page,
   mswControl,
   request,
@@ -47,7 +47,7 @@ test("Skills shows plugin-backed instructions with beta disabled", async ({
       url: "/api/config",
       body: {
         ...config,
-        features: { ...config.features, betaEnabled: false, plugins: false },
+        features: { ...config.features, plugins: false },
       },
     },
     {

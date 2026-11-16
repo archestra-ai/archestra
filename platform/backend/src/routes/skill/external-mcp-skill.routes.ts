@@ -2,7 +2,6 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
-import config from "@/config";
 import { AgentModel, ExternalMcpSkillUsageEventModel } from "@/models";
 import {
   canReadExternalMcpSkillUsage,
@@ -37,7 +36,6 @@ const externalMcpSkillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, organizationId, query }, reply) => {
-      assertEnabled();
       const { isAdmin: isMcpServerAdmin } =
         await getMcpCatalogPermissionChecker({
           userId: user.id,
@@ -71,7 +69,6 @@ const externalMcpSkillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ query, user, organizationId }, reply) => {
-      assertEnabled();
       const { isAdmin: isMcpServerAdmin } =
         await getMcpCatalogPermissionChecker({
           userId: user.id,
@@ -111,7 +108,6 @@ const externalMcpSkillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, query, user, organizationId }, reply) => {
-      assertEnabled();
       const { isAdmin: isMcpServerAdmin } =
         await getMcpCatalogPermissionChecker({
           userId: user.id,
@@ -143,11 +139,5 @@ const externalMcpSkillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
-
-function assertEnabled(): void {
-  if (!config.mcpGateway.skillsEnabled) {
-    throw new ApiError(404, "Skills over MCP is not enabled");
-  }
-}
 
 export default externalMcpSkillRoutes;

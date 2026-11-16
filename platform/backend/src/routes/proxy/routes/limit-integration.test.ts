@@ -5,7 +5,6 @@ import type OpenAI from "openai";
 import { vi } from "vitest";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { internalCallHeader } from "@/clients/internal-call";
-import config from "@/config";
 import db, { __setTestDb, getDb, schema } from "@/database";
 import {
   EnvironmentDefaultUserLimitModel,
@@ -690,7 +689,6 @@ describe("LLM proxy limit enforcement (integration)", () => {
       model: ["claude-sonnet-4-5"],
       lastCleanup: new Date(),
     });
-    config.llmProxy.modelPoolsEnabled = true;
     await LimitModel.create({
       entityType: "organization",
       entityId: agent.organizationId,

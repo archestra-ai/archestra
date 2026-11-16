@@ -1,5 +1,4 @@
 import { activeSourceVersion } from "@/auto-routing/signals";
-import config from "@/config";
 import logger from "@/logging";
 import AutoRoutingDispatchModel from "@/models/auto-routing-dispatch";
 import RoutingBackfillModel from "@/models/routing-backfill";
@@ -29,7 +28,6 @@ export class AutoRoutingDispatcher {
 
   async dispatch(now: Date = new Date()): Promise<void> {
     await this.purgeDaily(now);
-    if (!config.autoRouting.enabled) return;
     const due = await AutoRoutingDispatchModel.findDueRouters(
       new Date(now.getTime() - DAY_MS),
     );

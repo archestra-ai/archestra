@@ -2,7 +2,7 @@
 title: MCP Gateway
 description: One MCP endpoint that gives a client the tools, knowledge, subagents, and skills you choose
 order: 2
-lastUpdated: 2026-11-11
+lastUpdated: 2026-11-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -63,8 +63,6 @@ Each person finds only the documents [they can open](/docs/knowledge#permissions
 <span id="publish-skills"></span>
 
 ## Publish Skills
-
-:::beta:::
 
 Give every MCP client the same [skills](/docs/agents/skills), from one place. The gateway publishes them as `skill://` resources. Clients that support the draft MCP Skills extension list and read them like local skills. Other clients do not see them.
 

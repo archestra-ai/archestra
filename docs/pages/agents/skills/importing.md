@@ -2,7 +2,7 @@
 title: Importing Skills
 description: Bring skills in from GitHub, GitLab, MCP servers, and plugins
 order: 2
-lastUpdated: 2026-10-14
+lastUpdated: 2026-11-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -68,15 +68,11 @@ Set **Settings → Skills → Online skill catalog** to **Disabled**. This hides
 
 ## Skills from MCP Servers
 
-:::beta:::
-
 An MCP server can publish skills with its tools. Skills from servers you can access show under the **MCP skills** filter on **Skills**. They are read-only, because the server owns them.
 
 Archestra follows the draft [MCP skills extension (SEP-2640)](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640). The same extension works the other way, too: a gateway can [publish your Archestra skills to MCP clients](/docs/mcp/gateway#publish-skills).
 
 ## Skills from Plugins
-
-:::beta:::
 
 Skills inside a [plugin](/docs/agents/plugins) you can read show under the **Skills from plugins** filter. They are read-only. Each one shows the client and platforms it came from, because its scripts may depend on them.
 

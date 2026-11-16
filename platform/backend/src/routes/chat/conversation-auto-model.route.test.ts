@@ -1,17 +1,9 @@
 import { eq } from "drizzle-orm";
-import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  onTestFinished,
-  test,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   autoRouterId,
   configureAutoRouter,
@@ -35,11 +27,6 @@ describe("chat conversation routes - auto router", () => {
     currentUser = await makeUser();
     organizationId = (await makeOrganization()).id;
     await makeMember(currentUser.id, organizationId, { role: "admin" });
-    const enabled = config.autoRouting.enabled;
-    config.autoRouting.enabled = true;
-    onTestFinished(() => {
-      config.autoRouting.enabled = enabled;
-    });
     tiers = await configureAutoRouting(organizationId);
     routerId = await autoRouterId(organizationId);
     const key = await LlmProviderApiKeyModel.findOrganizationWideKey(

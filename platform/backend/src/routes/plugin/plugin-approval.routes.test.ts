@@ -1,4 +1,3 @@
-import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { PluginModel } from "@/models";
@@ -11,7 +10,6 @@ describe("plugin executable-content approval", () => {
   let user: User;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
-    config.beta = false;
     organizationId = (await makeOrganization()).id;
     // Not a member of the organization, so it holds no permissions.
     user = await makeUser();

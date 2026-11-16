@@ -1,5 +1,4 @@
 import { authPlugin } from "@/auth/fastify-plugin";
-import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import AutoRouterModel from "@/models/auto-router";
@@ -63,7 +62,6 @@ describe("auto routing API access", () => {
   let routerId: string;
 
   beforeEach(async ({ makeOrganization }) => {
-    config.autoRouting.enabled = true;
     organizationId = (await makeOrganization()).id;
     await configureAutoRouting(organizationId);
     routerId = await autoRouterId(organizationId);
@@ -90,26 +88,6 @@ describe("auto routing API access", () => {
     });
     return token;
   }
-
-  test("every route is not found while the feature is off", async () => {
-    config.autoRouting.enabled = false;
-    const authorization = await tokenFor("admin");
-
-    for (const request of [
-      ...reads(routerId),
-      ...writes(routerId),
-      {
-        method: "GET",
-        url: `/api/auto-routing/routers/${routerId}/plans/${organizationId}`,
-      },
-    ] as const) {
-      const response = await app.inject({
-        ...request,
-        headers: { authorization },
-      });
-      expect(response.statusCode, `${request.method} ${request.url}`).toBe(404);
-    }
-  });
 
   test("a member reads but cannot change routers, re-plan, preview or backfill", async () => {
     const authorization = await tokenFor("member");

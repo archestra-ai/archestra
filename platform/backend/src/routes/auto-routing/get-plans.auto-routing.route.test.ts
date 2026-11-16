@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
-import config from "@/config";
 import RoutingDecisionModel from "@/models/routing-decision";
 import RoutingPlanModel from "@/models/routing-plan";
-import { beforeEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 import {
   autoRouterId,
   configureAutoRouting,
@@ -16,10 +15,6 @@ import autoRoutingRoutes from "./auto-routing.routes";
 
 describe("GET /api/auto-routing/routers/:id/plans", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
-  beforeEach(() => {
-    config.autoRouting.enabled = true;
-  });
-
   test("lists the router's fits newest first with the sessions each routed", async ({
     makeOrganization,
   }) => {

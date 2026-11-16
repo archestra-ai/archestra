@@ -11,7 +11,6 @@ import {
   TOOL_UPDATE_PLUGIN_FULL_NAME,
 } from "@archestra/shared";
 import { vi } from "vitest";
-import config from "@/config";
 import { AuditLogModel, PluginModel } from "@/models";
 import {
   accessGrants,
@@ -80,7 +79,6 @@ describe("plugin tool execution", () => {
       organizationId,
       userId: adminUserId,
     };
-    config.beta = false;
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -111,7 +109,7 @@ describe("plugin tool execution", () => {
     return data.filter((row) => row.action === action);
   }
 
-  test("plugin tools are registered with beta disabled", () => {
+  test("plugin tools are registered", () => {
     const names = getArchestraMcpTools().map((tool) => tool.name);
     expect(names).toContain(TOOL_LIST_PLUGINS_FULL_NAME);
     expect(names).toContain(TOOL_GET_PLUGIN_FULL_NAME);
@@ -122,9 +120,7 @@ describe("plugin tool execution", () => {
     expect(names).not.toContain(`${ARCHESTRA_TOOL_PREFIX}import_plugin`);
   });
 
-  test("handlers execute a direct dispatch with beta disabled", async () => {
-    config.beta = false;
-
+  test("list_plugins reports when there are no plugins", async () => {
     const result = await executeArchestraTool(
       TOOL_LIST_PLUGINS_FULL_NAME,
       {},
@@ -135,7 +131,7 @@ describe("plugin tool execution", () => {
     expect(textOf(result)).toContain("No plugins");
   });
 
-  test("plugin dispatch still requires an authenticated user with beta disabled", async () => {
+  test("plugin dispatch requires an authenticated user", async () => {
     const result = await executeArchestraTool(
       TOOL_LIST_PLUGINS_FULL_NAME,
       {},

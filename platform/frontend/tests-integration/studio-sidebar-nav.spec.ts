@@ -18,7 +18,7 @@ import type { MswControl } from "./helpers/msw-control";
  * on `/llm/proxy` would light three rows at once), the one shared row opens
  * the page its reader may actually see, a group disappears with its heading
  * when the reader may open none of it, and Plugins remains available
- * independently of the deployment beta flag.
+ * whatever the `plugins` feature flag says.
  */
 
 /** Rows of the studio nav, in order, as a reader sees them. */
@@ -35,7 +35,9 @@ const STUDIO_NAV = [
   // is managed on one page in settings.
   "Model Providers",
   "Models",
+  "Model Pools",
   "Costs & Limits",
+  "Auto Routing",
   "Connectors",
   "Files",
   "Knowledge Bases",
@@ -90,7 +92,7 @@ async function setPermissions(
   });
 }
 
-async function disableBeta({
+async function disablePluginsFlag({
   mswControl,
   request,
 }: {
@@ -105,7 +107,7 @@ async function disableBeta({
     url: "/api/config",
     body: {
       ...config,
-      features: { ...config.features, betaEnabled: false, plugins: false },
+      features: { ...config.features, plugins: false },
     },
   });
 }
@@ -190,41 +192,15 @@ test.describe("studio sidebar navigation", () => {
     );
   });
 
-  test("offers Plugins with beta disabled", async ({
+  test("offers Plugins whatever the plugins feature flag", async ({
     page,
     mswControl,
     request,
   }) => {
-    await disableBeta({ mswControl, request });
+    await disablePluginsFlag({ mswControl, request });
     await page.goto("/agents");
 
     await expect(page.getByRole("link", { name: /^Plugins/ })).toBeVisible();
     expect(await rowNames(page)).toEqual(STUDIO_NAV);
-  });
-
-  test("offers Auto Routing after Costs & Limits once the alpha is enabled", async ({
-    page,
-    mswControl,
-    request,
-  }) => {
-    const config = await (
-      await request.get("/internal-test/api/api/config")
-    ).json();
-    await mswControl.use({
-      method: "get",
-      url: "/api/config",
-      body: {
-        ...config,
-        features: { ...config.features, autoRoutingEnabled: true },
-      },
-    });
-    await page.goto("/agents");
-
-    await expect(
-      page.getByRole("link", { name: /^Auto Routing/ }),
-    ).toBeVisible();
-    const expected = [...STUDIO_NAV];
-    expected.splice(expected.indexOf("Costs & Limits") + 1, 0, "Auto Routing");
-    expect(await rowNames(page)).toEqual(expected);
   });
 });

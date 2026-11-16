@@ -2,7 +2,6 @@
 
 import { BookOpen, PanelsTopLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { useFeature } from "@/lib/config/config.query";
 import { cn } from "@/lib/utils/tailwind";
 
 export function McpCapabilityBadges({
@@ -16,8 +15,7 @@ export function McpCapabilityBadges({
   skillCount?: number;
   className?: string;
 }) {
-  const skillsEnabled = useFeature("mcpGatewaySkillsEnabled") === true;
-  const showSkills = skillsEnabled && providesSkills && skillCount > 0;
+  const showSkills = providesSkills && skillCount > 0;
   if (!providesUi && !showSkills) return null;
 
   return (

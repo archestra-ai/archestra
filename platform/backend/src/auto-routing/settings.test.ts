@@ -1,11 +1,10 @@
 import { randomUUID } from "node:crypto";
-import config from "@/config";
 import AgentModel from "@/models/agent";
 import AutoRouterModel from "@/models/auto-router";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
-import { beforeEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 import {
   autoRouterId,
   configureAutoRouting,
@@ -17,10 +16,6 @@ import { getAutoRouter, listAutoRouters, updateAutoRouter } from "./settings";
 import { sharedLongContextThreshold, tiersFingerprint } from "./tiers";
 
 describe("updateAutoRouter", () => {
-  beforeEach(() => {
-    config.autoRouting.enabled = true;
-  });
-
   test("saving is refused while the router's trio has different long-context thresholds", async ({
     makeOrganization,
   }) => {
@@ -48,10 +43,6 @@ describe("updateAutoRouter", () => {
 });
 
 describe("listAutoRouters", () => {
-  beforeEach(() => {
-    config.autoRouting.enabled = true;
-  });
-
   test("counts the agents set to auto, apart from the organization default", async ({
     makeOrganization,
     makeAgent,
@@ -86,10 +77,6 @@ describe("listAutoRouters", () => {
 });
 
 describe("tier updates", () => {
-  beforeEach(() => {
-    config.autoRouting.enabled = true;
-  });
-
   test("tiers are their own: changing the organization's default trio leaves them", async ({
     makeOrganization,
   }) => {

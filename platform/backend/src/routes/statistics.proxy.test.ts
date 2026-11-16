@@ -1,7 +1,6 @@
 import { vi } from "vitest";
 import { auth as betterAuth } from "@/auth/better-auth";
 import { authPlugin } from "@/auth/fastify-plugin";
-import config from "@/config";
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
@@ -242,7 +241,6 @@ test("groups usage by provider key and model pool and counts failed-over attempt
   makeInteraction,
   makeLlmProviderApiKey,
 }) => {
-  config.llmProxy.modelPoolsEnabled = true;
   const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
   const dedicated = await makeLlmProviderApiKey(organizationId, null, {
     name: "Dedicated",
@@ -362,13 +360,6 @@ test("groups usage by provider key and model pool and counts failed-over attempt
     url: `/api/statistics/llm-proxy?providerApiKeyId=${shared.id}`,
   });
   expect(byKey.json().totals).toMatchObject({ requests: 1, billedCost: 2 });
-
-  // With model pools off there is nothing to group by pool.
-  config.llmProxy.modelPoolsEnabled = false;
-  const off = await app.inject({
-    url: "/api/statistics/llm-proxy?includeModelPools=true",
-  });
-  expect(off.json().modelPools).toBeUndefined();
 });
 
 test("includes legacy and soft-deleted proxy traffic but excludes chat, other organizations and out-of-range requests", async ({

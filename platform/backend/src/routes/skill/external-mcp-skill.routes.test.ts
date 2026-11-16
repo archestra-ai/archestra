@@ -2,44 +2,20 @@ import { createHash } from "node:crypto";
 import { MCP_SKILLS_EXTENSION_ID } from "@archestra/shared";
 import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
-import config from "@/config";
 import {
   ExternalMcpSkillUsageEventModel,
   McpCatalogSkillModel,
   McpServerModel,
 } from "@/models";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { afterEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import { drainBackgroundWork } from "@/utils/background-work";
 import externalMcpSkillRoutes from "./external-mcp-skill.routes";
 
 describe("external MCP Skill routes", () => {
   const ctx = useRouteTestApp(externalMcpSkillRoutes);
-  let originalEnabled: boolean;
-
-  beforeEach(() => {
-    originalEnabled = config.mcpGateway.skillsEnabled;
-    config.mcpGateway.skillsEnabled = true;
-  });
-
   afterEach(() => {
-    config.mcpGateway.skillsEnabled = originalEnabled;
     vi.restoreAllMocks();
-  });
-
-  test("routes are absent while the beta gate is off", async () => {
-    config.mcpGateway.skillsEnabled = false;
-    const response = await ctx.app.inject({
-      method: "GET",
-      url: "/api/skills/external",
-    });
-    expect(response.statusCode).toBe(404);
-
-    const statisticsResponse = await ctx.app.inject({
-      method: "GET",
-      url: "/api/skills/external/usage-statistics?mcpServerId=00000000-0000-4000-8000-000000000000&uri=skill%3A%2F%2Fexample%2Frelease%2FSKILL.md",
-    });
-    expect(statisticsResponse.statusCode).toBe(404);
   });
 
   test("lists only skills backed by an installation visible to the caller", async ({

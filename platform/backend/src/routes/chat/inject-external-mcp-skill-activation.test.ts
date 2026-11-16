@@ -1,6 +1,5 @@
 import type { ChatMessage } from "@archestra/shared";
 import * as chatMcpClient from "@/clients/chat-mcp-client";
-import config from "@/config";
 import { AgentModel, ExternalMcpSkillUsageEventModel } from "@/models";
 import * as externalMcpSkills from "@/services/external-mcp-skills";
 import { afterEach, expect, test, vi } from "@/test";
@@ -17,8 +16,6 @@ test("injects an attached external Skill without changing visible user text", as
   makeOrganization,
   makeUser,
 }) => {
-  const originalEnabled = config.mcpGateway.skillsEnabled;
-  config.mcpGateway.skillsEnabled = true;
   const organization = await makeOrganization();
   const user = await makeUser();
   await makeMember(user.id, organization.id);
@@ -80,8 +77,45 @@ test("injects an attached external Skill without changing visible user text", as
     },
   ];
 
-  try {
-    const result = await injectExternalMcpSkillActivation({
+  const result = await injectExternalMcpSkillActivation({
+    messages,
+    organizationId: organization.id,
+    userId: user.id,
+    agentId: agent.id,
+    conversationId: "conversation-1",
+    provider: "openai",
+    model: "gpt-5",
+  });
+
+  expect(result[0].parts?.[0]?.text).toContain(
+    '<skill_content name="Operations server [org:',
+  );
+  expect(result[0].parts?.[0]?.text).toContain("Run the checks.");
+  expect(result[0].parts?.[0]?.text).toContain("Prepare tonight's release.");
+  expect(messages[0].parts?.[0]?.text).toBe("Prepare tonight's release.");
+  expect(getExternalSkill).toHaveBeenCalledWith(
+    expect.objectContaining({
+      id: skillId,
+      mcpServerId: serverId,
+      organizationId: organization.id,
+      userId: user.id,
+      environmentId: null,
+    }),
+  );
+
+  await drainBackgroundWork();
+  const usage = await ExternalMcpSkillUsageEventModel.getSummaries([
+    { mcpServerId: serverId, uri },
+  ]);
+  expect(usage.get(serverId)?.get(uri)?.usageCount).toBe(1);
+
+  await AgentModel.setActivationSkillPolicyState({
+    id: agent.id,
+    mode: "manual",
+    revision: 1,
+  });
+  expect(
+    await injectExternalMcpSkillActivation({
       messages,
       organizationId: organization.id,
       userId: user.id,
@@ -89,49 +123,8 @@ test("injects an attached external Skill without changing visible user text", as
       conversationId: "conversation-1",
       provider: "openai",
       model: "gpt-5",
-    });
-
-    expect(result[0].parts?.[0]?.text).toContain(
-      '<skill_content name="Operations server [org:',
-    );
-    expect(result[0].parts?.[0]?.text).toContain("Run the checks.");
-    expect(result[0].parts?.[0]?.text).toContain("Prepare tonight's release.");
-    expect(messages[0].parts?.[0]?.text).toBe("Prepare tonight's release.");
-    expect(getExternalSkill).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: skillId,
-        mcpServerId: serverId,
-        organizationId: organization.id,
-        userId: user.id,
-        environmentId: null,
-      }),
-    );
-
-    await drainBackgroundWork();
-    const usage = await ExternalMcpSkillUsageEventModel.getSummaries([
-      { mcpServerId: serverId, uri },
-    ]);
-    expect(usage.get(serverId)?.get(uri)?.usageCount).toBe(1);
-
-    await AgentModel.setActivationSkillPolicyState({
-      id: agent.id,
-      mode: "manual",
-      revision: 1,
-    });
-    expect(
-      await injectExternalMcpSkillActivation({
-        messages,
-        organizationId: organization.id,
-        userId: user.id,
-        agentId: agent.id,
-        conversationId: "conversation-1",
-        provider: "openai",
-        model: "gpt-5",
-      }),
-    ).toBe(messages);
-  } finally {
-    config.mcpGateway.skillsEnabled = originalEnabled;
-  }
+    }),
+  ).toBe(messages);
 });
 
 test("rejects an external attachment whose catalog URI changed", async ({
@@ -140,8 +133,6 @@ test("rejects an external attachment whose catalog URI changed", async ({
   makeOrganization,
   makeUser,
 }) => {
-  const originalEnabled = config.mcpGateway.skillsEnabled;
-  config.mcpGateway.skillsEnabled = true;
   const organization = await makeOrganization();
   const user = await makeUser();
   await makeMember(user.id, organization.id);
@@ -183,19 +174,15 @@ test("rejects an external attachment whose catalog URI changed", async ({
     },
   ];
 
-  try {
-    const result = await injectExternalMcpSkillActivation({
-      messages,
-      organizationId: organization.id,
-      userId: user.id,
-      agentId: agent.id,
-      conversationId: "conversation-1",
-      provider: "openai",
-      model: "gpt-5",
-    });
-    expect(result).toBe(messages);
-    expect(result[0].parts?.[0]?.text).toBe("Keep this clean.");
-  } finally {
-    config.mcpGateway.skillsEnabled = originalEnabled;
-  }
+  const result = await injectExternalMcpSkillActivation({
+    messages,
+    organizationId: organization.id,
+    userId: user.id,
+    agentId: agent.id,
+    conversationId: "conversation-1",
+    provider: "openai",
+    model: "gpt-5",
+  });
+  expect(result).toBe(messages);
+  expect(result[0].parts?.[0]?.text).toBe("Keep this clean.");
 });

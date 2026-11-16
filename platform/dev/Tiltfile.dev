@@ -293,24 +293,22 @@ if is_prod:
     serve_env=frontend_env_vars
   )
 else:
-  backend_build_cmd = ''
   backend_watch_deps = ['../.env', 'run-backend-dev.sh']
-  # OpenAPPA is available independently of beta features.
-  if os.getenv('ARCHESTRA_BETA') == 'true':
-    # Build before starting/restarting Node: native modules stay cached in a
-    # running process. resource_deps alone only orders the initial startup.
-    # A failed build leaves the previous backend running and surfaces in Tilt.
-    backend_build_cmd = '(node ../scripts/napi-prebuilt.mjs openappa-rs || pnpm --filter @archestra/openappa-rs build:dev) && pnpm --filter @archestra/openappa-rs smoke:load'
-    openappa_inputs = [
-      '../archestra-rs/openappa-rs/src',
-      '../archestra-rs/openappa-rs/build.rs',
-      '../archestra-rs/openappa-rs/Cargo.toml',
-      '../archestra-rs/openappa-rs/package.json',
-      '../archestra-rs/openappa-rs/index.cjs',
-      '../archestra-rs/Cargo.toml',
-      '../archestra-rs/Cargo.lock',
-    ]
-    backend_watch_deps.extend(openappa_inputs)
+  # OpenAPPA is on in every deployment, so its addon is always built.
+  # Build before starting/restarting Node: native modules stay cached in a
+  # running process. resource_deps alone only orders the initial startup.
+  # A failed build leaves the previous backend running and surfaces in Tilt.
+  backend_build_cmd = '(node ../scripts/napi-prebuilt.mjs openappa-rs || pnpm --filter @archestra/openappa-rs build:dev) && pnpm --filter @archestra/openappa-rs smoke:load'
+  openappa_inputs = [
+    '../archestra-rs/openappa-rs/src',
+    '../archestra-rs/openappa-rs/build.rs',
+    '../archestra-rs/openappa-rs/Cargo.toml',
+    '../archestra-rs/openappa-rs/package.json',
+    '../archestra-rs/openappa-rs/index.cjs',
+    '../archestra-rs/Cargo.toml',
+    '../archestra-rs/Cargo.lock',
+  ]
+  backend_watch_deps.extend(openappa_inputs)
 
   # Backend rebuilds. Default: Tilt watches the backend and shared sources
   # itself, so no `tsdown --watch` stays resident (about 1.3 GB per stack for
@@ -326,19 +324,16 @@ else:
     backend_watch_mode = 'false' if os.getenv('ARCHESTRA_AGENT_RUNTIME_TASK_ID') else 'tilt'
   backend_cmd = backend_build_cmd
   if backend_watch_mode != 'true' and os.name != 'nt':
-    if backend_build_cmd:
-      # Tilt now reruns this on every backend save. Skip the OpenAPPA step
-      # (about 2 s even when nothing changed) while its addon is newer than
-      # every one of its inputs.
-      backend_cmd = (
-        'addon=$(ls -t ../archestra-rs/openappa-rs/*.node 2>/dev/null | head -1); ' +
-        'if [ -n "$addon" ] && [ -z "$(find ' + ' '.join(openappa_inputs) + ' -newer "$addon" -print 2>/dev/null | head -1)" ]; ' +
-        # touch: a prebuilt addon can arrive with an older mtime than a fresh
-        # checkout, which would rerun the step on every save.
-        'then echo "OpenAPPA addon is current"; else ' + backend_build_cmd + ' && touch ../archestra-rs/openappa-rs/*.node; fi && '
-      )
-    else:
-      backend_cmd = ''
+    # Tilt now reruns this on every backend save. Skip the OpenAPPA step
+    # (about 2 s even when nothing changed) while its addon is newer than
+    # every one of its inputs.
+    backend_cmd = (
+      'addon=$(ls -t ../archestra-rs/openappa-rs/*.node 2>/dev/null | head -1); ' +
+      'if [ -n "$addon" ] && [ -z "$(find ' + ' '.join(openappa_inputs) + ' -newer "$addon" -print 2>/dev/null | head -1)" ]; ' +
+      # touch: a prebuilt addon can arrive with an older mtime than a fresh
+      # checkout, which would rerun the step on every save.
+      'then echo "OpenAPPA addon is current"; else ' + backend_build_cmd + ' && touch ../archestra-rs/openappa-rs/*.node; fi && '
+    )
     backend_cmd += 'sh run-backend-dev.sh build'
   backend_ignore = []
   if backend_watch_mode == 'tilt' and os.name != 'nt':

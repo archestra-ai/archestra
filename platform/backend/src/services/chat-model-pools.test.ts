@@ -1,16 +1,10 @@
-import config from "@/config";
 import { ModelModel, ModelPoolModel } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 import {
   applyAgentModelPool,
   listChatModelPools,
   resolveChatModelPool,
 } from "./chat-model-pools";
-
-// Model pools are a beta feature; these tests run with it on.
-beforeEach(() => {
-  config.llmProxy.modelPoolsEnabled = true;
-});
 
 describe("chat model pools", () => {
   test("lists and anchors pools on a member the user can use, Bedrock last", async ({

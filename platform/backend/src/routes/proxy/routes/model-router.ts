@@ -19,7 +19,7 @@ import {
   resolveAutoModel,
 } from "@/auto-routing/router";
 import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
-import config, { getProviderConfiguredBaseUrl } from "@/config";
+import { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
   ManagedOauthClientModel as LlmOauthClientModel,
@@ -1291,11 +1291,7 @@ async function listModels(params: { auth: ModelRouterAuth }) {
     includeMedia: true,
   });
   // Pools come first: their names are what clients are meant to ask for.
-  const pools = (
-    config.llmProxy.modelPoolsEnabled
-      ? await ModelPoolModel.list(params.auth.organizationId)
-      : []
-  ).filter(
+  const pools = (await ModelPoolModel.list(params.auth.organizationId)).filter(
     (pool) =>
       pool.members.some((member) => member.enabled) &&
       mayUseModelPool({ pool, caller: modelPoolCaller(params.auth) }),
@@ -1441,14 +1437,8 @@ export async function authenticateModelRouterBearer(params: {
     // resolves to no provider key.
     if (
       mappings.length === 0 &&
-      !(
-        config.llmProxy.modelPoolsEnabled &&
-        (await ModelPoolModel.hasVirtualApiKeyGrant(resolved.virtualKey.id))
-      ) &&
-      !(
-        config.autoRouting.enabled &&
-        (await AutoRouterModel.hasAnyVirtualApiKeyGrant(resolved.virtualKey.id))
-      )
+      !(await ModelPoolModel.hasVirtualApiKeyGrant(resolved.virtualKey.id)) &&
+      !(await AutoRouterModel.hasAnyVirtualApiKeyGrant(resolved.virtualKey.id))
     ) {
       throw new ApiError(
         401,
@@ -1521,7 +1511,6 @@ async function usableModelPoolId(params: {
   auth: ModelRouterAuth;
   model: string;
 }): Promise<string | null> {
-  if (!config.llmProxy.modelPoolsEnabled) return null;
   const pool = await ModelPoolModel.findByName({
     organizationId: params.auth.organizationId,
     name: params.model.trim(),

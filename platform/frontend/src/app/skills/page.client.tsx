@@ -89,7 +89,6 @@ import {
   useScopedCapabilities,
   useSession,
 } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import { ACTION_LABEL, notYoursToChange } from "@/lib/design/resource-lexicon";
 import {
   useSkillLabelKeys,
@@ -212,7 +211,6 @@ function SkillsList() {
     (searchParams.get("sortBy") as SkillSortBy | null) || "usageCount";
   const sortDirection =
     (searchParams.get("sortDirection") as "asc" | "desc" | null) || "desc";
-  const mcpSkillsEnabled = useFeature("mcpGatewaySkillsEnabled") === true;
   const scopedCapabilities = useScopedCapabilities();
   const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
   const { data: canOpenPluginDetails } = useHasPermissions(
@@ -228,17 +226,13 @@ function SkillsList() {
         kindParam === "plugin"
       ? kindParam
       : "all";
-  const kind: SkillKind =
-    isDeletedView || (!mcpSkillsEnabled && !pluginSkillsEnabled)
-      ? "standalone"
-      : requestedKind === "mcp" && !mcpSkillsEnabled
-        ? "all"
-        : requestedKind === "plugin" && !pluginSkillsEnabled
-          ? "all"
-          : requestedKind;
+  const kind: SkillKind = isDeletedView
+    ? "standalone"
+    : requestedKind === "plugin" && !pluginSkillsEnabled
+      ? "all"
+      : requestedKind;
   const showStandaloneSkills = kind === "all" || kind === "standalone";
-  const showMcpSkills =
-    mcpSkillsEnabled && !isDeletedView && (kind === "all" || kind === "mcp");
+  const showMcpSkills = !isDeletedView && (kind === "all" || kind === "mcp");
   const showPluginSkills =
     pluginSkillsEnabled &&
     !isDeletedView &&
@@ -535,9 +529,7 @@ function SkillsList() {
     Boolean(labelsFilter) ||
     scopeFilter.hasActiveScopeFilters ||
     isDeletedView ||
-    ((mcpSkillsEnabled || pluginSkillsEnabled) &&
-      !isDeletedView &&
-      kind !== "all");
+    kind !== "all";
   const hasVisibleSkills =
     (showStandaloneSkills && totalStandaloneSkills > 0) ||
     (showMcpSkills && visibleExternalSkills.length > 0) ||
@@ -970,38 +962,35 @@ function SkillsList() {
                   {!isDeletedView && (
                     <ResourceAccessFilter resource="skill" noun="skills" />
                   )}
-                  {(mcpSkillsEnabled || pluginSkillsEnabled) &&
-                    !isDeletedView && (
-                      <Select value={kind} onValueChange={setKindFilter}>
-                        <SelectTrigger
-                          size="sm"
-                          aria-label="Filter by skill source"
-                          className={filterControlClass({
-                            active: kind !== "all",
-                          })}
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent
-                          position="popper"
-                          side="bottom"
-                          align="start"
-                        >
-                          <SelectItem value="all">All kinds</SelectItem>
-                          <SelectItem value="standalone">
-                            Standalone skills
+                  {!isDeletedView && (
+                    <Select value={kind} onValueChange={setKindFilter}>
+                      <SelectTrigger
+                        size="sm"
+                        aria-label="Filter by skill source"
+                        className={filterControlClass({
+                          active: kind !== "all",
+                        })}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent
+                        position="popper"
+                        side="bottom"
+                        align="start"
+                      >
+                        <SelectItem value="all">All kinds</SelectItem>
+                        <SelectItem value="standalone">
+                          Standalone skills
+                        </SelectItem>
+                        <SelectItem value="mcp">MCP skills</SelectItem>
+                        {pluginSkillsEnabled && (
+                          <SelectItem value="plugin">
+                            Skills from plugins
                           </SelectItem>
-                          {mcpSkillsEnabled && (
-                            <SelectItem value="mcp">MCP skills</SelectItem>
-                          )}
-                          {pluginSkillsEnabled && (
-                            <SelectItem value="plugin">
-                              Skills from plugins
-                            </SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    )}
+                        )}
+                      </SelectContent>
+                    </Select>
+                  )}
 
                   {/* Backend gates status=deleted on isAdmin||isTeamAdmin; the
                     checker has no `skill:delete` boolean, so this shows the

@@ -1,16 +1,10 @@
 import { and, asc, eq } from "drizzle-orm";
-import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-// Model pools are a beta feature; these tests run with it on.
-beforeEach(() => {
-  config.llmProxy.modelPoolsEnabled = true;
-});
 
 describe("POST /api/model-pools", () => {
   let app: FastifyInstanceWithZod;
@@ -521,14 +515,5 @@ describe("POST /api/model-pools", () => {
     expect(listed.json().map((pool: { name: string }) => pool.name)).toEqual([
       "haiku",
     ]);
-  });
-
-  test("is not there while model pools are off", async () => {
-    config.llmProxy.modelPoolsEnabled = false;
-    const listed = await app.inject({
-      method: "GET",
-      url: "/api/model-pools",
-    });
-    expect(listed.statusCode).toBe(404);
   });
 });

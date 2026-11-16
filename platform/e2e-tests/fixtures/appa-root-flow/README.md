@@ -36,10 +36,8 @@ provider, no fake gateway and no patched runtime.
    - `tilt get uiresources` reports the stack up
    - `http://localhost:9000/health` answers
    - `http://localhost:3000` loads
-  2. Enable OpenAPPA on the backend: set `ARCHESTRA_BETA=true` in
-    `platform/.env` (OpenAPPA has no flag of its own), and turn on the
-    deployment-wide **Guardrails v2** switch in platform settings. The switch
-    alone enforces nothing. When it is off, `http://localhost:3000/openappa` returns 404 and the proxy gates
+  2. Enable OpenAPPA on the backend: turn on the deployment-wide
+    **Guardrails v2** switch in platform settings. When it is off, `http://localhost:3000/openappa` returns 404 and the proxy gates
     nothing. The offer signing key needs no manual setup: it derives from the
     auth secret, which Tilt defaults for local development.
 3. The three client CLIs on `PATH` (Archestra Chat needs none — it is driven

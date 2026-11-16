@@ -140,9 +140,6 @@ beforeEach(() => {
 describe("CreateVirtualKeyDialog", () => {
   it("creates with only a model pool, blocks empty access, and shows its connection guide", async () => {
     const user = userEvent.setup();
-    vi.mocked(useFeature).mockImplementation(
-      (feature) => feature === "llmModelPoolsEnabled",
-    );
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as unknown as ReturnType<typeof useHasPermissions>);

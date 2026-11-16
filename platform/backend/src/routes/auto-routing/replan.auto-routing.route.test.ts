@@ -20,7 +20,6 @@ import autoRoutingRoutes from "./auto-routing.routes";
 describe("POST /api/auto-routing/routers/:id/replan", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
   beforeEach(() => {
-    config.autoRouting.enabled = true;
     config.autoRouting.minSessions = 30;
   });
 

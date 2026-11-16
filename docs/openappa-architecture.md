@@ -30,8 +30,6 @@ The proxy, connected clients, and user are trusted. Model output and external to
 
 ## Startup configuration
 
-OpenAPPA is available on every deployment. Its UI, proxy plugin, and policy API do not depend on `ARCHESTRA_BETA`.
-
 The deployment-wide guardrail setting controls policy enforcement for the whole deployment. It defaults to off and lives in the database (`guardrails_deployment.enabled`). Turn this database switch on to enforce policies. Each request reads the database switch, so replicas do not depend on local process state. The plugin list alone does not activate enforcement.
 
 Policy editing and GitHub sync stay available while enforcement is off. The OpenAPPA editor stores policy revisions in PostgreSQL. Toggling the database switch takes effect immediately without a restart.

@@ -342,10 +342,7 @@ describe("SkillsPage rows", () => {
   });
 
   it("keeps projected MCP and plugin skills disabled and out of bulk selection", async () => {
-    mockUseFeature.mockImplementation(
-      (name: string) =>
-        name === "plugins" || name === "mcpGatewaySkillsEnabled",
-    );
+    mockUseFeature.mockImplementation((name: string) => name === "plugins");
     vi.mocked(useExternalMcpSkills).mockReturnValue({
       data: [
         {
@@ -521,10 +518,6 @@ describe("SkillsPage rows", () => {
   });
 
   it("lists skills without their SKILL.md bodies in both the complete and paged views", () => {
-    mockUseFeature.mockImplementation(
-      (name: string) => name === "mcpGatewaySkillsEnabled",
-    );
-
     render(<SkillsPage />);
 
     // The default view walks every page; the table never shows a body.
@@ -539,9 +532,6 @@ describe("SkillsPage rows", () => {
   });
 
   it("uses one server page and its total for a standalone-only active view", () => {
-    mockUseFeature.mockImplementation(
-      (name: string) => name === "mcpGatewaySkillsEnabled",
-    );
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("kind=standalone&pageSize=10") as ReturnType<
         typeof useSearchParams
@@ -576,9 +566,6 @@ describe("SkillsPage rows", () => {
       push: vi.fn(),
       replace,
     } as unknown as ReturnType<typeof useRouter>);
-    mockUseFeature.mockImplementation(
-      (name: string) => name === "mcpGatewaySkillsEnabled",
-    );
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("kind=standalone&openEdit=pdf-tools") as ReturnType<
         typeof useSearchParams

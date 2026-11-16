@@ -23,7 +23,6 @@ export async function listChatModelPools(params: {
   organizationId: string;
   userId: string;
 }): Promise<ChatModelPool[]> {
-  if (!config.llmProxy.modelPoolsEnabled) return [];
   const [pools, keyIds] = await Promise.all([
     ModelPoolModel.list(params.organizationId),
     usableKeyIds(params),
@@ -74,12 +73,10 @@ async function resolveModelPoolSelection(
   params: { organizationId: string; userId: string; modelPoolId: string },
   throughAgent: boolean,
 ): Promise<{ modelPoolId: string; chatApiKeyId: string; modelId: string }> {
-  const pool = config.llmProxy.modelPoolsEnabled
-    ? await ModelPoolModel.findById({
-        organizationId: params.organizationId,
-        id: params.modelPoolId,
-      })
-    : null;
+  const pool = await ModelPoolModel.findById({
+    organizationId: params.organizationId,
+    id: params.modelPoolId,
+  });
   if (!pool) throw new ApiError(404, "Model pool not found");
   const keyIds = throughAgent
     ? await agentKeyIds(pool, params)

@@ -113,9 +113,6 @@ beforeEach(() => {
 describe("EditVirtualKeyDialog", () => {
   it("retains pool-only access on rename and blocks removing its last pool", async () => {
     const user = userEvent.setup();
-    vi.mocked(useFeature).mockImplementation(
-      (feature) => feature === "llmModelPoolsEnabled",
-    );
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as unknown as ReturnType<typeof useHasPermissions>);
@@ -170,9 +167,6 @@ describe("EditVirtualKeyDialog", () => {
 
   it("lets a non-manager rename a pool-only key without rewriting its grants", async () => {
     const user = userEvent.setup();
-    vi.mocked(useFeature).mockImplementation(
-      (feature) => feature === "llmModelPoolsEnabled",
-    );
     renderDialog({
       ...virtualKey,
       includeFutureProviders: false,

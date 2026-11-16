@@ -2,9 +2,8 @@ import { createHash } from "node:crypto";
 import { MCP_SKILLS_EXTENSION_ID } from "@archestra/shared";
 import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
-import config from "@/config";
 import { McpCatalogSkillModel } from "@/models";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { afterEach, describe, expect, test } from "@/test";
 import { readExternalMcpSkill, refreshMcpSkillMetadata } from "./mcp-external";
 
 const SERVER_ID = "11111111-1111-4111-8111-111111111111";
@@ -12,15 +11,7 @@ const ROOT = "skill://example/release";
 const MANIFEST_URI = `${ROOT}/SKILL.md`;
 
 describe("external MCP Skills", () => {
-  let originalEnabled: boolean;
-
-  beforeEach(() => {
-    originalEnabled = config.mcpGateway.skillsEnabled;
-    config.mcpGateway.skillsEnabled = true;
-  });
-
   afterEach(() => {
-    config.mcpGateway.skillsEnabled = originalEnabled;
     vi.restoreAllMocks();
   });
 

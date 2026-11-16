@@ -19,17 +19,12 @@ import LimitModel from "@/models/limit";
 import LlmThroughputModel from "@/models/llm-throughput";
 import ModelModel from "@/models/model";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import { accessGrants, beforeEach, expect, test } from "@/test";
+import { accessGrants, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import { drainBackgroundWork } from "@/utils/background-work";
 import modelRouterRoutes from "./model-router";
 import vllmProxyRoutes from "./vllm";
-
-// Model pools are a beta feature; these tests run with it on.
-beforeEach(() => {
-  config.llmProxy.modelPoolsEnabled = true;
-});
 
 vi.mock("../model-pool-failover", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../model-pool-failover")>()),

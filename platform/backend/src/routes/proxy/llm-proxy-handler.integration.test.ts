@@ -190,7 +190,6 @@ const availabilityTest = test.extend<{
               outputModalities: ["text"],
               ignored: true,
             });
-          config.llmProxy.modelPoolsEnabled = true;
           const pool = await ModelPoolModel.create({
             organizationId: org.id,
             input: {
@@ -633,7 +632,6 @@ test.for([
   makeSecret,
   makeLlmProviderApiKey,
 }) => {
-  config.llmProxy.modelPoolsEnabled = true;
   const canonical = "accounts/fireworks/models/glm-5p3-flash";
   const fireworks = "https://api.fireworks.ai/inference/v1";
   config.llm.vllm.enabled = true;

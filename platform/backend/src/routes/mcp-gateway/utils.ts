@@ -143,7 +143,10 @@ import { describeToolsForCaller } from "@/services/mcp-install-tool-descriptions
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
-import { verifyServiceAccountBearer } from "@/services/workload-identity/federated-bearer";
+import {
+  namesFederatedIssuer,
+  verifyServiceAccountBearer,
+} from "@/services/workload-identity/federated-bearer";
 import { isPlatformSkillUri } from "@/skills/skill-uri";
 import {
   type AgentAccessContext,
@@ -2393,10 +2396,16 @@ async function authenticateUngated(
 
   // A non-JWT that failed here was never a JWKS candidate, so an IdP-specific
   // reason would be misleading — it most likely meant to be an OAuth token.
+  // So would one for a workload's token a federated credential refused: it
+  // was never meant for the gateway's Identity Provider.
+  const explainAsExternalIdp =
+    !!externalIdpReason &&
+    isJwtShaped(tokenValue) &&
+    !(await namesFederatedIssuer(tokenValue));
   return {
     result: null,
     reason:
-      externalIdpReason && isJwtShaped(tokenValue)
+      explainAsExternalIdp && externalIdpReason
         ? externalIdpReason
         : "invalid_token",
   };

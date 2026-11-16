@@ -6,7 +6,10 @@ import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import AuditLogModel from "@/models/audit-log";
 import ServiceAccountFederatedCredentialModel from "@/models/service-account-federated-credential";
-import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
+import {
+  authenticateMCPGatewayRequest,
+  validateMCPGatewayToken,
+} from "@/routes/mcp-gateway/utils";
 import { beforeAll, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { spyOnLogger } from "@/test/logging";
@@ -154,8 +157,10 @@ describe("a workload's OIDC token as a bearer token", () => {
   test("acts as neither of two service accounts that both trust it", async ({
     makeOrganization,
     makeServiceAccount,
+    makeAgent,
   }) => {
     const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
     for (const account of [
       await makeServiceAccount(org.id),
       await makeServiceAccount(org.id),
@@ -163,15 +168,20 @@ describe("a workload's OIDC token as a bearer token", () => {
       await trust({ organizationId: org.id, serviceAccountId: account.id });
     }
 
-    const result = await verifyServiceAccountBearer({
-      token: await actorJwt({ sub: ACTOR }),
-    });
+    const token = await actorJwt({ sub: ACTOR });
+    const result = await verifyServiceAccountBearer({ token });
 
     expect(result).toBeNull();
     expect((await exchangeEvents(org.id)).map((event) => event.after)).toEqual([
       expect.objectContaining({ reason: "matches_several_service_accounts" }),
       expect.objectContaining({ reason: "matches_several_service_accounts" }),
     ]);
+    // A workload's token was never meant for the gateway's Identity Provider,
+    // so the gateway does not tell its caller to link one.
+    expect(await authenticateMCPGatewayRequest(agent.id, token)).toEqual({
+      result: null,
+      reason: "invalid_token",
+    });
   });
 
   test("refuses a forged token naming a trusted issuer without auditing it", async ({

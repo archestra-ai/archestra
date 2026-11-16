@@ -34,6 +34,21 @@ export async function verifyServiceAccountBearer(params: {
     : null;
 }
 
+/**
+ * Whether a token claims an issuer some service account's federated
+ * credential names: a workload's token, even one that is refused. Read
+ * without verification, so it only chooses how a refusal is explained.
+ */
+export async function namesFederatedIssuer(token: string): Promise<boolean> {
+  const unverified = JWT_SHAPE.test(token) ? readUnverified(token) : null;
+  if (!unverified) return false;
+  const candidates =
+    await ServiceAccountFederatedCredentialModel.findForIssuerAcrossAccounts(
+      unverified.issuer,
+    );
+  return candidates.length > 0;
+}
+
 // === Internal helpers
 
 /**

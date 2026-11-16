@@ -21,6 +21,7 @@ import {
 } from "@/test";
 import { type TunerCandidate, TunerFingerprintSchema } from "@/types/tuner";
 import { type ArchestraContext, executeArchestraTool } from ".";
+import { tunerRunToolFilter } from "./tuner-run-admission";
 
 const PROPOSE = getArchestraToolFullName("propose_tuner_suggestion");
 const CANDIDATE: TunerCandidate = {
@@ -306,6 +307,31 @@ describe("tools inside a tuner run", () => {
     expect((await executeArchestraTool(tool, {}, bare.context)).isError).toBe(
       true,
     );
+  });
+
+  test("lists the remedy pair a governed session must declare, unassigned", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const { context } = await tunerRun({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+    });
+    const allowed = await tunerRunToolFilter(context.agent.id);
+
+    expect(
+      ["execute_remedy_plan", "get_remedy_plans", "ask_user"].map((name) =>
+        allowed(getArchestraToolFullName(name)),
+      ),
+    ).toEqual([true, true, false]);
   });
 });
 

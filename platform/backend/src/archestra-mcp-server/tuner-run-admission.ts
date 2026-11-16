@@ -60,7 +60,7 @@ export async function tunerRunToolFilter(
     if (isAgentTool(toolName) || isSkillTool(toolName)) return false;
     const shortName = archestraMcpBranding.getToolShortName(toolName);
     if (!shortName) return true;
-    if (shortName === TOOL_PROPOSE_TUNER_SUGGESTION_SHORT_NAME) return true;
+    if (TUNER_RUN_IMPLICIT_SHORT_NAMES.has(shortName)) return true;
     if (isForbiddenInTunerRun(shortName)) return false;
     return assigned.has(shortName);
   };
@@ -79,10 +79,18 @@ function isForbiddenInTunerRun(shortName: ArchestraToolShortName): boolean {
   }
 }
 
-const TUNER_RUN_FORBIDDEN_SHORT_NAMES = new Set<ArchestraToolShortName>([
-  TOOL_ASK_USER_SHORT_NAME,
+/**
+ * Never assigned, always allowed: the run's own sink, and the remedy pair the
+ * proxy requires every governed session to declare.
+ */
+const TUNER_RUN_IMPLICIT_SHORT_NAMES = new Set<ArchestraToolShortName>([
+  TOOL_PROPOSE_TUNER_SUGGESTION_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+]);
+
+const TUNER_RUN_FORBIDDEN_SHORT_NAMES = new Set<ArchestraToolShortName>([
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
 ]);

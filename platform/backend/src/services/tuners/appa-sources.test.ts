@@ -280,23 +280,25 @@ describe("collectAppaCandidates", () => {
     ]);
   });
 
-  test("raises one candidate per unresolved agent yell", async ({
+  test("groups unresolved agent yells by caller", async ({
     makeOrganization,
     makeUser,
   }) => {
     const { id: org } = await makeOrganization();
     const user = await makeUser();
-    const yell = (session: string) =>
+    const yell = (callerId: string, session: string) =>
       OpenAppaYellModel.record({
         organizationId: org,
-        callerId: "user:1",
+        callerId,
         sessionId: session,
         toolCallId: `call-${session}`,
         message: "something is wrong",
         withTrajectory: false,
       });
-    const open = await yell("s1");
-    const closed = await yell("s2");
+    const first = await yell("user:1", "s1");
+    const second = await yell("user:1", "s2");
+    const other = await yell("user:2", "s3");
+    const closed = await yell("user:2", "s4");
     await OpenAppaYellModel.setResolved({
       organizationId: org,
       id: closed.id,
@@ -304,13 +306,20 @@ describe("collectAppaCandidates", () => {
       resolved: true,
     });
 
-    expect(await candidatesOf(org, "appa_unresolved_yell")).toEqual([
-      expect.objectContaining({
-        fingerprint: `appa_unresolved_yell:${open.id}`,
-        severity: "warn",
-        evidence: [{ type: "openappa_yell", id: open.id }],
-      }),
-    ]);
+    const byFingerprint = Object.fromEntries(
+      (await candidatesOf(org, "appa_unresolved_yell")).map((c) => [
+        c.fingerprint,
+        new Set(
+          c.evidence.flatMap((ref) =>
+            ref.type === "openappa_yell" ? [ref.id] : [],
+          ),
+        ),
+      ]),
+    );
+    expect(byFingerprint).toEqual({
+      "appa_unresolved_yell:caller:user:1": new Set([first.id, second.id]),
+      "appa_unresolved_yell:caller:user:2": new Set([other.id]),
+    });
   });
 
   test("ignores rows sealed away from the database", async ({

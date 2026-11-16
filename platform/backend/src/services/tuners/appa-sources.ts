@@ -36,10 +36,9 @@ export async function collectAppaCandidates(params: {
     // An unresolved yell stays a candidate however old it is; otherwise its
     // suggestion would be resolved while the yell is still open.
     OpenAppaYellModel.unresolvedWaiversByTool({ ...scan, since: new Date(0) }),
-    OpenAppaYellModel.unresolvedAgentYells({
-      ...window,
+    OpenAppaYellModel.unresolvedAgentYellsByCaller({
+      ...scan,
       since: new Date(0),
-      limit: TOOL_SCAN_LIMIT,
     }),
   ]);
   const complete = [hitl, denied, stock, waivers, agentYells].every(
@@ -120,15 +119,15 @@ export async function collectAppaCandidates(params: {
       ),
     ),
     ...top(
-      agentYells.map((yell) =>
+      agentYells.map((row) =>
         candidate({
           source: "appa_unresolved_yell",
           rule: AGENT_YELL_RULE,
-          count: 1,
-          key: yell.id,
-          title: "Unresolved agent yell",
-          detail: `An agent raised a yell at ${yell.createdAt.toISOString()} that is still unresolved.`,
-          evidence: yellRefs([yell.id]),
+          count: row.yells,
+          key: `caller:${row.callerId}`,
+          title: `Unresolved agent yells from ${row.callerId}`,
+          detail: `Agents running as ${row.callerId} raised ${row.yells} yells that are still unresolved, across ${sessionsText(row.sessions)}, raised ${spanText(row)}.`,
+          evidence: yellRefs(row.recentIds),
         }),
       ),
     ),
@@ -180,7 +179,7 @@ function candidate(params: {
   source: TunerCandidateSource;
   rule: Rule;
   count: number;
-  /** What the issue is about: a tool, or one agent yell's id. */
+  /** What the issue is about: a tool, or the caller agent yells came from. */
   key: string;
   title: string;
   detail: string;

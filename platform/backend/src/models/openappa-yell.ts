@@ -5,12 +5,10 @@ import {
   eq,
   exists,
   getTableColumns,
-  gt,
   ilike,
   inArray,
   isNotNull,
   isNull,
-  lte,
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
@@ -393,33 +391,57 @@ export default class OpenAppaYellModel {
     return UnresolvedWaiversByToolRowSchema.array().parse(result.rows);
   }
 
-  /** Unresolved yells agents raised themselves in `(since, until]`, newest first. */
-  static async unresolvedAgentYells(params: {
+  /** Unresolved yells agents raised themselves in `(since, until]`, per caller. */
+  static async unresolvedAgentYellsByCaller(params: {
     organizationId: string;
     since: Date;
     until: Date;
     limit: number;
+    evidenceLimit: number;
   }) {
-    return db
-      .select({
-        id: table.id,
-        sessionId: table.sessionId,
-        createdAt: table.createdAt,
-      })
-      .from(table)
-      .where(
-        and(
-          eq(table.organizationId, params.organizationId),
-          isNull(table.resolvedAt),
-          gt(table.createdAt, params.since),
-          lte(table.createdAt, params.until),
-          eq(table.kind, "agent"),
-        ),
+    const result = await db.execute(sql`
+      WITH ranked AS (
+        SELECT y.id, y.caller_id, y.session_id, y.created_at,
+          ROW_NUMBER() OVER (PARTITION BY y.caller_id ORDER BY y.created_at DESC, y.id DESC) AS rn
+        FROM ${table} AS y
+        WHERE y.organization_id = ${params.organizationId}
+          AND y.resolved_at IS NULL
+          AND y.created_at > ${params.since.toISOString()}::timestamptz
+          AND y.created_at <= ${params.until.toISOString()}::timestamptz
+          AND y.kind = 'agent'
       )
-      .orderBy(desc(table.createdAt), desc(table.id))
-      .limit(params.limit);
+      SELECT caller_id,
+        COUNT(*)::int AS yells,
+        COUNT(DISTINCT session_id)::int AS sessions,
+        MIN(created_at) AS first_at,
+        MAX(created_at) AS last_at,
+        COALESCE(to_jsonb((ARRAY_AGG(id::text ORDER BY created_at DESC, id DESC)
+          FILTER (WHERE rn <= ${params.evidenceLimit}::int))[1:${params.evidenceLimit}::int]), '[]'::jsonb) AS recent_ids
+      FROM ranked
+      GROUP BY caller_id
+      ORDER BY yells DESC, caller_id
+      LIMIT ${params.limit}
+    `);
+    return UnresolvedAgentYellsByCallerRowSchema.array().parse(result.rows);
   }
 }
+
+const UnresolvedAgentYellsByCallerRowSchema = z
+  .object({
+    caller_id: z.string(),
+    yells: z.number().int(),
+    sessions: z.number().int(),
+    first_at: z.coerce.date(),
+    last_at: z.coerce.date(),
+    recent_ids: z.array(z.uuid()),
+  })
+  .transform(({ caller_id, first_at, last_at, recent_ids, ...row }) => ({
+    ...row,
+    callerId: caller_id,
+    firstAt: first_at,
+    lastAt: last_at,
+    recentIds: recent_ids,
+  }));
 
 const UnresolvedWaiversByToolRowSchema = z
   .object({

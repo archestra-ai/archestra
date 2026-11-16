@@ -44888,7 +44888,7 @@ export type GetBootstrapResponses = {
                  *
                  * @deprecated
                  */
-                mcpIdleHibernationBetaEnabled: boolean;
+                mcpIdleHibernationBetaEnabled?: boolean;
                 sandbox: boolean;
                 agentRuntime: boolean;
                 agentRuntimeCatalogImages: {
@@ -54684,7 +54684,7 @@ export type GetConfigResponses = {
              *
              * @deprecated
              */
-            mcpIdleHibernationBetaEnabled: boolean;
+            mcpIdleHibernationBetaEnabled?: boolean;
             sandbox: boolean;
             agentRuntime: boolean;
             agentRuntimeCatalogImages: {

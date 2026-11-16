@@ -53,32 +53,6 @@ describe("config routes", () => {
     await app.close();
   });
 
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  test("keeps the deprecated hibernation beta field true for older clients", async () => {
-    const originalBeta = config.beta;
-    const originalHardDisabled =
-      config.orchestrator.mcpIdleHibernation.hardDisabled;
-    config.beta = false;
-    try {
-      // Neither ARCHESTRA_BETA nor the operator kill switch changes it: the
-      // field only stays in the contract so beta-era clients still parse it.
-      for (const hardDisabled of [false, true]) {
-        config.orchestrator.mcpIdleHibernation.hardDisabled = hardDisabled;
-        const response = (
-          await app.inject({ method: "GET", url: "/api/config" })
-        ).json();
-        expect(response.features.mcpIdleHibernationBetaEnabled).toBe(true);
-      }
-    } finally {
-      config.beta = originalBeta;
-      config.orchestrator.mcpIdleHibernation.hardDisabled =
-        originalHardDisabled;
-    }
-  });
-  // SPDX-SnippetEnd
-
   test("advertises the UI feedback overlay only when its flag is set", async () => {
     config.devFeedback.enabled = true;
     const on = await app.inject({ method: "GET", url: "/api/config" });

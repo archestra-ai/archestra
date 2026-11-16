@@ -167518,9 +167518,9 @@
                               "additionalProperties": false
                             },
                             "mcpIdleHibernationBetaEnabled": {
-                              "type": "boolean",
                               "deprecated": true,
-                              "description": "Deprecated. Always true: MCP idle hibernation is generally available. Kept for backward compatibility."
+                              "description": "Deprecated. Always true: MCP idle hibernation is generally available. Kept for backward compatibility.",
+                              "type": "boolean"
                             },
                             "sandbox": {
                               "type": "boolean"
@@ -167711,7 +167711,6 @@
                             "betaEnabled",
                             "orchestratorK8sRuntime",
                             "agentIdentitySpiffe",
-                            "mcpIdleHibernationBetaEnabled",
                             "sandbox",
                             "agentRuntime",
                             "agentRuntimeCatalogImages",
@@ -205444,9 +205443,9 @@
                           "additionalProperties": false
                         },
                         "mcpIdleHibernationBetaEnabled": {
-                          "type": "boolean",
                           "deprecated": true,
-                          "description": "Deprecated. Always true: MCP idle hibernation is generally available. Kept for backward compatibility."
+                          "description": "Deprecated. Always true: MCP idle hibernation is generally available. Kept for backward compatibility.",
+                          "type": "boolean"
                         },
                         "sandbox": {
                           "type": "boolean"
@@ -205637,7 +205636,6 @@
                         "betaEnabled",
                         "orchestratorK8sRuntime",
                         "agentIdentitySpiffe",
-                        "mcpIdleHibernationBetaEnabled",
                         "sandbox",
                         "agentRuntime",
                         "agentRuntimeCatalogImages",

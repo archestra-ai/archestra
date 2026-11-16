@@ -110,10 +110,10 @@ export const ConfigResponseSchema = z.strictObject({
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     /**
-     * @deprecated Always true: MCP idle hibernation is generally available.
-     * Kept so clients of the beta release still parse the response.
+     * @deprecated MCP idle hibernation is generally available. Kept in the
+     * contract only for clients of the beta release.
      */
-    mcpIdleHibernationBetaEnabled: z.boolean().meta({
+    mcpIdleHibernationBetaEnabled: z.boolean().optional().meta({
       deprecated: true,
       description:
         "Deprecated. Always true: MCP idle hibernation is generally available. Kept for backward compatibility.",

@@ -206,7 +206,10 @@ jobs:
         env:
           CACHE_REF: ${{ inputs.image_registry }}/${{ inputs.image_name }}:buildcache-${{ matrix.os_and_arch == 'linux/arm64' && 'arm64' || 'amd64' }}
           USE_REGISTRY_CACHE: ${{ inputs.auth_provider != 'dockerhub' }}
-          CAN_EXPORT_CACHE: ${{ inputs.push_image && inputs.auth_provider != 'none' }}
+          # The merge queue's release builds read this cache. Only builds of
+          # main and release/*, which take reviewed code, write it; a build
+          # dispatched from any other branch reads it and leaves it alone.
+          CAN_EXPORT_CACHE: ${{ inputs.push_image && inputs.auth_provider != 'none' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
           CACHE_COMPRESSION: ${{ inputs.cache_compression }}
         run: |
           if [ "${USE_REGISTRY_CACHE}" != "true" ]; then
@@ -317,7 +320,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 1
+          # A release reads its handoff scripts at the workflow's own commit.
+          fetch-depth: ${{ startsWith(inputs.checkout_ref, 'platform-v') && '0' || '1' }}
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
       - name: Download digests
@@ -410,7 +414,36 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - name: Download the release candidate selection
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
+        uses: $/.github/actions/github-download-artifact
+        with:
+          name: release-candidate-selection-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-selection
+
+      # The merge queue wrote this image's multi-arch index from the two
+      # scanned roots promoted above and signed its build provenance; push those
+      # bytes, so the release digest is the one the queue built.
+      - name: Push the queue's signed release index
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
+        env:
+          SELECTION_FILE: ${{ runner.temp }}/release-selection/release-candidate-selection.json
+          IMAGE_NAME: ${{ inputs.image_name }}
+          IMAGE_DESTINATION: ${{ inputs.image_registry }}/${{ inputs.image_name }}
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          POLICY_SHA: ${{ github.workflow_sha }}
+        run: |
+          [[ "$POLICY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          policy_dir="$RUNNER_TEMP/release-handoff-policy"
+          mkdir -p "$policy_dir"
+          for script in release-handoff.py release-candidate.py release-image-policy.py release-oci.py; do
+            git show "$POLICY_SHA:.github/scripts/$script" > "$policy_dir/$script"
+          done
+          python3 "$policy_dir/release-handoff.py" push-index
+
       - name: Create manifest list and push
+        if: ${{ !startsWith(inputs.checkout_ref, 'platform-v') }}
         working-directory: /tmp/digests
         run: |
           # Stable aliases move only in the release workflow's approved publication job.

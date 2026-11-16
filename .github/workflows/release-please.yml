@@ -645,9 +645,14 @@ jobs:
         shell: bash
         run: |
           bash .github/scripts/release-subjects.sh release-images ghcr.io/archestra-ai "archestra-platform-${VERSION}.tgz"
+          # Only the chart is built in this run. The images' provenance comes
+          # from the merge-queue run that built them (docker-image-scanning.yml
+          # attest-release-candidates), for the same index bytes.
+          chart=$(grep -E '^[0-9a-f]{64}  archestra-platform-[^ /]+\.tgz$' release-subjects.txt)
+          [ "$(printf '%s\n' "$chart" | grep -c .)" -eq 1 ] || { echo "::error::Expected one chart subject"; exit 1; }
           {
             echo "subjects<<SUBJECTS"
-            cat release-subjects.txt
+            echo "$chart"
             echo "SUBJECTS"
           } >> "$GITHUB_OUTPUT"
 
@@ -705,10 +710,10 @@ jobs:
           PLATFORM_LATEST: ${{ steps.platform-latest.outputs.move }}
         run: bash .github/scripts/release-request.sh release-images.json
 
-  # Signs in a job of its own that runs no build step (SLSA Build L3): no job
-  # that builds, relays or collects the release can sign its provenance.
+  # Signs the chart's build provenance in a job of its own that runs no build
+  # step (SLSA Build L3). The images carry the merge-queue run's.
   attest-release-images:
-    name: Attest release images and chart
+    name: Attest release chart
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     needs: [release-please, release-subjects]
     permissions:

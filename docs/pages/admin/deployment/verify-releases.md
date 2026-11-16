@@ -58,10 +58,7 @@ cosign verify-attestation --new-bundle-format --type slsaprovenance1 \
   "docker.io/archestra/platform@$DIGEST"
 ```
 
-What to know:
-
-- Stable releases come from `refs/heads/release/<major>.<minor>`, release candidates from `refs/heads/main`.
-- An older release signs its provenance in `archestra-ai/archestra/.github/workflows/release-please.yml`. If the check finds no provenance, pass that workflow to `--signer-workflow`, or to cosign as `--certificate-identity-regexp '^https://github\.com/archestra-ai/archestra/\.github/workflows/release-please\.yml@refs/heads/(main|release/[0-9]+\.[0-9]+)$'` with no `--certificate-github-workflow-*` flags.
+Stable releases come from `refs/heads/release/<major>.<minor>`, release candidates from `refs/heads/main`.
 
 ## Scan the SBOM
 
@@ -109,22 +106,13 @@ Make your cluster refuse any Archestra image that Archestra's release workflow d
             attestations:
               - type: https://slsa.dev/provenance/v1
                 attestors:
-                  # Any one entry admits the image.
-                  - count: 1
-                    entries:
-                      # Releases signed by the shared workflow, from your release line.
+                  - entries:
                       - keyless:
                           issuer: https://token.actions.githubusercontent.com
                           subjectRegExp: '^https://github\.com/archestra-ai/\.github/\.github/workflows/attest-provenance\.yml@'
                           additionalExtensions:
                             githubWorkflowRepository: archestra-ai/archestra
                             githubWorkflowRef: refs/heads/release/1.5
-                          rekor:
-                            url: https://rekor.sigstore.dev
-                      # Older releases, signed in the release workflow itself.
-                      - keyless:
-                          issuer: https://token.actions.githubusercontent.com
-                          subjectRegExp: '^https://github\.com/archestra-ai/archestra/\.github/workflows/release-please\.yml@refs/heads/release/[0-9]+\.[0-9]+$'
                           rekor:
                             url: https://rekor.sigstore.dev
   ```
@@ -134,7 +122,6 @@ Make your cluster refuse any Archestra image that Archestra's release workflow d
 
 What to know:
 
-- Set `githubWorkflowRef` to the release line you run. To admit release candidates too, add a copy of the first entry with `refs/heads/main`.
-- Drop the older-release entry once every cluster runs a release signed by the shared workflow.
+- Set `githubWorkflowRef` to the release line you run. To admit release candidates too, copy the entry with `refs/heads/main` under the same `entries`, and set `count: 1` on the attestor so either entry admits the image.
 - A registry mirror must copy the attestations with the image: `oras cp -r <image>@<digest> <mirror>/<image>` does. Point the policy's image references at the mirror.
 - An older release may have its attestations on GitHub only. If `--bundle-from-oci` finds none, drop the flag to check with GitHub instead.

@@ -12,6 +12,7 @@ import {
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
 } from "@archestra/shared";
 import { ToolModel } from "@/models";
+import { hasTunerAccess } from "@/services/tuners/access";
 import { findTunerRun } from "@/services/tuners/tuner-run";
 import { archestraMcpBranding } from "./branding";
 import { errorResult } from "./helpers";
@@ -20,7 +21,8 @@ import type { ArchestraContext } from "./types";
 /**
  * Keeps a tuner run propose-only: the agent may call the tools assigned to it
  * and `propose_tuner_suggestion`, nothing that delegates, dispatches, asks a
- * person, or writes through an implicit built-in. Outside tuner runs
+ * person, or writes through an implicit built-in, and nothing at all once the
+ * user it runs as loses tuner rights. Outside tuner runs
  * `propose_tuner_suggestion` does not exist and nothing else changes.
  * Returns the refusal, or null to continue.
  */
@@ -36,6 +38,19 @@ export async function admitTunerRunToolCall(params: {
       throw { code: -32601, message: `No tool named "${toolName}" exists.` };
     }
     return null;
+  }
+  if (
+    !(await hasTunerAccess({
+      userId: run.actorUserId,
+      organizationId: run.organizationId,
+      access: "update",
+    }))
+  ) {
+    return {
+      refusal: errorResult(
+        "The user this tuner runs as no longer holds tuner:update and log:admin.",
+      ),
+    };
   }
   const allowed = await tunerRunToolFilter(context.agent.id);
   return allowed(toolName)

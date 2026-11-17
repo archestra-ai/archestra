@@ -309,6 +309,38 @@ describe("tools inside a tuner run", () => {
     );
   });
 
+  test("refuses an assigned tool once the run's user lost tuner rights", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeCustomRole,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+    seedAndAssignArchestraTools,
+  }) => {
+    const { context, triggerId, organizationId } = await tunerRun({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+    });
+    await seedAndAssignArchestraTools(context.agent.id);
+    const tool = getArchestraToolFullName("get_guardrails_policy");
+    expect((await executeArchestraTool(tool, {}, context)).isError).toBeFalsy();
+
+    const demoted = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: { tuner: ["update"] },
+    });
+    await makeMember(demoted.id, organizationId, { role: role.role });
+    await ScheduleTriggerModel.update(triggerId, { actorUserId: demoted.id });
+
+    expect((await executeArchestraTool(tool, {}, context)).isError).toBe(true);
+  });
+
   test("lists the remedy pair a governed session must declare, unassigned", async ({
     makeOrganization,
     makeUser,

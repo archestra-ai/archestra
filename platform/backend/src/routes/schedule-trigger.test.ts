@@ -233,7 +233,7 @@ describe("schedule trigger routes", () => {
     );
   });
 
-  test("a tuner viewer opens a tuner run's conversation but cannot run, toggle or edit the tuner", async ({
+  test("a tuner viewer opens a tuner run's conversation, owned by the tuner's actor, but cannot run, toggle or edit the tuner", async ({
     makeAgent,
     makeCustomRole,
     makeMember,
@@ -266,7 +266,7 @@ describe("schedule trigger routes", () => {
     });
     expect(opened.statusCode, opened.body).toBe(200);
     expect(opened.json()).toMatchObject({
-      userId: viewer.id,
+      userId: trigger.actorUserId,
       agentId: agent.id,
     });
 

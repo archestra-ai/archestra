@@ -239,6 +239,7 @@ export class FakeGitlab {
           project.mergeRequests.some(
             (entry) =>
               entry.state === "opened" &&
+              (entry.sourceProjectId ?? project.id) === project.id &&
               entry.sourceBranch === body.source_branch &&
               entry.targetBranch === body.target_branch,
           )

@@ -394,14 +394,22 @@ export async function availableAutoRouterNames(
   return names;
 }
 
-/** Native provider routes cannot serve an auto router; only the Unified Model API translates between tiers. */
-export function assertNotAutoOnNativeRoute(model: string): void {
-  if (isAutoModel(model)) {
-    throw new ApiError(
-      400,
-      `"${model.trim()}" is only available through the Unified Model API.`,
-    );
-  }
+/**
+ * Native provider routes cannot serve an auto router; only the Unified Model
+ * API translates between tiers. Without an enabled router in the organization,
+ * `auto` is the provider's own model name (Fireworks has one) and passes through.
+ */
+export async function assertNotAutoOnNativeRoute(params: {
+  model: string;
+  organizationId: string;
+}): Promise<void> {
+  if (!isAutoModel(params.model)) return;
+  const routers = await AutoRouterModel.list(params.organizationId);
+  if (!routers.some((router) => router.enabled)) return;
+  throw new ApiError(
+    400,
+    `"${params.model.trim()}" is only available through the Unified Model API.`,
+  );
 }
 
 /** The tier a scored session gets from the active plan; null `plan` unless planned. */

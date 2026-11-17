@@ -46,6 +46,7 @@ import {
   readRunToolArgs,
   resolveRunToolDispatch,
 } from "@/archestra-mcp-server/run-tool-target";
+import { refuseRevokedTunerRunCall } from "@/archestra-mcp-server/tuner-run-admission";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
@@ -414,6 +415,14 @@ export function buildMcpGatewayTool(params: {
               }),
             });
           } else {
+            const tunerRefusal = await refuseRevokedTunerRunCall({
+              scheduleTriggerRunId: ctx.scheduleTriggerRunId,
+              userId: ctx.userId,
+            });
+            if (tunerRefusal !== null) {
+              span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, true);
+              return tunerRefusal;
+            }
             // Execute non-Archestra tools via shared helper with browser sync
             toolResult = await executeMcpTool({
               toolName: mcpTool.name,

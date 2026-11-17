@@ -29,7 +29,7 @@ import {
 } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
-import { AgentModel, SkillModel, ToolModel } from "@/models";
+import { AgentModel, MemberModel, SkillModel, ToolModel } from "@/models";
 import { metrics } from "@/observability";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { accessGrants, beforeEach, describe, expect, test } from "@/test";
@@ -1619,5 +1619,42 @@ describe("tuner runs", () => {
     expect(
       marker && verifyToolAttestation({ organizationId: org.id, marker }),
     ).toEqual({ gatewayId: agent.id, kind: "b", advertisedName: sinkName });
+  });
+
+  test("refuse an external tool once the user the run executes as lost tuner rights", async ({
+    makeCustomRole,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const { org, user, agent, baseParams } = await setupChatToolEnv({
+      gatewayTools: [externalTool("extsrv__fetch_data")],
+    });
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      actorUserId: user.id,
+      agentId: agent.id,
+      tunerKind: "appa",
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
+      content: [{ type: "text", text: "external result" }],
+      isError: false,
+    } as never);
+    const tools = await chatClient.getChatMcpTools({
+      ...baseParams,
+      scheduleTriggerRunId: run.id,
+    });
+    const call = () =>
+      tools.extsrv__fetch_data.execute?.({ query: "q" }, execOptions("call-t"));
+
+    await call();
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
+
+    const { role } = await makeCustomRole(org.id, {
+      permission: { tuner: ["read", "update"] },
+    });
+    await MemberModel.updateRole(user.id, org.id, role);
+    await call();
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
   });
 });

@@ -13,7 +13,7 @@ import {
 } from "@archestra/shared";
 import { ToolModel } from "@/models";
 import { hasTunerAccess } from "@/services/tuners/access";
-import { findTunerRun } from "@/services/tuners/tuner-run";
+import { findTunerRun, type TunerRunScope } from "@/services/tuners/tuner-run";
 import { archestraMcpBranding } from "./branding";
 import { errorResult } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -39,21 +39,8 @@ export async function admitTunerRunToolCall(params: {
     }
     return null;
   }
-  // The user the call executes as, not the trigger's current actor: enabling
-  // the tuner again moves the actor without touching a run already started.
-  if (
-    !context.userId ||
-    !(await hasTunerAccess({
-      userId: context.userId,
-      organizationId: run.organizationId,
-      access: "update",
-    }))
-  ) {
-    return {
-      refusal: errorResult(
-        "The user this tuner runs as no longer holds tuner:update and log:admin.",
-      ),
-    };
+  if (!(await executesWithTunerRights(run, context.userId))) {
+    return { refusal: errorResult(TUNER_RIGHTS_REVOKED) };
   }
   const allowed = await tunerRunToolFilter(context.agent.id);
   return allowed(toolName)
@@ -63,6 +50,20 @@ export async function admitTunerRunToolCall(params: {
           `"${toolName}" is not available in a tuner run. Use the tools listed for this run and propose_tuner_suggestion.`,
         ),
       };
+}
+
+/**
+ * The refusal for a tool outside the built-in server (whose calls pass
+ * {@link admitTunerRunToolCall}) in a tuner run whose user lost tuner rights,
+ * or null to continue.
+ */
+export async function refuseRevokedTunerRunCall(params: {
+  scheduleTriggerRunId: string | undefined;
+  userId: string | undefined;
+}): Promise<string | null> {
+  const run = await findTunerRun(params.scheduleTriggerRunId);
+  if (!run || (await executesWithTunerRights(run, params.userId))) return null;
+  return TUNER_RIGHTS_REVOKED;
 }
 
 /** Whether a tool may be listed for, and called in, the agent's tuner run. */
@@ -83,6 +84,27 @@ export async function tunerRunToolFilter(
     return assigned.has(shortName);
   };
 }
+
+/**
+ * Checks the user the call executes as, not the trigger's current actor:
+ * enabling the tuner again moves the actor without touching a started run.
+ */
+async function executesWithTunerRights(
+  run: TunerRunScope,
+  userId: string | undefined,
+): Promise<boolean> {
+  return (
+    !!userId &&
+    hasTunerAccess({
+      userId,
+      organizationId: run.organizationId,
+      access: "update",
+    })
+  );
+}
+
+const TUNER_RIGHTS_REVOKED =
+  "The user this tuner runs as no longer holds tuner:update and log:admin.";
 
 function isForbiddenInTunerRun(shortName: ArchestraToolShortName): boolean {
   switch (ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME[shortName]) {

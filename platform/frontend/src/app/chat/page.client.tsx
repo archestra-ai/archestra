@@ -103,6 +103,7 @@ import { useApp } from "@/lib/app.query";
 import { afterNextPaint } from "@/lib/app-interactive";
 import {
   useHasPermissions,
+  usePermissionsRevalidatingOnMount,
   useScopedCapabilities,
   useSession,
 } from "@/lib/auth/auth.query";
@@ -374,6 +375,10 @@ export function ChatPageContent({
     useHasPermissions({
       agent: ["read"],
     });
+  // The map this page opens on may have been cached under a role the viewer
+  // no longer holds: a refusal read from it stands only once the server has
+  // repeated it, and the page waits on a spinner until then.
+  const isPermissionsRevalidating = usePermissionsRevalidatingOnMount();
   // Unknown while the session and its permissions load: the page renders
   // optimistically (on a session cookie) before either answers, and assumes
   // the common case until told otherwise rather than flashing a refusal.
@@ -3161,6 +3166,7 @@ export function ChatPageContent({
   // If user lacks permission to read agents, show access denied
   // Must check before loading state since disabled queries stay in pending state
   if (!conversationId && canReadAgent === false) {
+    if (isPermissionsRevalidating) return <LoadingState variant="fill" />;
     return (
       <Empty className="h-full">
         <EmptyHeader>
@@ -3220,6 +3226,11 @@ export function ChatPageContent({
     // A runtime agent chats without a key, and the config says whether the
     // runtime is on: until it does, an empty key list is not yet the answer.
     if (!config) return <LoadingState variant="fill" />;
+    // Without the grants the key lists are never asked for, so "no keys" is
+    // the permission map's answer, not the server's.
+    if (isPermissionsRevalidating && !canLoadApiKeys) {
+      return <LoadingState variant="fill" />;
+    }
     return <NoApiKeySetup onKeyAdded={handleFirstKeyAdded} />;
   }
 

@@ -147,6 +147,15 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
       serverType: "local",
     });
     const shared = await create({ multitenant: true });
+    const emptyYaml = await create({ deploymentSpecYaml: "" });
+    const emptyYamlInstall = await makeMcpServer({
+      catalogId: emptyYaml.id,
+      serverType: "local",
+    });
+    const emptyYamlShared = await create({
+      multitenant: true,
+      deploymentSpecYaml: "",
+    });
     const custom = await create({ deploymentSpecYaml: "kind: Deployment" });
     const customInstall = await makeMcpServer({
       catalogId: custom.id,
@@ -177,6 +186,14 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
     });
     expect(
       (await InternalMcpCatalogModel.findById(shared.id))
+        ?.catalogReinstallRequired,
+    ).toBe(true);
+    expect(await McpServerModel.findById(emptyYamlInstall.id)).toMatchObject({
+      reinstallRequired: true,
+      reinstallReason: "restart",
+    });
+    expect(
+      (await InternalMcpCatalogModel.findById(emptyYamlShared.id))
         ?.catalogReinstallRequired,
     ).toBe(true);
     expect(

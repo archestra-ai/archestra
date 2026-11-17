@@ -227,7 +227,11 @@ class InternalMcpCatalogModel {
     const affected = and(
       eq(catalog.organizationId, params.organizationId),
       eq(catalog.serverType, "local"),
-      isNull(catalog.deploymentSpecYaml),
+      // Empty YAML follows the generated deployment path just like null.
+      or(
+        isNull(catalog.deploymentSpecYaml),
+        eq(catalog.deploymentSpecYaml, ""),
+      ),
       sql`lower(${catalog.localConfig}->>'runtimeTier') in (${sql.join(
         params.names.map((name) => sql`${name.toLowerCase()}`),
         sql`, `,

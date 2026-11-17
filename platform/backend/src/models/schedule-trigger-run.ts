@@ -137,6 +137,49 @@ class ScheduleTriggerRunModel {
     });
   }
 
+  /**
+   * Records a manual run and queues its work atomically, unless a run of the
+   * trigger is still running. The advisory lock serializes concurrent callers,
+   * so two of them cannot both see no running run.
+   */
+  static async createManualRunUnlessRunning(params: {
+    trigger: ScheduleTrigger;
+    initiatedByUserId: string;
+  }): Promise<ScheduleTriggerRun | null> {
+    const { trigger } = params;
+    const runs = schema.scheduleTriggerRunsTable;
+    return db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`schedule-trigger-run:${trigger.id}`}, 0))`,
+      );
+      const [running] = await tx
+        .select({ id: runs.id })
+        .from(runs)
+        .where(and(eq(runs.triggerId, trigger.id), eq(runs.status, "running")))
+        .limit(1);
+      if (running) return null;
+      const [run] = await tx
+        .insert(runs)
+        .values({
+          organizationId: trigger.organizationId,
+          triggerId: trigger.id,
+          runKind: "manual",
+          status: "running",
+          initiatedByUserId: params.initiatedByUserId,
+          startedAt: new Date(),
+        })
+        .returning();
+      await TaskModel.create(
+        {
+          taskType: "schedule_trigger_run_execute",
+          payload: { runId: run.id, triggerId: trigger.id },
+        },
+        tx,
+      );
+      return run;
+    });
+  }
+
   static async countByTrigger(params: {
     organizationId: string;
     triggerId: string;

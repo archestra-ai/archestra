@@ -101,6 +101,29 @@ describe("POST /api/tuners/:kind/run", () => {
     ]);
   });
 
+  test("concurrent requests start one run, and none while it is running", async () => {
+    const responses = await Promise.all(
+      Array.from({ length: 5 }, () => run("appa")),
+    );
+
+    expect(responses.map((r) => r.statusCode).sort()).toEqual([
+      202, 409, 409, 409, 409,
+    ]);
+    expect(
+      await ScheduleTriggerRunModel.countByTrigger({
+        organizationId,
+        triggerId,
+      }),
+    ).toBe(1);
+
+    const [started] = responses.filter((r) => r.statusCode === 202);
+    await ScheduleTriggerRunModel.markCompleted({
+      runId: started.json().id,
+      status: "success",
+    });
+    expect((await run("appa")).statusCode).toBe(202);
+  });
+
   test("a tuner without a trigger is not found", async () => {
     expect((await run("sre")).statusCode).toBe(404);
   });

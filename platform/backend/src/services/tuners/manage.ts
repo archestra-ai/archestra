@@ -1,8 +1,6 @@
 import { ScheduleTriggerModel, ScheduleTriggerRunModel } from "@/models";
-import {
-  scheduleActorCanUseAgent,
-  startManualScheduleTriggerRun,
-} from "@/services/schedule-trigger-access";
+import { metrics } from "@/observability";
+import { scheduleActorCanUseAgent } from "@/services/schedule-trigger-access";
 import { ApiError } from "@/types";
 import {
   type ScheduleTrigger,
@@ -130,10 +128,13 @@ export async function runTunerNow(params: {
   if (!(await TUNERS[params.kind].findAgent(params.organizationId))) {
     throw new ApiError(409, "This tuner is not available in this deployment");
   }
-  return startManualScheduleTriggerRun({
+  const run = await ScheduleTriggerRunModel.createManualRunUnlessRunning({
     trigger,
     initiatedByUserId: params.userId,
   });
+  if (!run) throw new ApiError(409, "This tuner is already running");
+  metrics.taskQueue.reportTaskEnqueued("schedule_trigger_run_execute");
+  return run;
 }
 
 /** Audit snapshot of a tuner, addressed by kind. */

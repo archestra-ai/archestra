@@ -619,7 +619,7 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
-    type: z.enum(["anthropic:messages"]),
+    type: z.enum(["anthropic:messages", "github-copilot:messages"]),
     request: withReadFallback(Anthropic.API.MessagesRequestSchema),
     processedRequest: withReadFallback(Anthropic.API.MessagesRequestSchema)
       .nullable()

@@ -65124,6 +65124,208 @@ export type GithubCopilotChatCompletionsWithAgentResponses = {
 
 export type GithubCopilotChatCompletionsWithAgentResponse = GithubCopilotChatCompletionsWithAgentResponses[keyof GithubCopilotChatCompletionsWithAgentResponses];
 
+export type GithubCopilotMessagesWithDefaultAgentData = {
+    body: AnthropicMessagesRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        'anthropic-version': string;
+        /**
+         * Beta features to enable (comma-separated)
+         */
+        'anthropic-beta'?: string;
+        'x-api-key'?: string;
+        /**
+         * Authorization header (Bearer token for OAuth)
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/github-copilot/v1/messages';
+};
+
+export type GithubCopilotMessagesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GithubCopilotMessagesWithDefaultAgentError = GithubCopilotMessagesWithDefaultAgentErrors[keyof GithubCopilotMessagesWithDefaultAgentErrors];
+
+export type GithubCopilotMessagesWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: AnthropicMessagesResponse;
+};
+
+export type GithubCopilotMessagesWithDefaultAgentResponse = GithubCopilotMessagesWithDefaultAgentResponses[keyof GithubCopilotMessagesWithDefaultAgentResponses];
+
+export type GithubCopilotMessagesWithAgentData = {
+    body: AnthropicMessagesRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        'anthropic-version': string;
+        /**
+         * Beta features to enable (comma-separated)
+         */
+        'anthropic-beta'?: string;
+        'x-api-key'?: string;
+        /**
+         * Authorization header (Bearer token for OAuth)
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/github-copilot/{agentId}/v1/messages';
+};
+
+export type GithubCopilotMessagesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GithubCopilotMessagesWithAgentError = GithubCopilotMessagesWithAgentErrors[keyof GithubCopilotMessagesWithAgentErrors];
+
+export type GithubCopilotMessagesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: AnthropicMessagesResponse;
+};
+
+export type GithubCopilotMessagesWithAgentResponse = GithubCopilotMessagesWithAgentResponses[keyof GithubCopilotMessagesWithAgentResponses];
+
 export type GithubCopilotResponsesWithDefaultAgentData = {
     body: {
         model: string;
@@ -68985,7 +69187,7 @@ export type GetLlmProxyLogsResponses = {
                 reason: string;
                 blockedToolCallCount: number;
             } | null;
-            type: 'anthropic:messages';
+            type: 'anthropic:messages' | 'github-copilot:messages';
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
@@ -79434,7 +79636,7 @@ export type GetLlmProxyLogSummariesResponses = {
                 [key: string]: string;
             } | null;
             failed: boolean;
-            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'xai:responses' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'kimi-code:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'openai:images' | 'openai:passthrough' | 'anthropic:passthrough' | 'openai:realtime' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
+            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'xai:responses' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'kimi-code:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'openai:images' | 'openai:passthrough' | 'anthropic:passthrough' | 'openai:realtime' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'github-copilot:messages' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
             externalAgentIdLabel: string | null;
             requestType: 'main' | 'subagent';
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:sanitizer' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'tool_search_text:generation';
@@ -81534,7 +81736,7 @@ export type GetLlmProxyLogResponses = {
             reason: string;
             blockedToolCallCount: number;
         } | null;
-        type: 'anthropic:messages';
+        type: 'anthropic:messages' | 'github-copilot:messages';
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;

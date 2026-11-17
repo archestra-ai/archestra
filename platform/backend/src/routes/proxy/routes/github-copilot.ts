@@ -6,11 +6,17 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import { fetchGithubCopilotModels } from "@/routes/chat/model-fetchers/github-copilot";
-import { constructResponseSchema, GithubCopilot, UuidIdSchema } from "@/types";
+import {
+  Anthropic,
+  constructResponseSchema,
+  GithubCopilot,
+  UuidIdSchema,
+} from "@/types";
 import {
   githubCopilotAdapterFactory,
   githubCopilotResponsesAdapterFactory,
 } from "../adapters";
+import { githubCopilotMessagesAdapterFactory } from "../adapters/github-copilot-messages";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import {
@@ -26,6 +32,7 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/github-copilot`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
   const RESPONSES_SUFFIX = "/responses";
+  const MESSAGES_SUFFIX = "/v1/messages";
 
   logger.debug("[UnifiedProxy] Registering unified GitHub Copilot routes");
 
@@ -35,7 +42,11 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     rewritePrefix: "",
     preHandler: createProxyPreHandler({
       apiPrefix: API_PREFIX,
-      endpointSuffix: [CHAT_COMPLETIONS_SUFFIX, RESPONSES_SUFFIX],
+      endpointSuffix: [
+        CHAT_COMPLETIONS_SUFFIX,
+        RESPONSES_SUFFIX,
+        MESSAGES_SUFFIX,
+      ],
       upstream: config.llm["github-copilot"].baseUrl,
       providerName: "GitHubCopilot",
       // Copilot's API only accepts the exchanged short-lived bearer, so never
@@ -106,6 +117,37 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
     },
   );
+
+  // Native Anthropic wire format: no model pool or Chat Completions translation.
+  for (const withAgent of [false, true]) {
+    fastify.post(
+      `${API_PREFIX}${withAgent ? "/:agentId" : ""}${MESSAGES_SUFFIX}`,
+      {
+        bodyLimit: PROXY_BODY_LIMIT,
+        schema: {
+          operationId: withAgent
+            ? RouteId.GithubCopilotMessagesWithAgent
+            : RouteId.GithubCopilotMessagesWithDefaultAgent,
+          description:
+            "Create a native Anthropic Messages response with GitHub Copilot",
+          tags: ["LLM Proxy"],
+          ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
+          body: Anthropic.API.MessagesRequestSchema,
+          headers: Anthropic.API.MessagesHeadersSchema,
+          response: constructResponseSchema(
+            Anthropic.API.MessagesResponseWireSchema,
+          ),
+        },
+      },
+      async (request, reply) =>
+        handleLLMProxy(
+          request.body as Anthropic.Types.MessagesRequest,
+          request,
+          reply,
+          githubCopilotMessagesAdapterFactory,
+        ),
+    );
+  }
 
   /**
    * Copilot's Responses surface. Its Codex and GPT-5.x models declare

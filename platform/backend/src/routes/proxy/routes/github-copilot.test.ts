@@ -1618,3 +1618,337 @@ describe("GitHub Copilot long-context accounting", () => {
     ).toBeCloseTo(0.099596, 10);
   });
 });
+
+describe("GitHub Copilot native Messages", () => {
+  setupTestCacheManager();
+  test.for([
+    "passthrough",
+    "virtual",
+  ])("preserves signed history and Copilot usage with %s credentials without a pool", async (credential, {
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createTestApp();
+    await app.register(githubCopilotProxyRoutes);
+    const agent = await makeAgent({ name: "Native Messages" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+    const model = "claude-sonnet-4.5";
+    const storedModel = await ModelModel.create({
+      externalId: `github-copilot/${model}`,
+      provider: "github-copilot",
+      modelId: model,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    await ModelModel.update(storedModel.id, {
+      customPricePerMillionInput: "3",
+      customPricePerMillionOutput: "15",
+      customPricePerMillionCacheRead: "0.3",
+    });
+    const cap = await LimitModel.create({
+      entityType: "organization",
+      entityId: agent.organizationId,
+      limitType: "token_cost",
+      limitValue: 100,
+      model: null,
+      lastCleanup: new Date(),
+    });
+    const githubToken = uniqueGithubToken();
+    const secret = await makeSecret({ secret: { apiKey: githubToken } });
+    const providerKey = await makeLlmProviderApiKey(
+      agent.organizationId,
+      secret.id,
+      { provider: "github-copilot", userId: owner.id },
+    );
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+      storedModel.id,
+    ]);
+    const { value: virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "Native Copilot",
+      authorId: owner.id,
+      ...accessGrants("personal"),
+      providerApiKeys: [
+        { provider: "github-copilot", providerApiKeyId: providerKey.id },
+      ],
+    });
+    stubTokenExchange();
+    const messages = [
+      { role: "user", content: "Read the file" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "thinking",
+            thinking: "Inspecting",
+            signature: "signed-history",
+          },
+          {
+            type: "tool_use",
+            id: "call_read",
+            name: "read",
+            input: { path: "example.txt" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "call_read", content: "hello" },
+        ],
+      },
+    ];
+    let upstream: Record<string, unknown> | undefined;
+    server.use(
+      http.post(
+        "https://api.githubcopilot.com/v1/messages",
+        async ({ request }) => {
+          expect(request.headers.get("authorization")).toBe(
+            "Bearer copilot-bearer-test",
+          );
+          expect(request.headers.get("x-api-key")).toBeNull();
+          expect(request.headers.get("openai-intent")).toBe("messages-proxy");
+          upstream = (await request.json()) as Record<string, unknown>;
+          return HttpResponse.json({
+            id: "msg_native",
+            type: "message",
+            role: "assistant",
+            model,
+            content: [
+              {
+                type: "thinking",
+                thinking: "Done",
+                signature: "signed-result",
+              },
+              { type: "text", text: "hello" },
+            ],
+            stop_reason: "end_turn",
+            stop_sequence: null,
+            usage: {
+              input_tokens: 12,
+              output_tokens: 3,
+              cache_read_input_tokens: 2,
+            },
+          });
+        },
+      ),
+    );
+    try {
+      const headers = {
+        "x-api-key": credential === "virtual" ? virtualKey : githubToken,
+        "anthropic-version": "2023-06-01",
+        ...(credential === "passthrough"
+          ? { "x-archestra-virtual-key": passthroughKey }
+          : {}),
+      };
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages`,
+        headers,
+        payload: {
+          model,
+          max_tokens: 128,
+          messages,
+          thinking: { type: "enabled", budget_tokens: 1024 },
+          tools: [
+            {
+              name: "read",
+              input_schema: {
+                type: "object",
+                properties: { path: { type: "string" } },
+              },
+            },
+          ],
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstream?.messages).toEqual(messages);
+      expect(upstream?.thinking).toEqual({
+        type: "enabled",
+        budget_tokens: 1024,
+      });
+      expect(response.json().content[0]).toEqual({
+        type: "thinking",
+        thinking: "Done",
+        signature: "signed-result",
+      });
+      await drainBackgroundWork();
+      const [log] = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, agent.id));
+      expect(log).toMatchObject({
+        type: "github-copilot:messages",
+        model,
+        inputTokens: 12,
+        outputTokens: 3,
+      });
+      const expectedCost = ((12 * 3 + 3 * 15 + 2 * 0.3) / 1_000_000).toFixed(
+        10,
+      );
+      expect(log.cost).toBe(expectedCost);
+      const [receipt] = await InteractionBillingModel.findMany([log.id]);
+      expect(receipt.usage).toMatchObject({
+        status: "complete",
+        cost: expectedCost,
+      });
+      expect(
+        (await LimitModel.getModelUsageBreakdowns([cap.id])).get(cap.id)?.[0]
+          .cost,
+      ).toBeCloseTo(Number(expectedCost), 10);
+      const count = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
+        headers,
+        payload: { model, messages },
+      });
+      expect(count.statusCode).toBe(400);
+      expect(count.body).toContain("only supports");
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe("Copilot Messages terminal accounting", () => {
+  // The SDK cancels its reader after message_stop. Drain MSW's response tee
+  // so cancellation can finish, just as for the Copilot accounting tests above.
+  const drainResponse = ({ response }: { response: Response }) => {
+    void response.arrayBuffer();
+  };
+  beforeEach(() => server.events.on("response:mocked", drainResponse));
+  afterEach(() =>
+    server.events.removeListener("response:mocked", drainResponse),
+  );
+  test.for([
+    false,
+    true,
+  ])("requires message_stop before finalizing usage (terminal present: %s)", async (terminalPresent, {
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const app = createTestApp();
+    await app.register(githubCopilotProxyRoutes);
+    const agent = await makeAgent({ name: "Messages terminal" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+    const model = "claude-sonnet-4.5";
+    await ModelModel.create({
+      externalId: `github-copilot/${model}`,
+      provider: "github-copilot",
+      modelId: model,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    stubTokenExchange();
+    const events = [
+      {
+        type: "message_start",
+        message: {
+          id: "msg_terminal",
+          type: "message",
+          role: "assistant",
+          model,
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 12, output_tokens: 0 },
+        },
+      },
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "" },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "hello" },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "end_turn", stop_sequence: null },
+        usage: { output_tokens: 3 },
+      },
+      ...(terminalPresent ? [{ type: "message_stop" }] : []),
+    ];
+    server.use(
+      http.post(
+        "https://api.githubcopilot.com/v1/messages",
+        () =>
+          new HttpResponse(
+            events
+              .map(
+                (event) =>
+                  `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+              )
+              .join(""),
+            { headers: { "content-type": "text/event-stream" } },
+          ),
+      ),
+    );
+    try {
+      const result = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages`,
+        headers: {
+          "x-api-key": uniqueGithubToken(),
+          "x-archestra-virtual-key": passthroughKey,
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model,
+          max_tokens: 128,
+          stream: true,
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      });
+      expect(result.statusCode, result.body).toBe(200);
+      if (terminalPresent) {
+        expect(result.body).toContain("event: message_stop");
+        expect(result.body).not.toContain("event: error");
+      } else {
+        expect(result.body).toContain(
+          "Provider stream ended before final usage was confirmed",
+        );
+        expect(result.body).not.toContain("event: message_stop");
+      }
+      await drainBackgroundWork();
+      const [log] = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, agent.id));
+      expect(log).toMatchObject({
+        type: "github-copilot:messages",
+        inputTokens: 12,
+        outputTokens: 3,
+      });
+      const [receipt] = await db
+        .select()
+        .from(schema.interactionBillingTable)
+        .where(eq(schema.interactionBillingTable.interactionId, log.id));
+      if (terminalPresent) {
+        expect(receipt.usage.issues).not.toContain("partial_stream");
+      } else {
+        expect(receipt.usage.status).toBe("incomplete");
+        expect(receipt.usage.issues).toContain("partial_stream");
+      }
+    } finally {
+      await app.close();
+    }
+  });
+});

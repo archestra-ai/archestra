@@ -3,6 +3,7 @@ import {
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
 } from "@archestra/shared";
 import { vi } from "vitest";
+import config from "@/config";
 import {
   ConversationModel,
   MemberModel,
@@ -1491,6 +1492,10 @@ describe("schedule trigger MCP tools", () => {
                 type: "data-hook-run",
                 data: { hook: "pre-tool", outcome: "denied" },
               },
+              {
+                type: "data-mcp-task",
+                data: { status: "failed", taskId: "task-1" },
+              },
               { type: "file", mediaType: "image/png", url: "data:," },
             ],
           },
@@ -1574,14 +1579,82 @@ describe("schedule trigger MCP tools", () => {
                 error_text: "Blocked by policy",
               },
               {
-                type: "data-hook-run",
-                output: JSON.stringify({ hook: "pre-tool", outcome: "denied" }),
+                type: "data-mcp-task",
+                output: JSON.stringify({ status: "failed", taskId: "task-1" }),
               },
               { type: "file" },
             ],
           },
         ],
       });
+    });
+
+    test("returns hook runs only to an agent admin while the chat is in debug mode", async ({
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+      makeConversation,
+    }) => {
+      config.hooks.enabled = true;
+      const trigger = await makeScheduleTrigger({
+        organizationId,
+        agentId: agent.id,
+        actorUserId: userId,
+      });
+      const run = await makeScheduleTriggerRun(trigger.id);
+      const conversation = await makeConversation(agent.id, {
+        userId,
+        organizationId,
+      });
+      await ScheduleTriggerRunModel.setChatConversationId(
+        run.id,
+        conversation.id,
+      );
+      await MessageModel.create({
+        conversationId: conversation.id,
+        role: "assistant",
+        content: {
+          id: "run-reply",
+          role: "assistant",
+          parts: [
+            { type: "text", text: "Done." },
+            {
+              type: "data-hook-run",
+              data: { hookEventName: "PreToolUse", stdout: "hook output" },
+            },
+          ],
+        },
+      });
+      const setDebug = (enabled: boolean) =>
+        ConversationModel.setHooksDebugEnabled({
+          id: conversation.id,
+          userId,
+          organizationId,
+          enabled,
+        });
+      const partTypes = async () => {
+        const result = await executeArchestraTool(
+          GET_RUN_TRANSCRIPT,
+          { schedule_trigger_id: trigger.id, run_id: run.id },
+          context,
+        );
+        expect(result.isError, textOf(result)).toBe(false);
+        return (
+          result.structuredContent as {
+            messages: { parts: { type: string }[] }[];
+          }
+        ).messages.flatMap((m) => m.parts.map((p) => p.type));
+      };
+      await setDebug(true);
+
+      // The actor reads its own transcript without the oversight bar, but a
+      // non-admin never gets hook output.
+      expect(await partTypes()).toEqual(["text"]);
+
+      await MemberModel.updateRole(userId, organizationId, "admin");
+      expect(await partTypes()).toEqual(["text", "data-hook-run"]);
+
+      await setDebug(false);
+      expect(await partTypes()).toEqual(["text"]);
     });
 
     test("reads a run without a conversation without creating one", async ({

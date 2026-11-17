@@ -41,7 +41,10 @@ it("loads credential options without agent assignments while retaining filters a
   const queryClient = new QueryClient({
     defaultOptions: { queries: { staleTime: 60_000, retry: false } },
   });
-  queryClient.setQueryData(authQueryKeys.session(), { user: { id: "viewer" } });
+  queryClient.setQueryData(authQueryKeys.session(), {
+    user: { id: "viewer" },
+    session: { activeOrganizationId: "org-1" },
+  });
   queryClient.setQueryData(authQueryKeys.userPermissions(), {
     mcpServerInstallation: ["read"],
   });

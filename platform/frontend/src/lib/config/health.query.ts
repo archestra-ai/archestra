@@ -39,6 +39,8 @@ export function useReadiness(
 ) {
   return useQuery({
     queryKey: ["readiness"],
+    // This probe must run even when a browser offline hint pauses other queries.
+    networkMode: "always",
     queryFn: async (): Promise<ReadinessData> => {
       const { data, error } = await getReady();
       if (error?.database === "disconnected") {

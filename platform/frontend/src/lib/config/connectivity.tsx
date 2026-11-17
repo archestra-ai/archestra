@@ -1,6 +1,6 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { onlineManager, useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   type ReactNode,
@@ -77,6 +77,13 @@ export function ConnectivityProvider({ children }: { children: ReactNode }) {
         ? "database-unavailable"
         : null;
 
+    // A readiness response is stronger evidence than the browser network hint.
+    // Resume paused queries even when the OS keeps reporting offline.
+    if (isSuccess) {
+      setBrowserOnline(true);
+      onlineManager.setOnline(true);
+    }
+
     if (!failureKind && isSuccess) {
       consecutiveFailuresRef.current = 0;
       lastFailureKindRef.current = null;
@@ -101,7 +108,10 @@ export function ConnectivityProvider({ children }: { children: ReactNode }) {
       setBrowserOnline(true);
       void refetch();
     };
-    const handleOffline = () => setBrowserOnline(false);
+    const handleOffline = () => {
+      setBrowserOnline(false);
+      void refetch();
+    };
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
     return () => {

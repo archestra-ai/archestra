@@ -14,6 +14,7 @@ import {
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
   TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
+  TOOL_PROPOSE_TUNER_SUGGESTION_SHORT_NAME,
   TOOL_START_AGENT_RUN_FULL_NAME,
   TOOL_STEER_AGENT_RUN_FULL_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
@@ -22,6 +23,11 @@ import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Tool } from "ai";
 import { afterEach, vi } from "vitest";
 import { getArchestraToolInputSchema } from "@/archestra-mcp-server";
+import {
+  takeLeadingAttestation,
+  verifyToolAttestation,
+} from "@/archestra-mcp-server/tool-attestation";
+import config from "@/config";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { AgentModel, SkillModel, ToolModel } from "@/models";
 import { metrics } from "@/observability";
@@ -1574,5 +1580,44 @@ describe("getChatMcpTools OpenAPPA delegated runs", () => {
     });
     expect(encryptedCacheKey).not.toBe(unencryptedCacheKey);
     expect(encryptedCacheKey).toContain(":encrypted");
+  });
+});
+
+describe("tuner runs", () => {
+  const saved = config.tuners.enabled;
+  beforeEach(() => {
+    config.tuners.enabled = true;
+  });
+  afterEach(() => {
+    config.tuners.enabled = saved;
+  });
+
+  test("attest the run's own sink as a built-in the run's agent served", async ({
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const { org, user, agent, baseParams } = await setupChatToolEnv();
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      actorUserId: user.id,
+      agentId: agent.id,
+      tunerKind: "appa",
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
+    const sinkName = getArchestraToolFullName(
+      TOOL_PROPOSE_TUNER_SUGGESTION_SHORT_NAME,
+    );
+
+    const tools = await chatClient.getChatMcpTools({
+      ...baseParams,
+      scheduleTriggerRunId: run.id,
+    });
+    const { marker } = takeLeadingAttestation(
+      tools[sinkName]?.description ?? "",
+    );
+
+    expect(
+      marker && verifyToolAttestation({ organizationId: org.id, marker }),
+    ).toEqual({ gatewayId: agent.id, kind: "b", advertisedName: sinkName });
   });
 });

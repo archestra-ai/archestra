@@ -31,6 +31,7 @@ import {
   getSkillDelegationTools,
 } from "@/archestra-mcp-server";
 import { isOpenappaTool } from "@/archestra-mcp-server/openappa";
+import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import { tunerRunToolFilter } from "@/archestra-mcp-server/tuner-run-admission";
 import {
   isServiceAccountUserId,
@@ -1189,7 +1190,13 @@ export async function getChatMcpTools({
     };
     const aiTools: Record<string, Tool> = {};
     const advertisedTools = tunerRun
-      ? [...filteredMcpTools, ...tunerRunOnlyTools()]
+      ? [
+          ...filteredMcpTools,
+          ...tunerRunOnlyTools({
+            organizationId: tunerRun.organizationId,
+            agentId,
+          }),
+        ]
       : filteredMcpTools;
 
     for (const mcpTool of advertisedTools) {
@@ -1526,11 +1533,28 @@ async function listToolsInProcess(params: {
   return tools;
 }
 
-/** Built-ins offered only inside a tuner run; never assigned to an agent. */
-function tunerRunOnlyTools() {
-  return getArchestraMcpTools().filter(
-    (tool) =>
-      archestraMcpBranding.getToolShortName(tool.name) ===
-      TOOL_PROPOSE_TUNER_SUGGESTION_SHORT_NAME,
-  );
+/**
+ * Built-ins offered only inside a tuner run; never assigned to an agent.
+ * Attested like the gateway's own tools, or the proxy rules them foreign.
+ */
+function tunerRunOnlyTools(params: {
+  organizationId: string;
+  agentId: string;
+}) {
+  return getArchestraMcpTools()
+    .filter(
+      (tool) =>
+        archestraMcpBranding.getToolShortName(tool.name) ===
+        TOOL_PROPOSE_TUNER_SUGGESTION_SHORT_NAME,
+    )
+    .map((tool) => ({
+      ...tool,
+      description: attestToolDescription({
+        organizationId: params.organizationId,
+        gatewayId: params.agentId,
+        advertisedName: tool.name,
+        kind: "b",
+        description: tool.description,
+      }),
+    }));
 }

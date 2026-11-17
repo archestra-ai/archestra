@@ -191,7 +191,7 @@ pub(crate) fn remedy_binding(caller_id: &Option<String>) -> ReceiptBinding {
 }
 
 pub(crate) fn operation_semantic(input: &Input) -> Value {
-    let mut semantic = json!({
+    json!({
         "event": input.event,
         "tool": input.tool,
         "arguments": input.arguments,
@@ -199,11 +199,7 @@ pub(crate) fn operation_semantic(input: &Input) -> Value {
         "output": input.output,
         "spawn_call_id": input.spawn_call_id,
         "child_native_id": input.child_native_id,
-    });
-    if let Some(answered) = &input.answered_call_ids {
-        semantic["answered_call_ids"] = json!(answered);
-    }
-    semantic
+    })
 }
 
 /// Host retry text lives beside the call, not in the idempotency key. Absent

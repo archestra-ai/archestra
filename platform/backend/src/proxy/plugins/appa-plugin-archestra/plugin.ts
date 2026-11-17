@@ -481,9 +481,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): Promise<LlmProxyToolResultsOutcome | undefined> {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
-    binding.answeredCallIds = context.toolResults.map((result) =>
-      withoutTrajectoryStamp(result.id),
-    );
+    // The reporting-recovery pass sees a filtered subset of this request's results.
+    if (!binding.reportingRecovery)
+      binding.answeredCallIds = context.toolResults.map((result) =>
+        withoutTrajectoryStamp(result.id),
+      );
     enterCapturedGuardrailsActivation("active");
     const completions = binding.request.childReturns?.completions ?? [];
     binding.unenforcedCalls = await findUnenforcedCalls({

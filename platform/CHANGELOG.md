@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.35](https://github.com/archestra-ai/archestra/compare/platform-v1.4.34...platform-v1.4.35) (2026-11-17)
+
+
+### Bug Fixes
+
+* **openappa:** ask the annotator model about fetched URLs (backport release/1.4) ([#10830](https://github.com/archestra-ai/archestra/issues/10830)) ([e2230bf](https://github.com/archestra-ai/archestra/commit/e2230bf96410f73f8567faeed951b3a87c73de61))
+* **openappa:** hold Claude Code stops while a call still runs and ignore side requests [1.4] ([#10831](https://github.com/archestra-ai/archestra/issues/10831)) ([14d27d5](https://github.com/archestra-ai/archestra/commit/14d27d5c8825c21c92f64dc51432ca2bc40fb28f))
+
+
+### Miscellaneous Chores
+
+* unblock Rust dependency policy and a network-sensitive frontend test (backport release/1.4) ([#10832](https://github.com/archestra-ai/archestra/issues/10832)) ([0dc203d](https://github.com/archestra-ai/archestra/commit/0dc203da8146c1b442e4f60d4ceddf927f47235d))
+
 ## [1.4.34](https://github.com/archestra-ai/archestra/compare/platform-v1.4.33...platform-v1.4.34) (2026-11-17)
 
 

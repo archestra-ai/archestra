@@ -3,6 +3,7 @@ import {
   type ModelsDevApiResponse,
   type ModelsDevModel,
   modelsDevCostToPerToken,
+  modelsDevLongContextPricing,
   sanitizeOutputLimit,
 } from "@/clients/models-dev-client";
 
@@ -15,6 +16,7 @@ export interface CrossProviderPrices {
   completionPricePerToken: string | null;
   cacheReadPricePerToken: string | null;
   cacheWritePricePerToken: string | null;
+  syncedLongContextPricing: ReturnType<typeof modelsDevLongContextPricing>;
 }
 
 /**
@@ -464,7 +466,12 @@ function pricesFromEntries(
   exactBedrockEntry?: ModelsDevModel,
 ): CrossProviderPrices | null {
   const entry = entries.find((e) => e.cost);
-  const fallback = entry?.cost ? modelsDevCostToPerToken(entry.cost) : null;
+  const fallback = entry?.cost
+    ? {
+        ...modelsDevCostToPerToken(entry.cost),
+        syncedLongContextPricing: modelsDevLongContextPricing(entry.cost),
+      }
+    : null;
   if (!exactBedrockEntry?.cost) {
     return fallback;
   }
@@ -474,6 +481,10 @@ function pricesFromEntries(
   // omitted meters can still use the canonical cache prices.
   const exact = modelsDevCostToPerToken(exactBedrockEntry.cost);
   return {
+    // Never mix a canonical vendor tier with an exact reseller flat tariff.
+    syncedLongContextPricing: modelsDevLongContextPricing(
+      exactBedrockEntry.cost,
+    ),
     promptPricePerToken:
       exact.promptPricePerToken ?? fallback?.promptPricePerToken ?? null,
     completionPricePerToken:

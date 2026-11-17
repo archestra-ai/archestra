@@ -30,6 +30,70 @@ beforeEach(() => modelsDevClient.clearFetchCache());
 afterEach(() => modelsDevClient.clearFetchCache());
 
 describe("ModelSyncService", () => {
+  test("imports context tiers without writing administrator overrides", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "openai",
+      models: [{ id: "tier-test" }],
+      modelsDevData: {
+        openai: {
+          id: "openai",
+          name: "OpenAI",
+          models: {
+            "tier-test": {
+              id: "tier-test",
+              name: "Tier test",
+              cost: {
+                input: 2,
+                output: 12,
+                tiers: [
+                  {
+                    input: 4,
+                    output: 18,
+                    tier: { type: "context", size: 272000 },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(model.syncedLongContextPricing).toMatchObject({
+      threshold: 272000,
+      pricePerMillionInput: "4",
+      pricePerMillionOutput: "18",
+    });
+    expect(model.longContextThreshold).toBeUndefined();
+    expect(model.customPricePerMillionInput).toBeUndefined();
+  });
+
+  test("does not combine a fetcher tariff with registry context prices", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "openai",
+      models: [
+        { id: "tier-test", capabilities: { promptPricePerToken: "0.000001" } },
+      ],
+      modelsDevData: {
+        openai: {
+          id: "openai",
+          name: "OpenAI",
+          models: {
+            "tier-test": {
+              id: "tier-test",
+              name: "Tier test",
+              cost: {
+                input: 2,
+                output: 12,
+                context_over_200k: { input: 4, output: 18 },
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(model.syncedLongContextPricing).toBeNull();
+  });
+
   test("keeps custom Jev endpoint prices unknown during model synchronization", async ({
     makeOrganization,
     makeSecret,

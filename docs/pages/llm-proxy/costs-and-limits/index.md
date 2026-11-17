@@ -2,7 +2,7 @@
 title: Costs & Limits
 description: See what every model call costs and cap spend, tokens, or requests before bills climb
 order: 3
-lastUpdated: 2026-11-11
+lastUpdated: 2026-11-17
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -39,6 +39,14 @@ Archestra syncs per-million-token prices (input, output, cache read, and cache w
 - **OpenRouter:** when OpenRouter returns `usage.cost` on a response, Archestra records that exact amount instead of recalculating from the price table.
 - **Custom or self-hosted models:** go to **Models**, edit the model, and open its **Pricing** tab to view or set rates per million tokens (see [Model Pricing, Limits, and Modalities](/docs/llm-proxy/providers#model-pricing-limits-and-modalities)). Until you set a price, Archestra charges `$50` per million input and output tokens, or `$30` for `mini`, `nano`, and `haiku` models. vLLM and Ollama models cost `$0`.
 - **Prompt caching:** cached input tokens are priced at the model's cache read and cache write rates.
+
+### Long-Context Prices
+
+Archestra syncs supported provider long-context tiers so a long prompt uses the applicable rate instead of the short-prompt price.
+
+- The threshold counts input, cache-read, and cache-write tokens together. A prompt strictly above it uses the long-context rates for the whole request, not only the tokens above the threshold.
+- In **Models → Pricing**, leave the long-context fields empty to inherit the synced tier. Set the threshold and all four long-context prices to override it; model refreshes preserve that override. Clear those five fields to inherit the synced tier again.
+- Custom input, output, and cache prices still take precedence over the corresponding synced rates. An explicit long-context override takes precedence above its threshold.
 
 ### When a Price Is Missing
 

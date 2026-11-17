@@ -207,3 +207,26 @@ test("a second sighting reports no insert, so enrichment does not re-run", async
 
   expect(await ModelModel.ensureModelExists("gpt-4o", "bedrock")).toBeNull();
 });
+
+test("enriches discovered context tiers without charging self-hosted models", async () => {
+  const data = structuredClone(MODELS_DEV);
+  data.openai.models["gpt-4o"].cost = {
+    input: 2.5,
+    output: 10,
+    tiers: [{ input: 5, output: 15, tier: { type: "context", size: 200000 } }],
+  };
+  for (const provider of ["openai", "vllm"] as const) {
+    const created = await discover("gpt-4o", provider);
+    await enrichDiscoveredModel({ model: created, modelsDevData: data });
+    const model = await ModelModel.findByProviderAndModelId(provider, "gpt-4o");
+    if (provider === "vllm") {
+      expect(model?.syncedLongContextPricing).toBeNull();
+    } else {
+      expect(model?.syncedLongContextPricing?.threshold).toBe(200000);
+      expect(
+        ModelModel.getEffectivePricing(model, undefined, undefined, 200001)
+          .pricePerMillionInput,
+      ).toBe("5");
+    }
+  }
+});

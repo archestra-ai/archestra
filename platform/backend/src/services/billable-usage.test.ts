@@ -6,7 +6,7 @@ import ModelModel from "@/models/model";
 import { test as fixtureTest } from "@/test";
 import { useMswServer } from "@/test/msw";
 import { normalizeAnthropicUsage, sumMoney } from "@/utils/billable-usage";
-import { priceBillingUsage } from "./billable-usage";
+import { priceBillingUsage, resolvePricingQuote } from "./billable-usage";
 import { isFireworksEndpoint } from "./fireworks-model";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest HTTP boundary fixture
@@ -612,3 +612,53 @@ fixtureTest.for([
     }
   },
 );
+
+test("synced context quotes count cache reads and writes and switch only above the boundary", async () => {
+  const model = "synthetic-context-quote";
+  await ModelModel.create({
+    provider: "anthropic",
+    modelId: model,
+    externalId: `anthropic/${model}`,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    promptPricePerToken: "0.000001",
+    completionPricePerToken: "0.000005",
+    cacheReadPricePerToken: "0.0000001",
+    cacheWritePricePerToken: "0.00000125",
+    syncedLongContextPricing: {
+      threshold: 100,
+      pricePerMillionInput: "2",
+      pricePerMillionOutput: "10",
+      pricePerMillionCacheRead: "0.2",
+      pricePerMillionCacheWrite: "2.5",
+    },
+  });
+  const usage = {
+    inputTokens: 40,
+    outputTokens: 10,
+    cacheReadTokens: 30,
+    cacheWriteTokens: 30,
+  };
+  const exact = await resolvePricingQuote({
+    model,
+    provider: "anthropic",
+    usage,
+  });
+  expect(exact.request.prices).toMatchObject({
+    input: "1",
+    output: "5",
+    cacheRead: "0.1",
+    cacheWrite: "1.25",
+  });
+  const above = await resolvePricingQuote({
+    model,
+    provider: "anthropic",
+    usage: { ...usage, cacheWriteTokens: 31 },
+  });
+  expect(above.request.prices).toMatchObject({
+    input: "2",
+    output: "10",
+    cacheRead: "0.2",
+    cacheWrite: "2.5",
+  });
+});

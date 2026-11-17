@@ -23,6 +23,7 @@ import type {
   ModelDefaultParameters,
   ModelInputModality,
   ModelOutputModality,
+  SyncedLongContextPricing,
 } from "@/types";
 
 /**
@@ -176,6 +177,11 @@ const modelsTable = pgTable(
      * cache write) exceeds this many tokens, the long prices below replace
      * the base prices. Set all five together or none.
      */
+    /** Refreshed from the provider catalog; never overwrites manual tier prices. */
+    syncedLongContextPricing: jsonb(
+      "synced_long_context_pricing",
+    ).$type<SyncedLongContextPricing>(),
+
     longContextThreshold: integer("long_context_threshold"),
     longContextPricePerMillionInput: numeric(
       "long_context_price_per_million_input",

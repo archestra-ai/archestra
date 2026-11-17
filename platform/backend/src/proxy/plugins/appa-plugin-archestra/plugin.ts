@@ -2520,12 +2520,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       operationId: binding.request.turnEndOperationId,
       ...answeredCallIds(binding),
     });
-    if (stop.decision === "held") {
-      logger.debug(
-        { running: stop.running },
-        "OpenAPPA keeps the turn open while its calls run",
-      );
-    }
+    if (stop.decision === "held") logHeldStop(binding, "turn", stop.running);
     return undefined;
   }
 
@@ -2603,7 +2598,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         ...(childNativeId ? { childNativeId } : {}),
         ...answeredCallIds(binding),
       });
-      if (stop.decision === "held") return { decision: "release" };
+      if (stop.decision === "held") {
+        logHeldStop(binding, "child turn", stop.running);
+        return { decision: "release" };
+      }
     } else {
       const outcome = await endChild({
         session: this.governedSession(binding),
@@ -2617,7 +2615,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         ...answeredCallIds(binding),
       });
       // The child is not finished: its reply stays its own, nothing crosses.
-      if (outcome.decision === "held") return { decision: "release" };
+      if (outcome.decision === "held") {
+        logHeldStop(binding, "child end", outcome.running);
+        return { decision: "release" };
+      }
       admitted =
         outcome.decision === "release" ? context.responseText : outcome.content;
       if (!outcome.crossed) {
@@ -5993,6 +5994,7 @@ async function admitChildHandback(params: {
     ...(childNativeId ? { childNativeId } : {}),
   });
   if (outcome.decision === "held") {
+    logHeldStop(binding, "child handback", outcome.running);
     return {
       kind: "deny",
       feedback: "OpenAPPA holds the return while a tool call is still running.",
@@ -9062,4 +9064,22 @@ function answeredCallIds(binding: AppaPluginBinding) {
   return isClaudeCodeFamilyAdapter(binding.adapter?.id)
     ? { answeredCallIds: binding.answeredCallIds }
     : {};
+}
+
+function logHeldStop(
+  binding: AppaPluginBinding,
+  stop: "turn" | "child turn" | "child end" | "child handback",
+  running: readonly string[],
+) {
+  // A call that never reports holds every later stop of its session, and this
+  // line is the only trace of it.
+  logger.warn(
+    {
+      sessionId: binding.session.session_id,
+      parentSessionId: binding.session.parent_id,
+      stop,
+      running,
+    },
+    "OpenAPPA held a stop while calls still run",
+  );
 }

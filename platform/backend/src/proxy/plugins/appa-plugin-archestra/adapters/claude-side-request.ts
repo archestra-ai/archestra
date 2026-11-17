@@ -23,6 +23,7 @@ const PROGRESS_LABEL_PROMPTS = [
 ].flatMap((prompt) => [`${prompt}\nGood: `, `${prompt}\n\nGood: `]);
 const NOTES_LABEL_SYSTEM_PROMPT =
   "You write a 3-5 word progress label for a background agent, from short notes about what it is doing.";
+const SYSTEM_REMINDER = "<system-reminder>";
 const SIDE_QUESTION_PROMPT =
   "<system-reminder>This is a side question from the user. You must answer this question directly in a single response.";
 const AWAY_SUMMARY_PROMPT =
@@ -54,7 +55,11 @@ export function claudeSideRequest(params: {
     )
   )
     return "progress_label";
-  if (frame !== undefined) {
+  // Text a person wrote before it makes the frame a quote, not Claude Code's.
+  const appended = texts
+    .slice(0, -1)
+    .every((text) => text.startsWith(SYSTEM_REMINDER));
+  if (frame !== undefined && appended) {
     if (PROGRESS_LABEL_PROMPTS.some((prompt) => frame.startsWith(prompt)))
       return "progress_label";
     if (frame.startsWith(SIDE_QUESTION_PROMPT)) return "side_question";

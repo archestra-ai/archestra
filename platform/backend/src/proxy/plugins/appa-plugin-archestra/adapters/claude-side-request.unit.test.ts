@@ -108,6 +108,33 @@ describe("claudeSideRequest", () => {
     ).toBeUndefined();
   });
 
+  test.each([
+    `${YOUR_LABEL}\n${EXAMPLES}`,
+    SIDE_QUESTION,
+    AWAY_SUMMARY,
+  ])("does not read a frame the user's own text introduces", (frame) => {
+    expect(
+      classify([user([text("Explain this prompt:"), text(frame)])]),
+    ).toBeUndefined();
+    expect(
+      classify([
+        user([toolResult("ok"), text("Explain this prompt:"), text(frame)]),
+      ]),
+    ).toBeUndefined();
+  });
+
+  test("reads a frame after Claude Code's own reminders", () => {
+    expect(
+      classify([
+        user([
+          toolResult("ok"),
+          text("<system-reminder>Todo list is empty.</system-reminder>"),
+          text(AWAY_SUMMARY),
+        ]),
+      ]),
+    ).toBe("away_summary");
+  });
+
   test("reads only the last user message's own text", () => {
     const label = `${YOUR_LABEL}\n${EXAMPLES}`;
     expect(classify([user(label), user("Now fix it.")])).toBeUndefined();

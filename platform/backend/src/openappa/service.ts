@@ -68,9 +68,10 @@ import { startedUnenforced } from "@/openappa/unenforced";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { readYellResult } from "@/openappa/yell-session";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
-import type {
-  ToolNameCanonicalizer,
-  ToolNameResolution,
+import {
+  FOREIGN_TOOL_NAME_PREFIX,
+  type ToolNameCanonicalizer,
+  type ToolNameResolution,
 } from "@/routes/proxy/utils/gateway-tool-names";
 import {
   type GuardrailsV2Activation,
@@ -1494,6 +1495,17 @@ export async function evaluateToolCalls(
       ) {
         return { kind: "allow" as const };
       }
+      // A built-in lookalike without attestation has no name a policy can
+      // declare, so it is refused like an undeclared tool: this call alone,
+      // before the runtime, which would reject the name and fail the batch.
+      if (target.toolCallName.startsWith(FOREIGN_TOOL_NAME_PREFIX))
+        return {
+          kind: "deny" as const,
+          feedback:
+            "[appa] Blocked: this tool's name matches a platform tool, but nothing in this request shows the platform serves it, so the policy cannot rule on it. The tool did not run. No remedy plan is available. Use only the tools this request declares, or stop and explain the refusal to the user.",
+          outcome: INTEGRITY,
+          proxyNotice: true as const,
+        };
       const conflict = argumentSpellingConflict(
         target.toolCallName,
         JSON.parse(target.toolCallArgs),

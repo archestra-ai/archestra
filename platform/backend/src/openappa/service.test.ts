@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { SEEDED_APP_RENDER_META_KEY } from "@archestra/shared";
 import client from "prom-client";
 import { vi } from "vitest";
@@ -7,6 +7,7 @@ import {
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import * as database from "@/database";
 import logger from "@/logging";
@@ -21,6 +22,7 @@ import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters
 import { AppaGrokAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/grok";
 import { grokToolName } from "@/routes/mcp-gateway/grok-tool-names";
 import { anthropicAdapterFactory } from "@/routes/proxy/adapters/anthropic";
+import { resolveGatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
 import { ApiError } from "@/types/api";
@@ -1684,6 +1686,60 @@ describe("APPA feature boundary", () => {
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).event),
     ).toEqual(["tool_call", "tool_call"]);
+  });
+
+  test("an unattested built-in lookalike becomes a planless notice while an attested sibling is ruled", async () => {
+    // The adapter's tool grammar refuses any name outside it as invalid input.
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      if (!/^[A-Za-z0-9_.-]+$/.test(JSON.parse(raw).tool))
+        throw Object.assign(new Error("outside the adapter's domain"), {
+          code: "invalid_input",
+        });
+      return JSON.stringify({ decision: "allow_call" });
+    });
+    const identity = await resolveGatewayToolIdentity({
+      organizationId,
+      declarations: [
+        {
+          name: "archestra__whoami",
+          marker: attestToolDescription({
+            organizationId,
+            gatewayId: randomUUID(),
+            advertisedName: "archestra__whoami",
+            kind: "b",
+            description: undefined,
+          }),
+        },
+      ],
+      internalChat: false,
+    });
+    expect(identity.mode).toBe("attested");
+
+    const decisions = await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "lookalike",
+          name: "archestra__get_openappa_yell",
+          arguments: {},
+        },
+        { id: "attested", name: "archestra__whoami", arguments: {} },
+      ],
+      { canonicalize: identity.canonicalize },
+    );
+
+    expect(decisions).toEqual([
+      {
+        kind: "deny",
+        feedback: expect.any(String),
+        outcome: { kind: "integrity" },
+        proxyNotice: true,
+      },
+      { kind: "allow" },
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).tool),
+    ).toEqual(["archestra__whoami"]);
   });
 
   test.each([

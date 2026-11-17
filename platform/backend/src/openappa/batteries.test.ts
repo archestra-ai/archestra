@@ -137,8 +137,8 @@ describe("composing an organization's declarations", () => {
     const composed = parsePolicyToml(effective.content)?.policy as
       | { annotator?: { name: string; builtin?: string }[] }
       | undefined;
-    const builtins = (composed?.annotator ?? []).flatMap(
-      ({ name, builtin }) => (builtin === undefined ? [] : [{ name, builtin }]),
+    const builtins = (composed?.annotator ?? []).flatMap(({ name, builtin }) =>
+      builtin === undefined ? [] : [{ name, builtin }],
     );
     expect(builtins.length).toBeGreaterThan(0);
     expect(builtins.filter(({ builtin }) => builtin !== "archestra")).toEqual(

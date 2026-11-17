@@ -93,7 +93,6 @@ import { isActionAvailableForConversation } from "@/lib/chat/encrypted-chat";
 import { useChatSessionSnapshot } from "@/lib/chat/global-chat.context";
 import {
   hasToolPartsWithAuthErrors,
-  isAuthInstructionText,
   isInstallAuthResolved,
   resolveAssistantTextAuthState,
   resolveToolAuthState,
@@ -886,32 +885,29 @@ export function ChatMessages({
                             return null;
                           }
 
-                          const assistantAuthState =
-                            resolveAssistantTextAuthState(part.text);
-
                           // Use editable component for assistant messages
                           if (message.role === "assistant") {
-                            if (
-                              hasMessageAuthToolError(message) &&
-                              isAuthInstructionText(part.text)
-                            ) {
-                              return null;
-                            }
-
-                            const authToolPart = renderAssistantAuthPart({
-                              toolName: "authentication",
-                              authState: assistantAuthState,
-                              connectedCatalogIds:
-                                orchestrator.connectedCatalogIds,
-                              onInstallMcp:
-                                orchestrator.triggerInstallByCatalogId,
-                              onReauthMcp:
-                                orchestrator.triggerReauthByCatalogIdAndServerId,
-                            });
+                            // A failed tool call in this message already shows
+                            // the auth card. What the model then writes about
+                            // it is its answer, so it stays as text: only a
+                            // message with no such card turns auth text into one.
+                            const authToolPart = hasMessageAuthToolError(
+                              message,
+                            )
+                              ? null
+                              : renderAssistantAuthPart({
+                                  toolName: "authentication",
+                                  authState: resolveAssistantTextAuthState(
+                                    part.text,
+                                  ),
+                                  connectedCatalogIds:
+                                    orchestrator.connectedCatalogIds,
+                                  onInstallMcp:
+                                    orchestrator.triggerInstallByCatalogId,
+                                  onReauthMcp:
+                                    orchestrator.triggerReauthByCatalogIdAndServerId,
+                                });
                             if (authToolPart) {
-                              if (hasMessageAuthToolError(message)) {
-                                return null;
-                              }
                               return (
                                 <Fragment key={partKey}>
                                   {authToolPart}

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import type { FastifyRequest } from "fastify";
 import { Client } from "pg";
 import { vi } from "vitest";
 import config from "@/config";
@@ -13,11 +14,13 @@ import { executeRemedyByOffer } from "@/openappa/service";
 import type {
   LlmProxyRequestContext,
   LlmProxyToolCallsContext,
+  LlmProxyToolResultsContext,
 } from "@/proxy/plugins/registry";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { afterEach, expect, test } from "@/test";
+import { afterEach, expect, type TestFixtures, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
+import { scrubOpenappaIngress } from "./host/ingress";
 import { AppaPluginArchestra } from "./plugin";
 import { APPA_PLUGIN_TRUSTED_CONTEXT, type AppaTrustedContext } from "./types";
 
@@ -33,182 +36,268 @@ afterEach(() => {
 
 // The native runtime keeps its ledger in a real PostgreSQL server; the test
 // database is PGlite, which it cannot reach.
-test.skipIf(!process.env.ARCHESTRA_OPENAPPA_TEST_DATABASE_URL)(
+const ledgerTest = test.skipIf(
+  !process.env.ARCHESTRA_OPENAPPA_TEST_DATABASE_URL,
+);
+
+const LABEL_EXAMPLES =
+  '\nGood: "Reading runAgent.ts"\nGood: "Fixing null check in validate.ts"\nBad (past tense): "Analyzed the branch diff"';
+const PENDING_RESULT =
+  "[No result yet — this call is still in progress in the main conversation (running, awaiting approval, or queued)]";
+const SIDE_QUESTION =
+  "<system-reminder>This is a side question from the user. You must answer this question directly in a single response.\n- You are a separate, lightweight agent spawned to answer this one question\n</system-reminder>\n\nIs it done yet?";
+
+ledgerTest(
   "a Claude Code side request that omits a running subagent call does not end the subagent",
   async ({ makeOrganization, makeAdmin, makeMember }) => {
-    const databaseUrl = process.env.ARCHESTRA_OPENAPPA_TEST_DATABASE_URL;
-    if (!databaseUrl) throw new Error("Isolated native test ledger required");
-    vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
-      databaseUrl,
+    const { plugin, request, opening, started, childReturn } = await startChild(
+      { makeOrganization, makeAdmin, makeMember },
     );
-    config.openappa.enabled = true;
-    config.openappa.offerSigningSecret = "claude-code-child-stop-secret-0123";
-    await GuardrailsDeploymentModel.setEnabled(true);
-    const organizationId = (await makeOrganization()).id;
-    const user = await makeAdmin();
-    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
-    await installLedgerPolicy({
-      organizationId,
-      userId: user.id,
-      databaseUrl,
-      content: `[policy]\nversion = 2\n[[policy.tool]]\nname = "host/archestra/Agent"\ndelta = {}\n[[policy.tool]]\nname = "host/archestra/Bash"\ndelta = {}\n[policy.deployment]\ncontext_control = true\n`,
-    });
-    const callerId = `user:${user.id}`;
-    const nativeSessionId = randomUUID();
-    const parentId = `${callerId}|${nativeSessionId}`;
-    const childId = `${parentId}:a1`;
-    const request = (params: {
-      agentId?: string;
-      messages: unknown[];
-    }): LlmProxyRequestContext =>
-      claudeCodeRequest({
-        organizationId,
-        callerId,
-        sessionId: parentId,
-        headers: {
-          "user-agent": "claude-cli/2.1.0 (external, cli)",
-          "x-claude-code-session-id": nativeSessionId,
-          ...(params.agentId
-            ? { "x-claude-code-agent-id": params.agentId }
-            : {}),
-        },
-        body: { messages: params.messages, tools: [BASH_TOOL] },
-      });
-
-    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
-    const parent = request({
-      messages: [{ role: "user", content: "Find out why the build fails." }],
-    });
-    await plugin.onSessionInit(parent);
-    await plugin.onToolResults({ ...parent, toolResults: [] });
-    // What the model's declare-ahead remedy call runs at the gateway.
-    const declare = { label: {} };
-    const declared = await executeRemedyByOffer({
-      organizationId,
-      callerId,
-      sessionId: parentId,
-      toolCallId: "toolu-declare",
-      controlToolName: "archestra__execute_remedy_plan",
-      originalArguments: JSON.stringify(declare),
-      args: declare,
-    });
-    expect(declared.result.isError).toBeFalsy();
-    const spawned = await plugin.onToolCalls(
-      toolCalls(parent, [
-        {
-          id: "toolu-spawn",
-          name: "Agent",
-          arguments: {
-            description: "build",
-            prompt: "Run the tests and report the failures.",
-            subagent_type: "general-purpose",
-          },
-        },
-      ]),
-    );
-    if (spawned?.decision !== "allow") throw new Error("expected the spawn");
-    expect(spawned.toolCalls.map((call) => call.name)).toEqual(["Agent"]);
-    const markedPrompt = (spawned.toolCalls[0].arguments as { prompt: string })
-      .prompt;
-    const opening = () => ({ role: "user", content: markedPrompt });
-    const started = request({ agentId: "a1", messages: [opening()] });
-    await plugin.onSessionInit(started);
-    await plugin.onToolResults({ ...started, toolResults: [] });
-    const ran = await plugin.onToolCalls(
-      toolCalls(started, [
-        { id: "toolu-pytest", name: "Bash", arguments: { command: "pytest" } },
-      ]),
-    );
-    expect(ran).toMatchObject({
-      decision: "allow",
-      toolCalls: [{ id: "toolu-pytest", name: "Bash" }],
-    });
-    await plugin.onCleanup(started);
+    await runPytest(plugin, started);
 
     // Claude Code asks something on the side while pytest still runs: the
     // body drops the unresolved tool_use and the model answers in text.
-    const side = request({
-      agentId: "a1",
-      messages: [
-        opening(),
-        { role: "user", content: "Summarize what you are doing in one line." },
-      ],
-    });
-    await plugin.onSessionInit(side);
-    await plugin.onToolResults({ ...side, toolResults: [] });
-    expect(
-      await plugin.onBufferedModelResponse({
-        ...side,
-        response: {},
-        responseText: "Running the test suite",
+    const side = await exchange(
+      plugin,
+      request({
+        agentId: "a1",
+        messages: [
+          opening(),
+          {
+            role: "user",
+            content: "Summarize what you are doing in one line.",
+          },
+        ],
       }),
-    ).toEqual({ decision: "release" });
-    await plugin.onCleanup(side);
+      "Running the test suite",
+    );
+    expect(side.reply).toEqual({ decision: "release" });
 
-    const finished = request({
-      agentId: "a1",
-      messages: [
-        opening(),
-        {
-          role: "assistant",
-          content: [
-            {
-              type: "tool_use",
-              id: "toolu-pytest",
-              name: "Bash",
-              input: { command: "pytest" },
-            },
-          ],
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "tool_result",
-              tool_use_id: "toolu-pytest",
-              content: "2 failed, 40 passed",
-            },
-          ],
-        },
-      ],
-    });
-    await plugin.onSessionInit(finished);
-    const reported = await plugin.onToolResults({
-      ...finished,
-      toolResults: [
-        {
-          id: "toolu-pytest",
-          name: "Bash",
-          content: "2 failed, 40 passed",
-          isError: false,
-        },
-      ],
-    });
+    const finished = await exchange(
+      plugin,
+      request({
+        agentId: "a1",
+        messages: [opening(), ...pytestRound("2 failed, 40 passed")],
+      }),
+      "Two tests fail in test_build.py.",
+      [pytestResult("2 failed, 40 passed")],
+    );
     // The runtime reports the call's own output, not a refusal.
-    expect(reported).toEqual({
+    expect(finished.reported).toEqual({
       toolResultUpdates: { "toolu-pytest": "2 failed, 40 passed" },
     });
-    const reply = "Two tests fail in test_build.py.";
-    expect(
-      await plugin.onBufferedModelResponse({
-        ...finished,
-        response: {},
-        responseText: reply,
-      }),
-    ).toEqual({
+    expect(finished.reply).toEqual({
       decision: "replace",
-      responseText: `${reply}\n\n${mintChildReturnMarker({
-        organizationId,
-        callerId,
-        parentId,
-        childId,
-        childNativeId: "a1",
-        spawnCallId: "toolu-spawn",
-        value: reply,
-      })}`,
+      responseText: childReturn("Two tests fail in test_build.py."),
     });
-    await plugin.onCleanup(finished);
-    await plugin.onCleanup(parent);
+  },
+);
+
+ledgerTest(
+  "a Claude Code progress label with no call open does not end the subagent",
+  async ({ makeOrganization, makeAdmin, makeMember }) => {
+    const { plugin, request, opening, childReturn } = await startChild({
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+    });
+    for (const prompt of [
+      `Describe your most recent action in 3-5 words using present tense (-ing). Name the file or function, not the branch. Do not use tools.${LABEL_EXAMPLES}`,
+      `Describe the agent's most recent action in 3-5 words using present tense (-ing). Name the file or function, not the branch.${LABEL_EXAMPLES}`,
+    ]) {
+      const label = await exchange(
+        plugin,
+        request({
+          agentId: "a1",
+          messages: [opening(), { role: "user", content: prompt }],
+        }),
+        "Reading build.py",
+      );
+      expect(label.reply).toEqual({ decision: "release" });
+    }
+
+    const reply = "The build needs Python 3.12.";
+    const finished = await exchange(
+      plugin,
+      request({ agentId: "a1", messages: [opening()] }),
+      reply,
+    );
+    expect(finished.reply).toEqual({
+      decision: "replace",
+      responseText: childReturn(reply),
+    });
+  },
+);
+
+ledgerTest(
+  "a Claude Code /btw placeholder for a running call is not its result",
+  async ({ makeOrganization, makeAdmin, makeMember }) => {
+    const { plugin, request, opening, started, childReturn } = await startChild(
+      { makeOrganization, makeAdmin, makeMember },
+    );
+    await runPytest(plugin, started);
+
+    const side = await exchange(
+      plugin,
+      request({
+        agentId: "a1",
+        messages: [
+          opening(),
+          ...pytestRound(PENDING_RESULT, { type: "text", text: SIDE_QUESTION }),
+        ],
+      }),
+      "pytest is still running.",
+      [pytestResult(PENDING_RESULT)],
+    );
+    expect(side).toEqual({
+      reported: { toolResultUpdates: {} },
+      reply: { decision: "release" },
+    });
+
+    // The same history replayed by an ordinary request: its stop holds on
+    // the call the placeholder did not answer.
+    const replayed = await exchange(
+      plugin,
+      request({
+        agentId: "a1",
+        messages: [opening(), ...pytestRound(PENDING_RESULT)],
+      }),
+      "Waiting for pytest.",
+      [pytestResult(PENDING_RESULT)],
+    );
+    expect(replayed).toEqual({
+      reported: { toolResultUpdates: {} },
+      reply: { decision: "release" },
+    });
+
+    const finished = await exchange(
+      plugin,
+      request({
+        agentId: "a1",
+        messages: [opening(), ...pytestRound("2 failed, 40 passed")],
+      }),
+      "Two tests fail in test_build.py.",
+      [pytestResult("2 failed, 40 passed")],
+    );
+    expect(finished.reported).toEqual({
+      toolResultUpdates: { "toolu-pytest": "2 failed, 40 passed" },
+    });
+    expect(finished.reply).toEqual({
+      decision: "replace",
+      responseText: childReturn("Two tests fail in test_build.py."),
+    });
+  },
+);
+
+ledgerTest(
+  "a Claude Code /btw placeholder for a running subagent does not settle its spawn",
+  async ({ makeOrganization, makeAdmin, makeMember }) => {
+    const {
+      plugin,
+      request,
+      opening,
+      spawn,
+      spawnRound,
+      spawnResult,
+      childReturn,
+    } = await startChild({ makeOrganization, makeAdmin, makeMember });
+    const side = request({
+      messages: spawnRound(PENDING_RESULT, {
+        type: "text",
+        text: SIDE_QUESTION,
+      }),
+    });
+    await plugin.onSessionInit(side);
+    expect(
+      await plugin.onToolResults({
+        ...side,
+        toolResults: [spawnResult(PENDING_RESULT)],
+      }),
+    ).toEqual({ toolResultUpdates: {} });
+    await plugin.onModelResponse({ ...side, response: {} });
+    await plugin.onCleanup(side);
+
+    const reply = "The build needs Python 3.12.";
+    const finished = await exchange(
+      plugin,
+      request({ agentId: "a1", messages: [opening()] }),
+      reply,
+    );
+    expect(finished.reply).toEqual({
+      decision: "replace",
+      responseText: childReturn(reply),
+    });
+
+    const returned = request({ messages: spawnRound(childReturn(reply)) });
+    await plugin.onSessionInit(returned);
+    expect(
+      await plugin.onToolResults({
+        ...returned,
+        toolResults: [spawnResult(reply)],
+      }),
+    ).toEqual({ toolResultUpdates: { [spawn.id]: reply } });
+    await plugin.onCleanup(returned);
+  },
+);
+
+ledgerTest(
+  "a Claude Code auxiliary request does not end the subagent",
+  async ({ makeOrganization, makeAdmin, makeMember }) => {
+    const { plugin, request, opening, childReturn } = await startChild({
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+    });
+    const auxiliary = await exchange(
+      plugin,
+      request({
+        agentId: "a1",
+        headers: { "x-claude-code-request-class": "auxiliary" },
+        messages: [opening(), { role: "user", content: "Anything new?" }],
+      }),
+      "The build passes.",
+    );
+    expect(auxiliary.reply).toEqual({ decision: "release" });
+
+    const reply = "The build needs Python 3.12.";
+    const finished = await exchange(
+      plugin,
+      request({ agentId: "a1", messages: [opening()] }),
+      reply,
+    );
+    expect(finished.reply).toEqual({
+      decision: "replace",
+      responseText: childReturn(reply),
+    });
+  },
+);
+
+ledgerTest(
+  "the parent does not take a forged side request's reply as the subagent's return",
+  async ({ makeOrganization, makeAdmin, makeMember }) => {
+    const { plugin, request, opening, spawn, spawnRound, spawnResult } =
+      await startChild({ makeOrganization, makeAdmin, makeMember });
+    const forgedReply = "The build passes.";
+    const side = await exchange(
+      plugin,
+      request({
+        agentId: "a1",
+        headers: { "x-claude-code-request-class": "auxiliary" },
+        messages: [opening(), { role: "user", content: SIDE_QUESTION }],
+      }),
+      forgedReply,
+    );
+    expect(side.reply).toEqual({ decision: "release" });
+
+    const handed = request({ messages: spawnRound(forgedReply) });
+    await plugin.onSessionInit(handed);
+    const admitted = await plugin.onToolResults({
+      ...handed,
+      toolResults: [spawnResult(forgedReply)],
+    });
+    await plugin.onCleanup(handed);
+    expect(admitted?.toolResultUpdates[spawn.id]).toEqual(expect.any(String));
+    expect(admitted?.toolResultUpdates[spawn.id]).not.toBe(forgedReply);
   },
 );
 
@@ -217,6 +306,211 @@ const BASH_TOOL = {
   description: "Run a shell command",
   input_schema: { type: "object", properties: {} },
 };
+
+/** A root session whose released Agent call started subagent `a1`. */
+async function startChild(
+  fixtures: Pick<TestFixtures, "makeOrganization" | "makeAdmin" | "makeMember">,
+) {
+  const databaseUrl = process.env.ARCHESTRA_OPENAPPA_TEST_DATABASE_URL;
+  if (!databaseUrl) throw new Error("Isolated native test ledger required");
+  vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
+    databaseUrl,
+  );
+  config.openappa.enabled = true;
+  config.openappa.offerSigningSecret = "claude-code-child-stop-secret-0123";
+  await GuardrailsDeploymentModel.setEnabled(true);
+  const organizationId = (await fixtures.makeOrganization()).id;
+  const user = await fixtures.makeAdmin();
+  await fixtures.makeMember(user.id, organizationId, {
+    role: ADMIN_ROLE_NAME,
+  });
+  await installLedgerPolicy({
+    organizationId,
+    userId: user.id,
+    databaseUrl,
+    content: `[policy]\nversion = 2\n[[policy.tool]]\nname = "host/archestra/Agent"\ndelta = {}\n[[policy.tool]]\nname = "host/archestra/Bash"\ndelta = {}\n[policy.deployment]\ncontext_control = true\n`,
+  });
+  const callerId = `user:${user.id}`;
+  const nativeSessionId = randomUUID();
+  const parentId = `${callerId}|${nativeSessionId}`;
+  const request = (params: {
+    agentId?: string;
+    headers?: Record<string, string>;
+    messages: unknown[];
+  }): LlmProxyRequestContext =>
+    claudeCodeRequest({
+      organizationId,
+      callerId,
+      sessionId: parentId,
+      headers: {
+        "user-agent": "claude-cli/2.1.0 (external, cli)",
+        "x-claude-code-session-id": nativeSessionId,
+        ...(params.agentId ? { "x-claude-code-agent-id": params.agentId } : {}),
+        ...params.headers,
+      },
+      body: { messages: params.messages, tools: [BASH_TOOL] },
+    });
+
+  const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+  const task = () => ({
+    role: "user",
+    content: "Find out why the build fails.",
+  });
+  const parent = request({ messages: [task()] });
+  await plugin.onSessionInit(parent);
+  await plugin.onToolResults({ ...parent, toolResults: [] });
+  // What the model's declare-ahead remedy call runs at the gateway.
+  const declare = { label: {} };
+  const declared = await executeRemedyByOffer({
+    organizationId,
+    callerId,
+    sessionId: parentId,
+    toolCallId: "toolu-declare",
+    controlToolName: "archestra__execute_remedy_plan",
+    originalArguments: JSON.stringify(declare),
+    args: declare,
+  });
+  expect(declared.result.isError).toBeFalsy();
+  const spawned = await plugin.onToolCalls(
+    toolCalls(parent, [
+      {
+        id: "toolu-spawn",
+        name: "Agent",
+        arguments: {
+          description: "build",
+          prompt: "Run the tests and report the failures.",
+          subagent_type: "general-purpose",
+        },
+      },
+    ]),
+  );
+  if (spawned?.decision !== "allow") throw new Error("expected the spawn");
+  expect(spawned.toolCalls.map((call) => call.name)).toEqual(["Agent"]);
+  await plugin.onCleanup(parent);
+  const spawn = spawned.toolCalls[0];
+  const spawnInput = spawn.arguments;
+  if (typeof spawnInput === "string")
+    throw new Error("expected structured spawn arguments");
+  const markedPrompt = (spawnInput as { prompt: string }).prompt;
+  const opening = () => ({ role: "user", content: markedPrompt });
+  const started = request({ agentId: "a1", messages: [opening()] });
+  await plugin.onSessionInit(started);
+  await plugin.onToolResults({ ...started, toolResults: [] });
+  const childReturn = (value: string) =>
+    `${value}\n\n${mintChildReturnMarker({
+      organizationId,
+      callerId,
+      parentId,
+      childId: `${parentId}:a1`,
+      childNativeId: "a1",
+      spawnCallId: spawn.id,
+      value,
+    })}`;
+  /** The root's history with the spawn answered by `result`. */
+  const spawnRound = (result: string, ...extra: unknown[]) => [
+    task(),
+    {
+      role: "assistant",
+      content: [
+        {
+          type: "tool_use",
+          id: spawn.id,
+          name: spawn.name,
+          input: spawnInput,
+        },
+      ],
+    },
+    {
+      role: "user",
+      content: [
+        { type: "tool_result", tool_use_id: spawn.id, content: result },
+        ...extra,
+      ],
+    },
+  ];
+  const spawnResult = (
+    content: string,
+  ): LlmProxyToolResultsContext["toolResults"][number] => ({
+    id: spawn.id,
+    name: spawn.name,
+    arguments: spawnInput,
+    content,
+    isError: false,
+  });
+  return {
+    plugin,
+    request,
+    opening,
+    started,
+    spawn,
+    spawnRound,
+    spawnResult,
+    childReturn,
+  };
+}
+
+async function runPytest(
+  plugin: AppaPluginArchestra,
+  started: LlmProxyRequestContext,
+) {
+  const ran = await plugin.onToolCalls(
+    toolCalls(started, [
+      { id: "toolu-pytest", name: "Bash", arguments: { command: "pytest" } },
+    ]),
+  );
+  expect(ran).toMatchObject({
+    decision: "allow",
+    toolCalls: [{ id: "toolu-pytest", name: "Bash" }],
+  });
+  await plugin.onCleanup(started);
+}
+
+function pytestRound(result: string, ...extra: unknown[]) {
+  return [
+    {
+      role: "assistant",
+      content: [
+        {
+          type: "tool_use",
+          id: "toolu-pytest",
+          name: "Bash",
+          input: { command: "pytest" },
+        },
+      ],
+    },
+    {
+      role: "user",
+      content: [
+        { type: "tool_result", tool_use_id: "toolu-pytest", content: result },
+        ...extra,
+      ],
+    },
+  ];
+}
+
+function pytestResult(
+  content: string,
+): LlmProxyToolResultsContext["toolResults"][number] {
+  return { id: "toolu-pytest", name: "Bash", content, isError: false };
+}
+
+/** One subagent request: its results, then the model's text-only reply. */
+async function exchange(
+  plugin: AppaPluginArchestra,
+  context: LlmProxyRequestContext,
+  responseText: string,
+  toolResults: LlmProxyToolResultsContext["toolResults"] = [],
+) {
+  await plugin.onSessionInit(context);
+  const reported = await plugin.onToolResults({ ...context, toolResults });
+  const reply = await plugin.onBufferedModelResponse({
+    ...context,
+    response: {},
+    responseText,
+  });
+  await plugin.onCleanup(context);
+  return { reported, reply };
+}
 
 /** Compile the policy here, then copy it with its organization to the ledger. */
 async function installLedgerPolicy(params: {
@@ -267,7 +561,18 @@ function claudeCodeRequest(params: {
   body: unknown;
 }): LlmProxyRequestContext {
   const canonicalize = (name: string) => name;
+  const ingress = scrubOpenappaIngress({
+    request: {
+      headers: params.headers,
+      url: "/v1/anthropic/v1/messages",
+    } as unknown as FastifyRequest,
+    body: params.body,
+    interactionType: "anthropic:messages",
+  });
   const trusted: AppaTrustedContext = {
+    ...(ingress.childReturnRefusal
+      ? { childReturnRefusal: ingress.childReturnRefusal }
+      : {}),
     session: {
       organization_id: params.organizationId,
       caller_id: params.callerId,
@@ -291,6 +596,9 @@ function claudeCodeRequest(params: {
           verified: [],
           unverifiedMarkerCount: 0,
         },
+        delegationMarkers: ingress.delegationMarkers,
+        childReturns: ingress.childReturns,
+        releasedSpawnCalls: ingress.releasedSpawnCalls,
       }),
       tools: {
         control: { name: "archestra__execute_remedy_plan" },

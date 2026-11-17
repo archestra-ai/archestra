@@ -686,17 +686,8 @@ test("a keyed GitHub publish asked again returns its pull request instead of ope
     await findPublicationByKey({
       organizationId: org.id,
       operationKey: "fix-1:v1:b",
-      repo: "example/policies",
     }),
   ).toBeNull();
-  // A source moved to another repository cannot say the request is absent.
-  await expect(
-    findPublicationByKey({
-      organizationId: org.id,
-      operationKey: "fix-1:v1:b",
-      repo: "example/old-policies",
-    }),
-  ).rejects.toThrow("Git source changed");
 });
 
 test("a keyed GitHub branch left without its commit or its pull request is completed, not duplicated", async ({
@@ -744,12 +735,26 @@ test("a keyed GitHub pull request create without an answer is uncertain until th
   const unanswered = await publishOpenAppaPolicyChange(request).catch((e) => e);
   expect(unanswered).toBeInstanceOf(PublicationUncertainError);
   expect(unanswered.operationKey).toBe("fix-3:v1:a");
-  expect(
-    await findPublicationByKey({
+  const source = await OpenAppaGithubSyncModel.find(org.id);
+  expect(unanswered.target).toEqual({
+    repo: "example/policies",
+    credentialId: source?.githubPatId,
+  });
+  const find = (target: { repo: string; credentialId: string }) =>
+    findPublicationByKey({
       organizationId: org.id,
       operationKey: "fix-3:v1:a",
-    }),
-  ).toBeNull();
+      target,
+    });
+  expect(await find(unanswered.target)).toBeNull();
+  // A source moved to another repository or credential, which may name
+  // another host, cannot say the request is absent.
+  await expect(
+    find({ ...unanswered.target, repo: "example/old-policies" }),
+  ).rejects.toThrow("Git source changed");
+  await expect(
+    find({ ...unanswered.target, credentialId: randomUUID() }),
+  ).rejects.toThrow("Git source changed");
 
   // A server fault after GitHub opened the request: the request is the answer.
   github.fail.pulls = "fault-after-create";
@@ -888,6 +893,15 @@ test("a keyed GitLab publish asked again returns its merge request, and the key 
       operationKey: "fix-5:v1:a",
     }),
   ).toMatchObject({ state: "merged" });
+  // The same branch name in a fork is someone else's request.
+  const [opened] = gitlab.projects.get(GITLAB_REPO)?.mergeRequests ?? [];
+  opened.sourceProjectId = 999;
+  expect(
+    await findPublicationByKey({
+      organizationId: org.id,
+      operationKey: "fix-5:v1:a",
+    }),
+  ).toBeNull();
   expect(
     await findPublicationByKey({
       organizationId: org.id,
@@ -957,6 +971,30 @@ test("a keyed GitLab merge request create without an answer is uncertain, and a 
   });
   expect(commitPosts(gitlab)).toBe(1);
   expect(gitlab.projects.get(GITLAB_REPO)?.mergeRequests).toHaveLength(1);
+});
+
+test("a keyed GitLab create whose success names no merge request is uncertain", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, org.id, { role: "admin" });
+  await configureGitlabSource(org.id);
+  server.use(
+    http.post(
+      `${GITLAB}/api/v4/projects/${encodeURIComponent(GITLAB_REPO)}/merge_requests`,
+      () => HttpResponse.json({}, { status: 201 }),
+      { once: true },
+    ),
+  );
+
+  const malformed = await publishOpenAppaPolicyChange(
+    changeRequest(org.id, user.id, "fix-10:v1:a"),
+  ).catch((e) => e);
+
+  expect(malformed).toBeInstanceOf(PublicationUncertainError);
 });
 
 test("concurrent keyed GitLab publishes under one key converge on one merge request", async ({

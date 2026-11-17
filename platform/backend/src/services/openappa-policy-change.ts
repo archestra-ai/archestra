@@ -36,7 +36,10 @@ import {
   PolicyTestDirectorySchema,
   PolicyTestFilesSchema,
 } from "@/types/openappa-policy-tests";
-import { PublicationUncertainError } from "@/types/openappa-publication";
+import {
+  type PublicationTarget,
+  PublicationUncertainError,
+} from "@/types/openappa-publication";
 
 type ChangeRequest = GuardrailsPolicyProposal & {
   organizationId: string;
@@ -140,11 +143,8 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       "A validations-only change must keep the current policy",
     );
 
-  if (
-    !source.repo ||
-    !source.path ||
-    !(source.githubAppConfigId || source.githubPatId || source.gitlabTokenId)
-  )
+  const target = sourceTarget(source);
+  if (!source.repo || !source.path || !target)
     throw new ApiError(
       409,
       "Connect a Git credential and policy file before proposing changes.",
@@ -171,7 +171,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       params,
       source: { ...source, repo: source.repo, path: source.path },
       gitlabTokenId: source.gitlabTokenId,
-      keyed,
+      keyed: keyed && { ...keyed, target },
       includePolicy,
       content,
       before: before.content,
@@ -406,6 +406,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
         token,
         body,
         operationKey: keyed.operationKey,
+        target,
       }),
     );
   const pull = await githubJson<{ number: number; html_url: string }>({
@@ -425,35 +426,37 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
 }
 
 /**
- * @public — the tuner apply flow's reconcile step consumes it.
+ * @public — for reconciling keyed publishes, such as tuner apply attempts.
  *
  * What a keyed publish left, for a caller that did not see its outcome: the
  * pull or merge request from the key's branch in the Git source's repository,
  * else the local revision right after `local.expectedRevision` when it holds
  * the content whose hash (sha256 hex, as revisions store it) is
  * `local.contentHash`. Null only when neither exists. A Git host that cannot
- * be asked throws, and so does a source no longer connected to `repo`, the
- * repository the publish was sent to when the caller recorded it: the request
- * may be there, out of reach.
+ * be asked throws, and so does a source that no longer reaches `target`, where
+ * the publish was sent (as `PublicationUncertainError.target` reports it): the
+ * request may be there, out of reach.
  */
 export async function findPublicationByKey(params: {
   organizationId: string;
   operationKey: string;
-  repo?: string;
+  target?: PublicationTarget;
   local?: { expectedRevision: number; contentHash: string };
 }): Promise<PolicyPublication | null> {
   const head = keyedBranch(params);
   const source = await OpenAppaGithubSyncModel.find(params.organizationId);
-  const connected =
-    source?.repo &&
-    (source.gitlabTokenId || source.githubAppConfigId || source.githubPatId);
-  if (params.repo !== undefined && (!connected || source.repo !== params.repo))
+  const current = source && sourceTarget(source);
+  if (
+    params.target &&
+    (current?.repo !== params.target.repo ||
+      current.credentialId !== params.target.credentialId)
+  )
     throw new ApiError(
       409,
       "The Git source changed since the change was published, so whether its request opened cannot be checked",
     );
-  if (connected && source.repo) {
-    const repo = source.repo;
+  if (source && current) {
+    const repo = current.repo;
     let found: Omit<
       Extract<PolicyPublication, { delivery: "pull_request" }>,
       "delivery"
@@ -758,7 +761,9 @@ async function publishGitlabChange(args: {
     Awaited<ReturnType<typeof OpenAppaGithubSyncModel.find>>
   > & { repo: string; path: string };
   gitlabTokenId: string;
-  keyed: { operationKey: string; branch: string } | undefined;
+  keyed:
+    | { operationKey: string; branch: string; target: PublicationTarget }
+    | undefined;
   includePolicy: boolean;
   content: string;
   before: string;
@@ -1006,6 +1011,7 @@ async function openKeyedPull(params: {
   token: string;
   body: { title: string; body: string; head: string; base: string };
   operationKey: string;
+  target: PublicationTarget;
 }): Promise<GithubPull> {
   let response: Response | undefined;
   try {
@@ -1055,7 +1061,7 @@ async function openKeyedPull(params: {
   if (found) return found;
   if (response?.status === 422 && found === null)
     throw await githubPolicyChangeErrors(response);
-  throw new PublicationUncertainError(params.operationKey);
+  throw new PublicationUncertainError(params.operationKey, params.target);
 }
 
 /** The commit a branch points at, or null when it does not exist. */
@@ -1127,6 +1133,20 @@ async function assertKeyedContents(params: {
     file.sha !== gitBlobSha(params.content)
   )
     throw differentChange(params.head);
+}
+
+/** The repository a connected Git source publishes to, and the credential that reaches it. */
+function sourceTarget(source: {
+  repo: string | null;
+  gitlabTokenId: string | null;
+  githubAppConfigId: string | null;
+  githubPatId: string | null;
+}): PublicationTarget | null {
+  const credentialId =
+    source.gitlabTokenId ?? source.githubAppConfigId ?? source.githubPatId;
+  return source.repo && credentialId
+    ? { repo: source.repo, credentialId }
+    : null;
 }
 
 /** A keyed write GitHub refused as already done: a racing attempt made it. */

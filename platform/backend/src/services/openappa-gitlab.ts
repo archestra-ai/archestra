@@ -15,7 +15,10 @@ import {
 } from "@/services/openappa-github-access";
 import { ApiError } from "@/types";
 import type { AppaGithubRepositoryStatus } from "@/types/openappa-github-app-setup";
-import { PublicationUncertainError } from "@/types/openappa-publication";
+import {
+  type PublicationTarget,
+  PublicationUncertainError,
+} from "@/types/openappa-publication";
 
 /**
  * GitLab (cloud or self-managed) as an OpenAPPA policy source. Mirrors the
@@ -392,7 +395,11 @@ class OpenAppaGitlab {
      * this change is reused, and a create GitLab did not answer is decided by
      * the request found from the branch, or is uncertain.
      */
-    keyed?: { operationKey: string; branch: string };
+    keyed?: {
+      operationKey: string;
+      branch: string;
+      target: PublicationTarget;
+    };
   }): Promise<{ iid: number; webUrl: string; sha: string }> {
     const client = gitClient(params.access);
     const keyed = params.keyed;
@@ -457,16 +464,25 @@ class OpenAppaGitlab {
             throw error;
           }));
       try {
-        return {
-          ...(await client.createGitlabMergeRequest({
-            repo: params.repo,
-            sourceBranch: head,
-            targetBranch: params.branch,
-            title: params.title,
-            description: params.summary,
-          })),
-          sha,
-        };
+        const request = await client.createGitlabMergeRequest({
+          repo: params.repo,
+          sourceBranch: head,
+          targetBranch: params.branch,
+          title: params.title,
+          description: params.summary,
+        });
+        // A keyed create's success must name its request; one that does not
+        // is reconciled like a lost answer.
+        if (
+          keyed &&
+          !(
+            Number.isSafeInteger(request.iid) &&
+            request.iid > 0 &&
+            request.webUrl
+          )
+        )
+          throw new Error("GitLab returned an invalid merge request");
+        return { ...request, sha };
       } catch (error) {
         if (keyed) {
           // A 4xx answer refuses the create, save a 409: a request from the
@@ -487,7 +503,7 @@ class OpenAppaGitlab {
             return undefined;
           });
           if (opened) return { iid: opened.iid, webUrl: opened.webUrl, sha };
-          throw new PublicationUncertainError(keyed.operationKey);
+          throw new PublicationUncertainError(keyed.operationKey, keyed.target);
         }
         // Without GitLab's answer the request may have opened all the same.
         const opened =
@@ -642,21 +658,28 @@ async function requestFromBranch(params: {
   repo: string;
   branch: string;
 }): Promise<BranchRequest | null> {
-  // GitLab lists requests in every state unless `state` narrows it.
+  // GitLab lists requests in every state unless `state` narrows it, and
+  // lists those from forks too: only one from the project itself is ours.
   const requests = await params.client.json<
     Array<{
       iid?: number;
       web_url?: string;
       state?: string;
       source_branch?: string;
+      project_id?: number;
+      source_project_id?: number;
     }>
   >(
     `${params.client.repoApi(params.repo)}/merge_requests?source_branch=${encodeURIComponent(params.branch)}`,
   );
+  if (!Array.isArray(requests))
+    throw new ApiError(502, "GitLab returned an invalid merge request list");
   const found = requests
     .filter(
       (request) =>
         request.source_branch === params.branch &&
+        request.project_id !== undefined &&
+        request.source_project_id === request.project_id &&
         Number.isSafeInteger(request.iid) &&
         typeof request.web_url === "string",
     )
@@ -708,7 +731,9 @@ async function committedChange(params: {
     // Nothing beyond the requested paths may change, and a written file may
     // not become a symbolic link.
     const compare = await client.json<{
+      compare_timeout?: boolean;
       diffs?: {
+        old_path?: string;
         new_path?: string;
         b_mode?: string;
         renamed_file?: boolean;
@@ -717,14 +742,22 @@ async function committedChange(params: {
     }>(
       `${client.repoApi(repo)}/repository/compare?from=${encodeURIComponent(params.baseSha)}&to=${encodeURIComponent(tip)}&straight=true`,
     );
-    holds = (compare.diffs ?? []).every(
-      (diff) =>
-        !diff.renamed_file &&
-        diff.new_path !== undefined &&
-        (diff.deleted_file
-          ? deletes.has(diff.new_path)
-          : upserts.has(diff.new_path) && diff.b_mode !== "120000"),
-    );
+    if (compare.compare_timeout || !Array.isArray(compare.diffs))
+      throw new ApiError(
+        502,
+        `GitLab could not compare the branch ${params.head} with its base`,
+      );
+    holds = compare.diffs.every((diff) => {
+      if (!diff.new_path) return false;
+      if (diff.deleted_file) return deletes.has(diff.new_path);
+      // A deletion and a write of the same content read as a rename.
+      const fromRequested =
+        !diff.renamed_file ||
+        (diff.old_path !== undefined && deletes.has(diff.old_path));
+      return (
+        fromRequested && upserts.has(diff.new_path) && diff.b_mode !== "120000"
+      );
+    });
   }
   for (const file of params.upsert) {
     if (!holds) break;

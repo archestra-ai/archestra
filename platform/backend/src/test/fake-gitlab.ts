@@ -480,6 +480,8 @@ interface FakeMergeRequest {
   baseSha: string | null;
   /** What merging put on the target branch. */
   mergedSha?: string;
+  /** The fork a request comes from; the project itself when unset. */
+  sourceProjectId?: number;
 }
 
 /** Who the fake's token acts as. */
@@ -539,6 +541,8 @@ function mergeRequestJson(
 ) {
   return {
     iid: request.iid,
+    project_id: project.id,
+    source_project_id: request.sourceProjectId ?? project.id,
     web_url: `${webUrl}/${project.path}/-/merge_requests/${request.iid}`,
     state: request.state,
     source_branch: request.sourceBranch,

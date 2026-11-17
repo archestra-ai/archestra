@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.5.0-rc.38](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.37...platform-v1.5.0-rc.38) (2026-11-17)
+
+
+### Features
+
+* **a2a:** accept image and file parts over the A2A HTTP endpoint ([#10815](https://github.com/archestra-ai/archestra/issues/10815)) ([065100f](https://github.com/archestra-ai/archestra/commit/065100f9a53febd478ca36c023994d910bc98f10))
+
+
+### Bug Fixes
+
+* **auth:** show a new member's organization right after they join ([#10802](https://github.com/archestra-ai/archestra/issues/10802)) ([baa156c](https://github.com/archestra-ai/archestra/commit/baa156c84b2fcb4c73179a0a29519fb26db2a336))
+* **chat:** name the subagent and its model on a delegated provider error ([#10539](https://github.com/archestra-ai/archestra/issues/10539)) ([bb9ffaa](https://github.com/archestra-ai/archestra/commit/bb9ffaa96bcb5c5e2d6deacd3b6d7ca89816655e))
+* custom image agents, runtime settings saving, MCP registry headers and mobile settings nav ([#10805](https://github.com/archestra-ai/archestra/issues/10805)) ([b1c2bc0](https://github.com/archestra-ai/archestra/commit/b1c2bc0bd2b6bf0e632b2699b929d26dd442f26a))
+
+
+### Miscellaneous Chores
+
+* **openappa:** pin OpenAPPA 050cb04a with the tuner tool rules ([#10809](https://github.com/archestra-ai/archestra/issues/10809)) ([0c7b87a](https://github.com/archestra-ai/archestra/commit/0c7b87aa063cc230e01a2486117fa7642c029a52))
+* update client versions ([#10816](https://github.com/archestra-ai/archestra/issues/10816)) ([a9863c5](https://github.com/archestra-ai/archestra/commit/a9863c58db520be7ccf47d4414f93d6feb4cd7bb))
+
 ## [1.5.0-rc.37](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.36...platform-v1.5.0-rc.37) (2026-11-16)
 
 

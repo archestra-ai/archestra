@@ -1,42 +1,50 @@
 {
   "schema": 1,
-  "sourceSha": "0bb2e2a6f48c4418e80451f283e6fcc8cf35eb03",
-  "baseSha": "3e072b78db258a5144c72676a43703c0536ac745",
-  "runId": 43927323614,
+  "sourceSha": "298932b81073eec32fd0f0b15ad8a3b8f704a540",
+  "baseSha": "065100f9a53febd478ca36c023994d910bc98f10",
+  "runId": 44091483394,
   "attempt": 1,
-  "platformTree": "5dc62fde53144bc1389fec1cb29f3b3826e3f90d",
+  "platformTree": "301dcfcd289531318bdf0335ab0c224d7aa025a3",
   "files": [
     {
       "path": "docs/openapi.json",
-      "blob": "fe20a36ae2eeea383a2a53f22cfcd570a0ab848e"
+      "blob": "c1648480d618b779bd8dd33e3843d87a9ecb1b66"
     },
     {
       "path": "docs/assets/automated_screenshots/knowledge_connectors.dark.webp",
-      "blob": "a3db5f2a6d64b5f003753e5aec576051e0c82967"
+      "blob": "e6ebf174a0c4d0ebc4614ef5c4afa13d4f8a1721"
     },
     {
       "path": "docs/assets/automated_screenshots/knowledge_connectors.webp",
-      "blob": "9c9be8cd01cd64c396d2ea0df8cb8034ad345c78"
+      "blob": "d8ede43773a21873e102f4c259d123c687f566df"
     },
     {
-      "path": "docs/assets/automated_screenshots/platform-agent-skills-sharing_connection-setup.dark.webp",
-      "blob": "41043213bbde93dfc726aab4424d42a95e3891b3"
+      "path": "docs/assets/automated_screenshots/mcp-servers-adding_remote.dark.webp",
+      "blob": "f5eb615c2615ddc715a8ed8a6c365e43da75e2a3"
     },
     {
-      "path": "docs/assets/automated_screenshots/platform-agent-skills-sharing_connection-setup.webp",
-      "blob": "7bedc062f0d1a6dca3f278f3001984a4f3c86879"
+      "path": "docs/assets/automated_screenshots/mcp-servers-adding_remote.webp",
+      "blob": "b08fe8e45735472b514f6de0861eda84176f897c"
     },
     {
-      "path": "docs/assets/automated_screenshots/platform-connection_connect-with-ai.dark.webp",
-      "blob": "0f24fe64aeaf3c07abf1b6bf75e693f3a15180ae"
+      "path": "docs/assets/automated_screenshots/mcp-servers-desktop_add.dark.webp",
+      "blob": "cb7c39dbce7e5ddd514247b19f41baedfd3da2be"
     },
     {
-      "path": "docs/assets/automated_screenshots/platform-connection_connect-with-ai.webp",
-      "blob": "9d1c06df7ca91baae025130e53ac4b326a131dca"
+      "path": "docs/assets/automated_screenshots/mcp-servers-desktop_add.webp",
+      "blob": "9c882efb4572d52cfb9f7aca23ca2c4eef6ecee1"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/platform-openappa_batteries.dark.webp",
+      "blob": "5e1bc361cc941d0ed2d3d407fbbdbb12b9c19bf9"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/platform-openappa_batteries.webp",
+      "blob": "fb37dccf347878f43a9b7cb76a37a3e5622621b4"
     },
     {
       "path": "docs/pages/admin/performance-benchmarks.md",
-      "blob": "545a7b909a190989b83932ad5251929eae0c405b"
+      "blob": "5801bde55a6608da02849a86ce3e24d48671ef9a"
     }
   ]
 }

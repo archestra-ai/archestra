@@ -478,7 +478,7 @@ class OpenAppaGitlab {
           !(
             Number.isSafeInteger(request.iid) &&
             request.iid > 0 &&
-            request.webUrl
+            isWebUrl(request.webUrl)
           )
         )
           throw new Error("GitLab returned an invalid merge request");
@@ -659,21 +659,32 @@ async function requestFromBranch(params: {
   branch: string;
 }): Promise<BranchRequest | null> {
   // GitLab lists requests in every state unless `state` narrows it, and
-  // lists those from forks too: only one from the project itself is ours.
-  const requests = await params.client.json<
-    Array<{
-      iid?: number;
-      web_url?: string;
-      state?: string;
-      source_branch?: string;
-      project_id?: number;
-      source_project_id?: number;
-    }>
-  >(
-    `${params.client.repoApi(params.repo)}/merge_requests?source_branch=${encodeURIComponent(params.branch)}`,
-  );
-  if (!Array.isArray(requests))
-    throw new ApiError(502, "GitLab returned an invalid merge request list");
+  // lists those from forks too: only one from the project itself is ours,
+  // and it may be on any page.
+  const requests: {
+    iid?: number;
+    web_url?: unknown;
+    state?: string;
+    source_branch?: string;
+    project_id?: number;
+    source_project_id?: number;
+  }[] = [];
+  for (let page = "1"; page; ) {
+    if (Number(page) > MAX_MERGE_REQUEST_PAGES)
+      throw new ApiError(502, "GitLab lists too many merge requests to check");
+    const url = `${params.client.repoApi(params.repo)}/merge_requests?source_branch=${encodeURIComponent(params.branch)}&per_page=100&page=${page}`;
+    const response = await params.client.request(url);
+    if (!response.ok)
+      throw new GitHostError(
+        response.status,
+        `GitLab returned HTTP ${response.status} listing merge requests`,
+      );
+    const listed: unknown = await response.json();
+    if (!Array.isArray(listed))
+      throw new ApiError(502, "GitLab returned an invalid merge request list");
+    requests.push(...listed);
+    page = response.headers.get("x-next-page") ?? "";
+  }
   const found = requests
     .filter(
       (request) =>
@@ -681,12 +692,12 @@ async function requestFromBranch(params: {
         request.project_id !== undefined &&
         request.source_project_id === request.project_id &&
         Number.isSafeInteger(request.iid) &&
-        typeof request.web_url === "string",
+        isWebUrl(request.web_url),
     )
     .sort(
       (a, b) => Number(b.state === "opened") - Number(a.state === "opened"),
     )[0];
-  if (!found?.iid || !found.web_url) return null;
+  if (!found?.iid || !isWebUrl(found.web_url)) return null;
   return {
     iid: found.iid,
     webUrl: found.web_url,
@@ -800,6 +811,11 @@ async function deleteBranch(params: {
     );
 }
 
+function isWebUrl(value: unknown): value is string {
+  return typeof value === "string" && /^https?:\/\/\S+$/.test(value);
+}
+
+const MAX_MERGE_REQUEST_PAGES = 20;
 const POLICY_MAX_BYTES = 1024 * 1024;
 const POLICY_TEST_MAX_BYTES = 65536;
 const POLICY_TESTS_MAX_BYTES = 524288;

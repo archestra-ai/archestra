@@ -22,6 +22,8 @@ export class FakeGitlab {
   }[] = [];
   /** The most entries a keyset tree page returns, to test paging with few files. */
   treePageSize = 100;
+  /** The most merge requests a list page returns, to test paging with few. */
+  mergeRequestPageSize = 100;
   private nextId = 1;
 
   constructor(
@@ -217,15 +219,24 @@ export class FakeGitlab {
       const state = url.searchParams.get("state");
       const target = url.searchParams.get("target_branch");
       const source = url.searchParams.get("source_branch");
+      const matching = project.mergeRequests.filter(
+        (entry) =>
+          (!state || entry.state === state) &&
+          (!target || entry.targetBranch === target) &&
+          (!source || entry.sourceBranch === source),
+      );
+      // Offset pages, each naming the next in `X-Next-Page`, as GitLab does.
+      const size = Math.min(
+        Number(url.searchParams.get("per_page") ?? 20),
+        this.mergeRequestPageSize,
+      );
+      const page = Number(url.searchParams.get("page") ?? 1);
+      const more = page * size < matching.length;
       return HttpResponse.json(
-        project.mergeRequests
-          .filter(
-            (entry) =>
-              (!state || entry.state === state) &&
-              (!target || entry.targetBranch === target) &&
-              (!source || entry.sourceBranch === source),
-          )
+        matching
+          .slice((page - 1) * size, page * size)
           .map((entry) => mergeRequestJson(this.webUrl, project, entry)),
+        { headers: more ? { "X-Next-Page": String(page + 1) } : {} },
       );
     }
     if (area === "merge_requests") {

@@ -893,8 +893,26 @@ test("a keyed GitLab publish asked again returns its merge request, and the key 
       operationKey: "fix-5:v1:a",
     }),
   ).toMatchObject({ state: "merged" });
+  // Requests from forks under the same branch name fill the first pages,
+  // and the project's own is still found past them.
+  const requests = gitlab.projects.get(GITLAB_REPO)?.mergeRequests ?? [];
+  const [opened] = requests;
+  requests.unshift(
+    ...[2, 3].map((iid) => ({
+      ...opened,
+      iid,
+      state: "opened" as const,
+      sourceProjectId: 999,
+    })),
+  );
+  gitlab.mergeRequestPageSize = 1;
+  expect(
+    await findPublicationByKey({
+      organizationId: org.id,
+      operationKey: "fix-5:v1:a",
+    }),
+  ).toMatchObject({ number: 1, state: "merged" });
   // The same branch name in a fork is someone else's request.
-  const [opened] = gitlab.projects.get(GITLAB_REPO)?.mergeRequests ?? [];
   opened.sourceProjectId = 999;
   expect(
     await findPublicationByKey({
@@ -990,11 +1008,22 @@ test("a keyed GitLab create whose success names no merge request is uncertain", 
     ),
   );
 
-  const malformed = await publishOpenAppaPolicyChange(
+  const empty = await publishOpenAppaPolicyChange(
     changeRequest(org.id, user.id, "fix-10:v1:a"),
   ).catch((e) => e);
+  server.use(
+    http.post(
+      `${GITLAB}/api/v4/projects/${encodeURIComponent(GITLAB_REPO)}/merge_requests`,
+      () => HttpResponse.json({ iid: 1, web_url: 42 }, { status: 201 }),
+      { once: true },
+    ),
+  );
+  const partial = await publishOpenAppaPolicyChange(
+    changeRequest(org.id, user.id, "fix-10:v1:b"),
+  ).catch((e) => e);
 
-  expect(malformed).toBeInstanceOf(PublicationUncertainError);
+  expect(empty).toBeInstanceOf(PublicationUncertainError);
+  expect(partial).toBeInstanceOf(PublicationUncertainError);
 });
 
 test("concurrent keyed GitLab publishes under one key converge on one merge request", async ({

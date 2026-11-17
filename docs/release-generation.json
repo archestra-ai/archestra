@@ -1,50 +1,42 @@
 {
   "schema": 1,
-  "sourceSha": "0c10acf48ddf113227405e87415e6bd5060ce153",
-  "baseSha": "87b17d21b2ff0f88c4c5d260cc195790d60ea585",
-  "runId": 43879827226,
+  "sourceSha": "0bb2e2a6f48c4418e80451f283e6fcc8cf35eb03",
+  "baseSha": "3e072b78db258a5144c72676a43703c0536ac745",
+  "runId": 43927323614,
   "attempt": 1,
-  "platformTree": "b8e814ccf1a727f95ff44bd5da0764aa42d89502",
+  "platformTree": "5dc62fde53144bc1389fec1cb29f3b3826e3f90d",
   "files": [
     {
       "path": "docs/openapi.json",
-      "blob": "24800c5d38d4bf6194eb033c026998973924c407"
+      "blob": "fe20a36ae2eeea383a2a53f22cfcd570a0ab848e"
     },
     {
       "path": "docs/assets/automated_screenshots/knowledge_connectors.dark.webp",
-      "blob": "16eeb942f2ab9eaefb1aa0fb2a89b87156caf11d"
+      "blob": "a3db5f2a6d64b5f003753e5aec576051e0c82967"
     },
     {
       "path": "docs/assets/automated_screenshots/knowledge_connectors.webp",
-      "blob": "73aaa8efb2ff35e64182ff4327a893e080de5d07"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.dark.webp",
-      "blob": "843d1aac70c3547ec19c6da3944c8644437940a7"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.webp",
-      "blob": "00b98a89bd1a572ba97eff47ac245c91f02edae0"
+      "blob": "9c9be8cd01cd64c396d2ea0df8cb8034ad345c78"
     },
     {
       "path": "docs/assets/automated_screenshots/platform-agent-skills-sharing_connection-setup.dark.webp",
-      "blob": "e2ef3db27a56d0adfa3bf5e44037e2b55f42ef50"
+      "blob": "41043213bbde93dfc726aab4424d42a95e3891b3"
     },
     {
       "path": "docs/assets/automated_screenshots/platform-agent-skills-sharing_connection-setup.webp",
-      "blob": "aa72941a69b6e79566bcf80a5715f3266bfde4af"
+      "blob": "7bedc062f0d1a6dca3f278f3001984a4f3c86879"
     },
     {
       "path": "docs/assets/automated_screenshots/platform-connection_connect-with-ai.dark.webp",
-      "blob": "4f863d43780e3548bbfea454e1ad70f7ff9c0c4f"
+      "blob": "0f24fe64aeaf3c07abf1b6bf75e693f3a15180ae"
     },
     {
       "path": "docs/assets/automated_screenshots/platform-connection_connect-with-ai.webp",
-      "blob": "aba7c0eedbcd61f1a1a0378bf4ad76a8febee80f"
+      "blob": "9d1c06df7ca91baae025130e53ac4b326a131dca"
     },
     {
       "path": "docs/pages/admin/performance-benchmarks.md",
-      "blob": "9543e348d6f988e5b889c406fb997de9f35847dd"
+      "blob": "545a7b909a190989b83932ad5251929eae0c405b"
     }
   ]
 }

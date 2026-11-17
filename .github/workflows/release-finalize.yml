@@ -154,21 +154,23 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: gh workflow run previous-release-published.yml --ref main
 
-  update-terraform-provider:
-    name: Start Terraform provider update
-    # Propose each release from main to the Terraform provider as soon as it is
-    # published, instead of at the updater's next daily run. A workflow_dispatch
+  sync-terraform-provider:
+    name: Start Terraform provider sync
+    # Start the agent that brings the Terraform and Crossplane providers up to
+    # each release from main, as soon as it is published. A workflow_dispatch
     # sent with GITHUB_TOKEN starts a run; the release event it caused does not.
     if: ${{ github.ref == 'refs/heads/main' && needs.publish.outputs.published == 'true' }}
     needs:
+      - finalize
       - publish
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      actions: write # Start the Update Terraform Provider workflow.
+      actions: write # Start the Sync Terraform Provider workflow.
     steps:
-      - name: Start Update Terraform Provider
+      - name: Start Sync Terraform Provider
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh workflow run update-terraform-provider.yml --ref main
+          TAG_NAME: ${{ needs.finalize.outputs.tag-name }}
+        run: gh workflow run sync-terraform-provider.yml --ref main -f "release_tag=$TAG_NAME"

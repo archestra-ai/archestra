@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "v1.5.0-rc.36"
+    "version": "v1.5.0-rc.37"
   },
   "components": {
     "schemas": {
@@ -171767,6 +171767,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -177820,6 +177835,21 @@
                                   ],
                                   "additionalProperties": false
                                 },
+                                "subagent": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "model": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "name"
+                                  ],
+                                  "additionalProperties": false
+                                },
                                 "originalError": {
                                   "type": "object",
                                   "properties": {
@@ -178723,6 +178753,21 @@
                                 ],
                                 "additionalProperties": false
                               },
+                              "subagent": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "model": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "additionalProperties": false
+                              },
                               "originalError": {
                                 "type": "object",
                                 "properties": {
@@ -179522,6 +179567,21 @@
                                   "required": [
                                     "provider",
                                     "providerLabel"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "subagent": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "model": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "name"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -180346,6 +180406,21 @@
                                 "required": [
                                   "provider",
                                   "providerLabel"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "subagent": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "model": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name"
                                 ],
                                 "additionalProperties": false
                               },
@@ -181226,6 +181301,21 @@
                                 "required": [
                                   "provider",
                                   "providerLabel"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "subagent": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "model": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name"
                                 ],
                                 "additionalProperties": false
                               },
@@ -184133,6 +184223,21 @@
                                 ],
                                 "additionalProperties": false
                               },
+                              "subagent": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "model": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "additionalProperties": false
+                              },
                               "originalError": {
                                 "type": "object",
                                 "properties": {
@@ -185240,6 +185345,21 @@
                                 "required": [
                                   "provider",
                                   "providerLabel"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "subagent": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "model": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name"
                                 ],
                                 "additionalProperties": false
                               },
@@ -186422,6 +186542,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -187255,6 +187390,21 @@
                                 "required": [
                                   "provider",
                                   "providerLabel"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "subagent": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "model": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name"
                                 ],
                                 "additionalProperties": false
                               },
@@ -188097,6 +188247,21 @@
                                 "required": [
                                   "provider",
                                   "providerLabel"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "subagent": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "model": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name"
                                 ],
                                 "additionalProperties": false
                               },
@@ -250672,6 +250837,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -251928,6 +252108,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -252711,6 +252906,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -253480,6 +253690,21 @@
                                           "required": [
                                             "provider",
                                             "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -254255,6 +254480,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -255027,6 +255267,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -255682,6 +255937,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -256331,6 +256601,21 @@
                                           "required": [
                                             "provider",
                                             "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -259111,6 +259396,21 @@
                                           "required": [
                                             "provider",
                                             "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -262556,6 +262856,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -263205,6 +263520,21 @@
                                           "required": [
                                             "provider",
                                             "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -263860,6 +264190,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -264509,6 +264854,21 @@
                                           "required": [
                                             "provider",
                                             "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -265164,6 +265524,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -265813,6 +266188,21 @@
                                           "required": [
                                             "provider",
                                             "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -266468,6 +266858,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -267117,6 +267522,21 @@
                                           "required": [
                                             "provider",
                                             "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -267772,6 +268192,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -268421,6 +268856,21 @@
                                           "required": [
                                             "provider",
                                             "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -269076,6 +269526,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -269728,6 +270193,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -270377,6 +270857,21 @@
                                           "required": [
                                             "provider",
                                             "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -274947,6 +275442,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -279514,6 +280024,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -284073,6 +284598,21 @@
                                           "required": [
                                             "provider",
                                             "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -288643,6 +289183,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -289292,6 +289847,21 @@
                                           "required": [
                                             "provider",
                                             "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -290179,6 +290749,21 @@
                                           "required": [
                                             "provider",
                                             "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -294759,6 +295344,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -295615,6 +296215,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -296468,6 +297083,21 @@
                                           "required": [
                                             "provider",
                                             "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -297375,6 +298005,21 @@
                                           "required": [
                                             "provider",
                                             "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -298452,6 +299097,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -299526,6 +300186,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -300591,6 +301266,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -301240,6 +301930,21 @@
                                           "required": [
                                             "provider",
                                             "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -301999,6 +302704,21 @@
                                           ],
                                           "additionalProperties": false
                                         },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -302732,6 +303452,21 @@
                                           "required": [
                                             "provider",
                                             "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "subagent": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "model": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -307097,6 +307832,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -308353,6 +309103,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -309136,6 +309901,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -309905,6 +310685,21 @@
                                     "required": [
                                       "provider",
                                       "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -310680,6 +311475,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -311452,6 +312262,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -312107,6 +312932,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -312756,6 +313596,21 @@
                                     "required": [
                                       "provider",
                                       "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -315536,6 +316391,21 @@
                                     "required": [
                                       "provider",
                                       "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -318981,6 +319851,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -319630,6 +320515,21 @@
                                     "required": [
                                       "provider",
                                       "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -320285,6 +321185,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -320934,6 +321849,21 @@
                                     "required": [
                                       "provider",
                                       "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -321589,6 +322519,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -322238,6 +323183,21 @@
                                     "required": [
                                       "provider",
                                       "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -322893,6 +323853,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -323542,6 +324517,21 @@
                                     "required": [
                                       "provider",
                                       "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -324197,6 +325187,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -324846,6 +325851,21 @@
                                     "required": [
                                       "provider",
                                       "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -325501,6 +326521,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -326153,6 +327188,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -326802,6 +327852,21 @@
                                     "required": [
                                       "provider",
                                       "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -331372,6 +332437,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -335939,6 +337019,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -340498,6 +341593,21 @@
                                     "required": [
                                       "provider",
                                       "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -345068,6 +346178,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -345717,6 +346842,21 @@
                                     "required": [
                                       "provider",
                                       "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -346604,6 +347744,21 @@
                                     "required": [
                                       "provider",
                                       "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -351184,6 +352339,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -352040,6 +353210,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -352893,6 +354078,21 @@
                                     "required": [
                                       "provider",
                                       "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -353800,6 +355000,21 @@
                                     "required": [
                                       "provider",
                                       "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -354877,6 +356092,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -355951,6 +357181,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -357016,6 +358261,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -357665,6 +358925,21 @@
                                     "required": [
                                       "provider",
                                       "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -358424,6 +359699,21 @@
                                     ],
                                     "additionalProperties": false
                                   },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -359157,6 +360447,21 @@
                                     "required": [
                                       "provider",
                                       "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "subagent": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -545644,6 +546949,21 @@
                                 "required": [
                                   "provider",
                                   "providerLabel"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "subagent": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "model": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name"
                                 ],
                                 "additionalProperties": false
                               },

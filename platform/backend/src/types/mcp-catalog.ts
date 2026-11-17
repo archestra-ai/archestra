@@ -6,7 +6,6 @@ import {
   ImagePullSecretConfigSchema,
   LocalConfigEnvironmentDefaultSchema,
   LocalConfigSchema,
-  McpServerResourcesSchema,
   OAuthConfigSchema,
 } from "@archestra/shared";
 import {
@@ -130,7 +129,7 @@ const LocalConfigSelectSchema = z.object({
     )
     .optional(),
   imagePullPolicy: ImagePullPolicySchema.optional(),
-  resources: McpServerResourcesSchema.optional(),
+  runtimeTier: z.string().optional(),
 });
 
 const CatalogLabelSchema = z.object({

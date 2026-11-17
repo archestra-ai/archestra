@@ -26,11 +26,11 @@ export async function assertCanWriteMcpDeploymentYaml(params: {
   current?: string | null;
   requestedLocalConfig?: Pick<
     LocalConfig,
-    "envFrom" | "serviceAccount" | "resources"
+    "envFrom" | "serviceAccount" | "runtimeTier"
   > | null;
   currentLocalConfig?: Pick<
     LocalConfig,
-    "envFrom" | "serviceAccount" | "resources"
+    "envFrom" | "serviceAccount" | "runtimeTier"
   > | null;
 }): Promise<void> {
   const yamlChanged =
@@ -47,17 +47,15 @@ export async function assertCanWriteMcpDeploymentYaml(params: {
     localConfig !== undefined &&
     (localConfig?.serviceAccount?.trim() || "default") !==
       (params.currentLocalConfig?.serviceAccount?.trim() || "default");
-  const resourcesChanged =
+  const runtimeTierChanged =
     localConfig !== undefined &&
-    !isDeepStrictEqual(
-      localConfig?.resources ?? {},
-      params.currentLocalConfig?.resources ?? {},
-    );
+    (localConfig?.runtimeTier ?? "") !==
+      (params.currentLocalConfig?.runtimeTier ?? "");
   if (
     !yamlChanged &&
     !envFromChanged &&
     !serviceAccountChanged &&
-    !resourcesChanged
+    !runtimeTierChanged
   )
     return;
 

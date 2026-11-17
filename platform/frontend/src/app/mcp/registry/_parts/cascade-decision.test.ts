@@ -871,7 +871,7 @@ describe("MCP resource rollout", () => {
       ...prev,
       localConfig: {
         ...prev.localConfig,
-        resources: { cpuRequest: 0.25, memoryLimitMiB: 512 },
+        runtimeTier: "Small",
       },
     };
     expect(
@@ -883,7 +883,10 @@ describe("MCP resource rollout", () => {
     expect(
       computeCascadeOutcome(
         prev,
-        { ...prev, localConfig: { ...prev.localConfig, resources: {} } },
+        {
+          ...prev,
+          localConfig: { ...prev.localConfig, runtimeTier: undefined },
+        },
         { affectedServerCount: 1 },
       ).mode,
     ).toBe("skip");

@@ -45,33 +45,23 @@ describe("OAuthConfigSchema", () => {
   });
 });
 
-describe("MCP container resources", () => {
-  it("preserves overrides and accepts legacy configurations without them", () => {
+describe("MCP runtime tiers", () => {
+  it("accepts legacy defaults and trims a named tier", () => {
     expect(LocalConfigSchema.parse({ command: "node" })).toEqual({
       command: "node",
     });
-    const resources = {
-      cpuRequest: 0.001,
-      cpuLimit: null,
-      memoryRequestMiB: 64,
-      memoryLimitMiB: 128,
-    };
     expect(
-      LocalConfigSchema.parse({ command: "node", resources }).resources,
-    ).toEqual(resources);
+      LocalConfigSchema.parse({ command: "node", runtimeTier: " S " })
+        .runtimeTier,
+    ).toBe("S");
   });
-
   it.each([
-    { cpuRequest: 0 },
-    { cpuRequest: 0.0001 },
-    { cpuLimit: -1 },
-    { cpuRequest: 2, cpuLimit: 1 },
-    { memoryRequestMiB: 1.5 },
-    { memoryLimitMiB: 0 },
-    { memoryRequestMiB: 256, memoryLimitMiB: 128 },
-  ])("rejects invalid or unschedulable overrides: %j", (resources) => {
+    "",
+    "  ",
+    "x".repeat(33),
+  ])("rejects invalid names %j", (runtimeTier) => {
     expect(
-      LocalConfigSchema.safeParse({ command: "node", resources }).success,
+      LocalConfigSchema.safeParse({ command: "node", runtimeTier }).success,
     ).toBe(false);
   });
 });

@@ -6,6 +6,8 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AgentModel from "@/models/agent";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import AuditLogModel from "@/models/audit-log";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import McpServerModel from "@/models/mcp-server";
 import OrganizationModel from "@/models/organization";
 import {
   organizationAgentRuntimeTiers,
@@ -79,6 +81,110 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
     ttlHours: null,
     maxCostUsd: null,
     idleTimeoutMinutes: null,
+  });
+
+  test("MCP tier references block removal, follow rename, and use the current CPU/RAM", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "local",
+      localConfig: { command: "node", runtimeTier: "m" },
+    });
+    const removed = await patch({
+      agentRuntimeTiers: {
+        tiers: [tier("S", 2), tier("L", 8)],
+        defaultTier: "S",
+      },
+    });
+    expect(removed.statusCode, removed.body).toBe(400);
+    expect(removed.body).toContain("MCP server");
+    const renamed = await patch({
+      agentRuntimeTiers: {
+        tiers: [
+          tier("S", 2),
+          tier("Medium", 3, {
+            previousName: "M",
+            memoryRequestMiB: 64,
+            memoryLimitMiB: 128,
+          }),
+          tier("L", 8),
+        ],
+        defaultTier: "S",
+      },
+    });
+    expect(renamed.statusCode, renamed.body).toBe(200);
+    const saved = await InternalMcpCatalogModel.findById(catalog.id);
+    expect(saved?.localConfig?.runtimeTier).toBe("Medium");
+    if (!saved?.localConfig) throw new Error("Missing saved local config");
+    expect(
+      await InternalMcpCatalogModel.resolveRuntimeResources(
+        saved.localConfig,
+        organizationId,
+      ),
+    ).toEqual({
+      cpuRequest: 3,
+      cpuLimit: null,
+      memoryRequestMiB: 64,
+      memoryLimitMiB: 128,
+    });
+  });
+
+  test("MCP resize flags single/shared deployments, but not defaults, custom YAML, or disk-only edits", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const create = (extra: Record<string, unknown> = {}) =>
+      makeInternalMcpCatalog({
+        organizationId,
+        serverType: "local",
+        localConfig: { command: "node", runtimeTier: "S" },
+        ...extra,
+      });
+    const single = await create();
+    const install = await makeMcpServer({
+      catalogId: single.id,
+      serverType: "local",
+    });
+    const shared = await create({ multitenant: true });
+    const custom = await create({ deploymentSpecYaml: "kind: Deployment" });
+    const customInstall = await makeMcpServer({
+      catalogId: custom.id,
+      serverType: "local",
+    });
+    const defaults = await create({ localConfig: { command: "node" } });
+    const defaultInstall = await makeMcpServer({
+      catalogId: defaults.id,
+      serverType: "local",
+    });
+    const save = (extra: Record<string, unknown>) =>
+      patch({
+        agentRuntimeTiers: {
+          tiers: [tier("S", 2, extra), tier("M", 4), tier("L", 8)],
+          defaultTier: "S",
+        },
+      });
+    const disk = await save({ workspaceGiB: 20 });
+    expect(disk.statusCode, disk.body).toBe(200);
+    expect((await McpServerModel.findById(install.id))?.reinstallRequired).toBe(
+      false,
+    );
+    const resized = await save({ memoryRequestMiB: 64, memoryLimitMiB: 128 });
+    expect(resized.statusCode, resized.body).toBe(200);
+    expect(await McpServerModel.findById(install.id)).toMatchObject({
+      reinstallRequired: true,
+      reinstallReason: "restart",
+    });
+    expect(
+      (await InternalMcpCatalogModel.findById(shared.id))
+        ?.catalogReinstallRequired,
+    ).toBe(true);
+    expect(
+      (await McpServerModel.findById(customInstall.id))?.reinstallRequired,
+    ).toBe(false);
+    expect(
+      (await McpServerModel.findById(defaultInstall.id))?.reinstallRequired,
+    ).toBe(false);
   });
 
   test("keeps previously saved small CPU tiers readable and runnable while rejecting new writes below 0.1", async () => {

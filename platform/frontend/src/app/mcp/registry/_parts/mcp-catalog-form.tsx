@@ -3,8 +3,10 @@
 import {
   type archestraApiTypes,
   DocsPage,
+  findAgentRuntimeTier,
   getDefaultMcpImagePullPolicy,
   isBuiltInCatalogId,
+  summarizeAgentRuntimeTier,
 } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -107,7 +109,10 @@ import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-s
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useMcpDeploymentPermission } from "@/lib/mcp/use-mcp-deployment-permission";
-import { useDefaultEnvironment } from "@/lib/organization.query";
+import {
+  useAgentRuntimeTiers,
+  useDefaultEnvironment,
+} from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
   type CascadeSnapshot,
@@ -614,7 +619,7 @@ export function McpCatalogForm({
   const isHttpPortDirty = deploymentField("httpPort");
   const isHttpPathDirty = deploymentField("httpPath");
   const isImagePullPolicyDirty = deploymentField("imagePullPolicy");
-  const isResourcesDirty = deploymentField("resources");
+  const isResourcesDirty = deploymentField("runtimeTier");
 
   // The per-field `is*Dirty` flags below drive `ReinstallHint` badges
   // next to individual inputs. The form-level cascade decision lives in
@@ -1370,53 +1375,11 @@ export function McpCatalogForm({
                   description={
                     initialValues?.deploymentSpecYaml
                       ? "Resources are configured in the custom Kubernetes deployment YAML."
-                      : "CPU is measured in cores; memory in MiB. Leave fields blank to use deployment defaults. CPU has no limit by default. Changes apply when the server is installed or reinstalled."
+                      : "Use the same CPU and memory tiers as Agent Runtimes. Changes apply when the server is installed or reinstalled."
                   }
                 >
                   {!initialValues?.deploymentSpecYaml && (
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {(
-                        [
-                          ["cpuRequest", "CPU request (cores)"],
-                          ["cpuLimit", "CPU limit (cores)"],
-                          ["memoryRequestMiB", "Memory request (MiB)"],
-                          ["memoryLimitMiB", "Memory limit (MiB)"],
-                        ] as const
-                      ).map(([key, label]) => (
-                        <FormField
-                          key={key}
-                          control={form.control}
-                          name={`localConfig.resources.${key}`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>{label}</FormLabel>
-                              <FormControl>
-                                <Input
-                                  {...field}
-                                  type="number"
-                                  min={key.startsWith("cpu") ? 0.001 : 1}
-                                  step={key.startsWith("cpu") ? 0.001 : 1}
-                                  placeholder={
-                                    key === "cpuLimit"
-                                      ? "No limit"
-                                      : "Deployment default"
-                                  }
-                                  value={field.value ?? ""}
-                                  onChange={(event) =>
-                                    field.onChange(
-                                      event.target.value === ""
-                                        ? undefined
-                                        : event.target.valueAsNumber,
-                                    )
-                                  }
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      ))}
-                    </div>
+                    <McpRuntimeTierField form={form} />
                   )}
                 </SettingsSection>
               )}
@@ -3165,5 +3128,60 @@ function OAuthOverrides({
         {children}
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+function McpRuntimeTierField({
+  form,
+}: {
+  form: UseFormReturn<McpCatalogFormValues>;
+}) {
+  const { data: resolved } = useAgentRuntimeTiers();
+  const tiers = resolved?.tiers ?? [];
+  return (
+    <FormField
+      control={form.control}
+      name="localConfig.runtimeTier"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>Runtime tier</FormLabel>
+          <Select
+            value={
+              field.value
+                ? `tier:${findAgentRuntimeTier(tiers, field.value)?.name ?? field.value}`
+                : "default"
+            }
+            disabled={!resolved}
+            onValueChange={(tier) =>
+              field.onChange(tier === "default" ? undefined : tier.slice(5))
+            }
+          >
+            <FormControl>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Loading tiers…" />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              <SelectItem value="default">Deployment defaults</SelectItem>
+              {field.value && !findAgentRuntimeTier(tiers, field.value) && (
+                <SelectItem value={`tier:${field.value}`}>
+                  {field.value} (unavailable)
+                </SelectItem>
+              )}
+              {tiers.map((tier) => (
+                <SelectItem key={tier.name} value={`tier:${tier.name}`}>
+                  {tier.name}:{" "}
+                  {summarizeAgentRuntimeTier({ ...tier, workspaceGiB: null })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FormDescription>
+            Only the tier's CPU and memory settings apply to this MCP server.
+          </FormDescription>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
   );
 }

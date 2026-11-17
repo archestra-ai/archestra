@@ -252,52 +252,43 @@ describe("internal MCP catalog deployment YAML permission", () => {
     expect(persisted?.deploymentSpecYaml).toBe(DEPLOYMENT_YAML);
   });
 
-  test("resource overrides persist through create/read/update and reject limits below deployment defaults", async () => {
-    const resources = {
-      cpuRequest: 0.25,
-      cpuLimit: 0.5,
-      memoryRequestMiB: 64,
-      memoryLimitMiB: 256,
-    };
+  test("runtime tiers persist through create/read/update and reject unknown tier names", async () => {
+    const runtimeTier = "S";
     const created = await app.inject({
       method: "POST",
       url: "/api/internal_mcp_catalog",
       payload: {
         name: "Resource settings",
         serverType: "local",
-        localConfig: { command: "node", resources },
+        localConfig: { command: "node", runtimeTier },
       },
     });
     expect(created.statusCode, created.body).toBe(200);
-    expect(created.json().localConfig.resources).toEqual(resources);
+    expect(created.json().localConfig.runtimeTier).toEqual(runtimeTier);
     const id = created.json().id;
     const read = await app.inject({
       method: "GET",
       url: `/api/internal_mcp_catalog/${id}`,
     });
     expect(read.statusCode, read.body).toBe(200);
-    expect(read.json().localConfig.resources).toEqual(resources);
+    expect(read.json().localConfig.runtimeTier).toEqual(runtimeTier);
     const preview = await app.inject({
       method: "GET",
       url: `/api/internal_mcp_catalog/${id}/deployment-yaml-preview`,
     });
     expect(preview.statusCode, preview.body).toBe(200);
-    expect(preview.json().yaml).toContain("cpu: 250m");
-    expect(preview.json().yaml).toContain("memory: 64Mi");
-    for (const invalid of [
-      { cpuLimit: 0.001 },
-      { memoryLimitMiB: 1 },
-      { cpuRequest: 2, cpuLimit: 1 },
-    ]) {
+    expect(preview.json().yaml).toContain('cpu: "2"');
+    expect(preview.json().yaml).toContain("memory: 4Gi");
+    for (const invalid of ["Missing", " "]) {
       const response = await app.inject({
         method: "PUT",
         url: `/api/internal_mcp_catalog/${id}`,
-        payload: { localConfig: { command: "node", resources: invalid } },
+        payload: { localConfig: { command: "node", runtimeTier: invalid } },
       });
       expect(response.statusCode, response.body).toBe(400);
       expect(
-        (await InternalMcpCatalogModel.findById(id))?.localConfig?.resources,
-      ).toEqual(resources);
+        (await InternalMcpCatalogModel.findById(id))?.localConfig?.runtimeTier,
+      ).toEqual(runtimeTier);
     }
     const cleared = await app.inject({
       method: "PUT",
@@ -305,39 +296,39 @@ describe("internal MCP catalog deployment YAML permission", () => {
       payload: { localConfig: { command: "node" } },
     });
     expect(cleared.statusCode, cleared.body).toBe(200);
-    expect(cleared.json().localConfig.resources).toBeUndefined();
+    expect(cleared.json().localConfig.runtimeTier).toBeUndefined();
   });
 
-  test("an editor cannot add, change or remove resource overrides", async ({
+  test("an editor cannot add, change or remove runtime tiers", async ({
     makeInternalMcpCatalog,
   }) => {
-    const resources = { cpuRequest: 0.25, memoryRequestMiB: 64 };
+    const runtimeTier = "S";
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       authorId: admin.id,
       serverType: "local",
-      localConfig: { command: "node", resources },
+      localConfig: { command: "node", runtimeTier },
     });
     currentUser = editor;
-    for (const next of [undefined, { cpuRequest: 0.5 }]) {
+    for (const next of [undefined, "M"]) {
       const response = await app.inject({
         method: "PUT",
         url: `/api/internal_mcp_catalog/${catalog.id}`,
-        payload: { localConfig: { command: "node", resources: next } },
+        payload: { localConfig: { command: "node", runtimeTier: next } },
       });
       expect(response.statusCode, response.body).toBe(403);
       expect(
         (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
-          ?.resources,
-      ).toEqual(resources);
+          ?.runtimeTier,
+      ).toEqual(runtimeTier);
     }
     const created = await app.inject({
       method: "POST",
       url: "/api/internal_mcp_catalog",
       payload: {
-        name: "Unauthorized resources",
+        name: "Unauthorized runtimeTier",
         serverType: "local",
-        localConfig: { command: "node", resources },
+        localConfig: { command: "node", runtimeTier },
       },
     });
     expect(created.statusCode, created.body).toBe(403);

@@ -1584,31 +1584,29 @@ describe("team access levels", () => {
   });
 });
 
-describe("local MCP resources", () => {
-  const resources = {
-    cpuRequest: 0.25,
-    cpuLimit: 1,
-    memoryRequestMiB: 256,
-    memoryLimitMiB: 512,
-  };
+describe("local MCP runtime tiers", () => {
   const item = {
     id: "resource-catalog",
     name: "Resource server",
     serverType: "local",
-    localConfig: { dockerImage: "example/server:1", resources },
+    localConfig: {
+      dockerImage: "example/server:1",
+      runtimeTier: "Small",
+    },
     labels: [],
     teams: [],
   } as unknown as Parameters<typeof transformCatalogItemToFormValues>[0];
 
-  it("retains overrides across edit and clone, and lets clearing restore defaults", () => {
+  it("retains tiers across edit and clone, and lets clearing restore defaults", () => {
     const values = transformCatalogItemToFormValues(item);
-    expect(values.localConfig?.resources).toEqual(resources);
-    expect(transformFormToApiData(values).localConfig?.resources).toEqual(
-      resources,
+    expect(values.localConfig?.runtimeTier).toBe("Small");
+    expect(transformFormToApiData(values).localConfig?.runtimeTier).toBe(
+      "Small",
     );
     expect(
-      transformFormToApiData(buildCloneFormValues(item)).localConfig?.resources,
-    ).toEqual(resources);
+      transformFormToApiData(buildCloneFormValues(item)).localConfig
+        ?.runtimeTier,
+    ).toBe("Small");
 
     const cleared = transformFormToApiData({
       ...values,
@@ -1616,19 +1614,19 @@ describe("local MCP resources", () => {
         arguments: "",
         environment: [],
         ...values.localConfig,
-        resources: undefined,
+        runtimeTier: undefined,
       },
     });
-    expect(cleared.localConfig?.resources).toBeUndefined();
+    expect(cleared.localConfig?.runtimeTier).toBeUndefined();
     expect(
       transformCatalogItemToFormValues({
         ...item,
         localConfig: { dockerImage: "example/server:1" },
-      }).localConfig?.resources,
+      }).localConfig?.runtimeTier,
     ).toBeUndefined();
   });
 
-  it("does not send local resource overrides for remote or desktop servers", () => {
+  it("does not send local runtime tiers for remote or desktop servers", () => {
     const values = transformCatalogItemToFormValues(item);
     expect(
       transformFormToApiData({

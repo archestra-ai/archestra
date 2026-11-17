@@ -195,8 +195,9 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
       title="Runtime tiers"
       description={
         <>
-          Runtime tiers control compute and other resources allocation to agent
-          runtimes.{" "}
+          Runtime tiers allocate resources to Agent Runtimes. Their CPU and
+          memory settings also size MCP servers; changes require affected MCP
+          servers to be reinstalled.{" "}
           <ExternalDocsLink
             href={getDocsUrl(
               DocsPage.PlatformAgentRuntimeSetup,
@@ -259,9 +260,8 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
         title={`Delete tier ${deleting?.name ?? ""}?`}
         description={
           <>
-            Agents and templates that name it as their default or scaleup tier
-            must move to another tier first; the deletion is refused while any
-            does.
+            Agents, templates, and MCP servers that use this tier must move to
+            another tier first. The tier cannot be deleted while it is in use.
             {deleteFailure && (
               <span role="alert" className="mt-2 block text-destructive">
                 {deleteFailure}

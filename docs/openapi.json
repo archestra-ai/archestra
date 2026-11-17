@@ -366875,34 +366875,8 @@
                               "Never"
                             ]
                           },
-                          "resources": {
-                            "type": "object",
-                            "properties": {
-                              "cpuRequest": {
-                                "type": "number",
-                                "minimum": 0.001,
-                                "multipleOf": 0.001
-                              },
-                              "cpuLimit": {
-                                "nullable": true,
-                                "type": "number",
-                                "minimum": 0.001,
-                                "multipleOf": 0.001
-                              },
-                              "memoryRequestMiB": {
-                                "type": "integer",
-                                "minimum": 0,
-                                "exclusiveMinimum": true,
-                                "maximum": 9007199254740991
-                              },
-                              "memoryLimitMiB": {
-                                "type": "integer",
-                                "minimum": 0,
-                                "exclusiveMinimum": true,
-                                "maximum": 9007199254740991
-                              }
-                            },
-                            "additionalProperties": false
+                          "runtimeTier": {
+                            "type": "string"
                           }
                         },
                         "additionalProperties": false
@@ -368016,33 +367990,10 @@
                           "Never"
                         ]
                       },
-                      "resources": {
-                        "type": "object",
-                        "properties": {
-                          "cpuRequest": {
-                            "type": "number",
-                            "minimum": 0.001,
-                            "multipleOf": 0.001
-                          },
-                          "cpuLimit": {
-                            "nullable": true,
-                            "type": "number",
-                            "minimum": 0.001,
-                            "multipleOf": 0.001
-                          },
-                          "memoryRequestMiB": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "exclusiveMinimum": true,
-                            "maximum": 9007199254740991
-                          },
-                          "memoryLimitMiB": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "exclusiveMinimum": true,
-                            "maximum": 9007199254740991
-                          }
-                        }
+                      "runtimeTier": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32
                       }
                     }
                   },
@@ -368833,34 +368784,8 @@
                             "Never"
                           ]
                         },
-                        "resources": {
-                          "type": "object",
-                          "properties": {
-                            "cpuRequest": {
-                              "type": "number",
-                              "minimum": 0.001,
-                              "multipleOf": 0.001
-                            },
-                            "cpuLimit": {
-                              "nullable": true,
-                              "type": "number",
-                              "minimum": 0.001,
-                              "multipleOf": 0.001
-                            },
-                            "memoryRequestMiB": {
-                              "type": "integer",
-                              "minimum": 0,
-                              "exclusiveMinimum": true,
-                              "maximum": 9007199254740991
-                            },
-                            "memoryLimitMiB": {
-                              "type": "integer",
-                              "minimum": 0,
-                              "exclusiveMinimum": true,
-                              "maximum": 9007199254740991
-                            }
-                          },
-                          "additionalProperties": false
+                        "runtimeTier": {
+                          "type": "string"
                         }
                       },
                       "additionalProperties": false
@@ -372707,34 +372632,8 @@
                             "Never"
                           ]
                         },
-                        "resources": {
-                          "type": "object",
-                          "properties": {
-                            "cpuRequest": {
-                              "type": "number",
-                              "minimum": 0.001,
-                              "multipleOf": 0.001
-                            },
-                            "cpuLimit": {
-                              "nullable": true,
-                              "type": "number",
-                              "minimum": 0.001,
-                              "multipleOf": 0.001
-                            },
-                            "memoryRequestMiB": {
-                              "type": "integer",
-                              "minimum": 0,
-                              "exclusiveMinimum": true,
-                              "maximum": 9007199254740991
-                            },
-                            "memoryLimitMiB": {
-                              "type": "integer",
-                              "minimum": 0,
-                              "exclusiveMinimum": true,
-                              "maximum": 9007199254740991
-                            }
-                          },
-                          "additionalProperties": false
+                        "runtimeTier": {
+                          "type": "string"
                         }
                       },
                       "additionalProperties": false
@@ -373785,33 +373684,10 @@
                           "Never"
                         ]
                       },
-                      "resources": {
-                        "type": "object",
-                        "properties": {
-                          "cpuRequest": {
-                            "type": "number",
-                            "minimum": 0.001,
-                            "multipleOf": 0.001
-                          },
-                          "cpuLimit": {
-                            "nullable": true,
-                            "type": "number",
-                            "minimum": 0.001,
-                            "multipleOf": 0.001
-                          },
-                          "memoryRequestMiB": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "exclusiveMinimum": true,
-                            "maximum": 9007199254740991
-                          },
-                          "memoryLimitMiB": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "exclusiveMinimum": true,
-                            "maximum": 9007199254740991
-                          }
-                        }
+                      "runtimeTier": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32
                       }
                     }
                   },
@@ -374457,34 +374333,8 @@
                             "Never"
                           ]
                         },
-                        "resources": {
-                          "type": "object",
-                          "properties": {
-                            "cpuRequest": {
-                              "type": "number",
-                              "minimum": 0.001,
-                              "multipleOf": 0.001
-                            },
-                            "cpuLimit": {
-                              "nullable": true,
-                              "type": "number",
-                              "minimum": 0.001,
-                              "multipleOf": 0.001
-                            },
-                            "memoryRequestMiB": {
-                              "type": "integer",
-                              "minimum": 0,
-                              "exclusiveMinimum": true,
-                              "maximum": 9007199254740991
-                            },
-                            "memoryLimitMiB": {
-                              "type": "integer",
-                              "minimum": 0,
-                              "exclusiveMinimum": true,
-                              "maximum": 9007199254740991
-                            }
-                          },
-                          "additionalProperties": false
+                        "runtimeTier": {
+                          "type": "string"
                         }
                       },
                       "additionalProperties": false
@@ -377334,34 +377184,8 @@
                               "Never"
                             ]
                           },
-                          "resources": {
-                            "type": "object",
-                            "properties": {
-                              "cpuRequest": {
-                                "type": "number",
-                                "minimum": 0.001,
-                                "multipleOf": 0.001
-                              },
-                              "cpuLimit": {
-                                "nullable": true,
-                                "type": "number",
-                                "minimum": 0.001,
-                                "multipleOf": 0.001
-                              },
-                              "memoryRequestMiB": {
-                                "type": "integer",
-                                "minimum": 0,
-                                "exclusiveMinimum": true,
-                                "maximum": 9007199254740991
-                              },
-                              "memoryLimitMiB": {
-                                "type": "integer",
-                                "minimum": 0,
-                                "exclusiveMinimum": true,
-                                "maximum": 9007199254740991
-                              }
-                            },
-                            "additionalProperties": false
+                          "runtimeTier": {
+                            "type": "string"
                           }
                         },
                         "additionalProperties": false
@@ -378406,34 +378230,8 @@
                             "Never"
                           ]
                         },
-                        "resources": {
-                          "type": "object",
-                          "properties": {
-                            "cpuRequest": {
-                              "type": "number",
-                              "minimum": 0.001,
-                              "multipleOf": 0.001
-                            },
-                            "cpuLimit": {
-                              "nullable": true,
-                              "type": "number",
-                              "minimum": 0.001,
-                              "multipleOf": 0.001
-                            },
-                            "memoryRequestMiB": {
-                              "type": "integer",
-                              "minimum": 0,
-                              "exclusiveMinimum": true,
-                              "maximum": 9007199254740991
-                            },
-                            "memoryLimitMiB": {
-                              "type": "integer",
-                              "minimum": 0,
-                              "exclusiveMinimum": true,
-                              "maximum": 9007199254740991
-                            }
-                          },
-                          "additionalProperties": false
+                        "runtimeTier": {
+                          "type": "string"
                         }
                       },
                       "additionalProperties": false

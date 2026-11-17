@@ -8,7 +8,10 @@ import {
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useDefaultEnvironment } from "@/lib/organization.query";
+import {
+  useAgentRuntimeTiers,
+  useDefaultEnvironment,
+} from "@/lib/organization.query";
 import {
   useAssignableTeams,
   useMyTeams,
@@ -461,7 +464,34 @@ describe("McpCatalogForm enterprise gating", () => {
     ).toBeInTheDocument();
   });
 
-  it("edits and validates resource overrides only for permitted generated deployments", async () => {
+  it("selects existing runtime tiers only for permitted generated deployments", async () => {
+    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+    Element.prototype.setPointerCapture = vi.fn();
+    Element.prototype.releasePointerCapture = vi.fn();
+    Element.prototype.scrollIntoView = vi.fn();
+    vi.mocked(useAgentRuntimeTiers).mockReturnValue({
+      data: {
+        defaultTier: "Small",
+        tiers: [
+          {
+            name: "Small",
+            cpuRequest: 0.25,
+            cpuLimit: null,
+            memoryRequestMiB: 256,
+            memoryLimitMiB: 512,
+            workspaceGiB: 20,
+          },
+          {
+            name: "Large",
+            cpuRequest: 1,
+            cpuLimit: 2,
+            memoryRequestMiB: 1024,
+            memoryLimitMiB: 2048,
+            workspaceGiB: 40,
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useAgentRuntimeTiers>);
     vi.mocked(useScopedCapabilities).mockReturnValue({
       data: [
         {
@@ -477,11 +507,7 @@ describe("McpCatalogForm enterprise gating", () => {
       serverType: "local",
       localConfig: {
         dockerImage: "example/server:1",
-        resources: {
-          cpuRequest: 0.25,
-          memoryRequestMiB: 256,
-          memoryLimitMiB: 512,
-        },
+        runtimeTier: "small",
       },
       deploymentSpecYaml: null,
       labels: [],
@@ -495,29 +521,31 @@ describe("McpCatalogForm enterprise gating", () => {
         initialValues={initialValues as never}
       />,
     );
-    expect(screen.getByLabelText("CPU request (cores)")).toHaveValue(0.25);
-    fireEvent.change(screen.getByLabelText("CPU limit (cores)"), {
-      target: { value: "0.1" },
-    });
-    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
     expect(
-      await screen.findByText("CPU limit must be at least the CPU request"),
-    ).toBeInTheDocument();
-    expect(onSubmit).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByLabelText("CPU limit (cores)"), {
-      target: { value: "1" },
-    });
-    fireEvent.change(screen.getByLabelText("Memory request (MiB)"), {
-      target: { value: "" },
-    });
+      screen.getByRole("combobox", { name: "Runtime tier" }),
+    ).toHaveTextContent("Small: 0.25 CPU, 256 MiB");
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Runtime tier" }),
+    );
+    expect(
+      screen.queryByRole("option", { name: /workspace/ }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("option", { name: "Large: 1 CPU, 1 GiB" }),
+    );
     fireEvent.submit(container.querySelector("form") as HTMLFormElement);
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
-    expect(onSubmit.mock.calls[0][0].localConfig.resources).toEqual({
-      cpuRequest: 0.25,
-      cpuLimit: 1,
-      memoryRequestMiB: undefined,
-      memoryLimitMiB: 512,
-    });
+    expect(onSubmit.mock.calls[0][0].localConfig.runtimeTier).toBe("Large");
+
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Runtime tier" }),
+    );
+    await userEvent.click(
+      screen.getByRole("option", { name: "Deployment defaults" }),
+    );
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+    expect(onSubmit.mock.calls[1][0].localConfig.runtimeTier).toBeUndefined();
 
     rerender(
       <McpCatalogForm
@@ -529,7 +557,7 @@ describe("McpCatalogForm enterprise gating", () => {
       />,
     );
     expect(
-      screen.queryByLabelText("CPU request (cores)"),
+      screen.queryByRole("combobox", { name: "Runtime tier" }),
     ).not.toBeInTheDocument();
     expect(
       screen.getByText(
@@ -547,7 +575,7 @@ describe("McpCatalogForm enterprise gating", () => {
       />,
     );
     expect(
-      screen.queryByLabelText("CPU request (cores)"),
+      screen.queryByRole("combobox", { name: "Runtime tier" }),
     ).not.toBeInTheDocument();
   });
 });

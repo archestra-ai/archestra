@@ -144,7 +144,7 @@ export function transformFormToApiData(
       httpPath: values.localConfig.httpPath || undefined,
       serviceAccount: values.localConfig.serviceAccount || undefined,
       imagePullPolicy: values.localConfig.imagePullPolicy || undefined,
-      resources: values.localConfig.resources,
+      runtimeTier: values.localConfig.runtimeTier,
       imagePullSecrets:
         values.localConfig.imagePullSecrets?.filter((s) => {
           if (s.source === "existing") return s.name.trim().length > 0;
@@ -489,9 +489,7 @@ export function transformCatalogItemToFormValues(
         serviceAccount?: string;
         imagePullSecrets?: ImagePullSecretConfig[];
         imagePullPolicy?: ImagePullPolicy;
-        resources?: NonNullable<
-          McpCatalogFormValues["localConfig"]
-        >["resources"];
+        runtimeTier?: string;
       }
     | undefined;
   if (item.localConfig) {
@@ -526,7 +524,7 @@ export function transformCatalogItemToFormValues(
       httpPath: config.httpPath || undefined,
       serviceAccount: config.serviceAccount || undefined,
       imagePullPolicy: config.imagePullPolicy || undefined,
-      resources: config.resources,
+      runtimeTier: config.runtimeTier,
       // Normalize imagePullSecrets: legacy { name } → { source: "existing", name }
       imagePullSecrets: (item.localConfig.imagePullSecrets || []).map(
         (s: ImagePullSecretConfig | { name: string }) => {

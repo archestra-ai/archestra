@@ -28,7 +28,7 @@ Pull from a private registry, add memory, or mount a volume, from the server's E
 
 - **Private image:** add an image pull secret, or the registry's credentials.
 - **Image pull policy:** `:latest` and untagged images pull on every restart, so a restart runs the newest push. Pinned tags reuse the node's copy, so pods start while the registry is down. Override either per server.
-- **CPU and memory:** set requests and limits under **Resources**, in CPU cores and MiB. Blank fields use deployment defaults; a blank CPU limit means no cap. You need **Full access + deploy** on the server; see [Granular Access Control](/docs/admin/access-control#granular-access-control).
+- **CPU and memory:** choose a **Runtime tier** under **Resources**, using the same named tiers as Agent Runtimes. Only CPU and memory apply; choose **Deployment defaults** to use the MCP deployment settings. You need **Full access + deploy** on the server; see [Granular Access Control](/docs/admin/access-control#granular-access-control).
 - **Custom deployment:** edit the **K8s YAML** tab for volumes or node rules. When custom YAML is saved, configure resources there instead.
 - **Who can change it:** the image, command, URL, and authentication take [`mcpRegistry:create`](/docs/reference/permissions#mcpRegistry:create) or **Full access + deploy**. Everyone else edits only the name, icon, description, and labels.
 - A credential on each call, such as the caller's [identity provider token](/docs/mcp/authentication/idp-token-exchange): set **Transport** to **streamable-http**. A **stdio** server gets credentials only at start.

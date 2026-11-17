@@ -137,7 +137,6 @@ import {
   UnmuteMcpServerAlertQuerySchema,
   UuidIdSchema,
 } from "@/types";
-import { resolveMcpServerResources } from "@/utils/mcp-server-resources";
 import {
   catalogIconUrl,
   replyWithIconImage,
@@ -996,8 +995,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         requested: restBody.deploymentSpecYaml,
         requestedLocalConfig: restBody.localConfig,
       });
-      if (restBody.localConfig?.resources && !restBody.deploymentSpecYaml) {
-        resolveMcpServerResources(restBody.localConfig.resources, restBody.id);
+      if (restBody.localConfig && !restBody.deploymentSpecYaml) {
+        await InternalMcpCatalogModel.resolveRuntimeResources(
+          restBody.localConfig,
+          request.organizationId,
+        );
       }
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -1663,8 +1665,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         restBody.deploymentSpecYaml === undefined
           ? originalCatalogItem.deploymentSpecYaml
           : restBody.deploymentSpecYaml;
-      if (effectiveLocalConfig?.resources && !effectiveDeploymentYaml) {
-        resolveMcpServerResources(effectiveLocalConfig.resources, id);
+      if (effectiveLocalConfig && !effectiveDeploymentYaml) {
+        await InternalMcpCatalogModel.resolveRuntimeResources(
+          effectiveLocalConfig,
+          request.organizationId,
+        );
       }
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -2591,7 +2596,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         imagePullSecrets: imagePullSecretsForYaml,
         imagePullPolicy: catalogItem.localConfig?.imagePullPolicy,
         catalogId: catalogItem.id,
-        resources: catalogItem.localConfig?.resources,
+        resources: catalogItem.localConfig
+          ? await InternalMcpCatalogModel.resolveRuntimeResources(
+              catalogItem.localConfig,
+              request.organizationId,
+            )
+          : undefined,
       });
 
       return reply.send({ yaml: yamlTemplate });
@@ -2705,7 +2715,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         imagePullSecrets: imagePullSecretsForYaml,
         imagePullPolicy: catalogItem.localConfig?.imagePullPolicy,
         catalogId: catalogItem.id,
-        resources: catalogItem.localConfig?.resources,
+        resources: catalogItem.localConfig
+          ? await InternalMcpCatalogModel.resolveRuntimeResources(
+              catalogItem.localConfig,
+              request.organizationId,
+            )
+          : undefined,
       });
 
       return reply.send({ yaml: yamlTemplate });

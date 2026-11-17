@@ -83,12 +83,7 @@ export type CascadeSnapshot = {
     serviceAccount?: string;
     imagePullSecrets?: unknown[];
     imagePullPolicy?: string;
-    resources?: {
-      cpuRequest?: number;
-      cpuLimit?: number | null;
-      memoryRequestMiB?: number;
-      memoryLimitMiB?: number;
-    };
+    runtimeTier?: string;
   } | null;
   userConfig?: Record<string, unknown> | null;
   labels?: Array<{ key: string; value: string }>;
@@ -245,12 +240,7 @@ function localExecutionConfigChanged(
     httpPath: s.localConfig?.httpPath ?? "",
     serviceAccount: s.localConfig?.serviceAccount ?? "",
     imagePullPolicy: s.localConfig?.imagePullPolicy,
-    resources: {
-      cpuRequest: s.localConfig?.resources?.cpuRequest,
-      cpuLimit: s.localConfig?.resources?.cpuLimit ?? undefined,
-      memoryRequestMiB: s.localConfig?.resources?.memoryRequestMiB,
-      memoryLimitMiB: s.localConfig?.resources?.memoryLimitMiB,
-    },
+    runtimeTier: s.localConfig?.runtimeTier,
   });
   return JSON.stringify(shape(prev)) !== JSON.stringify(shape(next));
 }

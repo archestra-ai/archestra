@@ -1,8 +1,12 @@
 import { createHash } from "node:crypto";
 import {
+  ApiError,
   ARCHESTRA_MCP_CATALOG_ID,
+  findAgentRuntimeTier,
+  type McpServerResources,
   type ResourcePermissionAction,
   type ResourcePermissionGrant,
+  resolveAgentRuntimeTiers,
 } from "@archestra/shared";
 import {
   and,
@@ -41,12 +45,12 @@ import type {
   InternalMcpCatalog,
   InternalMcpCatalogServerType,
   ListInternalMcpCatalog,
+  LocalConfig,
   ResourceVisibilityScope,
   SecretValue,
   UpdateInternalMcpCatalog,
 } from "@/types";
 import { ENTERPRISE_MANAGED_OVERRIDE_SECRET_FIELDS } from "@/types/enterprise-managed-credentials";
-import { resolveMcpServerResources } from "@/utils/mcp-server-resources";
 import { SERVABLE_ICON_TYPES } from "@/utils/servable-icon";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel, { lookupCreator } from "./created-by";
@@ -55,6 +59,7 @@ import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import type { RegistryInstallViewer } from "./mcp-server";
 import McpServerModel from "./mcp-server";
+import OrganizationModel from "./organization";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
@@ -162,6 +167,124 @@ class InternalMcpCatalogModel {
     return rows.length === 1;
   }
 
+  /** Resolve only CPU/RAM; agent workspace, scaleup and warm-pool settings do not apply to MCP servers. */
+  static async resolveRuntimeResources(
+    localConfig: LocalConfig,
+    organizationId: string | null | undefined,
+  ): Promise<McpServerResources | undefined> {
+    if (!localConfig.runtimeTier) return undefined;
+    if (!organizationId)
+      throw new ApiError(
+        400,
+        "An organization is required to select an MCP runtime tier",
+      );
+    const organization = await OrganizationModel.getById(organizationId);
+    if (!organization) throw new ApiError(400, "Organization not found");
+    const { tiers } = resolveAgentRuntimeTiers(organization.agentRuntimeTiers, {
+      defaultWarmSpares: 0,
+    });
+    const tier = findAgentRuntimeTier(tiers, localConfig.runtimeTier);
+    if (!tier)
+      throw new ApiError(
+        400,
+        `The runtime tier ${localConfig.runtimeTier} is not one of the organization's runtime tiers: ${tiers.map((entry) => entry.name).join(", ")}`,
+      );
+    return {
+      cpuRequest: tier.cpuRequest,
+      cpuLimit: tier.cpuLimit,
+      memoryRequestMiB: tier.memoryRequestMiB,
+      memoryLimitMiB: tier.memoryLimitMiB,
+    };
+  }
+
+  /** Include hidden variants and deleted entries: restoring one must not lose its tier. */
+  static async countRuntimeTierReferences(params: {
+    organizationId: string;
+    name: string;
+  }): Promise<number> {
+    const table = schema.internalMcpCatalogTable;
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          sql`lower(${table.localConfig}->>'runtimeTier') = lower(${params.name})`,
+        ),
+      );
+    return row?.count ?? 0;
+  }
+
+  /** Flag CPU/RAM changes without restarting workloads or applying agent disk/pool settings. */
+  static async markRuntimeTierResizes(params: {
+    organizationId: string;
+    names: readonly string[];
+    tx: Transaction;
+  }): Promise<void> {
+    if (!params.names.length) return;
+    const catalog = schema.internalMcpCatalogTable;
+    const installs = schema.mcpServersTable;
+    const affected = and(
+      eq(catalog.organizationId, params.organizationId),
+      eq(catalog.serverType, "local"),
+      isNull(catalog.deploymentSpecYaml),
+      sql`lower(${catalog.localConfig}->>'runtimeTier') in (${sql.join(
+        params.names.map((name) => sql`${name.toLowerCase()}`),
+        sql`, `,
+      )})`,
+    );
+    await params.tx
+      .update(installs)
+      .set({
+        reinstallRequired: true,
+        reinstallReason: sql`case when ${installs.reinstallRequired} and ${installs.reinstallReason} = 'new-input' then 'new-input' else 'restart' end`,
+      })
+      .where(
+        inArray(
+          installs.catalogId,
+          params.tx
+            .select({ id: catalog.id })
+            .from(catalog)
+            .where(and(affected, eq(catalog.multitenant, false))),
+        ),
+      );
+    await params.tx
+      .update(catalog)
+      .set({ catalogReinstallRequired: true })
+      .where(and(affected, eq(catalog.multitenant, true)));
+  }
+
+  /** Apply the mapping once per stored name, in the organization's settings transaction. */
+  static async renameRuntimeTiers(params: {
+    organizationId: string;
+    renames: readonly { from: string; to: string }[];
+    tx: Transaction;
+  }): Promise<void> {
+    if (params.renames.length === 0) return;
+    const table = schema.internalMcpCatalogTable;
+    const stored = sql`lower(${table.localConfig}->>'runtimeTier')`;
+    const mapped = sql.join(
+      params.renames.map(
+        (rename) => sql`when ${rename.from.toLowerCase()} then ${rename.to}`,
+      ),
+      sql` `,
+    );
+    await params.tx
+      .update(table)
+      .set({
+        localConfig: sql`jsonb_set(${table.localConfig}, '{runtimeTier}', to_jsonb((case ${stored} ${mapped} end)::text))`,
+      })
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          sql`${stored} in (${sql.join(
+            params.renames.map((rename) => sql`${rename.from.toLowerCase()}`),
+            sql`, `,
+          )})`,
+        ),
+      );
+  }
+
   static async create(
     catalogItem: InsertInternalMcpCatalog,
     context?: {
@@ -182,8 +305,11 @@ class InternalMcpCatalogModel {
     // pre-existing deployments of this shape never churn. Renames must never
     // touch it.
     const id = dbValues.id ?? crypto.randomUUID();
-    if (dbValues.localConfig?.resources && !dbValues.deploymentSpecYaml) {
-      resolveMcpServerResources(dbValues.localConfig.resources, id);
+    if (dbValues.localConfig && !dbValues.deploymentSpecYaml) {
+      await InternalMcpCatalogModel.resolveRuntimeResources(
+        dbValues.localConfig,
+        context?.organizationId,
+      );
     }
     const deploymentName = dbValues.multitenant
       ? constructLegacyMultitenantMcpDeploymentName(id, dbValues.name)
@@ -1417,8 +1543,11 @@ class InternalMcpCatalogModel {
         dbValues.deploymentSpecYaml === undefined
           ? current?.deploymentSpecYaml
           : dbValues.deploymentSpecYaml;
-      if (localConfig?.resources && !yaml)
-        resolveMcpServerResources(localConfig.resources, id);
+      if (localConfig && !yaml)
+        await InternalMcpCatalogModel.resolveRuntimeResources(
+          localConfig,
+          current?.organizationId,
+        );
     }
 
     // Name immutability at the generic-update layer: renames flow

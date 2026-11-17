@@ -5,6 +5,7 @@ import {
   type LocalConfigSchema,
   MCP_ORCHESTRATOR_DEFAULTS,
   type McpDeploymentState,
+  type McpServerResources,
   PLAYWRIGHT_MCP_CATALOG_ID,
   TimeInMs,
 } from "@archestra/shared";
@@ -2190,6 +2191,7 @@ export default class K8sDeployment {
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
     tolerations?: k8s.V1Toleration[] | null,
     resolvedImagePullSecretNames?: Array<{ name: string }>,
+    runtimeResources?: McpServerResources,
   ): k8s.V1Deployment {
     // Check if YAML override is provided
     if (this.catalogItem?.deploymentSpecYaml) {
@@ -2329,7 +2331,7 @@ export default class K8sDeployment {
           // Add volume mounts for mounted secrets
           ...(volumeMounts.length > 0 ? { volumeMounts } : {}),
           resources: resolveMcpServerResources(
-            localConfig.resources,
+            runtimeResources,
             this.catalogItem?.id,
           ),
         },
@@ -3299,6 +3301,13 @@ export default class K8sDeployment {
         })),
       };
 
+      const runtimeResources = catalogItem.deploymentSpecYaml
+        ? undefined
+        : await InternalMcpCatalogModel.resolveRuntimeResources(
+            catalogItem.localConfig,
+            catalogItem.organizationId,
+          );
+
       // Get the cached nodeSelector and tolerations from the platform pod (if available)
       // This allows MCP servers to inherit the same scheduling constraints
       const platformNodeSelector = getCachedPlatformNodeSelector();
@@ -3323,6 +3332,7 @@ export default class K8sDeployment {
             platformNodeSelector,
             platformTolerations,
             resolvedImagePullSecretNames,
+            runtimeResources,
           ),
         );
         await lifecycle?.assertOwned?.();

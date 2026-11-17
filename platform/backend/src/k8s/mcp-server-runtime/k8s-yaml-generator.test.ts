@@ -169,7 +169,12 @@ describe("k8s-yaml-generator", () => {
       expect(defaults).toContain("memory: 2Gi");
       const overridden = generateDeploymentYamlTemplate({
         ...context,
-        resources: { memoryRequestMiB: 256, memoryLimitMiB: 1024 },
+        resources: {
+          cpuRequest: 0.1,
+          cpuLimit: null,
+          memoryRequestMiB: 256,
+          memoryLimitMiB: 1024,
+        },
       });
       expect(overridden).toContain("memory: 256Mi");
       expect(overridden).toContain("memory: 1Gi");

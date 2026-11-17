@@ -20,6 +20,7 @@ export enum A2AErrorKind {
   InvalidPageToken,
   InvalidPushNotificationUrl,
   PushNotificationConfigNotFound,
+  InvalidFilePart,
 }
 const A2A_ERRORS: Record<A2AErrorKind, { code: number; message: string }> = {
   [A2AErrorKind.InvalidToken]: {
@@ -97,6 +98,10 @@ const A2A_ERRORS: Record<A2AErrorKind, { code: number; message: string }> = {
   [A2AErrorKind.PushNotificationConfigNotFound]: {
     code: -32001,
     message: "Push notification config not found",
+  },
+  [A2AErrorKind.InvalidFilePart]: {
+    code: -32602,
+    message: "Invalid file part",
   },
 };
 

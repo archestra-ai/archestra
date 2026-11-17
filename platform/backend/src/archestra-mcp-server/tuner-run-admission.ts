@@ -39,9 +39,12 @@ export async function admitTunerRunToolCall(params: {
     }
     return null;
   }
+  // The user the call executes as, not the trigger's current actor: enabling
+  // the tuner again moves the actor without touching a run already started.
   if (
+    !context.userId ||
     !(await hasTunerAccess({
-      userId: run.actorUserId,
+      userId: context.userId,
       organizationId: run.organizationId,
       access: "update",
     }))

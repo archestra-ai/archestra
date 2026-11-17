@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared";
 import config from "@/config";
 import {
+  MemberModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
   TunerSuggestionModel,
@@ -309,7 +310,7 @@ describe("tools inside a tuner run", () => {
     );
   });
 
-  test("refuses an assigned tool once the run's user lost tuner rights", async ({
+  test("refuses an assigned tool once the user the run executes as lost tuner rights", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -319,7 +320,7 @@ describe("tools inside a tuner run", () => {
     makeScheduleTriggerRun,
     seedAndAssignArchestraTools,
   }) => {
-    const { context, triggerId, organizationId } = await tunerRun({
+    const { context, actorId, triggerId, organizationId } = await tunerRun({
       makeOrganization,
       makeUser,
       makeMember,
@@ -331,12 +332,15 @@ describe("tools inside a tuner run", () => {
     const tool = getArchestraToolFullName("get_guardrails_policy");
     expect((await executeArchestraTool(tool, {}, context)).isError).toBeFalsy();
 
-    const demoted = await makeUser();
-    const role = await makeCustomRole(organizationId, {
-      permission: { tuner: ["update"] },
+    // Another admin enables the tuner again while this run still executes as
+    // its first user, who then loses log:admin but keeps the tool's own right.
+    const nextActor = await makeUser();
+    await makeMember(nextActor.id, organizationId, { role: ADMIN_ROLE_NAME });
+    await ScheduleTriggerModel.update(triggerId, { actorUserId: nextActor.id });
+    const { role } = await makeCustomRole(organizationId, {
+      permission: { tuner: ["read", "update"], guardrailsPolicy: ["read"] },
     });
-    await makeMember(demoted.id, organizationId, { role: role.role });
-    await ScheduleTriggerModel.update(triggerId, { actorUserId: demoted.id });
+    await MemberModel.updateRole(actorId, organizationId, role);
 
     expect((await executeArchestraTool(tool, {}, context)).isError).toBe(true);
   });
@@ -379,6 +383,7 @@ async function tunerRun(
   >,
 ): Promise<{
   context: ArchestraContext;
+  actorId: string;
   runId: string;
   triggerId: string;
   organizationId: string;
@@ -405,6 +410,7 @@ async function tunerRun(
     record: { outcome: "agent_ran", candidates: [CANDIDATE] },
   });
   return {
+    actorId: actor.id,
     runId: run.id,
     triggerId: trigger.id,
     organizationId: organization.id,

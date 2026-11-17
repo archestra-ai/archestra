@@ -3,7 +3,7 @@
 import {
   type archestraApiTypes,
   DocsPage,
-  findAgentRuntimeTier,
+  findMcpRuntimeTier,
   getDefaultMcpImagePullPolicy,
   isBuiltInCatalogId,
   summarizeAgentRuntimeTier,
@@ -110,8 +110,8 @@ import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useMcpDeploymentPermission } from "@/lib/mcp/use-mcp-deployment-permission";
 import {
-  useAgentRuntimeTiers,
   useDefaultEnvironment,
+  useMcpRuntimeTiers,
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
@@ -1375,7 +1375,7 @@ export function McpCatalogForm({
                   description={
                     initialValues?.deploymentSpecYaml
                       ? "Resources are configured in the custom Kubernetes deployment YAML."
-                      : "Use the same CPU and memory tiers as Agent Runtimes. Changes apply when the server is installed or reinstalled."
+                      : "Choose an MCP runtime tier managed in Settings > MCP. Changes apply when the server is installed or reinstalled."
                   }
                 >
                   {!initialValues?.deploymentSpecYaml && (
@@ -3136,7 +3136,7 @@ function McpRuntimeTierField({
 }: {
   form: UseFormReturn<McpCatalogFormValues>;
 }) {
-  const { data: resolved } = useAgentRuntimeTiers();
+  const { data: resolved } = useMcpRuntimeTiers();
   const tiers = resolved?.tiers ?? [];
   return (
     <FormField
@@ -3150,7 +3150,7 @@ function McpRuntimeTierField({
               !resolved
                 ? ""
                 : field.value
-                  ? `tier:${findAgentRuntimeTier(tiers, field.value)?.name ?? field.value}`
+                  ? `tier:${findMcpRuntimeTier(tiers, field.value)?.name ?? field.value}`
                   : "default"
             }
             disabled={!resolved}
@@ -3167,7 +3167,7 @@ function McpRuntimeTierField({
               <SelectItem value="default">Deployment defaults</SelectItem>
               {resolved &&
                 field.value &&
-                !findAgentRuntimeTier(tiers, field.value) && (
+                !findMcpRuntimeTier(tiers, field.value) && (
                   <SelectItem value={`tier:${field.value}`}>
                     {field.value} (unavailable)
                   </SelectItem>
@@ -3181,7 +3181,7 @@ function McpRuntimeTierField({
             </SelectContent>
           </Select>
           <FormDescription>
-            Only the tier's CPU and memory settings apply to this MCP server.
+            MCP runtime tiers are managed independently in Settings → MCP.
           </FormDescription>
           <FormMessage />
         </FormItem>

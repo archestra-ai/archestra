@@ -2,11 +2,11 @@ import { createHash } from "node:crypto";
 import {
   ApiError,
   ARCHESTRA_MCP_CATALOG_ID,
-  findAgentRuntimeTier,
+  findMcpRuntimeTier,
   type McpServerResources,
   type ResourcePermissionAction,
   type ResourcePermissionGrant,
-  resolveAgentRuntimeTiers,
+  resolveMcpRuntimeTiers,
 } from "@archestra/shared";
 import {
   and,
@@ -180,10 +180,8 @@ class InternalMcpCatalogModel {
       );
     const organization = await OrganizationModel.getById(organizationId);
     if (!organization) throw new ApiError(400, "Organization not found");
-    const { tiers } = resolveAgentRuntimeTiers(organization.agentRuntimeTiers, {
-      defaultWarmSpares: 0,
-    });
-    const tier = findAgentRuntimeTier(tiers, localConfig.runtimeTier);
+    const { tiers } = resolveMcpRuntimeTiers(organization.mcpRuntimeTiers);
+    const tier = findMcpRuntimeTier(tiers, localConfig.runtimeTier);
     if (!tier)
       throw new ApiError(
         400,

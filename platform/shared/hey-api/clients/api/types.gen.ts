@@ -44983,6 +44983,15 @@ export type GetBootstrapResponses = {
                 allowedDomains: Array<string>;
                 allowedCidrs: Array<string>;
             } | null;
+            mcpRuntimeTiers: {
+                tiers: Array<{
+                    name: string;
+                    cpuRequest: number;
+                    cpuLimit: number | null;
+                    memoryRequestMiB?: number | null;
+                    memoryLimitMiB?: number | null;
+                }>;
+            } | null;
             agentRuntimeTiers: {
                 [key: string]: unknown;
             } | null;
@@ -130652,6 +130661,15 @@ export type GetOrganizationResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -131121,6 +131139,15 @@ export type UpdateAppearanceSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -131358,6 +131385,15 @@ export type UpdateSecuritySettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -131591,6 +131627,15 @@ export type UpdateMcpSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -131823,6 +131868,15 @@ export type UpdateSkillsSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -131836,6 +131890,203 @@ export type UpdateSkillsSettingsResponses = {
 };
 
 export type UpdateSkillsSettingsResponse = UpdateSkillsSettingsResponses[keyof UpdateSkillsSettingsResponses];
+
+export type GetMcpRuntimeTiersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/mcp-runtime-tiers';
+};
+
+export type GetMcpRuntimeTiersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMcpRuntimeTiersError = GetMcpRuntimeTiersErrors[keyof GetMcpRuntimeTiersErrors];
+
+export type GetMcpRuntimeTiersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        tiers: Array<{
+            name: string;
+            cpuRequest: number;
+            cpuLimit: number | null;
+            memoryRequestMiB: number;
+            memoryLimitMiB: number;
+            memoryRequestMiBOverride?: number;
+            memoryLimitMiBOverride?: number;
+        }>;
+    };
+};
+
+export type GetMcpRuntimeTiersResponse = GetMcpRuntimeTiersResponses[keyof GetMcpRuntimeTiersResponses];
+
+export type UpdateMcpRuntimeTiersData = {
+    body: {
+        tiers: Array<{
+            name: string;
+            cpuRequest: number;
+            cpuLimit: number | null;
+            memoryRequestMiB?: number | null;
+            memoryLimitMiB?: number | null;
+            previousName?: string;
+        }>;
+    } | null;
+    path?: never;
+    query?: never;
+    url: '/api/organization/mcp-runtime-tiers';
+};
+
+export type UpdateMcpRuntimeTiersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateMcpRuntimeTiersError = UpdateMcpRuntimeTiersErrors[keyof UpdateMcpRuntimeTiersErrors];
+
+export type UpdateMcpRuntimeTiersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        tiers: Array<{
+            name: string;
+            cpuRequest: number;
+            cpuLimit: number | null;
+            memoryRequestMiB: number;
+            memoryLimitMiB: number;
+            memoryRequestMiBOverride?: number;
+            memoryLimitMiBOverride?: number;
+        }>;
+    };
+};
+
+export type UpdateMcpRuntimeTiersResponse = UpdateMcpRuntimeTiersResponses[keyof UpdateMcpRuntimeTiersResponses];
 
 export type GetAgentRuntimeTiersData = {
     body?: never;
@@ -132282,6 +132533,15 @@ export type UpdateAgentSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -132537,6 +132797,15 @@ export type UpdateConnectionSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -132830,6 +133099,15 @@ export type UpdateIntegrationSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -133072,6 +133350,15 @@ export type UpdateDefaultEnvironmentResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -133308,6 +133595,15 @@ export type UpdateAuthSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -133548,6 +133844,15 @@ export type UpdateKnowledgeSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
+        } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
         } | null;
@@ -133776,6 +134081,15 @@ export type DropEmbeddingConfigResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;
@@ -134367,6 +134681,15 @@ export type CompleteOnboardingResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        mcpRuntimeTiers: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+            }>;
         } | null;
         agentRuntimeTiers: {
             [key: string]: unknown;

@@ -555,6 +555,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOrganization]: {},
   // The tiers' names and sizes: the agent form shows them to anyone who may edit an agent.
   [RouteId.GetAgentRuntimeTiers]: {},
+  [RouteId.GetMcpRuntimeTiers]: {},
+  [RouteId.UpdateMcpRuntimeTiers]: { organizationSettings: ["update"] },
   [RouteId.ListAgentRuntimeTemplates]: {},
   [RouteId.ListBuiltInAgentRuntimeSettings]: {},
   [RouteId.GetAgentRuntimeTemplate]: {}, // Scoped agentRuntime:use check in the handler.

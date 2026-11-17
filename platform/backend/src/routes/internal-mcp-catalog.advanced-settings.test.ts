@@ -277,8 +277,8 @@ describe("internal MCP catalog deployment YAML permission", () => {
       url: `/api/internal_mcp_catalog/${id}/deployment-yaml-preview`,
     });
     expect(preview.statusCode, preview.body).toBe(200);
-    expect(preview.json().yaml).toContain('cpu: "2"');
-    expect(preview.json().yaml).toContain("memory: 4Gi");
+    expect(preview.json().yaml).toContain("cpu: 100m");
+    expect(preview.json().yaml).toContain("memory: 128Mi");
     for (const invalid of ["Missing", " "]) {
       const response = await app.inject({
         method: "PUT",
@@ -341,7 +341,7 @@ describe("internal MCP catalog deployment YAML permission", () => {
       url: `/api/internal_mcp_catalog/${id}/reset-deployment-yaml`,
     });
     expect(reset.statusCode, reset.body).toBe(200);
-    expect(reset.json().yaml).toContain('cpu: "2"');
+    expect(reset.json().yaml).toContain("cpu: 100m");
   });
 
   test("an editor cannot add, change or remove runtime tiers", async ({

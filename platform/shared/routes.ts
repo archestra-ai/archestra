@@ -767,6 +767,8 @@ export const RouteId = {
 
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
+  GetMcpRuntimeTiers: "getMcpRuntimeTiers",
+  UpdateMcpRuntimeTiers: "updateMcpRuntimeTiers",
   GetAgentRuntimeTiers: "getAgentRuntimeTiers",
   GetDefaultModelRuntimeDependents: "getDefaultModelRuntimeDependents",
 

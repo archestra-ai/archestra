@@ -12,7 +12,6 @@ import {
 import type { Transaction } from "@/database";
 import AgentModel from "@/models/agent";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
-import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import { ApiError } from "@/types";
 import {
   agentRuntimeTierDefaults,
@@ -22,7 +21,7 @@ import {
 /**
  * Check a new tier list against the organization's agents and templates, and
  * prepare what the save writes besides the setting itself: a renamed tier is
- * followed by every agent, template, and MCP server that names it, and a removed tier is
+ * followed by every agent and template that names it, and a removed tier is
  * refused while one still does. A reset (`input` null) restores the default
  * list under the same check, so a custom tier still in use cannot vanish
  * from under its agents. The caller runs `write` in the transaction that
@@ -82,63 +81,25 @@ export async function prepareAgentRuntimeTierChange(params: {
         organizationId,
         name: tier.name,
       });
-    const mcpServers = await InternalMcpCatalogModel.countRuntimeTierReferences(
-      { organizationId, name: tier.name },
-    );
-    if (agents + templates + mcpServers > 0) {
+    if (agents + templates > 0) {
       const users = [
         agents > 0 ? `${agents} agent${agents === 1 ? "" : "s"}` : null,
         templates > 0
           ? `${templates} template${templates === 1 ? "" : "s"}`
-          : null,
-        mcpServers > 0
-          ? `${mcpServers} MCP server${mcpServers === 1 ? "" : "s"}`
           : null,
       ]
         .filter(Boolean)
         .join(" and ");
       throw new ApiError(
         400,
-        `Tier ${tier.name} is ${mcpServers > 0 ? "used by" : "the default or scaleup tier of"} ${users}; move them to another tier first`,
+        `Tier ${tier.name} is the default or scaleup tier of ${users}; move them to another tier first`,
       );
     }
   }
-  const resolvedNext = resolveAgentRuntimeTiers(
-    settings,
-    agentRuntimeTierDefaults(),
-  );
-  const resized = current.tiers
-    .filter((before) => {
-      const renamed = renames.find((rename) =>
-        sameAgentRuntimeTierName(rename.from, before.name),
-      );
-      const after = findAgentRuntimeTier(
-        resolvedNext.tiers,
-        renamed?.to ?? before.name,
-      );
-      return (
-        after &&
-        (before.cpuRequest !== after.cpuRequest ||
-          before.cpuLimit !== after.cpuLimit ||
-          before.memoryRequestMiB !== after.memoryRequestMiB ||
-          before.memoryLimitMiB !== after.memoryLimitMiB)
-      );
-    })
-    .map((tier) => tier.name);
   return {
     settings: input === null ? null : settings,
     write: async (tx) => {
-      await InternalMcpCatalogModel.markRuntimeTierResizes({
-        organizationId,
-        names: resized,
-        tx,
-      });
       await AgentModel.renameRuntimeTiers({ organizationId, renames, tx });
-      await InternalMcpCatalogModel.renameRuntimeTiers({
-        organizationId,
-        renames,
-        tx,
-      });
       await AgentRuntimeTemplateModel.renameRuntimeTiers({
         organizationId,
         renames,

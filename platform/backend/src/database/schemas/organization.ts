@@ -1,6 +1,7 @@
 import type {
   ContextualRetrievalMode,
   KnowledgeConnectorOverrides,
+  McpRuntimeTierSettings,
   MessagingChannelOverrides,
   ModelProviderOverrides,
   OrganizationCustomFont,
@@ -496,6 +497,9 @@ const organizationsTable = pgTable("organization", {
    * spares, per tier and per field. NULL or an omitted field keeps the code
    * default (`DEFAULT_AGENT_RUNTIME_TIERS` in @archestra/shared).
    */
+  /** Independent administrator-defined CPU/RAM tiers for MCP containers. */
+  mcpRuntimeTiers: jsonb("mcp_runtime_tiers").$type<McpRuntimeTierSettings>(),
+
   agentRuntimeTiers: jsonb(
     "agent_runtime_tiers",
   ).$type<StoredAgentRuntimeTierSettings>(),

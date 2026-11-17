@@ -51,6 +51,7 @@ export * from "./mcp-extensions";
 export * from "./mcp-human-ruling";
 export * from "./mcp-image-pull-policy";
 export * from "./mcp-orchestrator";
+export * from "./mcp-runtime-tiers";
 export * from "./mcp-server-config";
 export * from "./mcp-server-issues";
 export * from "./mcp-tool-error";

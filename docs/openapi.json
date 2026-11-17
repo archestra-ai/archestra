@@ -167937,6 +167937,60 @@
                           ],
                           "additionalProperties": false
                         },
+                        "mcpRuntimeTiers": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "tiers": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32
+                                  },
+                                  "cpuRequest": {
+                                    "type": "number",
+                                    "minimum": 0.1,
+                                    "maximum": 256
+                                  },
+                                  "cpuLimit": {
+                                    "nullable": true,
+                                    "type": "number",
+                                    "minimum": 0.1,
+                                    "maximum": 256
+                                  },
+                                  "memoryRequestMiB": {
+                                    "nullable": true,
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "exclusiveMinimum": true,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "memoryLimitMiB": {
+                                    "nullable": true,
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "exclusiveMinimum": true,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "cpuRequest",
+                                  "cpuLimit"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "tiers"
+                          ],
+                          "additionalProperties": false
+                        },
                         "agentRuntimeTiers": {
                           "nullable": true,
                           "type": "object",
@@ -168053,6 +168107,7 @@
                         "defaultEnvironmentNamespace",
                         "defaultEnvironmentDescription",
                         "defaultNetworkPolicy",
+                        "mcpRuntimeTiers",
                         "agentRuntimeTiers",
                         "defaultEnvironmentValidationRegex",
                         "defaultEnvironmentTrustedImageRegistries",
@@ -506528,6 +506583,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -506644,6 +506753,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -508259,6 +508369,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -508375,6 +508539,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -509735,6 +509900,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -509851,6 +510070,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -510819,6 +511039,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -510935,6 +511209,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -511900,6 +512175,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -512016,6 +512345,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -512023,6 +512353,713 @@
                     "mcpIdleHibernationEnabled",
                     "newAppsDisabledByDefault",
                     "newAppsLockedByDefault"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "organizationSettings:update"
+          ]
+        }
+      }
+    },
+    "/api/organization/mcp-runtime-tiers": {
+      "get": {
+        "operationId": "getMcpRuntimeTiers",
+        "tags": [
+          "Organization"
+        ],
+        "description": "The organization's independent MCP CPU/RAM tiers\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tiers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 32
+                          },
+                          "cpuRequest": {
+                            "type": "number",
+                            "minimum": 0.1,
+                            "maximum": 256
+                          },
+                          "cpuLimit": {
+                            "nullable": true,
+                            "type": "number",
+                            "minimum": 0.1,
+                            "maximum": 256
+                          },
+                          "memoryRequestMiB": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "memoryLimitMiB": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "memoryRequestMiBOverride": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "memoryLimitMiBOverride": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "cpuRequest",
+                          "cpuLimit",
+                          "memoryRequestMiB",
+                          "memoryLimitMiB"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "tiers"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      },
+      "patch": {
+        "operationId": "updateMcpRuntimeTiers",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Manage independent MCP CPU/RAM tiers\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "nullable": true,
+                "type": "object",
+                "properties": {
+                  "tiers": {
+                    "minItems": 1,
+                    "maxItems": 12,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 32
+                        },
+                        "cpuRequest": {
+                          "type": "number",
+                          "minimum": 0.1,
+                          "maximum": 256
+                        },
+                        "cpuLimit": {
+                          "nullable": true,
+                          "type": "number",
+                          "minimum": 0.1,
+                          "maximum": 256
+                        },
+                        "memoryRequestMiB": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "memoryLimitMiB": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "previousName": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 32
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "cpuRequest",
+                        "cpuLimit"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "tiers"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tiers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 32
+                          },
+                          "cpuRequest": {
+                            "type": "number",
+                            "minimum": 0.1,
+                            "maximum": 256
+                          },
+                          "cpuLimit": {
+                            "nullable": true,
+                            "type": "number",
+                            "minimum": 0.1,
+                            "maximum": 256
+                          },
+                          "memoryRequestMiB": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "memoryLimitMiB": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "memoryRequestMiBOverride": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "memoryLimitMiBOverride": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "cpuRequest",
+                          "cpuLimit",
+                          "memoryRequestMiB",
+                          "memoryLimitMiB"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "tiers"
                   ],
                   "additionalProperties": false
                 }
@@ -513758,6 +514795,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -513874,6 +514965,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -514974,6 +516066,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -515090,6 +516236,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -516250,6 +517397,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -516366,6 +517567,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -517401,6 +518603,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -517517,6 +518773,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -518496,6 +519753,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -518612,6 +519923,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -519622,6 +520934,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -519738,6 +521104,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -520685,6 +522052,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -520801,6 +522222,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
@@ -522952,6 +524374,60 @@
                       ],
                       "additionalProperties": false
                     },
+                    "mcpRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "tiers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32
+                              },
+                              "cpuRequest": {
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "cpuLimit": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0.1,
+                                "maximum": 256
+                              },
+                              "memoryRequestMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "memoryLimitMiB": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "cpuRequest",
+                              "cpuLimit"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "tiers"
+                      ],
+                      "additionalProperties": false
+                    },
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
@@ -523068,6 +524544,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "mcpRuntimeTiers",
                     "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",

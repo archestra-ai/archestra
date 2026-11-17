@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import {
+  McpRuntimeTierSettingsSchema,
+  resolveMcpRuntimeTiers,
+} from "./mcp-runtime-tiers";
 import { LocalConfigSchema, OAuthConfigSchema } from "./mcp-server-config";
 
 describe("OAuthConfigSchema", () => {
@@ -63,5 +67,36 @@ describe("MCP runtime tiers", () => {
     expect(
       LocalConfigSchema.safeParse({ command: "node", runtimeTier }).success,
     ).toBe(false);
+  });
+});
+
+describe("independent MCP tiers", () => {
+  it("resolves MCP defaults independently with CPU/RAM only", () => {
+    expect(resolveMcpRuntimeTiers(null).tiers[0]).toMatchObject({
+      name: "S",
+      cpuRequest: 0.1,
+      cpuLimit: null,
+      memoryRequestMiB: 128,
+      memoryLimitMiB: 512,
+    });
+  });
+  it("rejects requests above limits, duplicate names, and agent-only fields", () => {
+    const tier = {
+      name: "S",
+      cpuRequest: 0.1,
+      cpuLimit: null,
+      memoryRequestMiB: 128,
+      memoryLimitMiB: 512,
+    };
+    for (const tiers of [
+      [{ ...tier, cpuLimit: 0.05 }],
+      [{ ...tier, memoryLimitMiB: 64 }],
+      [tier, { ...tier, name: "s" }],
+      [{ ...tier, workspaceGiB: 10 }],
+      [{ ...tier, pooled: false }],
+    ])
+      expect(McpRuntimeTierSettingsSchema.safeParse({ tiers }).success).toBe(
+        false,
+      );
   });
 });

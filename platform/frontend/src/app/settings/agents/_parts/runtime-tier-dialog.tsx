@@ -1,25 +1,6 @@
-import {
-  AGENT_RUNTIME_TIER_MAX_CPU_LIMIT,
-  AGENT_RUNTIME_TIER_MAX_CPU_REQUEST,
-  AGENT_RUNTIME_TIER_MIN_CPU,
-  type AgentRuntimeTierSettingsInput,
-} from "@archestra/shared";
+import type { AgentRuntimeTierSettingsInput } from "@archestra/shared";
 import { useEffect, useId, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { cn } from "@/lib/utils/tailwind";
-import { PooledHint } from "./pooled-hint";
 import {
   type RuntimeTierFormField,
   type RuntimeTierFormValues,
@@ -30,10 +11,18 @@ import {
   runtimeTierSettingsAfter,
   suggestRuntimeTierName,
   validateRuntimeTierForm,
-} from "./runtime-tier-form";
-
-const MEMORY_LIMIT_DEFAULT_HINT =
-  "The default limit in GiB is max(2x memory request, 2x CPU request, 2x CPU limit).";
+} from "@/components/runtime-tiers/runtime-tier-form";
+import {
+  RuntimeTierField as Field,
+  RuntimeTierResourceFields,
+} from "@/components/runtime-tiers/runtime-tier-resource-fields";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { PooledHint } from "./pooled-hint";
 
 /**
  * Create a tier or edit one. The whole list is saved with the change in it;
@@ -174,117 +163,15 @@ export function RuntimeTierDialog({
               autoFocus
             />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              id={`${id}-cpu-request`}
-              label="CPU request"
-              error={shown("cpuRequest")}
-            >
-              <Input
-                id={`${id}-cpu-request`}
-                type="number"
-                inputMode="decimal"
-                min={AGENT_RUNTIME_TIER_MIN_CPU}
-                max={AGENT_RUNTIME_TIER_MAX_CPU_REQUEST}
-                step="any"
-                placeholder={String(defaultCpuRequest)}
-                value={values.cpuRequest}
-                onChange={(event) => update({ cpuRequest: event.target.value })}
-                onBlur={() => touch("cpuRequest")}
-                aria-invalid={shown("cpuRequest") ? true : undefined}
-                aria-describedby={
-                  shown("cpuRequest") ? `${id}-cpu-request-error` : undefined
-                }
-              />
-            </Field>
-            <Field
-              id={`${id}-cpu-limit`}
-              label="CPU limit"
-              error={shown("cpuLimit")}
-            >
-              <Input
-                id={`${id}-cpu-limit`}
-                type="number"
-                inputMode="decimal"
-                min={AGENT_RUNTIME_TIER_MIN_CPU}
-                max={AGENT_RUNTIME_TIER_MAX_CPU_LIMIT}
-                step="any"
-                placeholder="No limit"
-                value={values.cpuLimit}
-                onChange={(event) => update({ cpuLimit: event.target.value })}
-                onBlur={() => touch("cpuLimit")}
-                aria-invalid={shown("cpuLimit") ? true : undefined}
-                aria-describedby={
-                  shown("cpuLimit") ? `${id}-cpu-limit-error` : undefined
-                }
-              />
-            </Field>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {(["memoryRequestGiB", "memoryLimitGiB"] as const).map((field) => (
-              <Field
-                key={field}
-                id={`${id}-${field}`}
-                label={
-                  field === "memoryRequestGiB"
-                    ? "Memory request (GiB)"
-                    : "Memory limit (GiB)"
-                }
-                error={shown(field)}
-              >
-                <Input
-                  id={`${id}-${field}`}
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step="any"
-                  placeholder={
-                    defaultMemory
-                      ? String(
-                          (field === "memoryRequestGiB"
-                            ? defaultMemory.memoryRequestMiB
-                            : defaultMemory.memoryLimitMiB) / 1024,
-                        )
-                      : undefined
-                  }
-                  value={values[field]}
-                  onChange={(event) => update({ [field]: event.target.value })}
-                  onBlur={() => touch(field)}
-                  aria-invalid={shown(field) ? true : undefined}
-                  aria-describedby={
-                    shown(field)
-                      ? `${id}-${field}-error`
-                      : `${id}-${field}-hint`
-                  }
-                />
-                <p
-                  id={`${id}-${field}-hint`}
-                  className="text-sm text-muted-foreground"
-                >
-                  {field === "memoryRequestGiB" ? (
-                    <span>2x CPU by default</span>
-                  ) : (
-                    <>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <UnstyledButton className="cursor-help text-left underline decoration-dotted underline-offset-4">
-                            2x memory request by default
-                          </UnstyledButton>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
-                          {MEMORY_LIMIT_DEFAULT_HINT}
-                        </TooltipContent>
-                      </Tooltip>
-                      <span className="sr-only">
-                        {" "}
-                        {MEMORY_LIMIT_DEFAULT_HINT}
-                      </span>
-                    </>
-                  )}
-                </p>
-              </Field>
-            ))}
-          </div>
+          <RuntimeTierResourceFields
+            id={id}
+            values={values}
+            update={update}
+            touch={touch}
+            shown={shown}
+            defaultCpuRequest={defaultCpuRequest}
+            defaultMemory={defaultMemory}
+          />
           <Field
             id={`${id}-workspace`}
             label="Disk (GiB)"
@@ -361,32 +248,6 @@ export function RuntimeTierDialog({
         </DialogStickyFooter>
       </form>
     </FormDialog>
-  );
-}
-
-function Field({
-  id,
-  label,
-  error,
-  children,
-}: {
-  id: string;
-  label: string;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id} className={cn(error && "text-destructive")}>
-        {label}
-      </Label>
-      {children}
-      {error && (
-        <p id={`${id}-error`} className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
-    </div>
   );
 }
 

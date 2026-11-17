@@ -11,6 +11,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useAgentRuntimeTiers,
   useDefaultEnvironment,
+  useMcpRuntimeTiers,
 } from "@/lib/organization.query";
 import {
   useAssignableTeams,
@@ -465,13 +466,17 @@ describe("McpCatalogForm enterprise gating", () => {
   });
 
   it("selects existing runtime tiers only for permitted generated deployments", async () => {
+    vi.mocked(useAgentRuntimeTiers).mockReturnValue({
+      data: {
+        tiers: [{ name: "Agent only", cpuRequest: 4, memoryRequestMiB: 8192 }],
+      },
+    } as unknown as ReturnType<typeof useAgentRuntimeTiers>);
     Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
     Element.prototype.setPointerCapture = vi.fn();
     Element.prototype.releasePointerCapture = vi.fn();
     Element.prototype.scrollIntoView = vi.fn();
-    vi.mocked(useAgentRuntimeTiers).mockReturnValue({
+    vi.mocked(useMcpRuntimeTiers).mockReturnValue({
       data: {
-        defaultTier: "Small",
         tiers: [
           {
             name: "Small",
@@ -479,7 +484,6 @@ describe("McpCatalogForm enterprise gating", () => {
             cpuLimit: null,
             memoryRequestMiB: 256,
             memoryLimitMiB: 512,
-            workspaceGiB: 20,
           },
           {
             name: "Large",
@@ -487,11 +491,10 @@ describe("McpCatalogForm enterprise gating", () => {
             cpuLimit: 2,
             memoryRequestMiB: 1024,
             memoryLimitMiB: 2048,
-            workspaceGiB: 40,
           },
         ],
       },
-    } as unknown as ReturnType<typeof useAgentRuntimeTiers>);
+    } as unknown as ReturnType<typeof useMcpRuntimeTiers>);
     vi.mocked(useScopedCapabilities).mockReturnValue({
       data: [
         {
@@ -513,10 +516,10 @@ describe("McpCatalogForm enterprise gating", () => {
       labels: [],
       teams: [],
     };
-    const loadedTiers = vi.mocked(useAgentRuntimeTiers)();
-    vi.mocked(useAgentRuntimeTiers).mockReturnValue({
+    const loadedTiers = vi.mocked(useMcpRuntimeTiers)();
+    vi.mocked(useMcpRuntimeTiers).mockReturnValue({
       data: undefined,
-    } as unknown as ReturnType<typeof useAgentRuntimeTiers>);
+    } as unknown as ReturnType<typeof useMcpRuntimeTiers>);
     const onSubmit = vi.fn();
     const { container, rerender } = render(
       <McpCatalogForm
@@ -532,7 +535,7 @@ describe("McpCatalogForm enterprise gating", () => {
       screen.getByRole("combobox", { name: "Runtime tier" }),
     ).toBeDisabled();
     expect(screen.queryByText(/unavailable/)).not.toBeInTheDocument();
-    vi.mocked(useAgentRuntimeTiers).mockReturnValue(loadedTiers);
+    vi.mocked(useMcpRuntimeTiers).mockReturnValue(loadedTiers);
     rerender(
       <McpCatalogForm
         mode="edit"
@@ -546,6 +549,9 @@ describe("McpCatalogForm enterprise gating", () => {
     await userEvent.click(
       screen.getByRole("combobox", { name: "Runtime tier" }),
     );
+    expect(
+      screen.queryByRole("option", { name: /Agent only/ }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("option", { name: /workspace/ }),
     ).not.toBeInTheDocument();

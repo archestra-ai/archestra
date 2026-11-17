@@ -205,8 +205,8 @@ describe("internal MCP catalog deployment YAML routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json().yaml).toContain("kind: Deployment");
-      expect(response.json().yaml).toContain('cpu: "2"');
-      expect(response.json().yaml).toContain("memory: 4Gi");
+      expect(response.json().yaml).toContain("cpu: 100m");
+      expect(response.json().yaml).toContain("memory: 128Mi");
       const reloaded = await InternalMcpCatalogModel.findById(catalog.id);
       expect(reloaded?.deploymentSpecYaml).toBeNull();
     });

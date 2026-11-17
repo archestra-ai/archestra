@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { AgentRuntimeTierSize } from "./agent-runtime-tiers";
 import { ImagePullPolicySchema } from "./mcp-image-pull-policy";
+import type { McpRuntimeTierSize } from "./mcp-runtime-tiers";
 
 export const OAuthConfigSchema = z
   .object({
@@ -141,7 +141,7 @@ export const EnvFromSchema = z.object({
 
 /** The CPU/RAM portion of a resolved runtime tier; never agent disk or pooling settings. */
 export type McpServerResources = Pick<
-  AgentRuntimeTierSize,
+  McpRuntimeTierSize,
   "cpuRequest" | "cpuLimit" | "memoryRequestMiB" | "memoryLimitMiB"
 >;
 

@@ -641,6 +641,7 @@ const APPA_TUNER_TOOL_SHORT_NAMES = [
   "get_openappa_policy_tests",
   "preview_guardrails_validation_change",
   "list_openappa_yells",
+  "get_openappa_yell",
   "list_openappa_consults",
   "list_openappa_operations",
   "list_llm_interactions",

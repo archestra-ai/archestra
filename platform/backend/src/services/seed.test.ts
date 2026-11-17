@@ -1119,6 +1119,7 @@ describe("APPA tuner", () => {
           "get_openappa_policy_tests",
           "preview_guardrails_validation_change",
           "list_openappa_yells",
+          "get_openappa_yell",
           "list_openappa_consults",
           "list_openappa_operations",
           "list_llm_interactions",
@@ -1133,7 +1134,7 @@ describe("APPA tuner", () => {
         ] as const
       ).map((name) => archestraMcpBranding.getToolName(name)),
     );
-    expect(expectedToolIds).toHaveLength(15);
+    expect(expectedToolIds).toHaveLength(16);
     expect((await AgentToolModel.findToolIdsByAgent(tuner.id)).sort()).toEqual(
       expectedToolIds.sort(),
     );

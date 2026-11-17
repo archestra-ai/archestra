@@ -2,19 +2,17 @@
  * Repro: a local catalog's transport is edited from stdio to streamable-http
  * while more than one backend process holds the install.
  *
- * Each process caches one K8sDeployment per install, and that object pins the
- * catalog row it was built from. Nothing tells a process that the catalog
- * changed, or that another process replaced the pod, so the processes disagree
- * about which transport the pod speaks:
+ * Each process caches one K8sDeployment per install, built from the catalog
+ * row of the moment. The catalog row is only what the NEXT restart will run,
+ * so every process has to agree on what the pod runs NOW:
  *
  * - before the owner restarts the install, a process that loads the install
- *   for the first time reads the NEW catalog and speaks HTTP to a stdio pod;
- * - after the owner restarts it, a process that had the install cached keeps
- *   speaking stdio to an HTTP pod for the rest of its lifetime.
+ *   for the first time must keep speaking stdio to the stdio pod;
+ * - after the owner restarts it on one process, a process that had the
+ *   install cached must follow the new pod to HTTP.
  *
  * Drives the REAL manager and K8sDeployment against one shared database; only
- * the Kubernetes API is faked. These tests assert the correct behavior, so
- * they fail until the cache follows the deployed transport.
+ * the Kubernetes API is faked.
  */
 import type * as k8s from "@kubernetes/client-node";
 import { eq } from "drizzle-orm";
@@ -30,10 +28,34 @@ const NOT_FOUND = { statusCode: 404, message: "not found" };
 
 type Transport = "stdio" | "streamable-http";
 
-/** The one pod behind the install, and the transport its process speaks. */
+/** The one Deployment behind the install, and the transport its pod speaks. */
 class FakeK8sCluster {
   podTransport: Transport = "stdio";
+  /** False for a Deployment created before the transport was recorded on it. */
+  recordsTransport = true;
   readonly createdServices: string[] = [];
+  private generation = 1;
+
+  /** What a restart does: delete the Deployment and create its successor. */
+  replaceDeployment(transport: Transport): void {
+    this.podTransport = transport;
+    this.generation++;
+  }
+
+  readDeployment(): k8s.V1Deployment {
+    return {
+      metadata: {
+        name: DEPLOYMENT_NAME,
+        namespace: NAMESPACE,
+        uid: `deployment-uid-${this.generation}`,
+        annotations: this.recordsTransport
+          ? { "archestra.ai/mcp-transport": this.podTransport }
+          : {},
+      },
+      spec: { replicas: 1 },
+      status: { availableReplicas: 1, readyReplicas: 1 },
+    } as k8s.V1Deployment;
+  }
 
   listPods(): k8s.V1Pod[] {
     return [
@@ -101,7 +123,9 @@ function makeReplica(cluster: FakeK8sCluster): McpServerRuntimeManager {
   const manager = new McpServerRuntimeManager();
   const internals = manager as unknown as ManagerInternals;
   internals.k8sApi = coreApi;
-  internals.k8sAppsApi = {} as k8s.AppsV1Api;
+  internals.k8sAppsApi = {
+    readNamespacedDeployment: vi.fn(async () => cluster.readDeployment()),
+  } as unknown as k8s.AppsV1Api;
   internals.k8sAuthApi = {} as k8s.AuthorizationV1Api;
   internals.k8sNetworkingApi = {} as k8s.NetworkingV1Api;
   internals.k8sCustomObjectsApi = customObjectsApi;
@@ -157,15 +181,20 @@ describe("local MCP server transport edited while several backend processes hold
     // restart runs on ANOTHER process, which drops its own cache entry and
     // rebuilds the pod from the current catalog row.
     await editCatalogTransport(catalog.id, "streamable-http");
-    cluster.podTransport = "streamable-http";
+    cluster.replaceDeployment("streamable-http");
     const restarter = makeReplica(cluster);
     expect(await restarter.usesStreamableHttp(mcpServer.id)).toBe(true);
 
-    // The pod now speaks HTTP only. A process still answering "stdio" attaches
-    // to its stdin, and every call waits out the tool-call timeout.
-    expect(await bystander.usesStreamableHttp(mcpServer.id)).toBe(
-      cluster.podTransport === "streamable-http",
+    // The Deployment watch wakes every process's state refresh.
+    await bystander.refreshAllStates();
+
+    // The pod now speaks HTTP only. A process still answering "stdio" would
+    // attach to its stdin, and every call would wait out the tool-call timeout.
+    expect(await bystander.usesStreamableHttp(mcpServer.id)).toBe(true);
+    expect(await bystander.getHttpEndpointUrl(mcpServer.id)).toBe(
+      await restarter.getHttpEndpointUrl(mcpServer.id),
     );
+    expect(await bystander.getHttpEndpointUrl(mcpServer.id)).toMatch(/\/mcp$/);
   });
 
   test("a process loading the install for the first time keeps the deployed transport until the owner restarts it", async ({
@@ -189,10 +218,31 @@ describe("local MCP server transport edited while several backend processes hold
     await editCatalogTransport(catalog.id, "streamable-http");
 
     const coldReplica = makeReplica(cluster);
-    expect(await coldReplica.usesStreamableHttp(mcpServer.id)).toBe(
-      cluster.podTransport === "streamable-http",
-    );
+    expect(await coldReplica.usesStreamableHttp(mcpServer.id)).toBe(false);
     // It must not put an HTTP Service in front of a pod with no HTTP listener.
     expect(cluster.createdServices).toEqual([]);
+  });
+
+  test("a Deployment created before its transport was recorded follows the catalog", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const cluster = new FakeK8sCluster();
+    cluster.recordsTransport = false;
+    cluster.podTransport = "streamable-http";
+    const catalog = await makeInternalMcpCatalog({
+      name: "Transport Change Catalog Unrecorded",
+      serverType: "local",
+      localConfig: localConfig("streamable-http"),
+    });
+    const mcpServer = await makeMcpServer({
+      catalogId: catalog.id,
+      name: "transport-change-server-unrecorded",
+      deploymentName: DEPLOYMENT_NAME,
+    });
+
+    const replica = makeReplica(cluster);
+    expect(await replica.usesStreamableHttp(mcpServer.id)).toBe(true);
+    expect(await replica.getHttpEndpointUrl(mcpServer.id)).toMatch(/\/mcp$/);
   });
 });

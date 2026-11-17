@@ -31,6 +31,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
 // SPDX-SnippetEnd
 import {
+  useIsGlobalAdmin,
   useOrganization,
   useUpdateMcpSettings,
 } from "@/lib/organization.query";
@@ -47,6 +48,7 @@ const MCP_SETTINGS_PERMISSIONS: Permissions = {
 
 export default function McpSettingsPage() {
   const { data: canEditTiers } = useHasPermissions(MCP_SETTINGS_PERMISSIONS);
+  const { isGlobalAdmin } = useIsGlobalAdmin();
   const { data: organization, isPending } = useOrganization();
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -225,7 +227,9 @@ export default function McpSettingsPage() {
           />
         </DisabledEnterpriseSection>
         {/* SPDX-SnippetEnd */}
-        <McpRuntimeTiersBlock canEdit={canEditTiers === true} />
+        <McpRuntimeTiersBlock
+          canEdit={isGlobalAdmin && canEditTiers === true}
+        />
         <SettingsSaveBar
           hasChanges={hasChanges}
           isSaving={updateMcpSettingsMutation.isPending}

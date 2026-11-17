@@ -77,7 +77,12 @@ export async function prepareMcpRuntimeTierChange(params: {
   const removed = current.tiers.filter(
     (tier) =>
       !renamedAway.has(tier.name.toLowerCase()) &&
-      !findMcpRuntimeTier(next.tiers, tier.name),
+      (!findMcpRuntimeTier(next.tiers, tier.name) ||
+        // Reusing its name does not retain the old tier identity. A valid
+        // swap/chain renames the old tier away and is excluded above.
+        renames.some(
+          (rename) => rename.to.toLowerCase() === tier.name.toLowerCase(),
+        )),
   );
   for (const tier of removed) {
     const count = await InternalMcpCatalogModel.countRuntimeTierReferences({

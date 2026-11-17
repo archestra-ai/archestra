@@ -492,14 +492,14 @@ const organizationsTable = pgTable("organization", {
    */
   defaultNetworkPolicy: jsonb("default_network_policy").$type<NetworkPolicy>(),
 
+  /** Independent administrator-defined CPU/RAM tiers for MCP containers. */
+  mcpRuntimeTiers: jsonb("mcp_runtime_tiers").$type<McpRuntimeTierSettings>(),
+
   /**
    * Administrator overrides of the Agent Runtime tiers' CPU, memory and warm
    * spares, per tier and per field. NULL or an omitted field keeps the code
    * default (`DEFAULT_AGENT_RUNTIME_TIERS` in @archestra/shared).
    */
-  /** Independent administrator-defined CPU/RAM tiers for MCP containers. */
-  mcpRuntimeTiers: jsonb("mcp_runtime_tiers").$type<McpRuntimeTierSettings>(),
-
   agentRuntimeTiers: jsonb(
     "agent_runtime_tiers",
   ).$type<StoredAgentRuntimeTierSettings>(),

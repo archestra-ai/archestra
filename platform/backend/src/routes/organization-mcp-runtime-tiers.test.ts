@@ -138,6 +138,55 @@ describe("Independent MCP runtime tiers", () => {
       memoryLimitMiB: 256,
     });
   });
+  test("renaming onto a deleted in-use name is rejected, but a swap retains both tier identities", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    expect((await patch([tier("A", 0.1), tier("B", 2)])).statusCode).toBe(200);
+    const a = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "local",
+      localConfig: { command: "node", runtimeTier: "a" },
+    });
+    const b = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "local",
+      localConfig: { command: "node", runtimeTier: "b" },
+    });
+    const before = (await OrganizationModel.getById(organizationId))
+      ?.mcpRuntimeTiers;
+    const collision = await patch([tier("B", 0.1, { previousName: "A" })]);
+    expect(collision.statusCode, collision.body).toBe(400);
+    expect(collision.body).toContain("MCP tier B is used by");
+    expect(
+      (await OrganizationModel.getById(organizationId))?.mcpRuntimeTiers,
+    ).toEqual(before);
+    expect(
+      (await InternalMcpCatalogModel.findById(b.id))?.localConfig?.runtimeTier,
+    ).toBe("b");
+    const swap = await patch([
+      tier("B", 0.1, { previousName: "A" }),
+      tier("A", 2, { previousName: "B" }),
+    ]);
+    expect(swap.statusCode, swap.body).toBe(200);
+    expect(
+      (await InternalMcpCatalogModel.findById(a.id))?.localConfig?.runtimeTier,
+    ).toBe("B");
+    expect(
+      (await InternalMcpCatalogModel.findById(b.id))?.localConfig?.runtimeTier,
+    ).toBe("A");
+    expect(
+      await InternalMcpCatalogModel.resolveRuntimeResources(
+        { runtimeTier: "A" },
+        organizationId,
+      ),
+    ).toMatchObject({ cpuRequest: 2 });
+    expect(
+      await InternalMcpCatalogModel.resolveRuntimeResources(
+        { runtimeTier: "B" },
+        organizationId,
+      ),
+    ).toMatchObject({ cpuRequest: 0.1 });
+  });
   test("CPU/RAM resize flags single/shared and empty YAML, not default/custom deployments", async ({
     makeInternalMcpCatalog,
     makeMcpServer,

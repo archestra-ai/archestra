@@ -1,10 +1,10 @@
 ## Policy file
 
-OpenAPPA reads its configuration from an `appa.toml` file.
+OpenAPPA reads its configuration from `appa.toml`.
 
-The file defines rules for the agent's tools. For example, a rule can restrict customer records to company members. These rules belong under `[policy]`.
-
-Some rules need an external component to resolve group membership or remove private data. The `[externals]` section configures how OpenAPPA calls these components and other deployment settings, such as response size limits and timeouts.
+The configuration consists of two primary sections:
+- `[policy]`: Declares the policy version, tool contracts, audience hierarchies, and trust chains.
+- `[externals]`: Configures transport bindings (HTTP endpoints or local executables) for external membership services, annotators, sanitizers, authorities, recorders, and context providers, as well as global timeouts and payload limits.
 
 ```toml
 [policy]
@@ -21,16 +21,16 @@ max_body_bytes = 65536
 
 ## Tool contracts
 
-Each `[[policy.tool]]` entry is a tool contract. It answers these questions:
+Each `[[policy.tool]]` entry defines a contract governing a tool's execution lifecycle:
 
-| Field | What to write | What OpenAPPA does |
+| Lifecycle stage | Contract field | Description |
 |---|---|---|
-| `delta` | Restrictions carried by the tool's result. | Applies those restrictions when the agent receives the result. |
-| `forwards` | Restrictions carried by content the tool sends beyond its arguments. | Adds them to the label that `requires` checks. |
-| `requires` | Conditions the call must satisfy. | Checks them before allowing the call. |
-| `effects` | Side effects of a successful call. | Records them in the trajectory's history. |
+| Pre-dispatch evaluation | `requires` | Preconditions evaluated against the outbound label (`current_label ⊓ forwards`). Call is blocked if unsatisfied. |
+| Pre-dispatch evaluation | `forwards` | Label of content the tool sends beyond its arguments. Combined into the outbound label during pre-dispatch checks. |
+| Post-dispatch update | `delta` | Label transition applied to the trajectory after result delivery. Can narrow audience or lower trust; cannot expand permissions. |
+| Post-dispatch update | `effects` | Side-effect identifiers appended to trajectory history upon successful execution. |
 
-In the example below, the `get_ticket_from_crm` tool contract restricts the trajectory to `internal` and lowers its trust to `suspicious`. The `send_email` tool contract requires the email recipient to belong to the current audience.
+In the example below, `get_ticket_from_crm` restricts the trajectory audience to `internal` and downgrades trust to `suspicious`. The `send_email` contract requires that all email recipients belong to the trajectory's current audience:
 
 ```toml
 [[policy.tool]]
@@ -46,26 +46,26 @@ delta = {}
 effects = ["egress"]
 ```
 
-| Field | Configuration rule |
+| Field | Description |
 |---|---|
-| `name` | The tool name, optionally with an argument selector. |
-| `description` | Optional description of the tool. Annotators can receive this description. |
-| `parameters` | JSON Schema for the tool arguments. Some input mappings require it. |
-| `tags` | Names used to select applicable authorities and sanitizers. See [Tags](#tags). |
-| `delta` | Can restrict the audience or lower trust. It cannot make the trajectory less restricted. |
-| `forwards` | Same shape as `delta`, with literal entries only: no `$<argument_name>` placeholders. |
-| `requires` | Audience, trust, effects, or attention requirements for the call. |
-| `effects` | Effect names recorded after successful execution. Declare all relevant side effects. |
-| `annotator` | A registered component that supplies the complete annotation for each call. |
-| `recorder` | A [recorder](references/contracts/annotators.md#recorders) that receives each released call's records. |
+| `name` | Tool name, optionally with an argument selector. |
+| `description` | Optional description of the tool. Forwarded to annotators. |
+| `parameters` | JSON Schema for tool arguments. Required when extracting specific arguments for annotators. |
+| `tags` | Category tags used to route blocked calls to matching authorities and sanitizers. See [Tags](#tags). |
+| `delta` | Label transition for tool results. Can narrow audience or lower trust; cannot expand permissions. |
+| `forwards` | Label of content the tool sends beyond its arguments. Accepts only literal entries (no `$<argument>` placeholders). |
+| `requires` | Preconditions for executing the call: audience, trust, effects, or attention requirements. |
+| `effects` | Side-effect identifiers recorded in trajectory history after successful execution. |
+| `annotator` | Name of a registered [annotator](references/contracts/annotators.md#annotators) that dynamically computes the contract for each call. |
+| `recorder` | Name of a registered [recorder](references/contracts/annotators.md#recorders) that receives audit records for released calls. |
 
-An omitted `delta` or `forwards` adds no restriction. An omitted `requires` adds no requirement.
+If omitted, `delta` and `forwards` add no restrictions, and `requires` imposes no preconditions.
 
-Only one source of contract rules is allowed: static `delta`, `forwards`, `requires`, and `effects` fields, or an `annotator`. Combining them causes a load error.
+A tool contract uses either static fields (`delta`, `forwards`, `requires`, `effects`) or an `annotator`. Beside an annotator, a tool can declare only a [label floor](references/contracts/annotators.md#annotators); any other static field causes a configuration load error.
 
-OpenAPPA checks `requires` before the call runs. The check reads the label of what the call sends: the trajectory's current label, combined with the tool's `forwards`. The `delta` is not part of this label. It labels only the result, so it never makes a requirement fail.
+OpenAPPA evaluates `requires` before dispatching a tool call. The engine checks the outbound flow label: the trajectory's current label combined with the tool's `forwards`. The tool's `delta` applies only to the returned result, so it does not affect pre-call evaluation.
 
-Use `forwards` when the tool itself sends content that its arguments do not carry. In the example below, `mail_report` reads a stored report on the server and mails it. The report is `internal`, so a mail to an external recipient fails `contains`, whatever the trajectory has read:
+Use `forwards` when a tool itself sends content that its arguments do not carry. In the example below, `mail_report` reads a server-side report and emails it. Because the report is marked `internal`, mailing it to an external recipient fails the `contains` check regardless of what data the trajectory previously read:
 
 ```toml
 [[policy.tool]]
@@ -77,34 +77,34 @@ requires = { audience = { contains = ["$to"] } }
 
 ### Tool names
 
-A policy can use a host-native name or a canonical tool id. Canonical ids have three segments: `<family>/<namespace>/<tool>`. The family is `mcp`, `host`, or `agent`. Each segment matches `[A-Za-z0-9_.-]+`. A namespace segment never contains `__`.
+Policies identify tools using either host-native names or canonical tool IDs. Canonical IDs use a three-segment format: `<family>/<namespace>/<tool>`. The family must be `mcp`, `host`, or `agent`. Each segment matches `[A-Za-z0-9_.-]+`. Namespace segments must not contain `__`.
 
-| Family | Names | Example |
-|---|---|---|
-| `mcp` | One tool of one MCP server. The namespace is the server. | `mcp/github/create_issue` |
-| `host` | A tool the host itself provides. The namespace is the host. | `host/claude-code/Bash` |
-| `agent` | An agent called as a tool. The namespace is where the agent lives. | `agent/kagent/log-analyst` |
+| Family | Namespace | Description | Example |
+|---|---|---|---|
+| `mcp` | Server name | A tool provided by an MCP server. | `mcp/github/create_issue` |
+| `host` | Host name | A tool provided natively by the host harness. | `host/claude-code/Bash` |
+| `agent` | Deployment namespace | A subagent invoked as a tool. | `agent/kagent/log-analyst` |
 
-`appa/execute_remedy_plan` is the runtime's own control tool, the one member of the `appa` family. A policy cannot declare it: the runtime recognizes it before any contract, and a `[[policy.tool]]` entry that names it refuses the policy at load. The wildcard entry `name = "*"` is not a canonical id; it covers every call without a matching explicit tool contract (see [the wildcard](#handling-undeclared-tools)).
+`appa/execute_remedy_plan` is the runtime's built-in control tool and the sole member of the `appa` family. Policies cannot declare it; the runtime handles it directly, and any `[[policy.tool]]` entry referencing it causes a configuration load error. The wildcard entry `name = "*"` is not a canonical ID; it acts as a fallback for calls without a matching explicit contract (see [Handling undeclared tools](#handling-undeclared-tools)).
 
-The agent keeps using its host's tool names. A plugin implements the host lifecycle; the runtime's adapter translates tool identities and events. The runtime records canonical ids, even when the policy uses native names. Where it tells the model to run a tool, it uses the host's dispatch spelling. Claude Code and kagent have these mappings:
+Agents continue using host-native tool names. The runtime adapter maps native tool invocations to canonical IDs for policy evaluation and audit logging, and formats tool names using host syntax when returning suggestions to the agent. Claude Code and kagent use the following mappings:
 
 | Adapter | Raw tool spelling | Canonical tool id |
 |---|---|---|
 | Claude Code | `mcp__<server>__<tool>` — split at the first `__` after `mcp__` | `mcp/<server>/<tool>` |
-| Claude Code | A built-in tool: `Bash`, `Read`, `Edit`, `Agent`, … | `host/claude-code/<name>` |
-| Claude Code | `mcp__appa__execute_remedy_plan`, the remedy tool of the runtime's own `appa` MCP server | `appa/execute_remedy_plan` |
-| kagent | A tool discovered from a configured MCP endpoint | `mcp/<source-id>/<tool>` |
-| kagent | An agent called as a tool | `agent/<namespace>/<agent>` |
-| kagent | A kagent built-in, such as `ask_user`, `load_memory`, `save_memory`, `prefetch_memory`, or a skill tool | `host/kagent/<name>` |
-| kagent | The entrypoint gates | `host/kagent-gate/code_execution`, `host/kagent-gate/memory_persist` |
-| kagent | The remedy tool | `appa/execute_remedy_plan` |
+| Claude Code | Built-in tools: `Bash`, `Read`, `Edit`, `Agent`, … | `host/claude-code/<name>` |
+| Claude Code | `mcp__appa__execute_remedy_plan` (remedy tool for the runtime's internal `appa` server) | `appa/execute_remedy_plan` |
+| kagent | Tools discovered from configured MCP endpoints | `mcp/<source-id>/<tool>` |
+| kagent | Delegated subagents invoked as tools | `agent/<namespace>/<agent>` |
+| kagent | Built-in tools: `ask_user`, `load_memory`, `save_memory`, `prefetch_memory`, or skill tools | `host/kagent/<name>` |
+| kagent | Entrypoint gates | `host/kagent-gate/code_execution`, `host/kagent-gate/memory_persist` |
+| kagent | Remedy tool | `appa/execute_remedy_plan` |
 
-Claude Code names such as `Bash` and `mcp__github__create_issue` identify precise tools. An unqualified kagent rule such as `read_secret` applies to that native name across MCP servers and kagent's own tools. It does not cover remote-agent delegation. A newly discovered tool can use an existing rule without restarting the trajectory.
+In Claude Code, names like `Bash` or `mcp__github__create_issue` identify specific tools. In kagent, an unqualified rule such as `name = "read_secret"` matches that native tool name across all connected MCP servers and built-in tools (excluding remote-agent delegation).
 
-A host that embeds the runtime brings its own tool identification. The adapter identifies every call's canonical id. The runtime spells a tool back through the same adapter. See Add to your agent.
+Custom hosts embedding the runtime implement an adapter to map incoming calls to canonical IDs and format tool names for the model. See Add to your agent.
 
-Use `server` when a rule should apply to one MCP connection:
+Use `server` when a rule must apply strictly to a single MCP connection:
 
 ```toml
 [[policy.tool]]
@@ -113,11 +113,15 @@ server = "demo-tools"
 delta = { trust = "suspicious" }
 ```
 
-This rule identifies `mcp/demo-tools/read_secret`. Deployment-level `[aliases]` maps a policy's namespace to a list of identities the deployment reports. `aliases.mcp` maps a server name to configured connection identities, such as `databricks = ["genie", "sql"]`; every rule under that name then covers each listed connection. `aliases.host` maps a battery's host namespace to the host that serves the same tools, such as `claude-code = ["archestra"]`; every `host/claude-code/...` rule then names `host/archestra/...`. Aliases resolve after composition, so a root rule still matches before a battery rule for the same tool. APPA does not infer a provider from a hostname or server metadata. A server qualifier cannot repair duplicate host dispatch names; the host must distinguish those tools.
+This rule matches `mcp/demo-tools/read_secret`. Deployment-level `[aliases]` maps policy namespaces to deployment-specific identifiers:
+- `aliases.mcp` maps a server name to configured connection identities (e.g. `databricks = ["genie", "sql"]`), expanding rules under that name to cover each connection.
+- `aliases.host` maps a battery's host namespace to the host serving those tools (e.g. `claude-code = ["archestra"]`), translating `host/claude-code/...` rules to `host/archestra/...`.
+
+Aliases resolve after policy composition, preserving root rule precedence over battery rules. OpenAPPA does not infer providers from hostnames or connection metadata. If a host exposes duplicate dispatch names, the host itself must disambiguate them.
 
 #### Canonical tools
 
-Different harnesses spell one capability differently. Claude Code runs a shell command as `Bash` with a `command` argument. Codex runs it as `exec_command` with a `cmd` argument. A rule can name the canonical tool `tool/<namespace>/<tool>` once, and `aliases.tool` binds that canonical tool to each client tool:
+Different agent harnesses use different names and argument schemas for the same underlying capability. For example, Claude Code executes shell commands using `Bash` with a `command` argument, while other tools may use `exec_command` with a `cmd` argument. A policy can define rules once for a canonical tool `tool/<namespace>/<tool>`, and `aliases.tool` binds that canonical tool to client-specific tools:
 
 ```toml
 [aliases.tool.coding]
@@ -131,31 +135,31 @@ name = "tool/coding/shell(command:*.env*)"
 delta = { audience = ["self"] }
 ```
 
-Composition replaces each `tool/...` rule with one copy per client tool, at the position of the original rule. Each copy names the client tool, so the example gives `host/claude-code/Bash(command:*.env*)` and `host/codex/exec_command(cmd:*.env*)`. `args` maps each canonical argument to the client's name for it. The copy renames every argument that the rule reads: in its selector, in a `$argument` recipient, in an `@provider:.../$argument` placeholder, and in `parameters`. The runtime never rewrites a call. It evaluates the tool and the arguments as the client sent them, so call digests and annotation evidence bind the exact call.
+During composition, OpenAPPA replaces each `tool/...` rule with one concrete rule per mapped client tool at the same position. Each copy references the client tool name (e.g. `host/claude-code/Bash(command:*.env*)` and `host/codex/exec_command(cmd:*.env*)`). The `args` table maps canonical argument names to client-specific argument names, rewriting argument selectors, `$argument` recipients, `@provider:.../$argument` placeholders, and `parameters` schemas.
 
-`aliases.mcp` and `aliases.host` then resolve the copies like any other rule. Under `aliases.host = { claude-code = ["archestra"] }`, the first copy names `host/archestra/Bash(command:*.env*)`.
+The runtime never rewrites tool calls. It evaluates tools and arguments exactly as sent by the client, ensuring call digests and audit records remain cryptographically bound to the raw invocation.
 
-A battery MAY declare `aliases.tool`, and a target MUST be in a namespace that the battery covers. Only the root declares `aliases.mcp` and `aliases.host`. The loader refuses the configuration when:
+`aliases.mcp` and `aliases.host` then resolve the generated rules. Under `aliases.host = { claude-code = ["archestra"] }`, the first rule resolves to `host/archestra/Bash(command:*.env*)`.
 
-- a rule reads an argument that one of its targets does not map;
-- one target maps two canonical arguments to one argument;
-- two maps bind the same client tool, after `aliases.mcp` and `aliases.host` resolve it;
-- a map binds a canonical tool to no client tool;
-- a map names a canonical namespace that no rule names, for example a battery whose map names a battery that is not included.
+The root policy and any battery MAY declare `aliases.tool`, including for a namespace another battery writes rules for. Only root policies may declare `aliases.mcp` and `aliases.host`. The loader rejects the configuration if:
+- A rule references an argument that a target does not map.
+- A target maps multiple canonical arguments to the same client argument.
+- Two mappings in one canonical namespace bind the same client tool after alias resolution.
+- A canonical tool mapping defines no client targets.
 
-A `tool/...` rule that no map binds is inactive. `confined_results` does not take canonical names. A target that sets `confined = true` adds its client tool to `confined_results`.
+Two canonical namespaces MAY map the same client tool. Their rules then apply in include order, and the first matching rule wins. A `tool/...` rule with no alias binding remains inactive, and a mapping for a namespace no rule names binds nothing; OpenAPPA logs both at load. `confined_results` accepts only client-specific tool names; setting `confined = true` on a target alias automatically adds that client tool to `confined_results`.
 
-An annotator, or a context provider, receives the native call. The `audiences` placeholders and `inputs` of an `[[policy.annotator]]` name native arguments, and a map does not rename them. A code annotator that reads an argument by its canonical name does not find it in a call from a client that uses another name. Its result for that call is what its own code does with a missing argument. A model-backed annotator reads the whole call, so the argument name does not change its input.
+Annotators and context providers always receive the native call. Argument placeholders in `audiences` and `inputs` refer to native argument names and are not translated by alias mappings. Code-based annotators that expect canonical argument names will receive missing arguments when invoked by clients with different native schemas. Model-backed annotators inspect the entire call object and adapt to native schemas.
 
-kagent derives a default source ID from the exact configured endpoint URL. Native rules do not require that ID. Discovery supplies evidence, not permission: known tools need policy coverage, unavailable sources remain unknown, and later calls still pass runtime enforcement. A trajectory keeps the tool identities it accepted, and decides under its `deployment`'s current policy.
+kagent derives a default source ID from the configured endpoint URL. Native rules do not require that ID. Tool discovery observes available tools but does not grant authority: discovered tools still require policy coverage, and all calls undergo runtime policy evaluation. Trajectories retain accepted tool identities and evaluate them against the active deployment policy.
 
 Native names also work in `confined_results`, `assumed_tools`, and `provider_run_tools`. Coverage reports distinguish a rule spanning servers from an observed concrete tool. Overlapping declarations with incompatible provider-run execution settings are rejected.
 
-The adapter identifies which calls start a child trajectory (Claude Code's `Agent`, a kagent agent called as a tool). A policy does not declare it.
+Adapters automatically detect tool calls that spawn child trajectories (such as Claude Code's `Agent` or kagent delegated agents); policies do not need to declare spawn behavior.
 
 ### Tags
 
-Tags connect tools to the authorities that can review their calls and the sanitizers that can transform their data. For example, this contract gives a ticket tool the `support` tag:
+Tags route blocked tool calls to matching authorities and sanitizers. For example, this contract assigns the `support` tag to a CRM tool:
 
 ```toml
 [[policy.tool]]
@@ -164,15 +168,15 @@ tags = ["support"]
 delta = { audience = ["internal"] }
 ```
 
-An authority or sanitizer with `tags = ["support"]` applies to tools with that tag. If it lists several tags, one matching tag is enough. Without tags, an authority or sanitizer is not restricted to a particular set of tools. Its permissions still limit what it can approve or transform.
+An authority or sanitizer specifying `tags = ["support"]` applies to any tool carrying that tag. If multiple tags are listed, matching any single tag suffices. If an authority or sanitizer omits `tags`, it applies across all tools (subject to its configured permissions).
 
-Attention approvals use a different rule: OpenAPPA selects authorities by `permits.attention`, regardless of their tags. See [Attention](references/contracts/labels.md#attention).
+Attention approvals follow a different mechanism: OpenAPPA matches authorities for attention marks by `permits.attention`, ignoring tool tags. See [Attention](references/contracts/labels.md#attention).
 
 ### Pattern matching
 
-A policy can declare several contracts for one tool. OpenAPPA checks them in declaration order and selects the first matching contract. This includes overlapping native and canonical names; canonical spelling does not give a rule priority.
+A policy can declare multiple contracts for the same tool. OpenAPPA evaluates contracts sequentially in declaration order and selects the first match. This applies across overlapping native and canonical names; canonical names receive no special precedence.
 
-In the example below, the first contract matches a `path` string that starts with `/docs/` and declares its result as `public`. The second contract covers all other calls to `read_file` and declares their results as `internal`.
+In the example below, the first contract matches `path` values starting with `/docs/` and labels results as `public`. The second contract matches all other calls to `read_file` and labels results as `internal`:
 
 ```toml
 [[policy.tool]]
@@ -184,9 +188,9 @@ name = "read_file"
 delta = { audience = ["internal"] }
 ```
 
-A selector checks top-level string arguments and arrays of strings. Put it in parentheses after the tool name, with conditions written as `argument:pattern` and separated by commas. List each argument only once, in any order.
+Argument selectors filter on top-level string arguments and arrays of strings. Specify selectors in parentheses after the tool name using comma-separated `argument:pattern` pairs. Each argument may appear only once, in any order.
 
-Every condition must match the full value of its argument. An array argument matches when it is not empty and every element is a string that matches the pattern, so `edit_agent(teams:*)` selects a call that sends a list of teams. If an argument is missing, is an empty array, or is any other value, the selector does not match.
+Each pattern must match the entire argument value. For array arguments, the selector matches only if the array is non-empty and every element matches the pattern (for example, `edit_agent(teams:*)` matches any non-empty array of strings). If an argument is missing, null, an empty array, or a non-string type, the selector does not match.
 
 ```toml
 [[policy.tool]]
@@ -195,7 +199,7 @@ requires = { trust = "trusted" }
 delta = {}
 ```
 
-Use `*` to match any sequence of characters, including an empty sequence:
+Use `*` to match any sequence of characters (including an empty sequence):
 
 | Pattern | Matches | Does not match |
 |---|---|---|
@@ -203,22 +207,35 @@ Use `*` to match any sequence of characters, including an empty sequence:
 | `/docs/*` | `/docs/guide.md`, `/docs/setup/install.md` | `/private/guide.md` |
 | `*.md` | `guide.md`, `/docs/guide.md` | `guide.txt` |
 
-`*` also matches `/`, `?` and `#`. Do not put it inside a URL host: `https://*.example.com/*` also matches `https://attacker.test/?x=.example.com/`. End each host with `/` and list each subdomain, as in `https://docs.example.com/*`. OpenAPPA logs a warning at load for a pattern with `*` inside a URL host.
+Because `*` matches `/`, `?`, and `#`, avoid using wildcards within URL hostnames: `https://*.example.com/*` matches `https://attacker.test/?x=.example.com/`. Instead, terminate each hostname with `/` and specify subdomains explicitly (e.g. `https://docs.example.com/*`). OpenAPPA logs a warning at policy load if a wildcard appears within a URL host pattern.
+
+#### Match one of several values
+
+Use `|` to separate alternatives in a pattern. A string argument matches if it satisfies any alternative. An array argument matches if every element satisfies at least one alternative (different elements can match different alternatives). Each alternative must match the full value and may contain `*`.
+
+For example, this contract matches Python package installations where all entries in `hosts` come from designated PyPI domains:
+
+```toml
+[[policy.tool]]
+name = "install(hosts:pypi.org|files.pythonhosted.org)"
+delta = {}
+```
+
+A call whose `hosts` array includes `evil.example` does not match, because that element satisfies no alternative. Specify hostnames explicitly whenever a wildcard could match untrusted domains.
 
 #### Match special characters literally
 
-Some characters have a special meaning in a selector. For example, `*` matches any text, and a comma separates argument conditions.
+To match special characters (`*`, `)`, `,`, `\`, `|`) literally, escape them with a backslash:
 
-To match the character itself, put a backslash before it:
-
-| Character to match | Write in the pattern |
+| Character to match | Escape sequence |
 |---|---|
 | Asterisk (`*`) | `\*` |
 | Closing parenthesis (`)`) | `\)` |
 | Comma (`,`) | `\,` |
 | Backslash (`\`) | `\\` |
+| Pipe (`\|`) | `\|` |
 
-For example, this contract matches a `search` call whose `query` argument is exactly `a,b`:
+For example, this contract matches a `search` call where `query` is exactly `a,b`:
 
 ```toml
 [[policy.tool]]
@@ -226,29 +243,15 @@ name = 'search(query:a\,b)'
 delta = {}
 ```
 
-The backslash tells OpenAPPA that the comma belongs to the query value. It does not separate two argument conditions.
+Use single-quoted string literals in TOML to preserve backslashes verbatim. In double-quoted strings, backslashes must be doubled (`"search(query:a\\,b)"`).
 
-Use single quotes around the name to preserve backslashes as written. If you use double quotes, TOML requires each backslash to be doubled. These two lines mean the same thing:
+Only the five escape sequences listed above are supported. Other escape sequences cause a configuration load error.
 
-```toml
-[[policy.tool]]
-# Single quotes:
-name = 'search(query:a\,b)'
-```
-
-```toml
-[[policy.tool]]
-# Equivalent form with double quotes:
-name = "search(query:a\\,b)"
-```
-
-Only the four escapes listed above are supported. Other escapes cause a policy load error.
-
-OpenAPPA selects a contract before it validates the contract's `parameters` schema. A schema error does not select a later contract. Rewritten arguments select their own matching contract. See [Sanitizers](references/contracts/sanitizers-authorities.md#sanitizers) for rewrite rules.
+OpenAPPA selects a contract before validating its `parameters` schema. If schema validation fails, the call is rejected; the engine does not fall through to subsequent contracts. If a sanitizer rewrites call arguments, the new arguments undergo fresh contract selection. See [Sanitizers](references/contracts/sanitizers-authorities.md#sanitizers).
 
 ### Handling undeclared tools
 
-The tool name `"*"` covers calls without a matching explicit tool contract, including calls to declared tools whose argument selectors do not match. The current format requires an annotator for this entry:
+The wildcard tool contract `name = "*"` routes any call that lacks an explicit matching contract through a dynamic annotator. This includes calls to declared tools whose argument selectors did not match:
 
 ```toml
 [[policy.annotator]]
@@ -260,13 +263,13 @@ name = "*"
 annotator = "classify_unknown_tool"
 ```
 
-Declare and bind `classify_unknown_tool` as shown in [Annotators](references/contracts/annotators.md#annotators). The wildcard cannot contain static `delta`, `requires`, or `effects` fields. It also cannot contain metadata or argument selectors.
+A policy may declare at most one wildcard entry. The wildcard contract requires an `annotator`. Beside it, the wildcard can declare only a [label floor](references/contracts/annotators.md#annotators); it cannot define other static fields, metadata, or argument selectors.
 
-A policy can contain one wildcard entry. Explicit tool contracts take precedence over it, regardless of where the wildcard appears in the policy. If none of a tool's argument selectors match, the call falls through to the wildcard annotator. A matched contract's schema error still refuses the call; it does not fall through. Without a wildcard, a call with no matching contract is refused before execution.
+Explicit tool contracts always take precedence over the wildcard, regardless of declaration order. If an explicit contract matches but fails argument schema validation, the engine rejects the call rather than falling back to the wildcard. If no wildcard is configured, any call lacking a matching contract is denied immediately.
 
 ## Include policy files
 
-Use `include` to reuse configuration from other files. It belongs at the start of the file, outside `[policy]` and `[externals]`. This example loads declarations from `battery.toml` alongside the root file's settings:
+Use `include` to compose modular policy fragments into a root configuration. Declare `include` at the top of `appa.toml`, outside `[policy]` and `[externals]`:
 
 ```toml
 include = ["battery.toml"]
@@ -279,7 +282,7 @@ timeout_ms = 2000
 max_body_bytes = 65536
 ```
 
-An entry can also name every policy file in one folder, such as `mcp/*.toml`. Then each team can add its own file without a change to the root:
+Entries can also use wildcards to include all policy files in a directory (e.g. `mcp/*.toml`), allowing teams to add modular policies without modifying the root configuration:
 
 ```toml
 include = [
@@ -288,28 +291,26 @@ include = [
 ]
 ```
 
-In such an entry, `*` matches any run of characters in a file name. Only the file name can hold `*`, and it MUST end in `.toml`. The matching files load at the entry's position, in file-name order, as if `include` listed each one. The following rules apply to such an entry:
+Wildcard paths must place `*` strictly in the filename portion and must end with `.toml`. Matching files are loaded at that position in alphabetical order:
+- Only regular files match. Hidden files, directories, and symlinks are ignored.
+- Target directories must reside within the root configuration directory. Directory traversal (`..`) is prohibited.
+- Missing directories match zero files.
+- The root policy file never matches its own wildcard pattern.
+- Explicitly named files load only at their specific entry and are not duplicated by wildcards.
+- Hosted policies cannot use directory wildcards.
 
-- Only a regular file matches. A hidden file, a folder and a symbolic link do not match.
-- The folder MUST be the root file's folder or a folder in it, after OpenAPPA resolves symbolic links. The entry MUST NOT contain `..`.
-- A folder that does not exist matches no file.
-- The root file does not match its own entry.
-- A file that another entry names on its own loads only at that entry. Two such entries cannot match the same file.
-- A hosted policy cannot use such an entry, because no files are beside it.
+OpenAPPA evaluates root declarations before included files, processing included files in the order listed under `include`:
+- Included files cannot include other files.
+- Included files cannot override deployment-wide settings. The sole exception is `confined_results` under `[policy.deployment]`: included files may append tools they declare. Included files must not set `[policy.deployment] hint`.
+- Root declarations for `[[policy.annotator]]` or `[[policy.sanitizer]]` replace included components sharing the same name. Omitted fields in the replacement are not inherited.
+- Multiple included files cannot declare the same annotator name.
+- Multiple files cannot configure the same external component name within the same category (e.g. two `[externals.sanitizers.clean]` blocks).
 
-OpenAPPA checks declarations in the root file first, then declarations from included files in the order listed by `include`. The following rules apply:
-
-- An included file cannot include another file.
-- An included file cannot replace settings that apply to the whole deployment. The one exception is `confined_results` under `[policy.deployment]`: an included file can list tools it declares itself, and the names join the root's list. An included file that sets `[policy.deployment] hint` is refused.
-- A root `[[policy.annotator]]` replaces an included annotator with the same name. A root `[[policy.sanitizer]]` replaces an included sanitizer with the same name. Fields omitted from the replacement are not inherited.
-- Two included files cannot declare the same annotator.
-- Two files cannot configure the same external component name within the same kind, such as two `[externals.sanitizers.clean]` sections.
-
-See Batteries for reusable policy files.
+See Batteries for pre-packaged policy bundles.
 
 ## Deployment coverage
 
-These settings describe what the agent integration can control: which tool results it can withhold and whether it can keep a child agent's data separate from the parent's:
+Deployment settings declare the interception and confinement capabilities supported by the agent integration:
 
 ```toml
 [policy.deployment]
@@ -321,13 +322,14 @@ name = "get_ticket_from_crm"
 delta = { audience = ["internal"] }
 ```
 
-`confined_results` lists tools whose results the integration can withhold from the agent. A restricted result from a listed tool that declares effects offers a withhold plan. The agent selects this plan before the tool runs.
+`confined_results` lists tools whose result payloads the harness can intercept and withhold from the agent context. If a tool in `confined_results` declares effects and produces a restricted result, OpenAPPA can offer a withhold plan before invocation.
 
-`context_control = true` declares that the integration can keep a child agent's data hidden from the parent and withhold the child's answer until OpenAPPA allows it. This lets OpenAPPA check or clean the answer before the parent reads it. The integration must implement this behavior; the setting alone does not provide it.
+`context_control = true` asserts that the integration can isolate child agent execution and withhold return payloads until approved by policy. This enables pre-return validation and sanitization. The underlying harness must implement context isolation; setting this flag asserts capability but does not synthesize it.
 
-- A `tool_output` sanitizer requires either a tool listed in `confined_results` or a child agent's answer controlled through `context_control`.
-- Every tool in `confined_results` must have a policy contract. A wildcard contract also satisfies this requirement.
-- Some tools run inside the model provider's service. The integration cannot intercept their results before the model reads them. These tools can declare only static `delta` fields. They cannot declare requirements, annotators, or argument selectors, and cannot appear in `confined_results`.
+Constraints:
+- A `tool_output` sanitizer requires either a tool listed in `confined_results` or a child return governed by `context_control = true`.
+- Every tool listed in `confined_results` must have a corresponding policy contract (explicit or wildcard).
+- Provider-executed tools (tools executed within remote model infrastructure where outputs cannot be intercepted prior to inference) support static `delta` declarations only. They cannot declare preconditions, annotators, or argument selectors, and must not appear in `confined_results`.
 
-OpenAPPA rejects configurations that require controls the integration does not support. See integration configuration for the integration's responsibilities.
+OpenAPPA rejects configurations requiring integration capabilities that the deployment does not provide. See integration configuration.
 

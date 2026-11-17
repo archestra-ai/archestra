@@ -16,6 +16,10 @@ fi
 # Prefer that alias so a fresh pod opens directly into the native TUI.
 unset ANTHROPIC_API_KEY
 
+# Name each request's class in a header, so Guardrails tell Claude Code's side
+# requests from its agent loop.
+export CLAUDE_CODE_GATEWAY_HINT_HEADERS=1
+
 # Keep every tool declared on each request: with tool search on, Guardrails
 # refuse a call to a tool that Claude Code has not loaded yet.
 if [[ "${ARCHESTRA_AGENT_RUNTIME_OPENAPPA:-0}" == "1" ]]; then

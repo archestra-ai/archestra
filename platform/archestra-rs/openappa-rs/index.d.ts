@@ -384,7 +384,7 @@ export declare function parseOpenappaDeclarations(content: string): Promise<Poli
  * `contract` change ever moves in a direction other than `unknown`.
  */
 export interface PolicyContractChange {
-  kind: 'contract' | 'trust_floor' | 'includes' | 'prior' | 'no_prior' | 'attention' | 'delta' | 'forwards' | 'emits' | 'parameters' | 'tags' | 'description' | 'annotator' | 'argument_predicates' | 'selection' | 'provider_run' | 'trust_chain' | 'authorities' | 'sanitizers' | 'audience' | 'deployment' | 'bindings'
+  kind: 'contract' | 'trust_floor' | 'includes' | 'prior' | 'no_prior' | 'attention' | 'delta' | 'forwards' | 'emits' | 'parameters' | 'tags' | 'description' | 'annotator' | 'argument_predicates' | 'selection' | 'provider_run' | 'trust_chain' | 'authorities' | 'sanitizers' | 'audience' | 'deployment' | 'bindings' | 'recorder'
   direction: 'tighten' | 'loosen' | 'mixed' | 'unknown'
   before?: string
   after?: string

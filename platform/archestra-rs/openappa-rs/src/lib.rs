@@ -1333,7 +1333,7 @@ impl State {
             result_presentation_options(input, &call),
         )
         .await;
-        let decision = wire(&outcome.decision)?;
+        let decision = session::labelled_wire(&outcome.decision, outcome.label)?;
         self.store
             .complete_operation(operation.clone(), decision.clone(), receipts.owner())
             .map_err(receipt_failure)?;

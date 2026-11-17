@@ -64,10 +64,10 @@ crate-type = ["cdylib"]
 # (#731), and the archestra battery ruling `list_openappa_operations` and
 # `propose_tuner_suggestion` (#926); then, on feat/structured-decisions, structured
 # gaps and labels on decisions and the hosted contract diff and check.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "bfd9bfa3dc32cfa91a8f81437b3c7805e6cfcf89", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "bfd9bfa3dc32cfa91a8f81437b3c7805e6cfcf89" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "bfd9bfa3dc32cfa91a8f81437b3c7805e6cfcf89", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "bfd9bfa3dc32cfa91a8f81437b3c7805e6cfcf89" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "12d5a4552fef084afda6551b98573a7fa1f0404f", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "12d5a4552fef084afda6551b98573a7fa1f0404f" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "12d5a4552fef084afda6551b98573a7fa1f0404f", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "12d5a4552fef084afda6551b98573a7fa1f0404f" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

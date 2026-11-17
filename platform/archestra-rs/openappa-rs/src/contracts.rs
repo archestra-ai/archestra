@@ -17,7 +17,7 @@ use crate::policy;
 #[napi(object)]
 pub struct PolicyContractChange {
     #[napi(
-        ts_type = "'contract' | 'trust_floor' | 'includes' | 'prior' | 'no_prior' | 'attention' | 'delta' | 'forwards' | 'emits' | 'parameters' | 'tags' | 'description' | 'annotator' | 'argument_predicates' | 'selection' | 'provider_run' | 'trust_chain' | 'authorities' | 'sanitizers' | 'audience' | 'deployment' | 'bindings'"
+        ts_type = "'contract' | 'trust_floor' | 'includes' | 'prior' | 'no_prior' | 'attention' | 'delta' | 'forwards' | 'emits' | 'parameters' | 'tags' | 'description' | 'annotator' | 'argument_predicates' | 'selection' | 'provider_run' | 'trust_chain' | 'authorities' | 'sanitizers' | 'audience' | 'deployment' | 'bindings' | 'recorder'"
     )]
     pub kind: String,
     #[napi(ts_type = "'tighten' | 'loosen' | 'mixed' | 'unknown'")]
@@ -240,6 +240,7 @@ fn change_kind(kind: ChangeKind) -> String {
         ChangeKind::Audience => "audience",
         ChangeKind::Deployment => "deployment",
         ChangeKind::Bindings => "bindings",
+        ChangeKind::Recorder => "recorder",
     }
     .to_string()
 }

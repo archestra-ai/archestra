@@ -546,7 +546,7 @@ async fn read(
         }
         HookDecision::DenyCall { .. } | HookDecision::Block { .. } => {
             let mut decision = crate::remedy::with_presentation_offers(
-                crate::session::wire(&outcome.decision)?,
+                crate::session::labelled_wire(&outcome.decision, outcome.label.clone())?,
                 outcome.presentation.as_ref(),
             )?;
             decision["peer_read_denied"] = Value::Bool(true);

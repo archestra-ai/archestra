@@ -309,7 +309,7 @@ class InternalMcpCatalogModel {
     // pre-existing deployments of this shape never churn. Renames must never
     // touch it.
     const id = dbValues.id ?? crypto.randomUUID();
-    if (dbValues.localConfig && !dbValues.deploymentSpecYaml) {
+    if (dbValues.localConfig) {
       await InternalMcpCatalogModel.resolveRuntimeResources(
         dbValues.localConfig,
         context?.organizationId,
@@ -1543,11 +1543,9 @@ class InternalMcpCatalogModel {
         dbValues.localConfig === undefined
           ? current?.localConfig
           : dbValues.localConfig;
-      const yaml =
-        dbValues.deploymentSpecYaml === undefined
-          ? current?.deploymentSpecYaml
-          : dbValues.deploymentSpecYaml;
-      if (localConfig && !yaml)
+      // Validate references even while custom YAML controls deployment resources,
+      // so resetting YAML cannot expose an invalid hidden selection.
+      if (localConfig)
         await InternalMcpCatalogModel.resolveRuntimeResources(
           localConfig,
           current?.organizationId,

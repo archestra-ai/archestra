@@ -299,6 +299,51 @@ describe("internal MCP catalog deployment YAML permission", () => {
     expect(cleared.json().localConfig.runtimeTier).toBeUndefined();
   });
 
+  test("custom YAML cannot hide an invalid runtime tier reference on create or update", async () => {
+    const payload = {
+      name: "Custom YAML tier",
+      serverType: "local",
+      localConfig: { command: "node", runtimeTier: "Missing" },
+      deploymentSpecYaml: DEPLOYMENT_YAML,
+    };
+    const invalidCreate = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload,
+    });
+    expect(invalidCreate.statusCode, invalidCreate.body).toBe(400);
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload: {
+        ...payload,
+        localConfig: { command: "node", runtimeTier: "S" },
+      },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const id = created.json().id;
+    const invalidUpdate = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${id}`,
+      payload: { localConfig: payload.localConfig },
+    });
+    expect(invalidUpdate.statusCode, invalidUpdate.body).toBe(400);
+    expect(
+      (await InternalMcpCatalogModel.findById(id))?.localConfig?.runtimeTier,
+    ).toBe("S");
+    const preview = await app.inject({
+      method: "GET",
+      url: `/api/internal_mcp_catalog/${id}/deployment-yaml-preview`,
+    });
+    expect(preview.json().yaml).toBe(DEPLOYMENT_YAML);
+    const reset = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${id}/reset-deployment-yaml`,
+    });
+    expect(reset.statusCode, reset.body).toBe(200);
+    expect(reset.json().yaml).toContain('cpu: "2"');
+  });
+
   test("an editor cannot add, change or remove runtime tiers", async ({
     makeInternalMcpCatalog,
   }) => {

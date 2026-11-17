@@ -226,9 +226,16 @@ export const MCP_CATALOG_API_BASE_URL =
  * remove exactly these keys — one list so the two directions can't drift.
  * `ANTHROPIC_CUSTOM_HEADERS` is handled separately: it is merged/stripped
  * line-wise so user-owned header lines survive.
+ * `CLAUDE_CODE_GATEWAY_HINT_HEADERS` makes Claude Code name each request's
+ * class in a header behind a custom base URL, so OpenAPPA can tell its side
+ * requests from its agent loop.
  */
 export const CLAUDE_CODE_PROXY_ENV_KEYS = {
-  anthropic: ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"],
+  anthropic: [
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN",
+    "CLAUDE_CODE_GATEWAY_HINT_HEADERS",
+  ],
   bedrock: [
     "CLAUDE_CODE_USE_BEDROCK",
     "AWS_REGION",
@@ -236,6 +243,7 @@ export const CLAUDE_CODE_PROXY_ENV_KEYS = {
     // Virtual-key mode only: the proxy virtual key, sent as a Bedrock bearer
     // token (the Anthropic path's ANTHROPIC_AUTH_TOKEN equivalent).
     "AWS_BEARER_TOKEN_BEDROCK",
+    "CLAUDE_CODE_GATEWAY_HINT_HEADERS",
   ],
 } as const;
 

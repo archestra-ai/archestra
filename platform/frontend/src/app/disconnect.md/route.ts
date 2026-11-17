@@ -128,8 +128,9 @@ const GUARD_CLIENTS: Partial<Record<InstallerClientId, GuardClient>> = {
   Then claude plugin marketplace remove MARKETPLACE.
 - In the settings.json env block, remove ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN
   (Bedrock: CLAUDE_CODE_USE_BEDROCK, AWS_REGION, ANTHROPIC_BEDROCK_BASE_URL and
-  AWS_BEARER_TOKEN_BEDROCK) when they point at {{HOST}} or hold a ${ARCHESTRA_TOKEN_PREFIX} key. Remove only
-  the x-archestra-* lines from ANTHROPIC_CUSTOM_HEADERS, and drop the key if it ends up empty.`,
+  AWS_BEARER_TOKEN_BEDROCK) when they point at {{HOST}} or hold a ${ARCHESTRA_TOKEN_PREFIX} key, and remove
+  CLAUDE_CODE_GATEWAY_HINT_HEADERS. Remove only the x-archestra-* lines from ANTHROPIC_CUSTOM_HEADERS,
+  and drop the key if it ends up empty.`,
     finish:
       "Tell the user to open a new terminal and start a new Claude Code session; the current one keeps the old configuration.",
   },

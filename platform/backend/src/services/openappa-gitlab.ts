@@ -415,37 +415,47 @@ class OpenAppaGitlab {
           );
       }
       const head = keyed?.branch ?? `archestra/openappa-${randomUUID()}`;
-      const left = keyed
-        ? await committedChange({
-            client,
-            repo: params.repo,
-            head,
-            baseSha: params.baseSha,
-            upsert: params.upsert,
-            delete: params.delete,
-          })
-        : null;
+      const committed = () =>
+        committedChange({
+          client,
+          repo: params.repo,
+          head,
+          baseSha: params.baseSha,
+          upsert: params.upsert,
+          delete: params.delete,
+        });
+      const left = keyed ? await committed() : null;
       const sha =
         left ??
-        (await client.commitGitlabFiles({
-          repo: params.repo,
-          branch: head,
-          startBranch: params.branch,
-          startSha: params.baseSha,
-          message: params.title,
-          actions: [
-            ...params.upsert.map((file) => ({
-              action: existing.has(file.path)
-                ? ("update" as const)
-                : ("create" as const),
-              path: file.path,
-              content: file.content,
-            })),
-            ...params.delete
-              .filter((path) => existing.has(path))
-              .map((path) => ({ action: "delete" as const, path })),
-          ],
-        }));
+        (await client
+          .commitGitlabFiles({
+            repo: params.repo,
+            branch: head,
+            startBranch: params.branch,
+            startSha: params.baseSha,
+            message: params.title,
+            actions: [
+              ...params.upsert.map((file) => ({
+                action: existing.has(file.path)
+                  ? ("update" as const)
+                  : ("create" as const),
+                path: file.path,
+                content: file.content,
+              })),
+              ...params.delete
+                .filter((path) => existing.has(path))
+                .map((path) => ({ action: "delete" as const, path })),
+            ],
+          })
+          .catch(async (error) => {
+            // A same-key publish racing this one made the branch first.
+            const raced =
+              keyed && error instanceof GitHostError && error.status === 400
+                ? await committed()
+                : null;
+            if (raced) return raced;
+            throw error;
+          }));
       try {
         return {
           ...(await client.createGitlabMergeRequest({
@@ -690,8 +700,32 @@ async function committedChange(params: {
   const commit = await client.json<{ parent_ids?: string[] }>(
     `${client.repoApi(repo)}/repository/commits/${encodeURIComponent(tip)}`,
   );
+  const upserts = new Set(params.upsert.map((file) => file.path));
+  const deletes = new Set(params.delete);
   let holds =
     commit.parent_ids?.length === 1 && commit.parent_ids[0] === params.baseSha;
+  if (holds) {
+    // Nothing beyond the requested paths may change, and a written file may
+    // not become a symbolic link.
+    const compare = await client.json<{
+      diffs?: {
+        new_path?: string;
+        b_mode?: string;
+        renamed_file?: boolean;
+        deleted_file?: boolean;
+      }[];
+    }>(
+      `${client.repoApi(repo)}/repository/compare?from=${encodeURIComponent(params.baseSha)}&to=${encodeURIComponent(tip)}&straight=true`,
+    );
+    holds = (compare.diffs ?? []).every(
+      (diff) =>
+        !diff.renamed_file &&
+        diff.new_path !== undefined &&
+        (diff.deleted_file
+          ? deletes.has(diff.new_path)
+          : upserts.has(diff.new_path) && diff.b_mode !== "120000"),
+    );
+  }
   for (const file of params.upsert) {
     if (!holds) break;
     const bytes = await client.readFile({

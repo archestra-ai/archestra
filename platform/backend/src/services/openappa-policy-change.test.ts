@@ -686,8 +686,17 @@ test("a keyed GitHub publish asked again returns its pull request instead of ope
     await findPublicationByKey({
       organizationId: org.id,
       operationKey: "fix-1:v1:b",
+      repo: "example/policies",
     }),
   ).toBeNull();
+  // A source moved to another repository cannot say the request is absent.
+  await expect(
+    findPublicationByKey({
+      organizationId: org.id,
+      operationKey: "fix-1:v1:b",
+      repo: "example/old-policies",
+    }),
+  ).rejects.toThrow("Git source changed");
 });
 
 test("a keyed GitHub branch left without its commit or its pull request is completed, not duplicated", async ({
@@ -751,6 +760,45 @@ test("a keyed GitHub pull request create without an answer is uncertain until th
   expect(github.pulls).toHaveLength(1);
 });
 
+test("concurrent keyed GitHub publishes under one key converge on one branch and one pull request", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  const { org, user, github } = await keyedGithubSetup({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  });
+  const request = changeRequest(org.id, user.id, "fix-8:v1:a");
+  // Both look for the pull request, then for the branch, before either acts.
+  const lookups = rendezvous(2);
+  const branchReads = rendezvous(2);
+  server.use(
+    http.get("https://api.github.com/repos/example/policies/pulls", () =>
+      lookups(),
+    ),
+    http.get(
+      ({ request }) =>
+        new URL(request.url).pathname.startsWith(
+          "/repos/example/policies/branches/archestra%2Fopenappa-op-",
+        ),
+      () => branchReads(),
+    ),
+  );
+
+  const [first, second] = await Promise.all([
+    publishOpenAppaPolicyChange(request),
+    publishOpenAppaPolicyChange(request),
+  ]);
+
+  expect(second).toEqual(first);
+  expect(github.pulls).toHaveLength(1);
+  expect(github.commits.size).toBe(1);
+  // Both raced for the branch and the pull request; one lost each.
+  expect(github.writes).toMatchObject({ refs: 2, pulls: 2 });
+});
+
 test("a keyed GitHub branch that holds another change is refused", async ({
   makeOrganization,
   makeUser,
@@ -771,6 +819,12 @@ test("a keyed GitHub branch that holds another change is refused", async ({
       ...changeRequest(org.id, user.id, "fix-4:v1:a"),
       content: `${changed}# Something else\n`,
     }),
+  ).rejects.toThrow("already holds a different change");
+  // The intended policy, and a file nobody asked for, in one commit.
+  const [left] = [...github.commits.values()];
+  left.extraFile = true;
+  await expect(
+    publishOpenAppaPolicyChange(changeRequest(org.id, user.id, "fix-4:v1:a")),
   ).rejects.toThrow("already holds a different change");
   expect(github.writes.pulls).toBe(1);
   expect(github.pulls).toHaveLength(0);
@@ -874,12 +928,75 @@ test("a keyed GitLab merge request create without an answer is uncertain, and a 
       content: `${changed}# Something else\n`,
     }),
   ).rejects.toThrow("already holds a different change");
+  // The intended policy, and a file nobody asked for, in one commit.
+  const keyedBranch = [
+    ...(gitlab.projects.get(GITLAB_REPO)?.branches.keys() ?? []),
+  ].find((name) => name.startsWith("archestra/openappa-op-"));
+  if (!keyedBranch) throw new Error("Expected the keyed branch");
+  const left = gitlab.branchHead(GITLAB_REPO, keyedBranch);
+  gitlab.setBranch(
+    GITLAB_REPO,
+    "crafted",
+    gitlab.branchHead(GITLAB_REPO, "main"),
+  );
+  gitlab.setBranch(
+    GITLAB_REPO,
+    keyedBranch,
+    gitlab.commit(GITLAB_REPO, "crafted", {
+      "appa.toml": changed,
+      "other.toml": "# unrequested\n",
+    }),
+  );
+  await expect(publishOpenAppaPolicyChange(request)).rejects.toThrow(
+    "already holds a different change",
+  );
+  gitlab.setBranch(GITLAB_REPO, keyedBranch, left);
 
   expect(await publishOpenAppaPolicyChange(request)).toMatchObject({
     number: 1,
   });
   expect(commitPosts(gitlab)).toBe(1);
   expect(gitlab.projects.get(GITLAB_REPO)?.mergeRequests).toHaveLength(1);
+});
+
+test("concurrent keyed GitLab publishes under one key converge on one merge request", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, org.id, { role: "admin" });
+  const gitlab = await configureGitlabSource(org.id);
+  const request = changeRequest(org.id, user.id, "fix-9:v1:a");
+  // Both look for the merge request, then for the branch, before either acts.
+  const lookups = rendezvous(2);
+  const branchReads = rendezvous(2);
+  const project = `/api/v4/projects/${encodeURIComponent(GITLAB_REPO)}`;
+  server.use(
+    http.get(
+      ({ request }) =>
+        new URL(request.url).pathname === `${project}/merge_requests`,
+      () => lookups(),
+    ),
+    http.get(
+      ({ request }) =>
+        new URL(request.url).pathname.startsWith(
+          `${project}/repository/branches/archestra%2Fopenappa-op-`,
+        ),
+      () => branchReads(),
+    ),
+  );
+
+  const [first, second] = await Promise.all([
+    publishOpenAppaPolicyChange(request),
+    publishOpenAppaPolicyChange(request),
+  ]);
+
+  expect(second).toEqual(first);
+  expect(gitlab.projects.get(GITLAB_REPO)?.mergeRequests).toHaveLength(1);
+  // Both raced for the branch; one lost.
+  expect(commitPosts(gitlab)).toBe(2);
 });
 
 test("the key finds a locally saved revision by the content it was to hold", async ({
@@ -931,6 +1048,24 @@ function changeRequest(
     title: "Tighten the policy",
     summary: "Adds a comment.",
     operationKey,
+  };
+}
+
+/**
+ * A request handler that answers nothing, so the request falls through to the
+ * fake, but holds the first `count` requests until all have arrived: racing
+ * publishes then read the same state before either writes.
+ */
+function rendezvous(count: number) {
+  let arrived = 0;
+  let release = () => {};
+  const met = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return async () => {
+    arrived += 1;
+    if (arrived >= count) release();
+    await met;
   };
 }
 
@@ -996,8 +1131,13 @@ async function keyedGithubSetup(fixtures: {
   });
   const repo = "https://api.github.com/repos/example/policies";
   const branches = new Map([["main", baseSha]]);
-  const commits = new Map<string, { parent: string; blob: string }>();
+  const commits = new Map<
+    string,
+    { parent: string; blob: string; extraFile?: boolean }
+  >();
   const github = {
+    branches,
+    commits,
     writes: { refs: 0, contents: 0, pulls: 0 },
     pulls: [] as {
       number: number;
@@ -1045,6 +1185,20 @@ async function keyedGithubSetup(fixtures: {
         ? HttpResponse.json({ sha: blob })
         : HttpResponse.json({ message: "Not Found" }, { status: 404 });
     }),
+    http.get(`${repo}/compare/:range`, ({ params }) => {
+      const [from, to] = String(params.range).split("...");
+      const commit = commits.get(to);
+      if (from !== baseSha || !commit || commit.parent !== baseSha)
+        return HttpResponse.json({ message: "Not Found" }, { status: 404 });
+      return HttpResponse.json({
+        files: [
+          { filename: "appa.toml", status: "modified", sha: commit.blob },
+          ...(commit.extraFile
+            ? [{ filename: "other.toml", status: "added", sha: fileSha }]
+            : []),
+        ],
+      });
+    }),
     http.get(`${repo}/git/commits/:sha`, ({ params }) => {
       const commit = commits.get(String(params.sha));
       return commit
@@ -1076,10 +1230,18 @@ async function keyedGithubSetup(fixtures: {
       const body = (await request.json()) as {
         branch: string;
         content: string;
+        sha: string;
       };
       const parent = branches.get(body.branch);
       if (!parent)
         return HttpResponse.json({ message: "Not Found" }, { status: 404 });
+      // Like GitHub, a write must name the file it replaces.
+      const current = parent === baseSha ? fileSha : commits.get(parent)?.blob;
+      if (body.sha !== current)
+        return HttpResponse.json(
+          { message: "appa.toml does not match" },
+          { status: 409 },
+        );
       const content = Buffer.from(body.content, "base64");
       const blob = createHash("sha1")
         .update(`blob ${content.length}\0`)

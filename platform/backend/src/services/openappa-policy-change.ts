@@ -19,6 +19,7 @@ import {
 } from "@/services/guardrails-policy";
 import { resolveProposedPolicy } from "@/services/guardrails-policy-proposal";
 import {
+  type GithubErrorPolicy,
   githubFetch,
   githubJson,
   githubPolicyChangeErrors,
@@ -285,14 +286,19 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       },
     });
     const treeSha = checkedSha(tree.sha);
-    head = keyed?.branch ?? `archestra/openappa-${randomUUID()}`;
-    // Git names a tree by its content, so a keyed branch an earlier attempt
-    // left holds this change exactly when its commit has this tree.
-    const tip = keyed ? await branchTip({ base, head, token }) : null;
-    if (tip) {
-      const left = await keyedCommit({ base, head, tip, baseSha, token });
-      if (left.tree !== treeSha) throw differentChange(head);
-    } else {
+    const keyedHead = keyed?.branch;
+    head = keyedHead ?? `archestra/openappa-${randomUUID()}`;
+    // Git names a tree by its content, so a keyed branch an earlier or a
+    // racing attempt left holds this change exactly when its one commit on
+    // the base has this tree.
+    const reused = async (name: string) => {
+      const tip = await branchTip({ base, head: name, token });
+      if (!tip) return false;
+      const left = await keyedCommit({ base, head: name, tip, baseSha, token });
+      if (left.tree !== treeSha) throw differentChange(name);
+      return true;
+    };
+    if (!(keyedHead && (await reused(keyedHead)))) {
       const commitResult = await githubJson<{ sha: string }>({
         method: "POST",
         url: `${base}/git/commits`,
@@ -311,8 +317,16 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
         method: "POST",
         url: `${base}/git/refs`,
         token,
-        errors: githubPolicyChangeErrors,
+        errors: keyedHead ? keyedWriteErrors : githubPolicyChangeErrors,
         body: { ref: `refs/heads/${head}`, sha: commitSha },
+      }).catch(async (error) => {
+        if (
+          keyedHead &&
+          error instanceof KeyedWriteConflict &&
+          (await reused(keyedHead))
+        )
+          return;
+        throw error;
       });
     }
   } else {
@@ -329,38 +343,52 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     await assertBranchUnchanged({ base, branch, baseSha, token });
 
     head = keyed?.branch ?? `archestra/openappa-${randomUUID()}`;
+    const writeErrors = keyed ? keyedWriteErrors : githubPolicyChangeErrors;
     // A keyed branch an earlier attempt left still at the base lacks only
     // the commit; one past it must be that commit.
-    const tip = keyed ? await branchTip({ base, head, token }) : null;
-    if (tip === null)
-      await githubJson({
-        method: "POST",
-        url: `${base}/git/refs`,
-        token,
-        errors: githubPolicyChangeErrors,
-        body: { ref: `refs/heads/${head}`, sha: baseSha },
-      });
-    if (tip === null || tip === baseSha)
-      await githubJson({
-        method: "PUT",
-        url: `${base}/contents/${path}`,
-        token,
-        errors: githubPolicyChangeErrors,
-        body: {
-          message,
-          content: Buffer.from(content).toString("base64"),
-          sha: file.sha,
-          branch: head,
-        },
-      });
-    else {
-      await keyedCommit({ base, head, tip, baseSha, token });
-      const committed = await githubJson<{ sha?: string }>({
-        url: `${base}/contents/${path}?ref=${tip}`,
-        token,
-        errors: githubPolicyChangeErrors,
-      });
-      if (committed.sha !== gitBlobSha(content)) throw differentChange(head);
+    const prepare = async () => {
+      const tip = keyed ? await branchTip({ base, head, token }) : null;
+      if (tip === null)
+        await githubJson({
+          method: "POST",
+          url: `${base}/git/refs`,
+          token,
+          errors: writeErrors,
+          body: { ref: `refs/heads/${head}`, sha: baseSha },
+        });
+      if (tip === null || tip === baseSha)
+        await githubJson({
+          method: "PUT",
+          url: `${base}/contents/${path}`,
+          token,
+          errors: writeErrors,
+          body: {
+            message,
+            content: Buffer.from(content).toString("base64"),
+            sha: file.sha,
+            branch: head,
+          },
+        });
+      else
+        await assertKeyedContents({
+          base,
+          head,
+          tip,
+          baseSha,
+          token,
+          path: policyPath,
+          content,
+        });
+    };
+    // A same-key publish racing this one won a write, the branch or then its
+    // commit, so at most two are lost before what it left decides.
+    for (let lost = 0; ; lost++) {
+      try {
+        await prepare();
+        break;
+      } catch (error) {
+        if (!(error instanceof KeyedWriteConflict) || lost === 2) throw error;
+      }
     }
   }
   const body = {
@@ -400,20 +428,31 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
  * @public — the tuner apply flow's reconcile step consumes it.
  *
  * What a keyed publish left, for a caller that did not see its outcome: the
- * pull or merge request from the key's branch in the synced repository, else
- * the local revision right after `local.expectedRevision` when it holds the
- * content whose hash (sha256 hex, as revisions store it) is
- * `local.contentHash`. Null only when neither exists; a Git host that cannot
- * be asked throws.
+ * pull or merge request from the key's branch in the Git source's repository,
+ * else the local revision right after `local.expectedRevision` when it holds
+ * the content whose hash (sha256 hex, as revisions store it) is
+ * `local.contentHash`. Null only when neither exists. A Git host that cannot
+ * be asked throws, and so does a source no longer connected to `repo`, the
+ * repository the publish was sent to when the caller recorded it: the request
+ * may be there, out of reach.
  */
 export async function findPublicationByKey(params: {
   organizationId: string;
   operationKey: string;
+  repo?: string;
   local?: { expectedRevision: number; contentHash: string };
 }): Promise<PolicyPublication | null> {
   const head = keyedBranch(params);
   const source = await OpenAppaGithubSyncModel.find(params.organizationId);
-  if (source?.interval && source.repo) {
+  const connected =
+    source?.repo &&
+    (source.gitlabTokenId || source.githubAppConfigId || source.githubPatId);
+  if (params.repo !== undefined && (!connected || source.repo !== params.repo))
+    throw new ApiError(
+      409,
+      "The Git source changed since the change was published, so whether its request opened cannot be checked",
+    );
+  if (connected && source.repo) {
     const repo = source.repo;
     let found: Omit<
       Extract<PolicyPublication, { delivery: "pull_request" }>,
@@ -987,8 +1026,8 @@ async function openKeyedPull(params: {
   )
     throw await githubPolicyChangeErrors(response);
   if (response?.ok) {
-    const bytes = await readResponseBodyWithLimit(response, 2 * 1024 * 1024);
     try {
+      const bytes = await readResponseBodyWithLimit(response, 2 * 1024 * 1024);
       const pull = JSON.parse(bytes?.toString() ?? "") as {
         number: number;
         html_url: string;
@@ -1058,6 +1097,48 @@ async function keyedCommit(params: {
     throw differentChange(params.head);
   return { tree: checkedSha(commit.tree?.sha) };
 }
+
+/**
+ * A keyed branch's one commit on the base must change exactly the policy
+ * file, to this content.
+ */
+async function assertKeyedContents(params: {
+  base: string;
+  head: string;
+  tip: string;
+  baseSha: string;
+  token: string;
+  path: string;
+  content: string;
+}) {
+  await keyedCommit(params);
+  const compare = await githubJson<{
+    files?: { filename?: string; status?: string; sha?: string }[];
+  }>({
+    url: `${params.base}/compare/${params.baseSha}...${params.tip}`,
+    token: params.token,
+    errors: githubPolicyChangeErrors,
+  });
+  const [file, ...more] = compare.files ?? [];
+  if (
+    more.length > 0 ||
+    file?.filename !== params.path ||
+    file.status !== "modified" ||
+    file.sha !== gitBlobSha(params.content)
+  )
+    throw differentChange(params.head);
+}
+
+/** A keyed write GitHub refused as already done: a racing attempt made it. */
+class KeyedWriteConflict extends ApiError {}
+
+const keyedWriteErrors: GithubErrorPolicy = async (response) =>
+  response.status === 409 || response.status === 422
+    ? new KeyedWriteConflict(
+        409,
+        "GitHub refused a write to the change's branch as conflicting",
+      )
+    : githubPolicyChangeErrors(response);
 
 function differentChange(head: string) {
   return new ApiError(

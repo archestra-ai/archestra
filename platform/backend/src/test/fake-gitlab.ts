@@ -235,6 +235,22 @@ export class FakeGitlab {
           target_branch: string;
           title: string;
         };
+        if (
+          project.mergeRequests.some(
+            (entry) =>
+              entry.state === "opened" &&
+              entry.sourceBranch === body.source_branch &&
+              entry.targetBranch === body.target_branch,
+          )
+        )
+          return HttpResponse.json(
+            {
+              message: [
+                "Another open merge request already exists for this source branch",
+              ],
+            },
+            { status: 409 },
+          );
         const created: FakeMergeRequest = {
           iid: project.mergeRequests.length + 1,
           sourceBranch: body.source_branch,
@@ -301,6 +317,15 @@ export class FakeGitlab {
           { error: "start_branch, start_sha are mutually exclusive" },
           { status: 400 },
         );
+      if (
+        (body.start_sha || body.start_branch) &&
+        body.start_branch !== body.branch &&
+        project.branches.has(body.branch)
+      )
+        return HttpResponse.json(
+          { message: `A branch called '${body.branch}' already exists` },
+          { status: 400 },
+        );
       if (body.start_sha && !project.commits.has(body.start_sha))
         return HttpResponse.json(
           { message: "Invalid start_sha" },
@@ -335,6 +360,26 @@ export class FakeGitlab {
       return sha
         ? HttpResponse.json({ id: sha, parent_ids: parent ? [parent] : [] })
         : notFound();
+    }
+    if (kind === "compare") {
+      const from = resolve(url.searchParams.get("from"));
+      const to = resolve(url.searchParams.get("to"));
+      if (!from || !to) return notFound();
+      const before = project.commits.get(from) ?? new Map<string, string>();
+      const after = project.commits.get(to) ?? new Map<string, string>();
+      const mode = (path: string) =>
+        project.symlinks.has(path) ? "120000" : "100644";
+      const diffs = [...new Set([...before.keys(), ...after.keys()])]
+        .filter((path) => before.get(path) !== after.get(path))
+        .map((path) => ({
+          old_path: path,
+          new_path: path,
+          b_mode: after.has(path) ? mode(path) : "0",
+          new_file: !before.has(path),
+          deleted_file: !after.has(path),
+          renamed_file: false,
+        }));
+      return HttpResponse.json({ diffs });
     }
     if (kind === "branches") {
       const sha = project.branches.get(name ?? "");

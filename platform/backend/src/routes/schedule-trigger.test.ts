@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import { auth as betterAuth } from "@/auth/better-auth";
+import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
@@ -230,6 +231,59 @@ describe("schedule trigger routes", () => {
     expect(response.json().error.message).toContain(
       "You do not have access to this scheduled task",
     );
+  });
+
+  test("a tuner viewer opens a tuner run's conversation but cannot run, toggle or edit the tuner", async ({
+    makeAgent,
+    makeCustomRole,
+    makeMember,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+    makeUser,
+  }) => {
+    config.tuners.enabled = true;
+    const agent = await makeAgent({ organizationId, agentType: "agent" });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      agentId: agent.id,
+      actorUserId: adminUser.id,
+      tunerKind: "appa",
+    });
+    const run = await makeScheduleTriggerRun(trigger.id, {
+      organizationId,
+      runKind: "due",
+    });
+    const viewer = await makeUser();
+    const { role } = await makeCustomRole(organizationId, {
+      permission: { tuner: ["read"], log: ["read", "admin"] },
+    });
+    await makeMember(viewer.id, organizationId, { role });
+    adminUser = viewer;
+
+    const opened = await app.inject({
+      method: "POST",
+      url: `/api/schedule-triggers/${trigger.id}/runs/${run.id}/conversation`,
+    });
+    expect(opened.statusCode, opened.body).toBe(200);
+    expect(opened.json()).toMatchObject({
+      userId: viewer.id,
+      agentId: agent.id,
+    });
+
+    const base = `/api/schedule-triggers/${trigger.id}`;
+    const refused = await Promise.all([
+      app.inject({ method: "POST", url: `${base}/run-now` }),
+      app.inject({ method: "POST", url: `${base}/enable` }),
+      app.inject({ method: "POST", url: `${base}/disable` }),
+      app.inject({ method: "PUT", url: base, payload: { name: "Renamed" } }),
+    ]);
+    expect(refused.map((r) => r.statusCode)).toEqual([404, 404, 404, 404]);
+    expect(
+      await ScheduleTriggerRunModel.countByTrigger({
+        organizationId,
+        triggerId: trigger.id,
+      }),
+    ).toBe(1);
   });
 
   test("POST create rejects a payload without a project", async ({

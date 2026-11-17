@@ -461,16 +461,15 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id, runId }, user, organizationId }, reply) => {
-      // Access is owner / project oversight (the shared run gate) — the
-      // same gate as every other schedule op. Loading the run conversation can
-      // MINT one when it isn't linked yet (createAndLinkRunConversation below),
-      // so it stays on that existing permission rather than any project scope.
+      // Loading the run conversation can MINT one when it isn't linked yet
+      // (createAndLinkRunConversation below), so a generic trigger needs `use`,
+      // not project read; a tuner run opens for tuner viewers.
       const run = await findAccessibleScheduleTriggerRunOrThrow({
         triggerId: id,
         runId,
         userId: user.id,
         organizationId,
-        access: "use",
+        access: "open_run",
       });
 
       const conversation = await ensureRunConversation({

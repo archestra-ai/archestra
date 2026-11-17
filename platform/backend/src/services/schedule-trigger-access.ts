@@ -31,10 +31,10 @@ export async function findAccessibleScheduleTriggerOrThrow(params: {
   }
 
   // Tuner triggers are managed only through the tuner routes; generic schedule
-  // surfaces may at most open a run (its conversation) for tuner viewers.
+  // surfaces only let tuner viewers read it and open a run's conversation.
   if (trigger.tunerKind !== null) {
     if (
-      params.access === "read" &&
+      (params.access === "read" || params.access === "open_run") &&
       (await hasTunerAccess({
         userId: params.userId,
         organizationId: params.organizationId,
@@ -45,6 +45,7 @@ export async function findAccessibleScheduleTriggerOrThrow(params: {
     }
     throw new ApiError(404, "Schedule trigger not found");
   }
+  const access = params.access === "open_run" ? "use" : params.access;
 
   // A trigger of a soft-deleted project is hidden and paused with it — 404 for
   // everyone (actor and project oversight included), or run-now could still
@@ -69,7 +70,7 @@ export async function findAccessibleScheduleTriggerOrThrow(params: {
     await hasProjectScheduleOversight({
       userId: params.userId,
       organizationId: params.organizationId,
-      action: params.access,
+      action: access,
     })
   ) {
     return trigger;
@@ -79,7 +80,7 @@ export async function findAccessibleScheduleTriggerOrThrow(params: {
   // their runs). Reuses the same ProjectAccessModel.userCanAccessProject check
   // that backs GET /api/projects/:id (via projectService.requireViewable).
   // Deliberately read-only — see ScheduleTriggerAccess.
-  if (params.access === "read" && project) {
+  if (access === "read" && project) {
     if (
       await ProjectAccessModel.userCanAccessProject({
         project,
@@ -130,7 +131,7 @@ export async function findAccessibleScheduleTriggerRunOrThrow(params: {
 export async function hasProjectScheduleOversight(params: {
   userId: string;
   organizationId: string;
-  action?: ScheduleTriggerAccess;
+  action?: ScheduleTriggerAction;
 }): Promise<boolean> {
   return await ResourcePermissions.allows({
     userId: params.userId,
@@ -199,10 +200,15 @@ export async function startManualScheduleTriggerRun(params: {
  * project's schedules are visible to everyone who can see the project.
  *
  * `update`, `delete`, `use` — changing the trigger or executing it (update,
- * delete, enable/disable, run-now, minting a run conversation). Project
+ * delete, enable/disable, run-now). Project
  * membership is NOT enough: a scheduled run executes as `trigger.actorUserId`
  * against that actor's agent and credentials, so letting a project member
  * rewrite or fire another member's schedule would let them act as that actor.
  * Restricted to the actor themselves or the corresponding organization-wide Project grant.
+ *
+ * `open_run` — opening a run's conversation, which may mint it. It needs `use`
+ * on a generic trigger; on a tuner trigger, tuner read access is enough.
  */
-type ScheduleTriggerAccess = "read" | "update" | "delete" | "use";
+type ScheduleTriggerAccess = ScheduleTriggerAction | "open_run";
+
+type ScheduleTriggerAction = "read" | "update" | "delete" | "use";

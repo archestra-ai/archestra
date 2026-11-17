@@ -228,6 +228,8 @@ type AppaPluginBinding = {
   sessionInitialized?: boolean;
   /** True when the model's response contained tool calls awaiting client execution. */
   turnOpen: boolean;
+  /** Ids of every tool result in this request, read before any filtering. */
+  answeredCallIds: string[];
   /** True on internal loopback Chat requests. */
   chat: boolean;
   compaction: boolean;
@@ -348,6 +350,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       runtimeSessionId: trustedContext.runtimeSessionId,
       runtimeTaskId: trustedContext.runtimeTaskId,
       turnOpen: false,
+      answeredCallIds: [],
       chat,
       compaction: trustedContext.compaction === true,
       threadContinue: trustedContext.thread === "continue",
@@ -386,6 +389,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): Promise<LlmProxyToolResultsOutcome | undefined> {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
+    // The reporting-recovery pass sees a filtered subset of this request's results.
+    if (!binding.reportingRecovery)
+      binding.answeredCallIds = context.toolResults.map((result) =>
+        withoutTrajectoryStamp(result.id),
+      );
     enterCapturedGuardrailsActivation("active");
     const completions = binding.request.childReturns?.completions ?? [];
     binding.unenforcedCalls = await findUnenforcedCalls({
@@ -2098,10 +2106,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     if (!binding.request.turnEndOperationId) return;
     enterCapturedGuardrailsActivation("active");
-    await endTurn(
-      this.governedSession(binding),
-      binding.request.turnEndOperationId,
-    );
+    const stop = await endTurn({
+      session: this.governedSession(binding),
+      operationId: binding.request.turnEndOperationId,
+      ...answeredCallIds(binding),
+    });
+    if (stop.decision === "held") {
+      logger.debug(
+        { running: stop.running },
+        "OpenAPPA keeps the turn open while its calls run",
+      );
+    }
     return undefined;
   }
 
@@ -2174,10 +2189,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // with no value as the end of the child: after it, the child can call no
       // tool and can return nothing. The parent can still send this child a
       // follow-up, so the turn ends as a turn and the child stays open.
-      await endTurn(
-        this.governedSession(binding),
-        binding.request.turnEndOperationId,
-      );
+      const stop = await endTurn({
+        session: this.governedSession(binding),
+        operationId: binding.request.turnEndOperationId,
+        ...answeredCallIds(binding),
+      });
+      if (stop.decision === "held") return { decision: "release" };
     } else {
       const outcome = await endChild({
         session: this.governedSession(binding),
@@ -2188,7 +2205,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         output: context.responseText,
         spawnCallId,
         ...(childNativeId ? { childNativeId } : {}),
+        ...answeredCallIds(binding),
       });
+      // The child is not finished: its reply stays its own, nothing crosses.
+      if (outcome.decision === "held") return { decision: "release" };
       admitted =
         outcome.decision === "release" ? context.responseText : outcome.content;
       if (!outcome.crossed) {
@@ -5021,6 +5041,12 @@ async function admitChildHandback(params: {
     spawnCallId,
     ...(childNativeId ? { childNativeId } : {}),
   });
+  if (outcome.decision === "held") {
+    throw new ApiError(
+      409,
+      "OpenAPPA holds the return while a tool call is still running.",
+    );
+  }
   const admitted =
     outcome.decision === "release" ? raw : (outcome.content ?? "");
   if (!outcome.crossed) {
@@ -7718,4 +7744,15 @@ function restoreSoftBlockRequest(target: unknown, original: unknown): void {
     delete (target as Record<string, unknown>)[key];
   if (Array.isArray(target)) target.length = 0;
   Object.assign(target, original);
+}
+
+/**
+ * Claude Code sends side requests, such as a subagent's progress label, that
+ * read as a stop while a call still runs: its stops hold on a call the
+ * request did not answer instead of closing it.
+ */
+function answeredCallIds(binding: AppaPluginBinding) {
+  return binding.adapter?.id === "claude-code"
+    ? { answeredCallIds: binding.answeredCallIds }
+    : {};
 }

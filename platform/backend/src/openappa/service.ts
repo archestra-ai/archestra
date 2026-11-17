@@ -134,6 +134,7 @@ const NativeDecisionSchema = z
       spawn_binding: z.string().min(1).optional(),
     }),
     z.object({ decision: z.literal("pass_control") }),
+    z.object({ decision: z.literal("held"), running: z.array(z.string()) }),
     z.object({
       decision: z.literal("deny_call"),
       feedback: z.string(),
@@ -245,6 +246,12 @@ type ProcessedToolResult = {
       refused?: true;
     }
 );
+/**
+ * A stop the runtime did not take: a call it would close, named in `running`,
+ * is not among the stopping request's answered calls. Nothing was recorded.
+ */
+type HeldStop = { decision: "held"; running: string[] };
+
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
   | {
@@ -1757,11 +1764,19 @@ export async function notePrompt(
  * own remedy call — leaves the turn open: the client still has work to do, and
  * closing here would release the remedy the client is about to execute.
  */
-export async function endTurn(
-  session: OpenAppaSession,
-  operationId: string,
-): Promise<void> {
-  await dispatch(session, { event: "turn_end", operation_id: operationId });
+export async function endTurn(params: {
+  session: OpenAppaSession;
+  operationId: string;
+  answeredCallIds?: readonly string[];
+}): Promise<{ decision: "taken" } | HeldStop> {
+  const decision = await dispatch(params.session, {
+    event: "turn_end",
+    operation_id: params.operationId,
+    ...answeredField(params.answeredCallIds),
+  });
+  return decision.decision === "held"
+    ? { decision: "held", running: decision.running }
+    : { decision: "taken" };
 }
 
 /**
@@ -1777,7 +1792,8 @@ export async function endChild(params: {
   output: string;
   spawnCallId?: string;
   childNativeId?: string;
-}): Promise<ChildEndOutcome> {
+  answeredCallIds?: readonly string[];
+}): Promise<ChildEndOutcome | HeldStop> {
   return crossChildValue({ ...params, event: "child_end" });
 }
 
@@ -1804,6 +1820,13 @@ export async function returnRuntimeValue(params: {
   });
   if (outcome.decision === "release") {
     return { kind: "admitted", value: params.value };
+  }
+  if (outcome.decision === "held") {
+    return {
+      kind: "held",
+      reason: "OpenAPPA holds the return while a tool call is still running.",
+      busy: true,
+    };
   }
   if (outcome.crossed) return { kind: "admitted", value: outcome.content };
   return outcome.busy
@@ -1973,6 +1996,15 @@ async function declareSpawnReturn(params: {
       .flatMap((block) => (block.type === "text" ? [block.text] : []))
       .join("\n"),
   };
+}
+
+/**
+ * The ids of the tool results a stopping request carried. With them, the
+ * runtime holds a stop that would close a call outside the list; without them,
+ * it closes every open call as unreported.
+ */
+function answeredField(answeredCallIds: readonly string[] | undefined) {
+  return answeredCallIds ? { answered_call_ids: answeredCallIds } : {};
 }
 
 function decisionMessage(decision: NativeDecision): string {
@@ -2478,11 +2510,13 @@ function validateReturnContract(text: string): void {
 
 async function crossChildValue(
   params: Parameters<typeof governedCrossChildValue>[0],
-): Promise<ChildEndOutcome> {
+): Promise<ChildEndOutcome | HeldStop> {
   try {
     if (await isUnenforcedSession(params.session))
       return { decision: "release", crossed: true };
     const result = await governedCrossChildValue(params);
+    // A held end is not a ruling, so it is never waived.
+    if (result.decision === "held") return result;
     if (
       !result.crossed &&
       (await waiveSoftBlock(params.session, params.event, result.content))
@@ -2506,7 +2540,8 @@ async function governedCrossChildValue(params: {
   event: "child_end" | "child_return";
   spawnCallId?: string;
   childNativeId?: string;
-}): Promise<ChildEndOutcome> {
+  answeredCallIds?: readonly string[];
+}): Promise<ChildEndOutcome | HeldStop> {
   if (!params.session.parent_id) {
     throw new ApiError(409, "OpenAPPA cannot end a non-child trajectory");
   }
@@ -2532,9 +2567,13 @@ async function governedCrossChildValue(params: {
         ? { output: params.output }
         : {}),
       ...correlation,
+      ...answeredField(params.answeredCallIds),
     },
     await policy(),
   );
+  if (decision.decision === "held") {
+    return { decision: "held", running: decision.running };
+  }
   if (decision.decision === "ack") {
     return { decision: "release", crossed: true };
   }

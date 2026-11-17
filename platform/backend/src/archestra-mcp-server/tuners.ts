@@ -72,9 +72,12 @@ const registry = defineArchestraTools([
           "propose_tuner_suggestion works only inside this agent's own running tuner run.",
         );
       }
+      // The user the run executes as; the trigger's actor may have moved since.
+      const userId = context.userId;
       if (
+        !userId ||
         !(await hasTunerAccess({
-          userId: run.actorUserId,
+          userId,
           organizationId: run.organizationId,
           access: "update",
         }))
@@ -101,7 +104,7 @@ const registry = defineArchestraTools([
         }
         const gate = await checkPolicyChange({
           organizationId: run.organizationId,
-          userId: run.actorUserId,
+          userId,
           expectedRevision: args.policy_change.expected_revision,
           edits: args.policy_change.edits,
         });

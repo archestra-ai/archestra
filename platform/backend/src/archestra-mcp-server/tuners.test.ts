@@ -143,6 +143,36 @@ describe("propose_tuner_suggestion", () => {
     makeScheduleTrigger,
     makeScheduleTriggerRun,
   }) => {
+    const { context, actorId, organizationId } = await tunerRun({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+    });
+    const role = await makeCustomRole(organizationId, {
+      permission: { tuner: ["update"] },
+    });
+    await MemberModel.updateRole(actorId, organizationId, role.role);
+
+    expect((await propose(context, CANDIDATE.fingerprint)).isError).toBe(true);
+    const filed = await TunerSuggestionModel.list({
+      organizationId,
+      pagination: { limit: 10, offset: 0 },
+    });
+    expect(filed.data).toEqual([]);
+  });
+
+  test("files as the user the run executes as after the tuner moved to an actor without rights", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeCustomRole,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
     const { context, triggerId, organizationId } = await tunerRun({
       makeOrganization,
       makeUser,
@@ -151,19 +181,16 @@ describe("propose_tuner_suggestion", () => {
       makeScheduleTrigger,
       makeScheduleTriggerRun,
     });
-    const demoted = await makeUser();
+    const nextActor = await makeUser();
     const role = await makeCustomRole(organizationId, {
       permission: { tuner: ["update"] },
     });
-    await makeMember(demoted.id, organizationId, { role: role.role });
-    await ScheduleTriggerModel.update(triggerId, { actorUserId: demoted.id });
+    await makeMember(nextActor.id, organizationId, { role: role.role });
+    await ScheduleTriggerModel.update(triggerId, { actorUserId: nextActor.id });
 
-    expect((await propose(context, CANDIDATE.fingerprint)).isError).toBe(true);
-    const filed = await TunerSuggestionModel.list({
-      organizationId,
-      pagination: { limit: 10, offset: 0 },
-    });
-    expect(filed.data).toEqual([]);
+    const filed = await propose(context, CANDIDATE.fingerprint);
+    expect(filed.isError, JSON.stringify(filed.content)).toBeFalsy();
+    expect(filed.structuredContent).toMatchObject({ status: "created" });
   });
 
   test("does not exist outside a tuner run, or with tuners off", async ({

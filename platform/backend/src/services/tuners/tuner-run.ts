@@ -9,7 +9,6 @@ export interface TunerRunScope {
   organizationId: string;
   tunerKind: TunerKind;
   agentId: string;
-  actorUserId: string;
   status: ScheduleTriggerRunStatus;
   record: TunerRunRecord | null;
 }
@@ -35,7 +34,6 @@ export async function findTunerRun(
     organizationId: run.organizationId,
     tunerKind: trigger.tunerKind,
     agentId: trigger.agentId,
-    actorUserId: trigger.actorUserId,
     status: run.status,
     record: run.tuner,
   };

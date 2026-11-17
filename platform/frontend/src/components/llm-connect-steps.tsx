@@ -434,9 +434,13 @@ export function LlmConnectSteps({
     offersPools &&
     hasProviderKey &&
     (pickedKey ? (
-      <KeyPools key={pickedKey.id} pools={pickedPools} noun="key" />
+      <KeyPools key={`pools-${pickedKey.id}`} pools={pickedPools} noun="key" />
     ) : pickedClient && takesPools(pickedClient) ? (
-      <KeyPools key={pickedClient.id} pools={pickedPools} noun="client" />
+      <KeyPools
+        key={`pools-${pickedClient.id}`}
+        pools={pickedPools}
+        noun="client"
+      />
     ) : null);
 
   // Only a client calling as the app takes auto routers, like pools.
@@ -446,10 +450,13 @@ export function LlmConnectSteps({
     offersRouters &&
     hasProviderKey &&
     (pickedKey ? (
-      <KeyAutoRouters key={pickedKey.id} virtualApiKeyId={pickedKey.id} />
+      <KeyAutoRouters
+        key={`routers-${pickedKey.id}`}
+        virtualApiKeyId={pickedKey.id}
+      />
     ) : routerClient ? (
       <KeyAutoRouters
-        key={routerClient.id}
+        key={`routers-${routerClient.id}`}
         routerIds={routerClient.autoRouterIds}
         noun="client"
       />

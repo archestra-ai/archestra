@@ -681,6 +681,11 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/agents/:id", makeAgent()),
   ...getJson("/api/agents/:id/export", {}),
   ...getJson("/api/agents/:id/tools", []),
+  ...getJson("/api/agents/:id/skills", {
+    accessAllSkills: false,
+    skillIds: [],
+    skills: [],
+  }),
   ...getJson("/api/agent-tools", {
     data: [],
     pagination: {
@@ -791,6 +796,7 @@ export const handlers: HttpHandler[] = [
   // Skills (list page, the "new skill" chooser, and the GitHub import dialog)
   ...getJson("/api/skills", skillsListSeed),
   ...getJson("/api/skills/plugins", []),
+  ...getJson("/api/skills/external", []),
   ...getJson("/api/plugins", []),
   ...paths("/api/skills/:id").map((url) =>
     http.get(url, ({ params }) =>

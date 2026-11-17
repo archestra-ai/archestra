@@ -6,15 +6,19 @@ import {
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { z } from "zod";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { LlmProviderApiKeyModel, ModelModel } from "@/models";
 import type { ModelInfo } from "@/routes/chat/model-fetchers/types";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import { ApiError } from "@/types";
 import {
   createPassthroughAuthenticator,
+  resolveAgent,
   validateVirtualApiKey,
   virtualKeyRateLimiter,
 } from "../llm-proxy-auth";
+
+import { checkModelTeamAccess } from "../utils/model-team-access";
 
 export const AnthropicModelsHeadersSchema = z.object({
   "x-api-key": z.string().optional(),
@@ -71,6 +75,8 @@ export async function resolveProxyModelsApiKey(params: {
   provider: SupportedProvider;
   token: string | undefined;
   allowKeyless?: boolean;
+  /** Model-scoped auxiliary operations enforce model and target-agent access. */
+  requestedModel?: string;
 }): Promise<ResolvedProxyModelsKey> {
   const { request, agentId, provider, token, allowKeyless = false } = params;
 
@@ -81,12 +87,36 @@ export async function resolveProxyModelsApiKey(params: {
     );
   }
 
+  const agent = params.requestedModel ? await resolveAgent(agentId) : undefined;
+  const assertModelAccess = async (authenticatedUserId?: string) => {
+    if (!params.requestedModel || !agent) return;
+    await ModelModel.assertAvailable({
+      provider,
+      modelId: params.requestedModel,
+    });
+    const access = await checkModelTeamAccess({
+      provider,
+      modelId: params.requestedModel,
+      organizationId: agent.organizationId,
+      authenticatedUserId,
+    });
+    if (!access.allowed) throw new ApiError(403, access.message);
+  };
+
   // Raw keys carry no per-key extra headers, matching the inference path's
   // raw-bearer branch (no parent provider-key row to read them from).
   if (!hasArchestraTokenPrefix(token)) {
     // A raw provider key is the caller's own upstream credential, not a
     // platform credential: the same check as the catch-all routes applies.
-    await createPassthroughAuthenticator(provider)({ request, agentId });
+    const identity = await createPassthroughAuthenticator(provider)({
+      request,
+      agentId,
+    });
+    await assertModelAccess(
+      identity?.serviceAccountId
+        ? serviceAccountUserId(identity.serviceAccountId)
+        : identity?.userId,
+    );
     assertSubscriptionCredentialForProvider({ apiKey: token, provider });
     return { apiKey: token, baseUrl: undefined, extraHeaders: null };
   }
@@ -96,9 +126,17 @@ export async function resolveProxyModelsApiKey(params: {
     const resolved = await validateVirtualApiKey({
       tokenValue: token,
       expectedProvider: provider,
-      expectedOrganizationId: null,
+      expectedOrganizationId: agent?.organizationId ?? null,
+      requestedModel: params.requestedModel,
       agentId,
     });
+    await assertModelAccess(
+      resolved.serviceAccountId
+        ? serviceAccountUserId(resolved.serviceAccountId)
+        : resolved.virtualKeyIsPersonal
+          ? (resolved.virtualKeyAuthorId ?? undefined)
+          : undefined,
+    );
     if (!resolved.apiKey && !allowKeyless) {
       throw new ApiError(401, `Could not resolve an API key for ${provider}.`);
     }
@@ -118,9 +156,10 @@ export async function resolveProxyModelsApiKey(params: {
     // back to the provider default (undefined) when no base is configured.
     return {
       apiKey: resolved.apiKey ?? "",
-      baseUrl:
-        providerKey?.baseUrl ??
-        (resolved.passthroughVirtualKeyId ? resolved.baseUrl : undefined),
+      baseUrl: params.requestedModel
+        ? resolved.baseUrl
+        : (providerKey?.baseUrl ??
+          (resolved.passthroughVirtualKeyId ? resolved.baseUrl : undefined)),
       extraHeaders: providerKey?.extraHeaders ?? null,
       providerApiKeyId: providerKey?.id,
     };

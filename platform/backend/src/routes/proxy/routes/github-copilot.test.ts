@@ -13,7 +13,7 @@
  *     models.id UUID — plus the exchanged bearer and integration headers)
  *   - how the upstream rejection surfaces to the proxy caller
  */
-import { randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, jsonSchema, streamText, tool } from "ai";
 import { eq } from "drizzle-orm";
@@ -25,13 +25,17 @@ import {
 import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
+  LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  RuntimeCredentialConnectionModel,
+  RuntimeCredentialDefinitionModel,
   VirtualApiKeyModel,
 } from "@/models";
 import InteractionModel from "@/models/interaction";
 import InteractionBillingModel from "@/models/interaction-billing";
 import LimitModel from "@/models/limit";
+import { encodeGithubAppReference } from "@/services/github-app-copilot-token";
 import { modelSyncService } from "@/services/model-sync";
 import captured from "@/services/vendor-published-pricing.test-data.json";
 import {
@@ -1633,7 +1637,11 @@ describe("GitHub Copilot native Messages", () => {
   }) => {
     const app = createTestApp();
     await app.register(githubCopilotProxyRoutes);
-    const agent = await makeAgent({ name: "Native Messages" });
+    const agent = await makeAgent({
+      name: "Native Messages",
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
     const owner = await makeUser();
     await makeMember(owner.id, agent.organizationId);
     const passthroughKey = await makePassthroughCredential({
@@ -1804,14 +1812,106 @@ describe("GitHub Copilot native Messages", () => {
         (await LimitModel.getModelUsageBreakdowns([cap.id])).get(cap.id)?.[0]
           .cost,
       ).toBeCloseTo(Number(expectedCost), 10);
-      const count = await app.inject({
+      let countCalls = 0;
+      server.use(
+        http.post(
+          "https://api.githubcopilot.com/v1/messages/count_tokens",
+          async ({ request }) => {
+            countCalls++;
+            expect(request.headers.get("authorization")).toBe(
+              "Bearer copilot-bearer-test",
+            );
+            expect(request.headers.get("x-api-key")).toBeNull();
+            expect(request.headers.get("openai-intent")).toBe("messages-proxy");
+            expect(request.headers.get("anthropic-beta")).toBe(
+              "interleaved-thinking-2025-05-14",
+            );
+            expect(await request.json()).toEqual({ model, messages });
+            return HttpResponse.json({ input_tokens: 42 });
+          },
+        ),
+      );
+      // Token counting stays available even when generation has no budget left.
+      await LimitModel.patch(cap.id, { limitValue: 0 });
+      for (const url of [
+        `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
+        "/v1/github-copilot/v1/messages/count_tokens",
+      ]) {
+        const count = await app.inject({
+          method: "POST",
+          url,
+          headers: {
+            ...headers,
+            "anthropic-beta": "interleaved-thinking-2025-05-14",
+          },
+          payload: { model, messages },
+        });
+        expect(count.statusCode, count.body).toBe(200);
+        expect(count.json()).toEqual({ input_tokens: 42 });
+      }
+      expect(countCalls).toBe(2);
+      await drainBackgroundWork();
+      expect(
+        await db
+          .select()
+          .from(schema.interactionsTable)
+          .where(eq(schema.interactionsTable.profileId, agent.id)),
+      ).toHaveLength(1);
+      expect(
+        (await LimitModel.getModelUsageBreakdowns([cap.id])).get(cap.id)?.[0]
+          .cost,
+      ).toBeCloseTo(Number(expectedCost), 10);
+      // Hidden models and invalid platform credentials are rejected before HTTP.
+      await ModelModel.update(storedModel.id, { ignored: true });
+      const denied = await app.inject({
         method: "POST",
         url: `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
         headers,
         payload: { model, messages },
       });
-      expect(count.statusCode).toBe(400);
-      expect(count.body).toContain("only supports");
+      expect(denied.statusCode).toBe(403);
+      const invalid = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
+        headers: {
+          "x-api-key": "archestra_invalid_count_key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: { model, messages },
+      });
+      expect(invalid.statusCode, invalid.body).toBe(401);
+      expect(countCalls).toBe(2);
+      await ModelModel.update(storedModel.id, { ignored: false });
+      server.use(
+        http.post(
+          "https://api.githubcopilot.com/v1/messages/count_tokens",
+          () =>
+            HttpResponse.json(
+              {
+                error: {
+                  type: "invalid_request_error",
+                  message: "Counting unsupported for this model",
+                },
+              },
+              { status: 400 },
+            ),
+        ),
+      );
+      const failure = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
+        headers,
+        payload: { model, messages },
+      });
+      expect(failure.statusCode).toBe(400);
+      expect(failure.json()).toEqual({
+        error: {
+          type: "invalid_request_error",
+          message: "Counting unsupported for this model",
+        },
+      });
+      expect(failure.body).not.toContain(githubToken);
+      expect(failure.body).not.toContain(virtualKey);
     } finally {
       await app.close();
     }
@@ -1947,6 +2047,172 @@ describe("Copilot Messages terminal accounting", () => {
         expect(receipt.usage.status).toBe("incomplete");
         expect(receipt.usage.issues).toContain("partial_stream");
       }
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe("Copilot native Messages with a stored GitHub App", () => {
+  setupTestCacheManager();
+  test("uses installation bearer for count_tokens and generation, never the stored App reference", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeSecret,
+  }) => {
+    const app = createTestApp();
+    await app.register(githubCopilotProxyRoutes);
+    const agent = await makeAgent({ name: "App Messages" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs1", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const definition = await RuntimeCredentialDefinitionModel.create({
+      organizationId: agent.organizationId,
+      createdBy: owner.id,
+      definition: {
+        key: "copilot-messages-app",
+        name: "Copilot Messages App",
+        description: "",
+        icon: null,
+        kind: "github_app",
+        appId: "4242",
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    await RuntimeCredentialConnectionModel.upsert({
+      organizationId: agent.organizationId,
+      scope: "organization",
+      userId: null,
+      credentialId: definition.key,
+      value: privateKey,
+    });
+    const reference = encodeGithubAppReference({
+      ref: {
+        organizationId: agent.organizationId,
+        credentialId: definition.id,
+      },
+      installationId: "902400",
+      organization: "example-org",
+      githubUrl: "https://github.com",
+    });
+    const providerKey = await LlmProviderApiKeyModel.create(
+      {
+        organizationId: agent.organizationId,
+        name: "Copilot App plan",
+        scope: "personal",
+        provider: "github-copilot",
+        secretId: (await makeSecret({ secret: { apiKey: reference } })).id,
+        userId: owner.id,
+      },
+      {
+        apiKeyValue: reference,
+        initialPermissionGrants: [
+          { subject: { type: "user", id: owner.id }, actions: ["read", "use"] },
+        ],
+      },
+    );
+    const model = "claude-haiku-4.5";
+    const storedModel = await ModelModel.create({
+      externalId: `github-copilot/${model}`,
+      provider: "github-copilot",
+      modelId: model,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+      storedModel.id,
+    ]);
+    const { value: virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "App native Messages",
+      authorId: owner.id,
+      ...accessGrants("personal"),
+      providerApiKeys: [
+        { provider: "github-copilot", providerApiKeyId: providerKey.id },
+      ],
+    });
+    let mintCalls = 0;
+    let modelCalls = 0;
+    server.use(
+      http.post(
+        "https://api.github.com/app/installations/902400/access_tokens",
+        ({ request }) => {
+          mintCalls++;
+          expect(request.headers.get("authorization")).toMatch(/^Bearer ey/);
+          return HttpResponse.json(
+            {
+              token: "ghs_native_messages_installation",
+              expires_at: new Date(Date.now() + 3600000).toISOString(),
+            },
+            { status: 201 },
+          );
+        },
+      ),
+      ...[
+        "https://api.githubcopilot.com/v1/messages",
+        "https://api.githubcopilot.com/v1/messages/count_tokens",
+      ].map((url) =>
+        http.post(url, ({ request }) => {
+          modelCalls++;
+          expect(request.headers.get("authorization")).toBe(
+            "Bearer ghs_native_messages_installation",
+          );
+          expect(request.headers.get("copilot-integration-id")).toBe(
+            "copilot-developer-cli",
+          );
+          expect(request.headers.get("x-github-api-version")).toBe(
+            "2025-04-01",
+          );
+          expect(request.headers.get("openai-intent")).toBe("messages-proxy");
+          expect(request.headers.get("x-api-key")).toBeNull();
+          if (request.url.endsWith("count_tokens"))
+            return HttpResponse.json({ input_tokens: 11 });
+          return HttpResponse.json({
+            id: "msg_app",
+            type: "message",
+            role: "assistant",
+            model,
+            content: [{ type: "text", text: "OK" }],
+            stop_reason: "end_turn",
+            stop_sequence: null,
+            usage: { input_tokens: 11, output_tokens: 1 },
+          });
+        }),
+      ),
+    );
+    try {
+      const headers = {
+        "x-api-key": virtualKey,
+        "anthropic-version": "2023-06-01",
+      };
+      const payload = {
+        model,
+        messages: [{ role: "user", content: "Reply OK" }],
+      };
+      const count = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
+        headers,
+        payload,
+      });
+      expect(count.statusCode, count.body).toBe(200);
+      expect(count.json()).toEqual({ input_tokens: 11 });
+      const message = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages`,
+        headers,
+        payload: { ...payload, max_tokens: 32 },
+      });
+      expect(message.statusCode, message.body).toBe(200);
+      expect(message.json().content).toEqual([{ type: "text", text: "OK" }]);
+      expect(modelCalls).toBe(2);
+      expect(mintCalls).toBe(1);
     } finally {
       await app.close();
     }

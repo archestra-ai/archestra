@@ -10,7 +10,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import { decodeCursor } from "@/database/utils/pagination";
 import type {
   ScheduleRunBlocker,
@@ -31,6 +31,16 @@ class ScheduleTriggerRunModel {
   }): Promise<ScheduleTriggerRun | null> {
     const { trigger, now, skip } = params;
     return db.transaction(async (tx) => {
+      // A tuner tick that would start work while a run raced in after the
+      // caller's blocker snapshot stays unclaimed; the next check records it
+      // as skipped behind that run.
+      if (
+        trigger.tunerKind !== null &&
+        !skip &&
+        (await lockAndFindLiveRun(tx, trigger.id))
+      ) {
+        return null;
+      }
       const [claimed] = await tx
         .update(schema.scheduleTriggersTable)
         .set({ lastExecutedAt: now })
@@ -139,27 +149,17 @@ class ScheduleTriggerRunModel {
 
   /**
    * Records a manual run and queues its work atomically, unless a run of the
-   * trigger is still running. The advisory lock serializes concurrent callers,
-   * so two of them cannot both see no running run.
+   * trigger still has live work. Serialized per trigger with tuner due runs.
    */
   static async createManualRunUnlessRunning(params: {
     trigger: ScheduleTrigger;
     initiatedByUserId: string;
   }): Promise<ScheduleTriggerRun | null> {
     const { trigger } = params;
-    const runs = schema.scheduleTriggerRunsTable;
     return db.transaction(async (tx) => {
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`schedule-trigger-run:${trigger.id}`}, 0))`,
-      );
-      const [running] = await tx
-        .select({ id: runs.id })
-        .from(runs)
-        .where(and(eq(runs.triggerId, trigger.id), eq(runs.status, "running")))
-        .limit(1);
-      if (running) return null;
+      if (await lockAndFindLiveRun(tx, trigger.id)) return null;
       const [run] = await tx
-        .insert(runs)
+        .insert(schema.scheduleTriggerRunsTable)
         .values({
           organizationId: trigger.organizationId,
           triggerId: trigger.id,
@@ -487,3 +487,35 @@ class ScheduleTriggerRunModel {
 }
 
 export default ScheduleTriggerRunModel;
+
+// === Internal ===
+
+/**
+ * Takes the trigger's run-admission lock, then reports whether a running run
+ * of it still has a queued or executing task. A running run whose task died
+ * blocks nothing, so it cannot lock out later runs.
+ */
+async function lockAndFindLiveRun(
+  tx: Transaction,
+  triggerId: string,
+): Promise<boolean> {
+  const runs = schema.scheduleTriggerRunsTable;
+  const tasks = schema.tasksTable;
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`schedule-trigger-run:${triggerId}`}, 0))`,
+  );
+  const [live] = await tx
+    .select({ id: runs.id })
+    .from(runs)
+    .innerJoin(tasks, sql`${runs.id}::text = ${tasks.payload}->>'runId'`)
+    .where(
+      and(
+        eq(runs.triggerId, triggerId),
+        eq(runs.status, "running"),
+        eq(tasks.taskType, "schedule_trigger_run_execute"),
+        inArray(tasks.status, ["pending", "processing"]),
+      ),
+    )
+    .limit(1);
+  return live !== undefined;
+}

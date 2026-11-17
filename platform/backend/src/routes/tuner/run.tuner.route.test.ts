@@ -7,6 +7,7 @@ import {
 import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import AuditLogModel from "@/models/audit-log";
+import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
@@ -122,6 +123,32 @@ describe("POST /api/tuners/:kind/run", () => {
       status: "success",
     });
     expect((await run("appa")).statusCode).toBe(202);
+  });
+
+  test("a running run whose task is gone does not block a new run", async ({
+    makeScheduleTriggerRun,
+  }) => {
+    await makeScheduleTriggerRun(triggerId);
+
+    expect((await run("appa")).statusCode).toBe(202);
+  });
+
+  test("a due tick whose blocker snapshot predates a manual run starts nothing", async () => {
+    const stale = await ScheduleTriggerModel.findById(triggerId);
+    expect((await run("appa")).statusCode).toBe(202);
+
+    expect(
+      await ScheduleTriggerRunModel.recordDueRun({
+        trigger: stale ?? expect.fail("trigger missing"),
+        now: new Date(),
+      }),
+    ).toBeNull();
+    expect(
+      await ScheduleTriggerRunModel.countByTrigger({
+        organizationId,
+        triggerId,
+      }),
+    ).toBe(1);
   });
 
   test("a tuner without a trigger is not found", async () => {

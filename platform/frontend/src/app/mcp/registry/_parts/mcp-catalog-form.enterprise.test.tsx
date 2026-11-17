@@ -513,8 +513,27 @@ describe("McpCatalogForm enterprise gating", () => {
       labels: [],
       teams: [],
     };
+    const loadedTiers = vi.mocked(useAgentRuntimeTiers)();
+    vi.mocked(useAgentRuntimeTiers).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useAgentRuntimeTiers>);
     const onSubmit = vi.fn();
     const { container, rerender } = render(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={onSubmit}
+        initialValues={initialValues as never}
+      />,
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Runtime tier" }),
+    ).toHaveTextContent("Loading tiers…");
+    expect(
+      screen.getByRole("combobox", { name: "Runtime tier" }),
+    ).toBeDisabled();
+    expect(screen.queryByText(/unavailable/)).not.toBeInTheDocument();
+    vi.mocked(useAgentRuntimeTiers).mockReturnValue(loadedTiers);
+    rerender(
       <McpCatalogForm
         mode="edit"
         onSubmit={onSubmit}

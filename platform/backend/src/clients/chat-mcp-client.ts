@@ -10,6 +10,7 @@ import {
   TimeInMs,
   TOOL_POST_AGENT_RUN_FILE_SHORT_NAME,
   TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
+  TOOL_PROPOSE_TUNER_SUGGESTION_SHORT_NAME,
   TOOL_START_AGENT_RUN_SHORT_NAME,
   TOOL_STEER_AGENT_RUN_SHORT_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
@@ -26,9 +27,12 @@ import type { Tool } from "ai";
 import {
   archestraMcpBranding,
   getAgentTools,
+  getArchestraMcpTools,
   getSkillDelegationTools,
 } from "@/archestra-mcp-server";
 import { isOpenappaTool } from "@/archestra-mcp-server/openappa";
+import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
+import { tunerRunToolFilter } from "@/archestra-mcp-server/tuner-run-admission";
 import {
   isServiceAccountUserId,
   serviceAccountIdFromUserId,
@@ -69,6 +73,7 @@ import {
 } from "@/routes/mcp-gateway/utils";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
+import { findTunerRun } from "@/services/tuners/tuner-run";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { drainScopeHeaders } from "@/utils/drain-scope";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
@@ -985,8 +990,14 @@ export async function getChatMcpTools({
     parentLlm,
     suppressContentLogging,
   });
+  // A tuner run gets its own narrowed tool set; never cached or reused.
+  const tunerRun = await findTunerRun(scheduleTriggerRunId);
   const shouldUseToolCache =
-    !oauthExecution && !abortSignal && !appaSubagent && !openappaReviewPause;
+    !oauthExecution &&
+    !abortSignal &&
+    !appaSubagent &&
+    !openappaReviewPause &&
+    !tunerRun;
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
   // LRU eviction and TTL are handled automatically by LRUCacheManager
@@ -1097,7 +1108,9 @@ export async function getChatMcpTools({
     // unless a spawn bound the run to a child trajectory of its own.
     const delegatedRun =
       !appaSubagent && isAppaDelegatedRun(agentId, delegationChain);
+    const tunerRunAllows = tunerRun ? await tunerRunToolFilter(agentId) : null;
     const filteredMcpTools = mcpTools.filter((tool) => {
+      if (tunerRunAllows && !tunerRunAllows(tool.name)) return false;
       if (isAgentTool(tool.name) || isSkillTool(tool.name)) return false;
       const shortName = archestraMcpBranding.getToolShortName(tool.name);
       if (
@@ -1176,8 +1189,17 @@ export async function getChatMcpTools({
       parentLlm,
     };
     const aiTools: Record<string, Tool> = {};
+    const advertisedTools = tunerRun
+      ? [
+          ...filteredMcpTools,
+          ...tunerRunOnlyTools({
+            organizationId: tunerRun.organizationId,
+            agentId,
+          }),
+        ]
+      : filteredMcpTools;
 
-    for (const mcpTool of filteredMcpTools) {
+    for (const mcpTool of advertisedTools) {
       try {
         aiTools[mcpTool.name] = buildMcpGatewayTool({
           mcpTool,
@@ -1200,7 +1222,7 @@ export async function getChatMcpTools({
     // Fetch and add agent + skill delegation tools if organizationId is
     // available. Both dispatch through executeArchestraTool, so they share the
     // same AI SDK wrapper.
-    if (organizationId) {
+    if (organizationId && !tunerRun) {
       try {
         const [agentToolsList, skillToolsList] = await Promise.all([
           getAgentTools({
@@ -1509,4 +1531,30 @@ async function listToolsInProcess(params: {
     },
   });
   return tools;
+}
+
+/**
+ * Built-ins offered only inside a tuner run; never assigned to an agent.
+ * Attested like the gateway's own tools, or the proxy rules them foreign.
+ */
+function tunerRunOnlyTools(params: {
+  organizationId: string;
+  agentId: string;
+}) {
+  return getArchestraMcpTools()
+    .filter(
+      (tool) =>
+        archestraMcpBranding.getToolShortName(tool.name) ===
+        TOOL_PROPOSE_TUNER_SUGGESTION_SHORT_NAME,
+    )
+    .map((tool) => ({
+      ...tool,
+      description: attestToolDescription({
+        organizationId: params.organizationId,
+        gatewayId: params.agentId,
+        advertisedName: tool.name,
+        kind: "b",
+        description: tool.description,
+      }),
+    }));
 }

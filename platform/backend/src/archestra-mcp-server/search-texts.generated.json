@@ -399,6 +399,10 @@
     "definitionHash": "0183fe2b55446ee9645786c58de68908882e0ade66ee1f25e530f9834d9753f7",
     "searchText": "list external consults per session, OpenAPPA helper call log, debug failed annotator, refused call reason, outcome status filter timeout unreachable non_success, HTTP status, diagnostics raw response, role authority sanitizer context provider audience source, external name, pagination cursor, troubleshoot policy denial"
   },
+  "list_openappa_operations": {
+    "definitionHash": "0922f2c6400c64a3f394167a7a684ee8c780af131a2a610a19a4092a15759e44",
+    "searchText": "list OpenAPPA guardrails policy decisions operations history audit, denied blocked allowed tool calls, filter by tool name decision date, session ids, investigate why calls were denied, recent enforcement activity, paginated"
+  },
   "list_openappa_yells": {
     "definitionHash": "2d6825c33ba76db55405f7197e05735a40476b706a22be19b02ce816b53eb4ee",
     "searchText": "list OpenAPPA yells alerts agent diagnostic reports, approval waived, block waived, break the glass policy override, filter resolved unresolved status, chat session, message text search, paginate cursor, review flagged tool calls, audit agent issues"
@@ -482,6 +486,10 @@
   "propose_guardrails_server_rules_change": {
     "definitionHash": "c22607b64a0c1fbb26e3f4a79b50a0f8502facef3bc0df8f7c244d66743e4c12",
     "searchText": "propose MCP server guardrails rules change, open pull request on policy repository, update per-server rules file, add self-service folder include to appa.toml, change summary for reviewers, Git sync after merge, pull request link, edit tool policy for one server"
+  },
+  "propose_tuner_suggestion": {
+    "definitionHash": "046c147a4c312bfc2ead873d1212123bed566f938d5f7ddf2963709f0f955f0e",
+    "searchText": "file tuner suggestion admin inbox, report housekeeping finding recommendation, propose guardrails policy change edit, candidate fingerprint rationale, scheduled tuner run review"
   },
   "publish_app": {
     "definitionHash": "510e7d578250669b1f4562fde1900077ae75ed43db61fbfe5d07456bc60e5df1",

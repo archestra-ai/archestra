@@ -1,7 +1,9 @@
+import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
+import { AgentModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
@@ -164,6 +166,72 @@ describe("agent routes - per-agent network policy", () => {
       payload: { networkPolicy: null },
     });
     expect(unlocked.statusCode).toBe(403);
+  });
+
+  test("the SRE built-in takes its own policy from an environment updater only", async () => {
+    const sre = await AgentModel.create(
+      {
+        name: "SRE",
+        organizationId,
+        agentType: "agent",
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+      },
+      member.id,
+    );
+    const reconcile = vi.spyOn(
+      daggerEnvironmentRuntimeManager,
+      "reconcileAgent",
+    );
+
+    const memberApp = await appFor(member);
+    const refused = await memberApp.inject({
+      method: "PUT",
+      url: `/api/agents/${sre.id}`,
+      payload: { networkPolicy: { egressMode: "off" } },
+    });
+    expect(refused.statusCode).toBe(403);
+    const prompted = await memberApp.inject({
+      method: "PUT",
+      url: `/api/agents/${sre.id}`,
+      payload: { systemPrompt: "Investigate." },
+    });
+    expect(prompted.statusCode).toBe(200);
+
+    const adminApp = await appFor(admin);
+    const locked = await adminApp.inject({
+      method: "PUT",
+      url: `/api/agents/${sre.id}`,
+      payload: { networkPolicy: { egressMode: "off" } },
+    });
+    expect(locked.statusCode).toBe(200);
+    expect((await AgentModel.findById(sre.id))?.networkPolicy).toEqual({
+      egressMode: "off",
+      domainPreset: "none",
+      allowedDomains: [],
+      allowedCidrs: [],
+    });
+    await drainBackgroundWork();
+    expect(reconcile).toHaveBeenCalledWith(sre.id);
+  });
+
+  test("other built-ins drop a policy in the update body", async () => {
+    const compaction = await AgentModel.create({
+      name: "Compaction",
+      organizationId,
+      agentType: "agent",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
+    });
+
+    const adminApp = await appFor(admin);
+    const response = await adminApp.inject({
+      method: "PUT",
+      url: `/api/agents/${compaction.id}`,
+      payload: { networkPolicy: { egressMode: "off" } },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(
+      (await AgentModel.findById(compaction.id))?.networkPolicy,
+    ).toBeNull();
   });
 
   test("soft-delete, restore, and permanent delete each reconcile the agent's engine", async () => {

@@ -6,13 +6,11 @@ import {
   executeA2AMessage,
 } from "@/agents/a2a-executor";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import logger from "@/logging";
 import {
   A2ATaskModel,
   ActiveChatRunModel,
   AgentModel,
-  AgentTeamModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
   UserModel,
@@ -22,12 +20,14 @@ import { ProviderError } from "@/routes/chat/errors";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { startDetachedAgentTask } from "@/services/agent-runtime/start-task";
+import { scheduleActorCanUseAgent } from "@/services/schedule-trigger-access";
 import {
   createAndLinkRunConversation,
   persistRunConversationMessages,
   persistRunUserMessage,
   recordRunConversationError,
 } from "@/services/scheduled-run-conversation";
+import { runTunerPreflight } from "@/services/tuners/preflight";
 import type { Conversation } from "@/types";
 import { hasUnavailableScheduleReview } from "./schedule-review-outcome";
 
@@ -97,18 +97,13 @@ export async function handleScheduleTriggerRunExecution(
     if (!actor) {
       throw new Error("Scheduled trigger actor no longer exists");
     }
-    const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
-      userId: actor.id,
-      organizationId: trigger.organizationId,
-    });
-
-    const hasAgentAccess = await AgentTeamModel.userHasAgentAccess({
-      userId: actor.id,
-      agentId: trigger.agentId,
-      isAgentAdmin: userIsAgentAdmin,
-      action: "use",
-    });
-    if (!hasAgentAccess) {
+    if (
+      !(await scheduleActorCanUseAgent({
+        userId: actor.id,
+        organizationId: trigger.organizationId,
+        agentId: trigger.agentId,
+      }))
+    ) {
       throw new Error(
         "Scheduled trigger actor no longer has access to the target agent",
       );
@@ -120,6 +115,42 @@ export async function handleScheduleTriggerRunExecution(
 
     if (triggerAgent.agentType !== "agent") {
       throw new Error("Scheduled trigger target must be an internal agent");
+    }
+
+    let message = trigger.messageTemplate;
+    if (trigger.tunerKind !== null) {
+      // Tuner viewers only read a run, so its conversation belongs to the user
+      // it executes as; the trigger's actor may move before anyone opens it.
+      if (!run.chatConversationId) {
+        await createAndLinkRunConversation({
+          run,
+          trigger,
+          ownerUserId: actor.id,
+          organizationId: trigger.organizationId,
+        });
+      }
+      const preflight = await runTunerPreflight({
+        runId: run.id,
+        trigger: { ...trigger, tunerKind: trigger.tunerKind },
+        agentHasRuntime: resolveAgentRuntime(triggerAgent) !== null,
+        now: new Date(),
+      });
+      switch (preflight.type) {
+        case "taken":
+          return;
+        case "settled":
+          await ScheduleTriggerRunModel.markCompleted({
+            runId: run.id,
+            status: "success",
+          });
+          metrics.scheduleTrigger.reportScheduleTriggerRun(
+            agentName,
+            "success",
+          );
+          return;
+        case "run_agent":
+          message = preflight.message;
+      }
     }
 
     if (resolveAgentRuntime(triggerAgent)) {
@@ -230,7 +261,7 @@ export async function handleScheduleTriggerRunExecution(
     const writer = eventWriter;
     executeResult = await executeA2AMessage({
       agentId: trigger.agentId,
-      message: trigger.messageTemplate,
+      message,
       organizationId: trigger.organizationId,
       userId: actor.id,
       sessionId: `scheduled-${run.id}`,

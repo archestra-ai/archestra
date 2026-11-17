@@ -3,6 +3,7 @@ import {
   APP_RUNTIME_SYSTEM_PROMPT,
   APPA_KEEPER_AGENT_ICON,
   ARCHESTRA_MCP_CATALOG_ID,
+  type ArchestraToolShortName,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
@@ -68,6 +69,7 @@ import {
   stripBuiltInBodyFrontmatter,
 } from "@/skills/built-in-skills";
 import type { BuiltInAgentConfig, Organization } from "@/types";
+import type { SuggestedPromptInput } from "@/types/agent-suggested-prompt";
 import {
   encryptSecretValue,
   ensureEncryptionKeyAvailable,
@@ -141,6 +143,24 @@ export async function syncBuiltInAgents(
           name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
         } as const,
       },
+      ...(appaTunerEnabled()
+        ? [
+            {
+              builtInAgentId: BUILT_IN_AGENT_IDS.APPA_TUNER,
+              name: BUILT_IN_AGENT_NAMES.APPA_TUNER,
+              description:
+                "Reviews OpenAPPA activity on a schedule and files suggestions for administrators",
+              systemPrompt: archestraMcpBranding.brandBuiltInText(
+                BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[
+                  BUILT_IN_AGENT_IDS.APPA_TUNER
+                ],
+              ),
+              builtInAgentConfig: {
+                name: BUILT_IN_AGENT_IDS.APPA_TUNER,
+              } as const,
+            },
+          ]
+        : []),
       {
         builtInAgentId: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
         name: BUILT_IN_AGENT_NAMES.CONTEXT_COMPACTION,
@@ -406,58 +426,40 @@ export async function seedArchestraCatalogAndTools(): Promise<void> {
 
 /** @public — startup reconciliation, exported for behavior tests. */
 export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
-  const toolShortNames = [
-    "get_guardrails_policy",
-    "get_openappa_policy_tests",
-    "run_openappa_policy_tests",
-    "preview_guardrails_validation_change",
-    "update_guardrails_validation",
-    "get_openappa_yell",
-    "resolve_openappa_yell",
-    "list_openappa_yells",
-    "list_openappa_consults",
-    // Read-only, so it can find out why a scheduled run was blocked.
-    "list_schedule_triggers",
-    "get_schedule_trigger",
-    "list_schedule_trigger_runs",
-    "get_schedule_trigger_run",
-    "get_schedule_trigger_run_transcript",
-    // Inspect gateway sessions separately from scheduled and runtime runs.
-    "list_llm_interactions",
-    "get_llm_interaction",
-    "list_llm_sessions",
-    "get_llm_session_logs",
-    "list_guardrails_battery_fits",
-    "validate_guardrails_policy",
-    "preview_guardrails_policy_change",
-    "update_guardrails_policy",
-    "bind_guardrails_credential",
-    "get_guardrails_policy_change_status",
-    "list_runtime_credentials",
-    "get_runtime_credential",
-    "create_runtime_credential",
-    "update_runtime_credential",
-    "delete_runtime_credential",
-    "request_runtime_credential_setup",
-    "request_battery_credentials",
-    "sync_guardrails_repository",
-    // A server's editors change its own rules through pull requests.
-    "get_guardrails_server_rules",
-    "preview_guardrails_server_rules_change",
-    "propose_guardrails_server_rules_change",
-    "get_guardrails_server_rules_change_status",
-    "list_mcp_server_deployments",
-    "inspect_guardrails_server",
-    "load_skill",
-    "ask_user",
-    // A yell's archive is read in the sandbox; absent when the sandbox is off.
-    "run_command",
-    "upload_file",
-    "download_file",
-  ] as const;
+  await syncAppaAgentCapabilities({
+    builtInAgentId: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+    enabled: config.openappa.enabled,
+    toolShortNames: APPA_KEEPER_TOOL_SHORT_NAMES,
+    suggestedPrompts: OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
+  });
+}
 
+/**
+ * Re-applies the APPA tuner's read-only tool set and the appa-guide skill.
+ * The tuner exists only while both tuners and OpenAPPA are enabled.
+ *
+ * @public — startup reconciliation, exported for behavior tests.
+ */
+export async function syncAppaTunerAgentCapabilities(): Promise<void> {
+  if (!appaTunerEnabled()) return;
+  await syncAppaAgentCapabilities({
+    builtInAgentId: BUILT_IN_AGENT_IDS.APPA_TUNER,
+    enabled: true,
+    toolShortNames: APPA_TUNER_TOOL_SHORT_NAMES,
+    suggestedPrompts: [],
+  });
+}
+
+async function syncAppaAgentCapabilities(params: {
+  builtInAgentId:
+    | typeof BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
+    | typeof BUILT_IN_AGENT_IDS.APPA_TUNER;
+  enabled: boolean;
+  toolShortNames: readonly ArchestraToolShortName[];
+  suggestedPrompts: readonly SuggestedPromptInput[];
+}): Promise<void> {
+  const { builtInAgentId, enabled, toolShortNames, suggestedPrompts } = params;
   for (const organization of await getOrganizationsForBuiltInAgentSync()) {
-    const enabled = config.openappa.enabled;
     const findBuiltIns = async () => ({
       guide: enabled
         ? await SkillModel.findBuiltIn({
@@ -465,10 +467,7 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
             sourceRef: builtInSkillSourceRef("appa-guide"),
           })
         : null,
-      agent: await AgentModel.getBuiltInAgent(
-        BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-        organization.id,
-      ),
+      agent: await AgentModel.getBuiltInAgent(builtInAgentId, organization.id),
     });
     let found = await findBuiltIns();
     // An organization created after the built-in pass (the fallback in
@@ -572,13 +571,10 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
         agent.id,
         tx,
       );
-      if (
-        JSON.stringify(currentPrompts) !==
-        JSON.stringify(OPENAPPA_CONFIG_SUGGESTED_PROMPTS)
-      ) {
+      if (JSON.stringify(currentPrompts) !== JSON.stringify(suggestedPrompts)) {
         await AgentSuggestedPromptModel.syncForAgent({
           agentId: agent.id,
-          prompts: [...OPENAPPA_CONFIG_SUGGESTED_PROMPTS],
+          prompts: [...suggestedPrompts],
           tx,
         });
       }
@@ -586,6 +582,81 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
     });
     await AgentVersionModel.forkIfChangedBestEffort(agentId);
   }
+}
+
+const APPA_KEEPER_TOOL_SHORT_NAMES = [
+  "get_guardrails_policy",
+  "get_openappa_policy_tests",
+  "run_openappa_policy_tests",
+  "preview_guardrails_validation_change",
+  "update_guardrails_validation",
+  "get_openappa_yell",
+  "resolve_openappa_yell",
+  "list_openappa_yells",
+  "list_openappa_consults",
+  "list_openappa_operations",
+  // Read-only, so it can find out why a scheduled run was blocked.
+  "list_schedule_triggers",
+  "get_schedule_trigger",
+  "list_schedule_trigger_runs",
+  "get_schedule_trigger_run",
+  "get_schedule_trigger_run_transcript",
+  // Inspect gateway sessions separately from scheduled and runtime runs.
+  "list_llm_interactions",
+  "get_llm_interaction",
+  "list_llm_sessions",
+  "get_llm_session_logs",
+  "list_guardrails_battery_fits",
+  "validate_guardrails_policy",
+  "preview_guardrails_policy_change",
+  "update_guardrails_policy",
+  "bind_guardrails_credential",
+  "get_guardrails_policy_change_status",
+  "list_runtime_credentials",
+  "get_runtime_credential",
+  "create_runtime_credential",
+  "update_runtime_credential",
+  "delete_runtime_credential",
+  "request_runtime_credential_setup",
+  "request_battery_credentials",
+  "sync_guardrails_repository",
+  // A server's editors change its own rules through pull requests.
+  "get_guardrails_server_rules",
+  "preview_guardrails_server_rules_change",
+  "propose_guardrails_server_rules_change",
+  "get_guardrails_server_rules_change_status",
+  "list_mcp_server_deployments",
+  "inspect_guardrails_server",
+  "load_skill",
+  "ask_user",
+  // A yell's archive is read in the sandbox; absent when the sandbox is off.
+  "run_command",
+  "upload_file",
+  "download_file",
+] as const satisfies readonly ArchestraToolShortName[];
+
+// Read-only: the tuner investigates and files suggestions, never changes anything.
+const APPA_TUNER_TOOL_SHORT_NAMES = [
+  "get_guardrails_policy",
+  "get_openappa_policy_tests",
+  "preview_guardrails_validation_change",
+  "list_openappa_yells",
+  "get_openappa_yell",
+  "list_openappa_consults",
+  "list_openappa_operations",
+  "list_llm_interactions",
+  "get_llm_interaction",
+  "list_llm_sessions",
+  "get_llm_session_logs",
+  "list_guardrails_battery_fits",
+  "validate_guardrails_policy",
+  "preview_guardrails_policy_change",
+  "get_guardrails_server_rules",
+  "load_skill",
+] as const satisfies readonly ArchestraToolShortName[];
+
+function appaTunerEnabled(): boolean {
+  return config.tuners.enabled && config.openappa.enabled;
 }
 
 const APPA_KEEPER_DEFAULT_GRANTS: ResourcePermissionGrant[] = [
@@ -1211,6 +1282,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await syncBuiltInAgents();
   await seedArchestraCatalogAndTools();
   await syncOpenAppaConfigAgentCapabilities();
+  await syncAppaTunerAgentCapabilities();
   await enableSkillToolsForExistingOrgs();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();

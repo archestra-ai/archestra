@@ -133,6 +133,9 @@ export type AgentScopeFilter = z.infer<typeof AgentScopeFilterSchema>;
 const OpenAppaConfigAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG),
 });
+const AppaTunerAgentConfigSchema = z.object({
+  name: z.literal(BUILT_IN_AGENT_IDS.APPA_TUNER),
+});
 const ContextCompactionAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION),
 });
@@ -151,6 +154,7 @@ const SreAgentConfigSchema = z.object({
 // Discriminated union — add future built-in agents here
 export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
   OpenAppaConfigAgentConfigSchema,
+  AppaTunerAgentConfigSchema,
   ContextCompactionAgentConfigSchema,
   ChatTitleGenerationAgentConfigSchema,
   AppRuntimeAgentConfigSchema,

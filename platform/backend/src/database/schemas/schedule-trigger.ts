@@ -1,11 +1,14 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { TunerKind } from "@/types/tuner";
 import agentsTable from "./agent";
 import projectsTable from "./project";
 import usersTable from "./user";
@@ -29,6 +32,12 @@ const scheduleTriggersTable = pgTable(
     projectId: uuid("project_id").references(() => projectsTable.id, {
       onDelete: "cascade",
     }),
+    /**
+     * Set on the one trigger per organization that runs a tuner. Tuner
+     * triggers are hidden from generic schedule surfaces and run through the
+     * tuner preflight (services/tuners).
+     */
+    tunerKind: text("tuner_kind").$type<TunerKind>(),
     messageTemplate: text("message_template").notNull(),
     cronExpression: text("cron_expression").notNull(),
     timezone: text("timezone").notNull(),
@@ -52,6 +61,9 @@ const scheduleTriggersTable = pgTable(
       table.enabled,
       table.lastExecutedAt,
     ),
+    uniqueIndex("schedule_triggers_org_tuner_kind_uidx")
+      .on(table.organizationId, table.tunerKind)
+      .where(sql`${table.tunerKind} IS NOT NULL`),
   ],
 );
 

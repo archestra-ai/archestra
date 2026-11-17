@@ -6,6 +6,9 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
+import config from "@/config";
+import { stripHookRunParts } from "@/hooks/hook-run-parts";
 import {
   ConversationModel,
   ScheduleTriggerModel,
@@ -29,13 +32,15 @@ import {
 } from "@/services/scheduled-run-conversation";
 import {
   ApiError,
+  type ChatMessage,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  ScheduleTriggerResponseSchema,
+  type ScheduleTriggerRun,
   ScheduleTriggerRunKindSchema,
+  ScheduleTriggerRunResponseSchema,
   ScheduleTriggerRunStatusSchema,
   SelectConversationSchema,
-  SelectScheduleTriggerRunSchema,
-  SelectScheduleTriggerSchema,
   UuidIdSchema,
 } from "@/types";
 import {
@@ -76,7 +81,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .optional(),
         }),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectScheduleTriggerSchema),
+          createPaginatedResponseSchema(ScheduleTriggerResponseSchema),
         ),
       },
     },
@@ -181,7 +186,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Create a scheduled agent trigger",
         tags: ["Schedule Triggers"],
         body: CreateScheduleTriggerBodySchema,
-        response: constructResponseSchema(SelectScheduleTriggerSchema),
+        response: constructResponseSchema(ScheduleTriggerResponseSchema),
       },
     },
     async ({ body, user, organizationId }, reply) => {
@@ -203,7 +208,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a scheduled agent trigger",
         tags: ["Schedule Triggers"],
         params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(SelectScheduleTriggerSchema),
+        response: constructResponseSchema(ScheduleTriggerResponseSchema),
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
@@ -227,7 +232,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Schedule Triggers"],
         params: z.object({ id: UuidIdSchema }),
         body: UpdateScheduleTriggerBodySchema,
-        response: constructResponseSchema(SelectScheduleTriggerSchema),
+        response: constructResponseSchema(ScheduleTriggerResponseSchema),
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
@@ -278,7 +283,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Enable a scheduled agent trigger",
         tags: ["Schedule Triggers"],
         params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(SelectScheduleTriggerSchema),
+        response: constructResponseSchema(ScheduleTriggerResponseSchema),
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
@@ -309,7 +314,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Disable a scheduled agent trigger",
         tags: ["Schedule Triggers"],
         params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(SelectScheduleTriggerSchema),
+        response: constructResponseSchema(ScheduleTriggerResponseSchema),
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
@@ -340,7 +345,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Run a scheduled agent trigger immediately",
         tags: ["Schedule Triggers"],
         params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(SelectScheduleTriggerRunSchema),
+        response: constructResponseSchema(ScheduleTriggerRunResponseSchema),
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
@@ -373,7 +378,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           runKind: ScheduleTriggerRunKindSchema.optional(),
         }),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectScheduleTriggerRunSchema),
+          createPaginatedResponseSchema(ScheduleTriggerRunResponseSchema),
         ),
       },
     },
@@ -428,7 +433,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
           runId: UuidIdSchema,
         }),
-        response: constructResponseSchema(SelectScheduleTriggerRunSchema),
+        response: constructResponseSchema(ScheduleTriggerRunResponseSchema),
       },
     },
     async ({ params: { id, runId }, user, organizationId }, reply) => {
@@ -460,16 +465,15 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id, runId }, user, organizationId }, reply) => {
-      // Access is owner / project oversight (the shared run gate) — the
-      // same gate as every other schedule op. Loading the run conversation can
-      // MINT one when it isn't linked yet (createAndLinkRunConversation below),
-      // so it stays on that existing permission rather than any project scope.
+      // Loading the run conversation can MINT one when it isn't linked yet
+      // (createAndLinkRunConversation below), so a generic trigger needs `use`,
+      // not project read; a tuner run opens for tuner viewers.
       const run = await findAccessibleScheduleTriggerRunOrThrow({
         triggerId: id,
         runId,
         userId: user.id,
         organizationId,
-        access: "use",
+        access: "open_run",
       });
 
       const conversation = await ensureRunConversation({
@@ -478,7 +482,21 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      return reply.send(conversation);
+      // The same requester-side gate as the chat read: hook-run parts only for
+      // an agent admin while the conversation is in debug mode.
+      const hooksDebugVisible =
+        config.hooks.enabled &&
+        conversation.hooksDebugEnabled &&
+        (await hasAnyAgentTypeAdminPermission({
+          userId: user.id,
+          organizationId,
+        }));
+      return reply.send({
+        ...conversation,
+        messages: stripHookRunParts(conversation.messages as ChatMessage[], {
+          visible: hooksDebugVisible,
+        }),
+      });
     },
   );
 };
@@ -486,7 +504,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default scheduleTriggerRoutes;
 
 async function ensureRunConversation(params: {
-  run: z.infer<typeof SelectScheduleTriggerRunSchema>;
+  run: ScheduleTriggerRun;
   userId: string;
   organizationId: string;
 }): Promise<z.infer<typeof SelectConversationSchema>> {
@@ -499,7 +517,8 @@ async function ensureRunConversation(params: {
 
   // A project-scoped run's conversation was created up front by the handler;
   // otherwise create it now, owned by the requester so follow-up chat uses
-  // their own model/API key access.
+  // their own model/API key access. A tuner run links its conversation for
+  // the user it executes as when it starts, so a tuner viewer never mints one.
   let conversation = run.chatConversationId
     ? await ConversationModel.findByIdInOrganization({
         id: run.chatConversationId,
@@ -508,6 +527,9 @@ async function ensureRunConversation(params: {
       })
     : null;
   if (!conversation) {
+    if (trigger.tunerKind !== null) {
+      throw new ApiError(404, "This tuner run has no conversation");
+    }
     try {
       conversation = await createAndLinkRunConversation({
         run,

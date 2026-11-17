@@ -30,6 +30,7 @@ export const resources = [
   "mcpGateway",
   "llmProxy",
   "log",
+  "tuner",
   "identityProvider",
   "mcpRegistry",
   "mcpServerInstallation",
@@ -80,6 +81,7 @@ export const resourceLabels: Record<Resource, string> = {
   mcpGateway: "MCP Gateways",
   llmProxy: "LLM Proxy",
   log: "LLM & MCP Logs",
+  tuner: "Tuners",
   organization: "Organization",
   identityProvider: "Identity Providers",
   member: "Users",
@@ -119,6 +121,8 @@ export const resourceDescriptions: Record<Resource, string> = {
   guardrailsPolicy:
     "Guardrails (OpenAPPA) policies that inspect and filter prompts and tool calls",
   log: "Request logs and alerts from the LLM Proxy, MCP tool calls, and Guardrails",
+  tuner:
+    "Scheduled agents that look for recurring issues and file suggestions for admins",
   chat: "Conversations with agents and models in the chat interface",
   project:
     "Shared workspaces containing chats, files, schedules, and agent runs",
@@ -182,7 +186,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmCost",
     "costExport",
   ],
-  Other: ["chat", "project", "knowledgeSource", "log", "auditLog"],
+  Other: ["chat", "project", "knowledgeSource", "log", "tuner", "auditLog"],
   Administration: [
     "accessPolicies",
     "member",

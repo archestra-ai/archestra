@@ -21,6 +21,7 @@ import {
   Route,
   Settings,
   Shuffle,
+  SlidersHorizontal,
   Sparkles,
   Waypoints,
 } from "lucide-react";
@@ -42,6 +43,9 @@ import { GUARDRAILS_BETA_TOOLTIP } from "@/lib/openappa-maturity";
 
 /** Shown only while the deployment enables auto routing. */
 export const AUTO_ROUTING_URL = "/llm/auto-routing";
+
+/** Shown only while the deployment enables tuners. */
+export const TUNERS_URL = "/tuners";
 
 export interface NavSubItem {
   title: string;
@@ -318,6 +322,14 @@ export const contentNavGroups: NavGroup[] = [
     // deployment is configured.
     id: "platform",
     items: [
+      {
+        title: "Tuners",
+        url: TUNERS_URL,
+        icon: SlidersHorizontal,
+        customIsActive: (pathname: string) => pathname.startsWith(TUNERS_URL),
+        beta: true,
+        badgeLabel: "Beta",
+      },
       {
         title: "Logs",
         url: "/llm/logs",

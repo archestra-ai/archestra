@@ -1,13 +1,18 @@
+import { makeSignature } from "better-auth/crypto";
 import { vi } from "vitest";
 import { auth as betterAuth } from "@/auth/better-auth";
+import { authPlugin } from "@/auth/fastify-plugin";
+import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import ConversationModel from "@/models/conversation";
 import MessageModel from "@/models/message";
+import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import { projectService } from "@/services/project";
+import { createAndLinkRunConversation } from "@/services/scheduled-run-conversation";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -230,6 +235,106 @@ describe("schedule trigger routes", () => {
     expect(response.json().error.message).toContain(
       "You do not have access to this scheduled task",
     );
+  });
+
+  test("a tuner viewer opens a tuner run's conversation, never minting one, but cannot run, toggle or edit the tuner", async ({
+    makeAgent,
+    makeCustomRole,
+    makeMember,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+    makeUser,
+  }) => {
+    config.tuners.enabled = true;
+    const executor = adminUser;
+    const agent = await makeAgent({ organizationId, agentType: "agent" });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      agentId: agent.id,
+      actorUserId: executor.id,
+      tunerKind: "appa",
+    });
+    const [run, unopened] = await Promise.all([
+      makeScheduleTriggerRun(trigger.id, { organizationId, runKind: "due" }),
+      makeScheduleTriggerRun(trigger.id, { organizationId, runKind: "due" }),
+    ]);
+    // What the run handler links when the run starts.
+    const linked = await createAndLinkRunConversation({
+      run,
+      trigger,
+      ownerUserId: executor.id,
+      organizationId,
+    });
+    await MessageModel.create({
+      conversationId: linked.id,
+      role: "assistant",
+      content: {
+        id: "message-1",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "Filed one suggestion" },
+          { type: "data-hook-run", data: { hook: "pre-tool", stdout: "x" } },
+        ],
+      },
+    });
+    config.hooks.enabled = true;
+    await ConversationModel.setHooksDebugEnabled({
+      id: linked.id,
+      userId: executor.id,
+      organizationId,
+      enabled: true,
+    });
+    const nextActor = await makeUser();
+    await makeMember(nextActor.id, organizationId, { role: "admin" });
+    await ScheduleTriggerModel.update(trigger.id, {
+      actorUserId: nextActor.id,
+    });
+    const viewer = await makeUser();
+    const { role } = await makeCustomRole(organizationId, {
+      permission: { tuner: ["read"], log: ["read", "admin"] },
+    });
+    await makeMember(viewer.id, organizationId, { role });
+    adminUser = viewer;
+    const open = (runId: string) =>
+      app.inject({
+        method: "POST",
+        url: `/api/schedule-triggers/${trigger.id}/runs/${runId}/conversation`,
+      });
+
+    const partTypes = (body: { messages: { parts: { type: string }[] }[] }) =>
+      body.messages.flatMap((m) => m.parts.map((p) => p.type));
+    const opened = await open(run.id);
+    expect(opened.statusCode, opened.body).toBe(200);
+    expect(opened.json()).toMatchObject({
+      userId: executor.id,
+      agentId: agent.id,
+    });
+    expect(partTypes(opened.json())).toEqual(["text"]);
+    adminUser = executor;
+    expect(partTypes((await open(run.id)).json())).toEqual([
+      "text",
+      "data-hook-run",
+    ]);
+    adminUser = viewer;
+    expect((await open(unopened.id)).statusCode).toBe(404);
+    expect(
+      (await ScheduleTriggerRunModel.findById(unopened.id))?.chatConversationId,
+    ).toBeNull();
+
+    const base = `/api/schedule-triggers/${trigger.id}`;
+    const refused = await Promise.all([
+      app.inject({ method: "POST", url: `${base}/run-now` }),
+      app.inject({ method: "POST", url: `${base}/enable` }),
+      app.inject({ method: "POST", url: `${base}/disable` }),
+      app.inject({ method: "PUT", url: base, payload: { name: "Renamed" } }),
+    ]);
+    expect(refused.map((r) => r.statusCode)).toEqual([404, 404, 404, 404]);
+    expect(
+      await ScheduleTriggerRunModel.countByTrigger({
+        organizationId,
+        triggerId: trigger.id,
+      }),
+    ).toBe(2);
   });
 
   test("POST create rejects a payload without a project", async ({
@@ -480,5 +585,118 @@ describe("schedule trigger routes", () => {
       payload: { projectId: "11111111-1111-4111-8111-111111111111" },
     });
     expect(response.statusCode).toBe(404);
+  });
+});
+
+describe("opening a run conversation through the auth middleware", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let executor: User;
+  let tunerViewer: User;
+  let agentId: string;
+  let cookie: string;
+
+  beforeEach(
+    async ({
+      makeAgent,
+      makeCustomRole,
+      makeMember,
+      makeOrganization,
+      makeSession,
+      makeUser,
+    }) => {
+      config.tuners.enabled = true;
+      organizationId = (await makeOrganization()).id;
+      executor = await makeUser();
+      await makeMember(executor.id, organizationId, { role: "admin" });
+      tunerViewer = await makeUser();
+      const { role } = await makeCustomRole(organizationId, {
+        permission: { tuner: ["read"], log: ["read", "admin"] },
+      });
+      await makeMember(tunerViewer.id, organizationId, { role });
+      agentId = (await makeAgent({ organizationId, agentType: "agent" })).id;
+      const session = await makeSession(tunerViewer.id, {
+        activeOrganizationId: organizationId,
+      });
+      const signature = await makeSignature(
+        session.token,
+        process.env.ARCHESTRA_AUTH_SECRET as string,
+      );
+      cookie = `archestra.session_token=${encodeURIComponent(`${session.token}.${signature}`)}`;
+
+      app = createFastifyInstance();
+      await app.register(authPlugin);
+      const { default: scheduleTriggerRoutes } = await import(
+        "./schedule-trigger"
+      );
+      await app.register(scheduleTriggerRoutes);
+    },
+  );
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const openAsTunerViewer = (triggerId: string, runId: string) =>
+    app.inject({
+      method: "POST",
+      url: `/api/schedule-triggers/${triggerId}/runs/${runId}/conversation`,
+      headers: { cookie },
+    });
+
+  test("a tuner viewer without project:create opens a linked tuner run conversation", async ({
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      agentId,
+      actorUserId: executor.id,
+      tunerKind: "appa",
+    });
+    const [run, unopened] = await Promise.all([
+      makeScheduleTriggerRun(trigger.id, { organizationId, runKind: "due" }),
+      makeScheduleTriggerRun(trigger.id, { organizationId, runKind: "due" }),
+    ]);
+    const linked = await createAndLinkRunConversation({
+      run,
+      trigger,
+      ownerUserId: executor.id,
+      organizationId,
+    });
+
+    const opened = await openAsTunerViewer(trigger.id, run.id);
+    expect(opened.statusCode, opened.body).toBe(200);
+    expect(opened.json()).toMatchObject({ id: linked.id, userId: executor.id });
+    expect((await openAsTunerViewer(trigger.id, unopened.id)).statusCode).toBe(
+      404,
+    );
+  });
+
+  test("a caller without project:create cannot open a generic trigger's run conversation, even as its actor", async ({
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      agentId,
+      actorUserId: tunerViewer.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id, {
+      organizationId,
+      runKind: "due",
+    });
+    const conversation = await ConversationModel.create({
+      userId: tunerViewer.id,
+      organizationId,
+      agentId,
+    });
+    await ScheduleTriggerRunModel.setChatConversationId(
+      run.id,
+      conversation.id,
+    );
+
+    const response = await openAsTunerViewer(trigger.id, run.id);
+    expect(response.statusCode, response.body).toBe(403);
   });
 });

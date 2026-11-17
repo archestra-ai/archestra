@@ -45,6 +45,7 @@ import ServiceAccountFederatedCredentialModel from "@/models/service-account-fed
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
+import TunerSuggestionModel from "@/models/tuner-suggestion";
 import UserLimitUsageResetModel from "@/models/user-limit-usage-reset";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
@@ -180,6 +181,7 @@ export const AUDIT_DECISIONS = {
   limitsTable: { audited: true, model: LimitModel },
   blobProvidersTable: { audited: true, model: BlobProviderModel },
   costExportsTable: { audited: true, model: CostExportModel },
+  tunerSuggestionsTable: { audited: true, model: TunerSuggestionModel },
   userLimitUsageResetsTable: {
     audited: true,
     model: UserLimitUsageResetModel,

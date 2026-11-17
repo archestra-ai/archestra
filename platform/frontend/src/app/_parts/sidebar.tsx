@@ -33,6 +33,7 @@ import {
   isNavItemPermitted,
   type NavGroup,
   type NavItem,
+  TUNERS_URL,
 } from "@/app/_parts/studio-nav";
 import { preloadAgentsPage } from "@/app/agents/preload";
 import { prefetchMcpRegistry } from "@/app/mcp/registry/_parts/prefetch-registry";
@@ -520,6 +521,7 @@ export function AppSidebar() {
   const { data: guardrailsDeployment } = useGuardrailsDeployment();
   const autoRoutingEnabled = useFeature("autoRoutingEnabled");
   const modelPoolsEnabled = useFeature("llmModelPoolsEnabled") === true;
+  const tunersEnabled = useFeature("tunersEnabled") === true;
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
@@ -556,7 +558,8 @@ export function AppSidebar() {
           .filter(
             (item) =>
               (item.url !== "/llm/model-pools" || modelPoolsEnabled) &&
-              (item.url !== AUTO_ROUTING_URL || autoRoutingEnabled === true),
+              (item.url !== AUTO_ROUTING_URL || autoRoutingEnabled === true) &&
+              (item.url !== TUNERS_URL || tunersEnabled),
           )
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
@@ -608,6 +611,7 @@ export function AppSidebar() {
       modelPoolsEnabled,
       permissionMap,
       autoRoutingEnabled,
+      tunersEnabled,
     ],
   );
 

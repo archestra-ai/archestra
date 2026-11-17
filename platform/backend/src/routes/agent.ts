@@ -2,6 +2,7 @@ import {
   AGENT_OPTIONS_MAX_IDS,
   AGENT_OPTIONS_MAX_PAGE_SIZE,
   type AgentType,
+  BUILT_IN_AGENT_IDS,
   CursorQuerySchema,
   createCursorPaginatedResponseSchema,
   createPaginatedResponseSchema,
@@ -123,6 +124,7 @@ import {
   AgentSubagentExclusionsSchema,
   AgentToolExclusionsSchema,
   ApiError,
+  type BuiltInAgentConfig,
   ChatAgentRosterSchema,
   CloneAgentBodySchema,
   CreateAgentBodySchema,
@@ -2262,6 +2264,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...(body.modelPoolId !== undefined && {
             modelPoolId: body.modelPoolId,
           }),
+          ...(body.networkPolicy !== undefined &&
+            builtInAcceptsOwnNetworkPolicy(
+              existingAgent.builtInAgentConfig,
+            ) && {
+              networkPolicy: body.networkPolicy,
+            }),
         };
       } else {
         // `builtInAgentConfig` is server-owned and a trust attribute (drives
@@ -3018,6 +3026,23 @@ function getPermittedAgentTypesForList(params: {
  */
 function environmentDeployKindFor(agentType: AgentType): EnvironmentDeployKind {
   return agentType === "mcp_gateway" ? "mcpGateway" : "agent";
+}
+
+/**
+ * Only the SRE agent runs commands in a sandbox an admin may want to lock
+ * down, so it alone takes an own network policy among built-ins.
+ */
+function builtInAcceptsOwnNetworkPolicy(config: BuiltInAgentConfig): boolean {
+  switch (config.name) {
+    case BUILT_IN_AGENT_IDS.SRE:
+      return true;
+    case BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG:
+    case BUILT_IN_AGENT_IDS.APPA_TUNER:
+    case BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION:
+    case BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION:
+    case BUILT_IN_AGENT_IDS.APP_RUNTIME:
+      return false;
+  }
 }
 
 /**

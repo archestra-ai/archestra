@@ -19,6 +19,7 @@ module.exports.validateHostedOpenappaPolicy = wrapAsync(binding, "validateHosted
 module.exports.replayOpenappaPolicy = wrapAsync(binding, "replayOpenappaPolicy");
 module.exports.inspectOpenappaPolicyTests = wrapAsync(binding, "inspectOpenappaPolicyTests");
 module.exports.getOpenappaReplayEngineVersion = wrapSync(binding, "getOpenappaReplayEngineVersion");
+module.exports.canonicalOpenappaTool = wrapSync(binding, "canonicalOpenappaTool");
 module.exports.composeOpenappaPolicy = wrapAsync(binding, "composeOpenappaPolicy");
 module.exports.parseOpenappaDeclarations = wrapAsync(binding, "parseOpenappaDeclarations");
 module.exports.editOpenappaPolicy = wrapAsync(binding, "editOpenappaPolicy");

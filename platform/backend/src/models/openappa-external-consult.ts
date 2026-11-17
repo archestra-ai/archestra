@@ -1,4 +1,5 @@
 import { and, desc, eq, gte, inArray, lte, type SQL, sql } from "drizzle-orm";
+import { z } from "zod";
 import db, { schema } from "@/database";
 import {
   type CursorPaginatedResult,
@@ -112,6 +113,129 @@ class OpenappaExternalConsultModel {
     return new Map(
       rows.map(({ externalName, ...latest }) => [externalName, latest]),
     );
+  }
+
+  /**
+   * Answered human-review (`hitl` authority) consults in `(since, until]`,
+   * per tool of the denied call whose offer they ruled on, busiest first.
+   * The ruling lives in the answer, so a consult whose answer was not
+   * stored (metadata-only logging) or is sealed counts as `unreadable`.
+   * A consult whose denied call is sealed names no tool and is left out.
+   */
+  static async hitlRulingsByTool(params: {
+    organizationId: string;
+    since: Date;
+    until: Date;
+    limit: number;
+    evidenceLimit: number;
+  }): Promise<HitlRulingsByTool[]> {
+    const operations = schema.openappaOperationsTable;
+    const since = params.since.toISOString();
+    const until = params.until.toISOString();
+    const result = await db.execute(sql`
+      WITH offered AS (
+        SELECT DISTINCT ON (offer.id) offer.id AS offer_id,
+          COALESCE(o.input->'semantic'->>'tool', o.input->'context'->>'tool', o.input->>'tool') AS tool
+        FROM ${operations} AS o
+        CROSS JOIN LATERAL (
+          SELECT jsonb_path_query(o.decision, 'lax $.offers[*].offer_id') #>> '{}'
+          UNION
+          SELECT jsonb_path_query(o.decision, 'lax $.review[*].offer_id') #>> '{}'
+        ) AS offer(id)
+        WHERE o.organization_id = ${params.organizationId}
+          -- A review is answered after the denial that offered it.
+          AND o.created_at > ${since}::timestamptz - interval '1 day'
+          AND o.created_at <= ${until}::timestamptz
+          AND o.status = 'complete'
+          AND o.decision->>'decision' = 'deny_call'
+      ),
+      ruled AS (
+        SELECT c.id, c.session_id, c.created_at, offered.tool,
+          CASE c.answer->>'ruling'
+            WHEN 'approve' THEN 'approve'
+            WHEN 'deny' THEN 'deny'
+            ELSE 'unreadable'
+          END AS ruling
+        FROM ${table} AS c
+        -- Decisions carry the rendered offer id, a prefix of the canonical one a consult stores.
+        JOIN offered ON offered.offer_id <> ''
+          AND starts_with(c.offer_id, offered.offer_id)
+        WHERE c.organization_id = ${params.organizationId}
+          AND c.created_at > ${since}::timestamptz
+          AND c.created_at <= ${until}::timestamptz
+          AND c.role = 'authority'
+          AND c.backend = 'hitl'
+          AND c.outcome = 'answered'
+      ),
+      ranked AS (
+        SELECT ruled.*,
+          ROW_NUMBER() OVER (PARTITION BY tool, ruling ORDER BY created_at DESC, id DESC) AS rn
+        FROM ruled
+        WHERE tool IS NOT NULL AND tool <> ''
+      )
+      SELECT tool,
+        COUNT(*) FILTER (WHERE ruling = 'approve')::int AS approved,
+        COUNT(*) FILTER (WHERE ruling = 'deny')::int AS denied,
+        COUNT(*) FILTER (WHERE ruling = 'unreadable')::int AS unreadable,
+        COUNT(DISTINCT session_id)::int AS sessions,
+        MIN(created_at) AS first_at,
+        MAX(created_at) AS last_at,
+        COALESCE(to_jsonb((ARRAY_AGG(id::text ORDER BY created_at DESC, id DESC)
+          FILTER (WHERE ruling = 'approve' AND rn <= ${params.evidenceLimit}::int))[1:${params.evidenceLimit}::int]), '[]'::jsonb) AS approved_ids,
+        COALESCE(to_jsonb((ARRAY_AGG(id::text ORDER BY created_at DESC, id DESC)
+          FILTER (WHERE ruling = 'deny' AND rn <= ${params.evidenceLimit}::int))[1:${params.evidenceLimit}::int]), '[]'::jsonb) AS denied_ids
+      FROM ranked
+      GROUP BY tool
+      ORDER BY COUNT(*) DESC, tool
+      LIMIT ${params.limit}
+    `);
+    return HitlRulingsByToolRowSchema.array().parse(result.rows);
+  }
+
+  /**
+   * Approvals the stock `approve` authority gave in `(since, until]`: the
+   * policy approved the call without asking anyone. Per the governed tool
+   * the request names, which metadata-only logging keeps; a sealed request
+   * names none and is left out.
+   */
+  static async stockApprovalsByTool(params: {
+    organizationId: string;
+    since: Date;
+    until: Date;
+    limit: number;
+    evidenceLimit: number;
+  }): Promise<StockApprovalsByTool[]> {
+    const result = await db.execute(sql`
+      WITH approved AS (
+        SELECT c.id, c.session_id, c.created_at,
+          c.request->'artifact'->>'tool' AS tool
+        FROM ${table} AS c
+        WHERE c.organization_id = ${params.organizationId}
+          AND c.created_at > ${params.since.toISOString()}::timestamptz
+          AND c.created_at <= ${params.until.toISOString()}::timestamptz
+          AND c.role = 'authority'
+          AND c.backend = 'stock'
+          AND c.outcome = 'answered'
+      ),
+      ranked AS (
+        SELECT approved.*,
+          ROW_NUMBER() OVER (PARTITION BY tool ORDER BY created_at DESC, id DESC) AS rn
+        FROM approved
+        WHERE tool IS NOT NULL AND tool <> ''
+      )
+      SELECT tool,
+        COUNT(*)::int AS approvals,
+        COUNT(DISTINCT session_id)::int AS sessions,
+        MIN(created_at) AS first_at,
+        MAX(created_at) AS last_at,
+        COALESCE(to_jsonb((ARRAY_AGG(id::text ORDER BY created_at DESC, id DESC)
+          FILTER (WHERE rn <= ${params.evidenceLimit}::int))[1:${params.evidenceLimit}::int]), '[]'::jsonb) AS recent_ids
+      FROM ranked
+      GROUP BY tool
+      ORDER BY approvals DESC, tool
+      LIMIT ${params.limit}
+    `);
+    return StockApprovalsByToolRowSchema.array().parse(result.rows);
   }
 
   // SPDX-SnippetBegin
@@ -250,6 +374,39 @@ function readable(row: ExternalConsult): ExternalConsult {
     answer: openPlainJson(row.answer),
   };
 }
+
+const ToolSpanRowSchema = z.object({
+  tool: z.string(),
+  sessions: z.number().int(),
+  first_at: z.coerce.date(),
+  last_at: z.coerce.date(),
+});
+
+const HitlRulingsByToolRowSchema = ToolSpanRowSchema.extend({
+  approved: z.number().int(),
+  denied: z.number().int(),
+  unreadable: z.number().int(),
+  approved_ids: z.array(z.uuid()),
+  denied_ids: z.array(z.uuid()),
+}).transform(({ first_at, last_at, approved_ids, denied_ids, ...row }) => ({
+  ...row,
+  firstAt: first_at,
+  lastAt: last_at,
+  approvedIds: approved_ids,
+  deniedIds: denied_ids,
+}));
+type HitlRulingsByTool = z.infer<typeof HitlRulingsByToolRowSchema>;
+
+const StockApprovalsByToolRowSchema = ToolSpanRowSchema.extend({
+  approvals: z.number().int(),
+  recent_ids: z.array(z.uuid()),
+}).transform(({ first_at, last_at, recent_ids, ...row }) => ({
+  ...row,
+  firstAt: first_at,
+  lastAt: last_at,
+  recentIds: recent_ids,
+}));
+type StockApprovalsByTool = z.infer<typeof StockApprovalsByToolRowSchema>;
 
 const EXPORT_PAGE_SIZE = 500;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -6,6 +6,7 @@ import {
   type archestraApiTypes,
   BLOCKED_PASSTHROUGH_HEADERS,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
+  BUILT_IN_AGENT_IDS,
   DEFAULT_AGENT_SYSTEM_PROMPT,
   DocsPage,
   E2eTestId,
@@ -1597,6 +1598,9 @@ export function AgentForm({
   const defaultSystemPrompt = builtInAgentName
     ? (BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[builtInAgentName] ?? "")
     : undefined;
+  // The SRE agent runs commands in a sandbox, so it alone among built-ins
+  // takes its own egress; the backend drops the field for the others.
+  const showsBuiltInNetworkPolicy = builtInAgentName === BUILT_IN_AGENT_IDS.SRE;
   const showsEnvironmentSelector =
     isInternalAgent || agentType === "mcp_gateway";
   const supportsIdentityProvider =
@@ -2409,6 +2413,8 @@ export function AgentForm({
               modelId: llmModel || null,
               modelPoolId: agentModelPoolId,
             }),
+            ...(showsBuiltInNetworkPolicy &&
+              networkPolicyChanged && { networkPolicy }),
           },
         });
         savedAgentId = updated?.id ?? agent.id;
@@ -2803,6 +2809,7 @@ export function AgentForm({
     isBuiltIn,
     isInternalAgent,
     builtInAgentName,
+    showsBuiltInNetworkPolicy,
     showConfigurationSections,
     showToolsSections,
     showAdvancedSections,
@@ -3556,6 +3563,16 @@ export function AgentForm({
                         }
                       />
                     </div>
+                  )}
+
+                  {showsBuiltInNetworkPolicy && (
+                    <AgentNetworkPolicyField
+                      value={networkPolicy}
+                      onChange={setNetworkPolicy}
+                      disabled={!!readOnly}
+                      label="Network egress"
+                      description="Outbound network access for this agent's runtime and sandbox. Inherits its environment's policy unless the agent sets its own."
+                    />
                   )}
 
                   {!agent &&

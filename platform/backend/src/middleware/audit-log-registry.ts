@@ -55,10 +55,12 @@ import SiteNotificationModel from "@/models/site-notification";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
+import TunerSuggestionModel from "@/models/tuner-suggestion";
 import UserLimitUsageResetModel from "@/models/user-limit-usage-reset";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { findConnectedClientForAudit } from "@/services/connected-client";
+import { findTunerForAudit } from "@/services/tuners/manage";
 import { type AuditEventName, AuditEventNameSchema } from "@/types/audit-log";
 import type { AuditableRouteConfig } from "@/types/audit-route-config";
 
@@ -781,6 +783,39 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "costExport",
     action: "costExport.run",
     fetchById: (id, orgId) => CostExportModel.findByIdForAudit(id, orgId),
+  },
+  // Tuners: addressed by kind; the snapshot is the tuner's schedule trigger.
+  "/api/tuners/:kind": {
+    resourceType: "tuner",
+    resourceIdParam: "kind",
+    action: "tuner.updated",
+    fetchById: (kind, orgId) => findTunerForAudit(kind, orgId),
+  },
+  "/api/tuners/:kind/run": {
+    resourceType: "tuner",
+    resourceIdParam: "kind",
+    action: "tuner.run",
+    fetchById: (kind, orgId) => findTunerForAudit(kind, orgId),
+  },
+  "/api/tuner-suggestions/:id/done": {
+    resourceType: "tunerSuggestion",
+    action: "tunerSuggestion.done",
+    fetchById: (id, orgId) => TunerSuggestionModel.findByIdForAudit(id, orgId),
+  },
+  "/api/tuner-suggestions/:id/reject": {
+    resourceType: "tunerSuggestion",
+    action: "tunerSuggestion.rejected",
+    fetchById: (id, orgId) => TunerSuggestionModel.findByIdForAudit(id, orgId),
+  },
+  "/api/tuner-suggestions/:id/apply": {
+    resourceType: "tunerSuggestion",
+    action: "tunerSuggestion.applied",
+    fetchById: (id, orgId) => TunerSuggestionModel.findByIdForAudit(id, orgId),
+  },
+  "/api/tuner-suggestions/:id/refresh": {
+    resourceType: "tunerSuggestion",
+    action: "tunerSuggestion.refreshed",
+    fetchById: (id, orgId) => TunerSuggestionModel.findByIdForAudit(id, orgId),
   },
   // Stored GitHub personal access tokens
   "/api/github-pats": {

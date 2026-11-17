@@ -151,6 +151,7 @@ import {
 import { projectService } from "@/services/project";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { generateConversationTitle } from "@/services/title-generation";
+import { hasTunerAccess } from "@/services/tuners/access";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { resolveProjectFileScope } from "@/skills-sandbox/project-file-scope";
@@ -5319,17 +5320,6 @@ async function canReadScheduleRunConversation(params: {
   userId: string;
   organizationId: string;
 }): Promise<boolean> {
-  const hasProjectOversight = await ResourcePermissions.allows({
-    userId: params.userId,
-    organizationId: params.organizationId,
-    resource: "project",
-    scope: "*",
-    action: "read",
-  });
-  if (!hasProjectOversight) {
-    return false;
-  }
-
   const run = await ScheduleTriggerRunModel.findByChatConversationId(
     params.conversationId,
   );
@@ -5342,7 +5332,22 @@ async function canReadScheduleRunConversation(params: {
     return false;
   }
 
-  return true;
+  // The same split as the schedule-trigger gate: a tuner run's conversation is
+  // for tuner viewers, every other run's for project oversight.
+  if (trigger.tunerKind !== null) {
+    return hasTunerAccess({
+      userId: params.userId,
+      organizationId: params.organizationId,
+      access: "read",
+    });
+  }
+  return ResourcePermissions.allows({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    resource: "project",
+    scope: "*",
+    action: "read",
+  });
 }
 
 async function forkConversation(params: {

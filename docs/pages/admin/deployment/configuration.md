@@ -959,6 +959,9 @@ The [SRE agent](/docs/admin/deployment/diagnostics#sre-agent) investigates the i
   - Default: unset (the environment uses the organization's default egress policy)
   - Values: comma-separated IPv4 or IPv6 CIDRs, for example `172.16.0.2/32`. Invalid entries are ignored and logged.
 
+- **`ARCHESTRA_TUNERS_ENABLED`** - Turns on [tuners](/docs/admin/tuners) and their suggestion inbox. Off by default.
+  - Default: `false`
+
 ## MCP Apps Sandbox
 
 MCP Apps render in sandboxed iframes. Without a sandbox domain, apps still work. They cannot use `localStorage`, cookies, or origin-restricted APIs. See [Deployment](/docs/admin/deployment) for setup.

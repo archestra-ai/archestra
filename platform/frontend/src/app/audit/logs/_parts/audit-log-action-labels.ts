@@ -221,6 +221,14 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "team.created": "Team created",
   "team.updated": "Team updated",
   "team.deleted": "Team deleted",
+  // Tuner
+  "tuner.updated": "Tuner updated",
+  "tuner.run": "Tuner run manually",
+  "tunerSuggestion.proposed": "Tuner suggestion proposed",
+  "tunerSuggestion.done": "Tuner suggestion marked done",
+  "tunerSuggestion.rejected": "Tuner suggestion rejected",
+  "tunerSuggestion.applied": "Tuner suggestion applied",
+  "tunerSuggestion.refreshed": "Tuner suggestion refreshed",
   // Team / org token
   // Guardrails
   "openappaYell.updated": "Guardrails yell status updated",

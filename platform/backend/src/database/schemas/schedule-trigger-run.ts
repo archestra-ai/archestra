@@ -11,6 +11,7 @@ import type {
   ScheduleTriggerRunKind,
   ScheduleTriggerRunStatus,
 } from "@/types/schedule-trigger";
+import type { TunerRunRecord } from "@/types/tuner";
 import scheduleTriggersTable from "./schedule-trigger";
 
 const scheduleTriggerRunsTable = pgTable(
@@ -37,6 +38,8 @@ const scheduleTriggerRunsTable = pgTable(
     error: text("error"),
     blockedBy: jsonb("blocked_by").$type<ScheduleRunBlocker>(),
     artifact: text("artifact"),
+    /** Tuner scan result; written once, and its write claims the run's scan. */
+    tuner: jsonb("tuner").$type<TunerRunRecord>(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .notNull()
       .defaultNow(),

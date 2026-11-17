@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "What each built-in role can do, and every permission a custom role can hold"
 order: 2
-lastUpdated: 2026-11-14
+lastUpdated: 2026-11-16
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -182,3 +182,5 @@ A [custom role](/docs/admin/access-control#custom-roles) can hold any of these p
 | <span id="team:create"></span>`team:create` | Create new teams |
 | <span id="team:update"></span>`team:update` | Modify team settings |
 | <span id="team:delete"></span>`team:delete` | Delete teams |
+| <span id="tuner:read"></span>`tuner:read` | View tuners and their suggestions (also requires organization-wide log access) |
+| <span id="tuner:update"></span>`tuner:update` | Enable, schedule, and run tuners, and act on their suggestions (also requires organization-wide log access) |

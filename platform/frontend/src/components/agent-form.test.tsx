@@ -3252,6 +3252,61 @@ describe("AgentForm save payload and failure handling", () => {
       await waitFor(() => expect(pendingSaveChanges).toHaveBeenCalledTimes(1));
       expect(savedBody()).not.toHaveProperty("accessAllTools");
     });
+
+    const restrictedPolicy = {
+      egressMode: "restricted" as const,
+      domainPreset: "none" as const,
+      allowedDomains: ["api.example.com"],
+      allowedCidrs: [],
+    };
+
+    it("saves the SRE agent's own network policy", async () => {
+      const sreAgent = {
+        ...builtInAgent,
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+        networkPolicy: restrictedPolicy,
+      };
+      useProfileMock.mockReturnValue({ data: sreAgent, refetch: vi.fn() });
+      updateAgent.mockResolvedValue(sreAgent);
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={sreAgent}
+          sections={["configuration"]}
+        />,
+      );
+
+      const domains = await screen.findByLabelText("Allowed domains");
+      fireEvent.change(domains, {
+        target: { value: "api.example.com\nregistry.example.com" },
+      });
+      await user.click(screen.getByRole("button", { name: /update/i }));
+
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody()).toMatchObject({
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+        networkPolicy: {
+          ...restrictedPolicy,
+          allowedDomains: ["api.example.com", "registry.example.com"],
+        },
+      });
+    });
+
+    it("offers other built-ins no network policy", async () => {
+      const withPolicy = { ...builtInAgent, networkPolicy: restrictedPolicy };
+      useProfileMock.mockReturnValue({ data: withPolicy, refetch: vi.fn() });
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={withPolicy}
+          sections={["configuration"]}
+        />,
+      );
+
+      await screen.findByLabelText("Instructions");
+      expect(screen.queryByLabelText("Allowed domains")).toBeNull();
+    });
   });
   it("keeps Update disabled while a save is in flight", async () => {
     const user = userEvent.setup();

@@ -31,6 +31,7 @@ import {
   decideCallerHitlReviews,
 } from "@/openappa/a2a-hitl-review";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
+import { persistAgentRunInputs } from "@/services/agent-runtime/input-files";
 import {
   resolveAgentRuntime,
   resumeAgentRun,
@@ -806,6 +807,19 @@ export class A2AManager {
               : [],
             artifacts: [],
           };
+        }
+
+        // A container run reads its files from the task's stored inputs, which
+        // are staged under the attachments directory and named in the
+        // instruction. Stored before the run can start, so a launch adopted by
+        // another control plane finds them too.
+        if (runtime && currentTurnAttachments.length > 0) {
+          await persistAgentRunInputs({
+            taskId: runTask.id,
+            organizationId: actor.organizationId,
+            uploadedByUserId: actor.kind === "user" ? actor.id : null,
+            attachments: currentTurnAttachments,
+          });
         }
 
         const lifecycle = async () => {

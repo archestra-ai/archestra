@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { AgentModel, ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
 const { mockValidateMCPGatewayToken } = vi.hoisted(() => ({
@@ -101,6 +102,33 @@ describe("a2a v2 AgentCard conformance", () => {
     expect(card.skills[0].tags.length).toBeGreaterThan(0);
     expect(card.skills[0].examples.length).toBeGreaterThan(0);
     expect(card.documentationUrl).toEqual(expect.any(String));
+  });
+
+  test("advertises the file types the agent's model reads", async () => {
+    // No pinned model: the common readable set.
+    const unpinned = (await fetchCard()).json();
+    expect(unpinned.defaultInputModes).toEqual(
+      expect.arrayContaining(["text/plain", "image/png", "application/pdf"]),
+    );
+    expect(unpinned.skills[0].inputModes).toEqual(unpinned.defaultInputModes);
+
+    // A vision model without PDF support says so.
+    const model = await ModelModel.create({
+      externalId: "openai/a2a-card-vision-test",
+      provider: "openai",
+      modelId: "a2a-card-vision-test",
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await AgentModel.update(agentId, { modelId: model.id });
+
+    const pinned = (await fetchCard()).json();
+    expect(pinned.defaultInputModes).toEqual(
+      expect.arrayContaining(["text/plain", "image/png", "image/jpeg"]),
+    );
+    expect(pinned.defaultInputModes).not.toContain("application/pdf");
   });
 
   test("names the provider running the agent", async () => {

@@ -6,6 +6,8 @@ import {
   type AgentCatalogId,
   type archestraApiTypes,
   buildAgentCatalogRuntime,
+  CUSTOM_IMAGE_RUNTIME_ID,
+  isIntegrationHidden,
   withAgentRuntimeDefaults,
 } from "@archestra/shared";
 import {
@@ -57,7 +59,6 @@ import {
 import { ConfigurationRow } from "@/components/configuration-row";
 import { IdentityFields } from "@/components/identity-fields";
 import { QueryLoadError } from "@/components/query-load-error";
-import { SettingsSaveBar } from "@/components/settings/settings-block";
 import { Accordion } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import {
@@ -146,7 +147,11 @@ export function RuntimeTemplateSection({
   const images = useAgentCatalogImages();
   const appName = useAppName();
   const builtIns = getAgentCatalogTemplates(images, appName);
-  const [draft, setDraft] = useState<SaveBody | null>(null);
+  // The change being saved, shown at once and dropped when the save
+  // settles: a success replaces it with the saved settings, a failure puts
+  // the list back as it was.
+  const [pending, setPending] = useState<SaveBody | null>(null);
+  const customImagesId = useId();
   const [editing, setEditing] = useState<TemplateDraft | "new" | null>(null);
   const [editingBuiltIn, setEditingBuiltIn] = useState<AgentCatalogId | null>(
     null,
@@ -159,15 +164,13 @@ export function RuntimeTemplateSection({
       ? settings.data.popularAgentOverrides
       : (organization?.popularAgentOverrides ?? null),
   };
-  const state = draft ?? saved;
+  const state = pending ?? saved;
   const editable =
     canUpdate === true &&
     !disabled &&
     !!settings.data &&
     !!organization &&
     !save.isPending;
-  const hasChanges =
-    draft !== null && JSON.stringify(draft) !== JSON.stringify(saved);
   const rows: Row[] = [
     ...AGENT_CATALOG_IDS.map((id) => ({
       id,
@@ -192,6 +195,10 @@ export function RuntimeTemplateSection({
   ].sort((a, b) => position(a.id) - position(b.id));
   const visibleRows = rows.filter((row) => !row.hidden);
   const removedRows = rows.filter((row) => row.hidden);
+  const customImageHidden = isIntegrationHidden(
+    state.popularAgentOverrides,
+    CUSTOM_IMAGE_RUNTIME_ID,
+  );
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, {
@@ -207,8 +214,7 @@ export function RuntimeTemplateSection({
     );
   }
   function reorder(ids: string[]) {
-    if (!editable) return;
-    setDraft(
+    commit(
       withRuntimeOrder(state, [...ids, ...removedRows.map((row) => row.id)]),
     );
   }
@@ -230,8 +236,25 @@ export function RuntimeTemplateSection({
         visibleRows.findIndex((item) => item.id === over.id),
       );
   }
-  function setAvailable(row: Row, visible: boolean) {
+  /** Every change to the list saves at once; there is no draft to keep. */
+  function commit(next: SaveBody, onSaved?: () => void) {
     if (!editable) return;
+    setPending(next);
+    save.mutate(next, {
+      onSuccess: onSaved,
+      onSettled: () => setPending(null),
+    });
+  }
+  function setCustomImageAvailable(visible: boolean) {
+    commit({
+      ...state,
+      popularAgentOverrides: {
+        ...state.popularAgentOverrides,
+        [CUSTOM_IMAGE_RUNTIME_ID]: { hidden: !visible },
+      },
+    });
+  }
+  function setAvailable(row: Row, visible: boolean) {
     const next = row.builtIn
       ? {
           ...state,
@@ -249,7 +272,7 @@ export function RuntimeTemplateSection({
             item.id === row.id ? { ...item, hidden: !visible } : item,
           ),
         };
-    setDraft(
+    commit(
       visible
         ? withRuntimeOrder(next, [
             ...visibleRows.map((item) => item.id),
@@ -264,8 +287,8 @@ export function RuntimeTemplateSection({
 
   return (
     <section id="popular-agents" className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
           <h3 className="text-sm font-medium">Available runtimes</h3>
           <p className="max-w-2xl text-sm text-muted-foreground">
             The runtimes people can pick when creating an agent. A locked
@@ -276,7 +299,12 @@ export function RuntimeTemplateSection({
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="sm" variant="outline" disabled={!editable}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0"
+              disabled={!editable}
+            >
               <Plus />
               <span>Add runtime</span>
               <ChevronDown />
@@ -361,27 +389,38 @@ export function RuntimeTemplateSection({
           )}
         </div>
       )}
-      <SettingsSaveBar
-        hasChanges={hasChanges}
-        isSaving={save.isPending}
-        disabledSave={!editable}
-        permissions={{ organizationSettings: ["update"] }}
-        onSave={() => save.mutate(state, { onSuccess: () => setDraft(null) })}
-        onCancel={() => setDraft(null)}
-      />
+      {/* Not a runtime: the choice to run an image that is none of them. */}
+      <div className="flex items-center justify-between gap-4 rounded-lg border bg-card px-4 py-3">
+        <div className="min-w-0 space-y-0.5">
+          <Label htmlFor={customImagesId}>Allow custom images</Label>
+          <p className="text-xs text-muted-foreground">
+            Offers a Custom image choice when creating an agent, to run your own
+            container image and command. Turning it off keeps existing agents as
+            they are.
+          </p>
+        </div>
+        <Switch
+          id={customImagesId}
+          checked={!customImageHidden}
+          disabled={!editable}
+          onCheckedChange={setCustomImageAvailable}
+        />
+      </div>
       {editingBuiltIn !== null && (
         <BuiltInRuntimeDialog
           id={editingBuiltIn}
           image={images[editingBuiltIn]}
           value={state.builtIns?.[editingBuiltIn]}
           onClose={() => setEditingBuiltIn(null)}
-          onSave={(builtIn) => {
-            setDraft({
-              ...state,
-              builtIns: { ...state.builtIns, [editingBuiltIn]: builtIn },
-            });
-            setEditingBuiltIn(null);
-          }}
+          onSave={(builtIn) =>
+            commit(
+              {
+                ...state,
+                builtIns: { ...state.builtIns, [editingBuiltIn]: builtIn },
+              },
+              () => setEditingBuiltIn(null),
+            )
+          }
         />
       )}
       {editing !== null && (
@@ -402,7 +441,7 @@ export function RuntimeTemplateSection({
                       item.id === template.id ? template : item,
                     ),
             };
-            setDraft(
+            commit(
               editing === "new"
                 ? withRuntimeOrder(next, [
                     ...visibleRows.map((row) => row.id),
@@ -410,8 +449,8 @@ export function RuntimeTemplateSection({
                     ...removedRows.map((row) => row.id),
                   ])
                 : next,
+              () => setEditing(null),
             );
-            setEditing(null);
           }}
         />
       )}

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { guardrailsPolicyRevisionsTable as table } from "@/database/schemas/guardrails-policy";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
@@ -13,6 +13,22 @@ class GuardrailsPolicyModel {
       .where(eq(table.organizationId, organizationId))
       .orderBy(desc(table.revision))
       .limit(1);
+    return row ?? null;
+  }
+
+  static async findRevision(params: {
+    organizationId: string;
+    revision: number;
+  }) {
+    const [row] = await db
+      .select()
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.revision, params.revision),
+        ),
+      );
     return row ?? null;
   }
 

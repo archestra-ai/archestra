@@ -9,14 +9,20 @@ import {
 } from "@/models";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import { secretManager } from "@/secrets-manager";
+import { createGitlabToken } from "@/services/git-credentials";
 import {
   guardrailsPolicyService,
   initialPolicy,
 } from "@/services/guardrails-policy";
+import { syncAppaGithubPolicy } from "@/services/openappa-github-sync";
 import { getOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import { expect, test } from "@/test";
+import { FakeGitlab } from "@/test/fake-gitlab";
 import { useMswServer } from "@/test/msw";
+import { ApiError } from "@/types";
+import { PublicationUncertainError } from "@/types/openappa-publication";
 import {
+  findPublicationByKey,
   getOpenAppaPolicyChangeStatus,
   publishOpenAppaPolicyChange,
 } from "./openappa-policy-change";
@@ -638,3 +644,496 @@ test("a merged policy PR that Git sync has not applied queues a sync; a failed s
   expect(applied).toMatchObject({ state: "merged", applied: true });
   expect(applied).not.toHaveProperty("syncQueued");
 });
+
+test("a keyed GitHub publish asked again returns its pull request instead of opening a second, and the key finds it", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  const { org, user, github } = await keyedGithubSetup({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  });
+  const publish = () =>
+    publishOpenAppaPolicyChange(changeRequest(org.id, user.id, "fix-1:v1:a"));
+
+  const first = await publish();
+  const second = await publish();
+
+  expect(second).toEqual(first);
+  expect(github.writes).toEqual({ refs: 1, contents: 1, pulls: 1 });
+  expect(
+    await findPublicationByKey({
+      organizationId: org.id,
+      operationKey: "fix-1:v1:a",
+    }),
+  ).toEqual({
+    delivery: "pull_request",
+    number: 1,
+    url: "https://github.com/example/policies/pull/1",
+    state: "open",
+  });
+  github.pulls[0].merged_at = "2026-11-17T10:00:00Z";
+  github.pulls[0].state = "closed";
+  expect(
+    await findPublicationByKey({
+      organizationId: org.id,
+      operationKey: "fix-1:v1:a",
+    }),
+  ).toMatchObject({ state: "merged" });
+  expect(
+    await findPublicationByKey({
+      organizationId: org.id,
+      operationKey: "fix-1:v1:b",
+    }),
+  ).toBeNull();
+});
+
+test("a keyed GitHub branch left without its commit or its pull request is completed, not duplicated", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  const { org, user, github } = await keyedGithubSetup({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  });
+  const request = changeRequest(org.id, user.id, "fix-2:v1:a");
+
+  // The branch is created, then the commit onto it fails.
+  github.fail.contents = true;
+  await expect(publishOpenAppaPolicyChange(request)).rejects.toThrow();
+  // The commit lands, then GitHub refuses the pull request.
+  github.fail.pulls = "refuse";
+  const refused = await publishOpenAppaPolicyChange(request).catch((e) => e);
+  expect(refused).toBeInstanceOf(ApiError);
+  expect(refused).not.toBeInstanceOf(PublicationUncertainError);
+
+  const done = await publishOpenAppaPolicyChange(request);
+
+  expect(done).toMatchObject({ delivery: "pull_request", number: 1 });
+  // One branch and one commit, each completed rather than made again.
+  expect(github.writes).toEqual({ refs: 1, contents: 2, pulls: 2 });
+  expect(github.pulls).toHaveLength(1);
+});
+
+test("a keyed GitHub pull request create without an answer is uncertain until the branch's request decides it", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  const { org, user, github } = await keyedGithubSetup({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  });
+  const request = changeRequest(org.id, user.id, "fix-3:v1:a");
+
+  github.fail.pulls = "unanswered";
+  const unanswered = await publishOpenAppaPolicyChange(request).catch((e) => e);
+  expect(unanswered).toBeInstanceOf(PublicationUncertainError);
+  expect(unanswered.operationKey).toBe("fix-3:v1:a");
+  expect(
+    await findPublicationByKey({
+      organizationId: org.id,
+      operationKey: "fix-3:v1:a",
+    }),
+  ).toBeNull();
+
+  // A server fault after GitHub opened the request: the request is the answer.
+  github.fail.pulls = "fault-after-create";
+  expect(await publishOpenAppaPolicyChange(request)).toMatchObject({
+    number: 1,
+  });
+  expect(github.writes).toEqual({ refs: 1, contents: 1, pulls: 2 });
+  expect(github.pulls).toHaveLength(1);
+});
+
+test("a keyed GitHub branch that holds another change is refused", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  const { org, user, github } = await keyedGithubSetup({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  });
+  github.fail.pulls = "refuse";
+  await expect(
+    publishOpenAppaPolicyChange(changeRequest(org.id, user.id, "fix-4:v1:a")),
+  ).rejects.toThrow();
+
+  await expect(
+    publishOpenAppaPolicyChange({
+      ...changeRequest(org.id, user.id, "fix-4:v1:a"),
+      content: `${changed}# Something else\n`,
+    }),
+  ).rejects.toThrow("already holds a different change");
+  expect(github.writes.pulls).toBe(1);
+  expect(github.pulls).toHaveLength(0);
+});
+
+test("without a key every publish opens its own branch and a server fault stays an ordinary failure", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  const { org, user, github } = await keyedGithubSetup({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  });
+  const { operationKey: _, ...request } = changeRequest(org.id, user.id, "-");
+
+  await publishOpenAppaPolicyChange(request);
+  github.fail.pulls = "fault-after-create";
+  const fault = await publishOpenAppaPolicyChange(request).catch((e) => e);
+
+  expect(fault).toBeInstanceOf(ApiError);
+  expect(fault).not.toBeInstanceOf(PublicationUncertainError);
+  expect(github.writes).toEqual({ refs: 2, contents: 2, pulls: 2 });
+  expect(new Set(github.pulls.map((pull) => pull.head)).size).toBe(2);
+});
+
+test("a keyed GitLab publish asked again returns its merge request, and the key finds it", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, org.id, { role: "admin" });
+  const gitlab = await configureGitlabSource(org.id);
+  const request = changeRequest(org.id, user.id, "fix-5:v1:a");
+
+  const first = await publishOpenAppaPolicyChange(request);
+  const second = await publishOpenAppaPolicyChange(request);
+
+  expect(first).toMatchObject({ delivery: "pull_request", number: 1 });
+  expect(second).toMatchObject({ delivery: "pull_request", number: 1 });
+  expect(gitlab.projects.get(GITLAB_REPO)?.mergeRequests).toHaveLength(1);
+  expect(commitPosts(gitlab)).toBe(1);
+  expect(
+    await findPublicationByKey({
+      organizationId: org.id,
+      operationKey: "fix-5:v1:a",
+    }),
+  ).toEqual({
+    delivery: "pull_request",
+    number: 1,
+    url: `${GITLAB}/${GITLAB_REPO}/-/merge_requests/1`,
+    state: "open",
+  });
+  gitlab.merge(GITLAB_REPO, 1);
+  expect(
+    await findPublicationByKey({
+      organizationId: org.id,
+      operationKey: "fix-5:v1:a",
+    }),
+  ).toMatchObject({ state: "merged" });
+  expect(
+    await findPublicationByKey({
+      organizationId: org.id,
+      operationKey: "fix-5:v1:b",
+    }),
+  ).toBeNull();
+});
+
+test("a keyed GitLab merge request create without an answer is uncertain, and a retry completes the branch it left", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, org.id, { role: "admin" });
+  const gitlab = await configureGitlabSource(org.id);
+  const request = changeRequest(org.id, user.id, "fix-6:v1:a");
+  server.use(
+    http.post(
+      `${GITLAB}/api/v4/projects/${encodeURIComponent(GITLAB_REPO)}/merge_requests`,
+      () => HttpResponse.error(),
+      { once: true },
+    ),
+  );
+
+  const unanswered = await publishOpenAppaPolicyChange(request).catch((e) => e);
+  expect(unanswered).toBeInstanceOf(PublicationUncertainError);
+  expect(
+    await findPublicationByKey({
+      organizationId: org.id,
+      operationKey: "fix-6:v1:a",
+    }),
+  ).toBeNull();
+  await expect(
+    publishOpenAppaPolicyChange({
+      ...request,
+      content: `${changed}# Something else\n`,
+    }),
+  ).rejects.toThrow("already holds a different change");
+
+  expect(await publishOpenAppaPolicyChange(request)).toMatchObject({
+    number: 1,
+  });
+  expect(commitPosts(gitlab)).toBe(1);
+  expect(gitlab.projects.get(GITLAB_REPO)?.mergeRequests).toHaveLength(1);
+});
+
+test("the key finds a locally saved revision by the content it was to hold", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, org.id, { role: "admin" });
+  const contentHash = createHash("sha256").update(changed).digest("hex");
+  const find = (local: { expectedRevision: number; contentHash: string }) =>
+    findPublicationByKey({
+      organizationId: org.id,
+      operationKey: "fix-7:v1:a",
+      local,
+    });
+  expect(await find({ expectedRevision: 0, contentHash })).toBeNull();
+
+  await publishOpenAppaPolicyChange({
+    ...changeRequest(org.id, user.id, "fix-7:v1:a"),
+    expectedRevision: 0,
+  });
+
+  expect(await find({ expectedRevision: 0, contentHash })).toEqual({
+    delivery: "revision",
+    revision: 1,
+  });
+  expect(
+    await find({ expectedRevision: 0, contentHash: "0".repeat(64) }),
+  ).toBeNull();
+  expect(await find({ expectedRevision: 1, contentHash })).toBeNull();
+});
+
+const GITLAB = "https://gitlab.example.test";
+const GITLAB_REPO = "team/policies";
+
+function changeRequest(
+  organizationId: string,
+  userId: string,
+  operationKey: string,
+) {
+  return {
+    organizationId,
+    userId,
+    content: changed,
+    expectedRevision: 1,
+    title: "Tighten the policy",
+    summary: "Adds a comment.",
+    operationKey,
+  };
+}
+
+function commitPosts(gitlab: FakeGitlab) {
+  return gitlab.requests.filter(
+    (request) =>
+      request.method === "POST" && request.path.endsWith("/repository/commits"),
+  ).length;
+}
+
+async function configureGitlabSource(organizationId: string) {
+  config.openappa.enabled = true;
+  const gitlab = new FakeGitlab(GITLAB, "glpat-test-token");
+  server.use(...gitlab.handlers());
+  gitlab.addProject({
+    path: GITLAB_REPO,
+    files: { "appa.toml": initialPolicy() },
+  });
+  const gitlabTokenId = (
+    await createGitlabToken({
+      organizationId,
+      data: { name: "GitLab", gitlabUrl: GITLAB, token: "glpat-test-token" },
+    })
+  ).id;
+  await OpenAppaGithubSyncModel.save(organizationId, {
+    repo: GITLAB_REPO,
+    ref: null,
+    path: "appa.toml",
+    interval: "1h",
+    githubPatId: null,
+    githubAppConfigId: null,
+    gitlabTokenId,
+  });
+  await syncAppaGithubPolicy(organizationId);
+  expect((await guardrailsPolicyService.get(organizationId)).revision).toBe(1);
+  return gitlab;
+}
+
+/**
+ * A GitHub repository that keeps its branches, the commits the contents API
+ * makes and the pull requests opened, so a publish asked twice meets what the
+ * first one left. `fail` makes the next contents write or pull request create
+ * fail once.
+ */
+async function keyedGithubSetup(fixtures: {
+  makeOrganization: () => Promise<{ id: string }>;
+  makeUser: () => Promise<{ id: string }>;
+  makeMember: (
+    userId: string,
+    organizationId: string,
+    options: { role: string },
+  ) => Promise<unknown>;
+}) {
+  config.openappa.enabled = true;
+  const org = await fixtures.makeOrganization();
+  const user = await fixtures.makeUser();
+  await fixtures.makeMember(user.id, org.id, { role: "admin" });
+  await configureValidationSource({
+    organizationId: org.id,
+    directory: "traces",
+    appWriter: true,
+    patUserId: user.id,
+  });
+  const repo = "https://api.github.com/repos/example/policies";
+  const branches = new Map([["main", baseSha]]);
+  const commits = new Map<string, { parent: string; blob: string }>();
+  const github = {
+    writes: { refs: 0, contents: 0, pulls: 0 },
+    pulls: [] as {
+      number: number;
+      head: string;
+      state: "open" | "closed";
+      merged_at: string | null;
+    }[],
+    fail: {} as {
+      contents?: boolean;
+      pulls?: "refuse" | "unanswered" | "fault-after-create";
+    },
+  };
+  const openPull = (head: string) => {
+    const pull = {
+      number: github.pulls.length + 1,
+      head,
+      state: "open" as const,
+      merged_at: null,
+    };
+    github.pulls.push(pull);
+    return pull;
+  };
+  server.use(
+    http.get(
+      ({ request }) =>
+        new URL(request.url).pathname.startsWith(
+          "/repos/example/policies/branches/",
+        ),
+      ({ request }) => {
+        const name = decodeURIComponent(
+          new URL(request.url).pathname.slice(
+            "/repos/example/policies/branches/".length,
+          ),
+        );
+        const sha = branches.get(name);
+        return sha
+          ? HttpResponse.json({ commit: { sha } })
+          : HttpResponse.json({ message: "Branch not found" }, { status: 404 });
+      },
+    ),
+    http.get(`${repo}/contents/appa.toml`, ({ request }) => {
+      const ref = new URL(request.url).searchParams.get("ref") ?? "";
+      const blob = ref === baseSha ? fileSha : commits.get(ref)?.blob;
+      return blob
+        ? HttpResponse.json({ sha: blob })
+        : HttpResponse.json({ message: "Not Found" }, { status: 404 });
+    }),
+    http.get(`${repo}/git/commits/:sha`, ({ params }) => {
+      const commit = commits.get(String(params.sha));
+      return commit
+        ? HttpResponse.json({
+            sha: params.sha,
+            tree: { sha: "e".repeat(40) },
+            parents: [{ sha: commit.parent }],
+          })
+        : HttpResponse.json({ message: "Not Found" }, { status: 404 });
+    }),
+    http.post(`${repo}/git/refs`, async ({ request }) => {
+      github.writes.refs += 1;
+      const body = (await request.json()) as { ref: string; sha: string };
+      const name = body.ref.replace("refs/heads/", "");
+      if (branches.has(name))
+        return HttpResponse.json(
+          { message: "Reference already exists" },
+          { status: 422 },
+        );
+      branches.set(name, body.sha);
+      return HttpResponse.json({ ref: body.ref }, { status: 201 });
+    }),
+    http.put(`${repo}/contents/appa.toml`, async ({ request }) => {
+      github.writes.contents += 1;
+      if (github.fail.contents) {
+        github.fail.contents = false;
+        return HttpResponse.json({ message: "Server Error" }, { status: 500 });
+      }
+      const body = (await request.json()) as {
+        branch: string;
+        content: string;
+      };
+      const parent = branches.get(body.branch);
+      if (!parent)
+        return HttpResponse.json({ message: "Not Found" }, { status: 404 });
+      const content = Buffer.from(body.content, "base64");
+      const blob = createHash("sha1")
+        .update(`blob ${content.length}\0`)
+        .update(content)
+        .digest("hex");
+      const sha = createHash("sha1").update(`${parent}${blob}`).digest("hex");
+      commits.set(sha, { parent, blob });
+      branches.set(body.branch, sha);
+      return HttpResponse.json({ commit: { sha } }, { status: 201 });
+    }),
+    http.post(`${repo}/pulls`, async ({ request }) => {
+      github.writes.pulls += 1;
+      const body = (await request.json()) as { head: string };
+      const fail = github.fail.pulls;
+      github.fail.pulls = undefined;
+      if (fail === "refuse")
+        return HttpResponse.json({ message: "Forbidden" }, { status: 403 });
+      if (fail === "unanswered") return HttpResponse.error();
+      if (
+        github.pulls.some(
+          (pull) => pull.head === body.head && pull.state === "open",
+        )
+      )
+        return HttpResponse.json(
+          { message: "A pull request already exists" },
+          { status: 422 },
+        );
+      const pull = openPull(body.head);
+      if (fail === "fault-after-create")
+        return HttpResponse.json({ message: "Server Error" }, { status: 502 });
+      return HttpResponse.json(
+        {
+          number: pull.number,
+          html_url: `https://github.com/example/policies/pull/${pull.number}`,
+        },
+        { status: 201 },
+      );
+    }),
+    http.get(`${repo}/pulls`, ({ request }) => {
+      const url = new URL(request.url);
+      expect(url.searchParams.get("state")).toBe("all");
+      const head = url.searchParams.get("head");
+      return HttpResponse.json(
+        github.pulls
+          .filter((pull) => `example:${pull.head}` === head)
+          .map((pull) => ({
+            number: pull.number,
+            html_url: `https://github.com/example/policies/pull/${pull.number}`,
+            state: pull.state,
+            merged_at: pull.merged_at,
+            head: { ref: pull.head },
+          })),
+      );
+    }),
+  );
+  return { org, user, github };
+}

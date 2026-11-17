@@ -1,5 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { userHasPermission } from "@/auth";
+import logger from "@/logging";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import UserModel from "@/models/user";
@@ -10,12 +12,14 @@ import {
   type PolicyResolution,
 } from "@/openappa/declarations";
 import { withRequester } from "@/openappa/policy-text";
+import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import {
   guardrailsPolicyService,
   requireGrantPermission,
 } from "@/services/guardrails-policy";
 import { resolveProposedPolicy } from "@/services/guardrails-policy-proposal";
 import {
+  githubFetch,
   githubJson,
   githubPolicyChangeErrors,
 } from "@/services/openappa-github";
@@ -31,6 +35,7 @@ import {
   PolicyTestDirectorySchema,
   PolicyTestFilesSchema,
 } from "@/types/openappa-policy-tests";
+import { PublicationUncertainError } from "@/types/openappa-publication";
 
 type ChangeRequest = GuardrailsPolicyProposal & {
   organizationId: string;
@@ -45,13 +50,40 @@ type ChangeRequest = GuardrailsPolicyProposal & {
     directory: string;
     expectedVersion: string;
   };
+  /**
+   * Names the change request's branch, so publishing again under the same key
+   * returns the request already opened, or completes a branch left without
+   * one, instead of opening a second. An unconfirmed create then throws
+   * `PublicationUncertainError`. Without it every publish opens a new branch.
+   */
+  operationKey?: string;
 };
+
+/** What a keyed publish left behind, as `findPublicationByKey` finds it. */
+export type PolicyPublication =
+  | {
+      delivery: "pull_request";
+      url: string;
+      number: number;
+      state: "open" | "closed" | "merged";
+    }
+  | { delivery: "revision"; revision: number };
 
 /**
  * Publish a policy change through the configured source of truth. GitHub sync
  * writes a reviewable PR; a locally managed policy saves a revision.
  */
 export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
+  const keyed =
+    params.operationKey === undefined
+      ? undefined
+      : {
+          operationKey: params.operationKey,
+          branch: keyedBranch({
+            organizationId: params.organizationId,
+            operationKey: params.operationKey,
+          }),
+        };
   const source = await OpenAppaGithubSyncModel.find(params.organizationId);
   const before = await guardrailsPolicyService.get(params.organizationId);
   const includePolicy = params.includePolicy ?? true;
@@ -138,6 +170,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       params,
       source: { ...source, repo: source.repo, path: source.path },
       gitlabTokenId: source.gitlabTokenId,
+      keyed,
       includePolicy,
       content,
       before: before.content,
@@ -146,6 +179,28 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
 
   const { token, api, web } = await resolveWriteToken(source);
   const base = `${api}/repos/${source.repo}`;
+  const repo = source.repo;
+  const policyPath = source.path;
+  const published = (pull: { number: number; url: string }) => ({
+    delivery: "pull_request" as const,
+    number: pull.number,
+    url: pull.url,
+    repo,
+    path: policyPath,
+    warnings: validation.warnings,
+    before: before.content,
+    after: content,
+  });
+  if (keyed) {
+    const existing = await findGithubPull({
+      base,
+      web,
+      repo,
+      head: keyed.branch,
+      token,
+    });
+    if (existing) return published(existing);
+  }
   const branch =
     source.ref ??
     (
@@ -229,28 +284,37 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
         ],
       },
     });
-    const commitResult = await githubJson<{ sha: string }>({
-      method: "POST",
-      url: `${base}/git/commits`,
-      token,
-      errors: githubPolicyChangeErrors,
-      body: {
-        message,
-        tree: checkedSha(tree.sha),
-        parents: [baseSha],
-      },
-    });
-    const commitSha = checkedSha(commitResult.sha);
-    await assertPublishSource({ params, source });
-    await assertBranchUnchanged({ base, branch, baseSha, token });
-    head = `archestra/openappa-${randomUUID()}`;
-    await githubJson({
-      method: "POST",
-      url: `${base}/git/refs`,
-      token,
-      errors: githubPolicyChangeErrors,
-      body: { ref: `refs/heads/${head}`, sha: commitSha },
-    });
+    const treeSha = checkedSha(tree.sha);
+    head = keyed?.branch ?? `archestra/openappa-${randomUUID()}`;
+    // Git names a tree by its content, so a keyed branch an earlier attempt
+    // left holds this change exactly when its commit has this tree.
+    const tip = keyed ? await branchTip({ base, head, token }) : null;
+    if (tip) {
+      const left = await keyedCommit({ base, head, tip, baseSha, token });
+      if (left.tree !== treeSha) throw differentChange(head);
+    } else {
+      const commitResult = await githubJson<{ sha: string }>({
+        method: "POST",
+        url: `${base}/git/commits`,
+        token,
+        errors: githubPolicyChangeErrors,
+        body: {
+          message,
+          tree: treeSha,
+          parents: [baseSha],
+        },
+      });
+      const commitSha = checkedSha(commitResult.sha);
+      await assertPublishSource({ params, source });
+      await assertBranchUnchanged({ base, branch, baseSha, token });
+      await githubJson({
+        method: "POST",
+        url: `${base}/git/refs`,
+        token,
+        errors: githubPolicyChangeErrors,
+        body: { ref: `refs/heads/${head}`, sha: commitSha },
+      });
+    }
   } else {
     const path = source.path.split("/").map(encodeURIComponent).join("/");
     const file = await githubJson<{ sha: string }>({
@@ -264,55 +328,131 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     await assertPublishSource({ params, source });
     await assertBranchUnchanged({ base, branch, baseSha, token });
 
-    head = `archestra/openappa-${randomUUID()}`;
-    await githubJson({
-      method: "POST",
-      url: `${base}/git/refs`,
-      token,
-      errors: githubPolicyChangeErrors,
-      body: { ref: `refs/heads/${head}`, sha: baseSha },
-    });
-    await githubJson({
-      method: "PUT",
-      url: `${base}/contents/${path}`,
-      token,
-      errors: githubPolicyChangeErrors,
-      body: {
-        message,
-        content: Buffer.from(content).toString("base64"),
-        sha: file.sha,
-        branch: head,
-      },
-    });
+    head = keyed?.branch ?? `archestra/openappa-${randomUUID()}`;
+    // A keyed branch an earlier attempt left still at the base lacks only
+    // the commit; one past it must be that commit.
+    const tip = keyed ? await branchTip({ base, head, token }) : null;
+    if (tip === null)
+      await githubJson({
+        method: "POST",
+        url: `${base}/git/refs`,
+        token,
+        errors: githubPolicyChangeErrors,
+        body: { ref: `refs/heads/${head}`, sha: baseSha },
+      });
+    if (tip === null || tip === baseSha)
+      await githubJson({
+        method: "PUT",
+        url: `${base}/contents/${path}`,
+        token,
+        errors: githubPolicyChangeErrors,
+        body: {
+          message,
+          content: Buffer.from(content).toString("base64"),
+          sha: file.sha,
+          branch: head,
+        },
+      });
+    else {
+      await keyedCommit({ base, head, tip, baseSha, token });
+      const committed = await githubJson<{ sha?: string }>({
+        url: `${base}/contents/${path}?ref=${tip}`,
+        token,
+        errors: githubPolicyChangeErrors,
+      });
+      if (committed.sha !== gitBlobSha(content)) throw differentChange(head);
+    }
   }
+  const body = {
+    title: params.title,
+    body: params.summary,
+    head,
+    base: branch,
+  };
+  if (keyed)
+    return published(
+      await openKeyedPull({
+        base,
+        web,
+        repo,
+        token,
+        body,
+        operationKey: keyed.operationKey,
+      }),
+    );
   const pull = await githubJson<{ number: number; html_url: string }>({
     method: "POST",
     url: `${base}/pulls`,
     token,
     errors: githubPolicyChangeErrors,
-    body: {
-      title: params.title,
-      body: params.summary,
-      head,
-      base: branch,
-    },
+    body,
   });
   const url = checkedPullUrl({
     url: pull.html_url,
     web,
-    repo: source.repo,
+    repo,
     number: pull.number,
   });
-  return {
-    delivery: "pull_request" as const,
-    number: pull.number,
-    url,
-    repo: source.repo,
-    path: source.path,
-    warnings: validation.warnings,
-    before: before.content,
-    after: content,
-  };
+  return published({ number: pull.number, url });
+}
+
+/**
+ * @public — the tuner apply flow's reconcile step consumes it.
+ *
+ * What a keyed publish left, for a caller that did not see its outcome: the
+ * pull or merge request from the key's branch in the synced repository, else
+ * the local revision right after `local.expectedRevision` when it holds the
+ * content whose hash (sha256 hex, as revisions store it) is
+ * `local.contentHash`. Null only when neither exists; a Git host that cannot
+ * be asked throws.
+ */
+export async function findPublicationByKey(params: {
+  organizationId: string;
+  operationKey: string;
+  local?: { expectedRevision: number; contentHash: string };
+}): Promise<PolicyPublication | null> {
+  const head = keyedBranch(params);
+  const source = await OpenAppaGithubSyncModel.find(params.organizationId);
+  if (source?.interval && source.repo) {
+    const repo = source.repo;
+    let found: Omit<
+      Extract<PolicyPublication, { delivery: "pull_request" }>,
+      "delivery"
+    > | null;
+    if (source.gitlabTokenId) {
+      const request = await openappaGitlab.requestForBranch({
+        access: await resolveOpenAppaGitlabAccess({
+          organizationId: params.organizationId,
+          gitlabTokenId: source.gitlabTokenId,
+        }),
+        repo,
+        branch: head,
+      });
+      found = request && {
+        number: request.iid,
+        url: request.webUrl,
+        state: request.state,
+      };
+    } else {
+      const { token, api, web } = await resolveWriteToken(source);
+      found = await findGithubPull({
+        base: `${api}/repos/${repo}`,
+        web,
+        repo,
+        head,
+        token,
+      });
+    }
+    if (found) return { delivery: "pull_request", ...found };
+  }
+  if (!params.local) return null;
+  const saved = await GuardrailsPolicyModel.findRevision({
+    organizationId: params.organizationId,
+    revision: params.local.expectedRevision + 1,
+  });
+  return saved?.contentHash === params.local.contentHash
+    ? { delivery: "revision", revision: saved.revision }
+    : null;
 }
 
 export async function getOpenAppaPolicyChangeStatus(params: {
@@ -579,6 +719,7 @@ async function publishGitlabChange(args: {
     Awaited<ReturnType<typeof OpenAppaGithubSyncModel.find>>
   > & { repo: string; path: string };
   gitlabTokenId: string;
+  keyed: { operationKey: string; branch: string } | undefined;
   includePolicy: boolean;
   content: string;
   before: string;
@@ -589,6 +730,24 @@ async function publishGitlabChange(args: {
     organizationId: params.organizationId,
     gitlabTokenId: args.gitlabTokenId,
   });
+  const published = (request: { iid: number; webUrl: string }) => ({
+    delivery: "pull_request" as const,
+    number: request.iid,
+    url: request.webUrl,
+    repo: source.repo,
+    path: source.path,
+    warnings: args.warnings,
+    before: args.before,
+    after: args.content,
+  });
+  if (args.keyed) {
+    const existing = await openappaGitlab.requestForBranch({
+      access,
+      repo: source.repo,
+      branch: args.keyed.branch,
+    });
+    if (existing) return published(existing);
+  }
   const branch =
     source.ref ??
     (await openappaGitlab.defaultBranch({ access, repo: source.repo }));
@@ -619,17 +778,9 @@ async function publishGitlabChange(args: {
         : []),
     ],
     delete: changes?.delete ?? [],
+    keyed: args.keyed,
   });
-  return {
-    delivery: "pull_request" as const,
-    number: request.iid,
-    url: request.webUrl,
-    repo: source.repo,
-    path: source.path,
-    warnings: args.warnings,
-    before: args.before,
-    after: args.content,
-  };
+  return published(request);
 }
 
 async function resolveWriteToken(source: {
@@ -738,6 +889,190 @@ async function assertBranchUnchanged(params: {
       409,
       "GitHub has changed since the last policy sync. Sync and review the new revision.",
     );
+}
+
+/**
+ * The branch an operation key names: a digest, so any key makes a valid ref
+ * that no other key or organization shares, under the prefix the status
+ * check accepts.
+ */
+function keyedBranch(params: {
+  organizationId: string;
+  operationKey: string;
+}): string {
+  if (!params.operationKey)
+    throw new ApiError(400, "An operation key must not be empty");
+  const digest = createHash("sha256")
+    .update(`${params.organizationId}\n${params.operationKey}`)
+    .digest("hex");
+  return `archestra/openappa-op-${digest.slice(0, 40)}`;
+}
+
+type GithubPull = { number: number; url: string };
+
+/** The pull request from `head` in any state, an open one first; null when none. */
+async function findGithubPull(params: {
+  base: string;
+  web: string;
+  repo: string;
+  head: string;
+  token: string;
+}): Promise<(GithubPull & { state: "open" | "closed" | "merged" }) | null> {
+  const owner = params.repo.split("/")[0];
+  const pulls = await githubJson<
+    {
+      number: number;
+      html_url: string;
+      state: string;
+      merged_at?: string | null;
+      head?: { ref?: string };
+    }[]
+  >({
+    url: `${params.base}/pulls?head=${encodeURIComponent(`${owner}:${params.head}`)}&state=all&per_page=100`,
+    token: params.token,
+    errors: githubPolicyChangeErrors,
+  });
+  if (!Array.isArray(pulls))
+    throw new ApiError(502, "GitHub returned an invalid pull request list");
+  const pull = pulls
+    .filter((entry) => entry.head?.ref === params.head)
+    .sort((a, b) => Number(b.state === "open") - Number(a.state === "open"))[0];
+  if (!pull) return null;
+  return {
+    number: pull.number,
+    url: checkedPullUrl({
+      url: pull.html_url,
+      web: params.web,
+      repo: params.repo,
+      number: pull.number,
+    }),
+    state: pull.merged_at
+      ? "merged"
+      : pull.state === "open"
+        ? "open"
+        : "closed",
+  };
+}
+
+/**
+ * Open the pull request for a keyed branch. A create GitHub refused with an
+ * answer fails as usual; one it did not answer, or answered with a server
+ * fault or an existing request (422), is decided by the request found from
+ * the branch, or is uncertain.
+ */
+async function openKeyedPull(params: {
+  base: string;
+  web: string;
+  repo: string;
+  token: string;
+  body: { title: string; body: string; head: string; base: string };
+  operationKey: string;
+}): Promise<GithubPull> {
+  let response: Response | undefined;
+  try {
+    response = await githubFetch({
+      method: "POST",
+      url: `${params.base}/pulls`,
+      token: params.token,
+      body: params.body,
+    });
+  } catch (err) {
+    logger.warn({ err }, "OpenAPPA could not reach GitHub");
+  }
+  if (
+    response &&
+    response.status >= 400 &&
+    response.status < 500 &&
+    response.status !== 422
+  )
+    throw await githubPolicyChangeErrors(response);
+  if (response?.ok) {
+    const bytes = await readResponseBodyWithLimit(response, 2 * 1024 * 1024);
+    try {
+      const pull = JSON.parse(bytes?.toString() ?? "") as {
+        number: number;
+        html_url: string;
+      };
+      return {
+        number: pull.number,
+        url: checkedPullUrl({
+          url: pull.html_url,
+          web: params.web,
+          repo: params.repo,
+          number: pull.number,
+        }),
+      };
+    } catch {
+      // Created, but unreadable: the branch's request is the answer.
+    }
+  }
+  const found = await findGithubPull({
+    ...params,
+    head: params.body.head,
+  }).catch((err) => {
+    logger.warn({ err }, "OpenAPPA could not look for a policy pull request");
+    return undefined;
+  });
+  if (found) return found;
+  if (response?.status === 422 && found === null)
+    throw await githubPolicyChangeErrors(response);
+  throw new PublicationUncertainError(params.operationKey);
+}
+
+/** The commit a branch points at, or null when it does not exist. */
+async function branchTip(params: {
+  base: string;
+  head: string;
+  token: string;
+}): Promise<string | null> {
+  try {
+    const branch = await githubJson<{ commit: { sha: string } }>({
+      url: `${params.base}/branches/${encodeURIComponent(params.head)}`,
+      token: params.token,
+      errors: githubPolicyChangeErrors,
+    });
+    return checkedSha(branch.commit?.sha);
+  } catch (error) {
+    if (error instanceof ApiError && error.statusCode === 404) return null;
+    throw error;
+  }
+}
+
+/** The tree of a keyed branch's commit, which must be one commit on `baseSha`. */
+async function keyedCommit(params: {
+  base: string;
+  head: string;
+  tip: string;
+  baseSha: string;
+  token: string;
+}): Promise<{ tree: string }> {
+  const commit = await githubJson<{
+    tree?: { sha?: string };
+    parents?: { sha?: string }[];
+  }>({
+    url: `${params.base}/git/commits/${params.tip}`,
+    token: params.token,
+    errors: githubPolicyChangeErrors,
+  });
+  if (commit.parents?.length !== 1 || commit.parents[0]?.sha !== params.baseSha)
+    throw differentChange(params.head);
+  return { tree: checkedSha(commit.tree?.sha) };
+}
+
+function differentChange(head: string) {
+  return new ApiError(
+    409,
+    `The branch ${head} already holds a different change`,
+  );
+}
+
+/** The object name Git gives `content` as a file. */
+function gitBlobSha(content: string): string {
+  const bytes = Buffer.from(content);
+  return createHash("sha1")
+    .update(`blob ${bytes.length}\0`)
+    .update(bytes)
+    .digest("hex");
 }
 
 function checkedSha(sha: unknown): string {

@@ -15,6 +15,7 @@ import {
 } from "@/services/openappa-github-access";
 import { ApiError } from "@/types";
 import type { AppaGithubRepositoryStatus } from "@/types/openappa-github-app-setup";
+import { PublicationUncertainError } from "@/types/openappa-publication";
 
 /**
  * GitLab (cloud or self-managed) as an OpenAPPA policy source. Mirrors the
@@ -386,8 +387,15 @@ class OpenAppaGitlab {
      * a file.
      */
     present?: ReadonlyMap<string, { type: string; mode?: string }>;
+    /**
+     * The branch an operation key names. A commit already on it that holds
+     * this change is reused, and a create GitLab did not answer is decided by
+     * the request found from the branch, or is uncertain.
+     */
+    keyed?: { operationKey: string; branch: string };
   }): Promise<{ iid: number; webUrl: string; sha: string }> {
     const client = gitClient(params.access);
+    const keyed = params.keyed;
     return withGitlabErrors(async () => {
       let existing: ReadonlyMap<string, { type: string; mode?: string }>;
       if (params.present) existing = params.present;
@@ -406,26 +414,38 @@ class OpenAppaGitlab {
             `${path} is not a regular file in the repository`,
           );
       }
-      const head = `archestra/openappa-${randomUUID()}`;
-      const sha = await client.commitGitlabFiles({
-        repo: params.repo,
-        branch: head,
-        startBranch: params.branch,
-        startSha: params.baseSha,
-        message: params.title,
-        actions: [
-          ...params.upsert.map((file) => ({
-            action: existing.has(file.path)
-              ? ("update" as const)
-              : ("create" as const),
-            path: file.path,
-            content: file.content,
-          })),
-          ...params.delete
-            .filter((path) => existing.has(path))
-            .map((path) => ({ action: "delete" as const, path })),
-        ],
-      });
+      const head = keyed?.branch ?? `archestra/openappa-${randomUUID()}`;
+      const left = keyed
+        ? await committedChange({
+            client,
+            repo: params.repo,
+            head,
+            baseSha: params.baseSha,
+            upsert: params.upsert,
+            delete: params.delete,
+          })
+        : null;
+      const sha =
+        left ??
+        (await client.commitGitlabFiles({
+          repo: params.repo,
+          branch: head,
+          startBranch: params.branch,
+          startSha: params.baseSha,
+          message: params.title,
+          actions: [
+            ...params.upsert.map((file) => ({
+              action: existing.has(file.path)
+                ? ("update" as const)
+                : ("create" as const),
+              path: file.path,
+              content: file.content,
+            })),
+            ...params.delete
+              .filter((path) => existing.has(path))
+              .map((path) => ({ action: "delete" as const, path })),
+          ],
+        }));
       try {
         return {
           ...(await client.createGitlabMergeRequest({
@@ -438,6 +458,27 @@ class OpenAppaGitlab {
           sha,
         };
       } catch (error) {
+        if (keyed) {
+          // A 4xx answer refuses the create, save a 409: a request from the
+          // branch is open already. Without an answer, or with a server
+          // fault, one may have opened all the same. The branch stays.
+          const refused =
+            error instanceof GitHostError &&
+            error.status >= 400 &&
+            error.status < 500 &&
+            error.status !== 409;
+          if (refused) throw error;
+          const opened = await requestFromBranch({
+            client,
+            repo: params.repo,
+            branch: head,
+          }).catch((err) => {
+            logger.warn({ err }, "OpenAPPA could not look for a merge request");
+            return undefined;
+          });
+          if (opened) return { iid: opened.iid, webUrl: opened.webUrl, sha };
+          throw new PublicationUncertainError(keyed.operationKey);
+        }
         // Without GitLab's answer the request may have opened all the same.
         const opened =
           error instanceof GitHostError && error.status === 0
@@ -460,6 +501,21 @@ class OpenAppaGitlab {
     if (!request.sourceBranch.startsWith("archestra/openappa-"))
       throw new ApiError(404, "OpenAPPA policy merge request not found");
     return request;
+  }
+
+  /** The merge request from `branch` in any state, an open one first; null when none. */
+  async requestForBranch(params: {
+    access: GitAccess;
+    repo: string;
+    branch: string;
+  }): Promise<BranchRequest | null> {
+    return withGitlabErrors(() =>
+      requestFromBranch({
+        client: gitClient(params.access),
+        repo: params.repo,
+        branch: params.branch,
+      }),
+    );
   }
 
   /** Whether `commit` has `ancestor` in its history. */
@@ -563,6 +619,99 @@ async function openRequestFor(params: {
     logger.warn({ err }, "OpenAPPA could not look for a policy merge request");
     return undefined;
   }
+}
+
+type BranchRequest = {
+  iid: number;
+  webUrl: string;
+  state: "open" | "closed" | "merged";
+};
+
+async function requestFromBranch(params: {
+  client: GitHostClient;
+  repo: string;
+  branch: string;
+}): Promise<BranchRequest | null> {
+  // GitLab lists requests in every state unless `state` narrows it.
+  const requests = await params.client.json<
+    Array<{
+      iid?: number;
+      web_url?: string;
+      state?: string;
+      source_branch?: string;
+    }>
+  >(
+    `${params.client.repoApi(params.repo)}/merge_requests?source_branch=${encodeURIComponent(params.branch)}`,
+  );
+  const found = requests
+    .filter(
+      (request) =>
+        request.source_branch === params.branch &&
+        Number.isSafeInteger(request.iid) &&
+        typeof request.web_url === "string",
+    )
+    .sort(
+      (a, b) => Number(b.state === "opened") - Number(a.state === "opened"),
+    )[0];
+  if (!found?.iid || !found.web_url) return null;
+  return {
+    iid: found.iid,
+    webUrl: found.web_url,
+    state:
+      found.state === "opened"
+        ? "open"
+        : found.state === "merged"
+          ? "merged"
+          : "closed",
+  };
+}
+
+/**
+ * The commit on a keyed branch, when an earlier attempt left one: reused when
+ * it is one commit on `baseSha` holding exactly this change, refused when it
+ * holds anything else, null when the branch does not exist.
+ */
+async function committedChange(params: {
+  client: GitHostClient;
+  repo: string;
+  head: string;
+  baseSha: string;
+  upsert: { path: string; content: string }[];
+  delete: string[];
+}): Promise<string | null> {
+  const { client, repo } = params;
+  let tip: string;
+  try {
+    tip = await client.gitlabBranchCommit(repo, params.head);
+  } catch (error) {
+    if (error instanceof GitHostError && error.status === 404) return null;
+    throw error;
+  }
+  const commit = await client.json<{ parent_ids?: string[] }>(
+    `${client.repoApi(repo)}/repository/commits/${encodeURIComponent(tip)}`,
+  );
+  let holds =
+    commit.parent_ids?.length === 1 && commit.parent_ids[0] === params.baseSha;
+  for (const file of params.upsert) {
+    if (!holds) break;
+    const bytes = await client.readFile({
+      repo,
+      ref: tip,
+      path: file.path,
+      maxBytes: POLICY_MAX_BYTES,
+    });
+    holds = bytes?.equals(Buffer.from(file.content)) ?? false;
+  }
+  for (const path of params.delete) {
+    if (!holds) break;
+    holds = !(await client.pathExists({ repo, ref: tip, path }));
+  }
+  if (!holds)
+    throw new ApiError(
+      409,
+      `The branch ${params.head} already holds a different change`,
+    );
+  return tip;
 }
 
 /** Remove a branch whose merge request did not open; a failure is logged. */

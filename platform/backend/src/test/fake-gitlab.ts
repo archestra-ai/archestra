@@ -331,7 +331,10 @@ export class FakeGitlab {
     }
     if (kind === "commits") {
       const sha = resolve(name ?? null);
-      return sha ? HttpResponse.json({ id: sha }) : notFound();
+      const parent = sha ? project.parents.get(sha) : null;
+      return sha
+        ? HttpResponse.json({ id: sha, parent_ids: parent ? [parent] : [] })
+        : notFound();
     }
     if (kind === "branches") {
       const sha = project.branches.get(name ?? "");

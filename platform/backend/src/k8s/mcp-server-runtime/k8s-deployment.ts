@@ -2,7 +2,6 @@ import { PassThrough } from "node:stream";
 import {
   type ImagePullPolicy,
   type ImagePullSecretConfig,
-  isPlaywrightCatalogItem,
   type LocalConfigSchema,
   MCP_ORCHESTRATOR_DEFAULTS,
   type McpDeploymentState,
@@ -43,6 +42,7 @@ import type {
   K8sNetworkPolicyCapabilities,
   McpServer,
 } from "@/types";
+import { resolveMcpServerResources } from "@/utils/mcp-server-resources";
 import {
   applyDeploymentObservation,
   deriveOrdinaryDeploymentState,
@@ -2328,27 +2328,10 @@ export default class K8sDeployment {
               }),
           // Add volume mounts for mounted secrets
           ...(volumeMounts.length > 0 ? { volumeMounts } : {}),
-          // Set resource requests/limits for the container (with defaults).
-          // Ephemeral-storage governance keeps the scheduler disk-aware and
-          // prevents DiskPressure eviction cascades on over-packed nodes.
-          resources: {
-            requests: {
-              memory: isPlaywrightCatalogItem(this.catalogItem?.id ?? "")
-                ? PLAYWRIGHT_MEMORY_REQUEST
-                : config.orchestrator.mcpServerResources.requests.memory,
-              cpu: config.orchestrator.mcpServerResources.requests.cpu,
-              "ephemeral-storage":
-                config.orchestrator.mcpServerResources.requests
-                  .ephemeralStorage,
-            },
-            limits: {
-              memory: isPlaywrightCatalogItem(this.catalogItem?.id ?? "")
-                ? PLAYWRIGHT_MEMORY_LIMIT
-                : config.orchestrator.mcpServerResources.limits.memory,
-              "ephemeral-storage":
-                config.orchestrator.mcpServerResources.limits.ephemeralStorage,
-            },
-          },
+          resources: resolveMcpServerResources(
+            localConfig.resources,
+            this.catalogItem?.id,
+          ),
         },
       ],
       restartPolicy: "Always",
@@ -6295,11 +6278,3 @@ const MCP_TRANSPORT_ANNOTATION = "archestra.ai/mcp-transport";
 
 type DeployedTransport = "stdio" | "streamable-http";
 
-/**
- * The built-in Playwright server runs one Chromium shared by every browser
- * session in its Environment, with a context per conversation. The generic MCP
- * server default (sized for small tool servers) starves it: pages slow to a
- * crawl and screenshots time out long before the pod is OOM-killed.
- */
-const PLAYWRIGHT_MEMORY_REQUEST = "512Mi";
-const PLAYWRIGHT_MEMORY_LIMIT = "2Gi";

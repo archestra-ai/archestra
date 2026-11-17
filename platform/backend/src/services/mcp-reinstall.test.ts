@@ -59,6 +59,7 @@ async function getCatalogTools(catalogId: string) {
 
 import {
   autoReinstallServer,
+  manualReinstallReason,
   multitenantSharedPodChanged,
   onlyForwardCompatibleEnvDiff,
   reinstallMultitenantCatalog,
@@ -67,6 +68,33 @@ import {
 } from "./mcp-reinstall";
 
 describe("mcp-reinstall", () => {
+  test("resource edits require reinstall and invalidate a shared pod", () => {
+    const previous = {
+      serverType: "local",
+      localConfig: { command: "node" },
+    } as InternalMcpCatalog;
+    const next = {
+      ...previous,
+      localConfig: {
+        ...previous.localConfig,
+        resources: { cpuRequest: 0.25, memoryRequestMiB: 128 },
+      },
+    } as InternalMcpCatalog;
+    expect(manualReinstallReason(previous, next)).toBe("restart");
+    expect(
+      multitenantSharedPodChanged(
+        { ...previous, multitenant: true },
+        { ...next, multitenant: true },
+      ),
+    ).toBe(true);
+    expect(
+      manualReinstallReason(previous, {
+        ...previous,
+        localConfig: { command: "node", resources: { cpuLimit: null } },
+      }),
+    ).toBeNull();
+  });
+
   describe("requiresNewUserInputForReinstall", () => {
     // Helper to create a minimal local catalog item
     const createLocalCatalog = (

@@ -1022,6 +1022,67 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     expect(resources?.limits?.["ephemeral-storage"]).toBe("1Gi");
   });
 
+  test("uses per-catalog CPU and memory while retaining ephemeral storage governance", () => {
+    const deployment = createMockK8sDeployment({
+      id: "custom-resource-id",
+      name: "custom-resource-server",
+      catalogId: "custom-resource-catalog",
+    } as McpServer);
+    const localConfig = {
+      command: "node",
+      resources: {
+        cpuRequest: 0.25,
+        cpuLimit: 0.5,
+        memoryRequestMiB: 64,
+        memoryLimitMiB: 256,
+      },
+    };
+    const resources = deployment.generateDeploymentSpec(
+      "test:latest",
+      localConfig,
+      false,
+      8080,
+    ).spec?.template.spec?.containers[0]?.resources;
+    expect(resources).toEqual({
+      requests: { cpu: "250m", memory: "64Mi", "ephemeral-storage": "256Mi" },
+      limits: { cpu: "500m", memory: "256Mi", "ephemeral-storage": "1Gi" },
+    });
+    expect(
+      deployment.generateDeploymentSpec(
+        "test:latest",
+        {
+          ...localConfig,
+          resources: { ...localConfig.resources, cpuLimit: null },
+        },
+        false,
+        8080,
+      ).spec?.template.spec?.containers[0]?.resources?.limits,
+    ).not.toHaveProperty("cpu");
+  });
+
+  test("rejects an override below the effective default request", () => {
+    const deployment = createMockK8sDeployment({
+      id: "invalid-resources",
+      name: "invalid-resources",
+    } as McpServer);
+    expect(() =>
+      deployment.generateDeploymentSpec(
+        "test:latest",
+        { command: "node", resources: { cpuLimit: 0.001 } },
+        false,
+        8080,
+      ),
+    ).toThrow("effective CPU request");
+    expect(() =>
+      deployment.generateDeploymentSpec(
+        "test:latest",
+        { command: "node", resources: { memoryLimitMiB: 1 } },
+        false,
+        8080,
+      ),
+    ).toThrow("effective memory request");
+  });
+
   test("generates deploymentSpec with empty arguments array when not provided", () => {
     const mcpServer: McpServer = {
       id: "no-args-id",

@@ -183,11 +183,20 @@ describe("internal MCP catalog deployment YAML routes", () => {
           name: "local-server-with-custom-yaml",
           serverType: "local",
           scope: "org",
-          localConfig: { dockerImage: "registry.example.com/mcp:latest" },
+          localConfig: {
+            dockerImage: "registry.example.com/mcp:latest",
+            resources: { cpuRequest: 0.25, memoryRequestMiB: 64 },
+          },
           deploymentSpecYaml: "apiVersion: apps/v1\nkind: Deployment\n",
         },
         { organizationId, authorId: user.id },
       );
+
+      const preview = await app.inject({
+        method: "GET",
+        url: `/api/internal_mcp_catalog/${catalog.id}/deployment-yaml-preview`,
+      });
+      expect(preview.json().yaml).toBe(catalog.deploymentSpecYaml);
 
       const response = await app.inject({
         method: "POST",
@@ -196,6 +205,8 @@ describe("internal MCP catalog deployment YAML routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json().yaml).toContain("kind: Deployment");
+      expect(response.json().yaml).toContain("cpu: 250m");
+      expect(response.json().yaml).toContain("memory: 64Mi");
       const reloaded = await InternalMcpCatalogModel.findById(catalog.id);
       expect(reloaded?.deploymentSpecYaml).toBeNull();
     });

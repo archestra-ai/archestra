@@ -1008,6 +1008,7 @@ async function handleEditMcpConfig(
         requested: args.deploymentSpecYaml,
         requestedLocalConfig: {
           envFrom: args.envFrom ?? existing.localConfig?.envFrom,
+          resources: existing.localConfig?.resources,
           serviceAccount:
             args.serviceAccount ?? existing.localConfig?.serviceAccount,
         },

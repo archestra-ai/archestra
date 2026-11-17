@@ -46,6 +46,7 @@ import type {
   UpdateInternalMcpCatalog,
 } from "@/types";
 import { ENTERPRISE_MANAGED_OVERRIDE_SECRET_FIELDS } from "@/types/enterprise-managed-credentials";
+import { resolveMcpServerResources } from "@/utils/mcp-server-resources";
 import { SERVABLE_ICON_TYPES } from "@/utils/servable-icon";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel, { lookupCreator } from "./created-by";
@@ -181,6 +182,9 @@ class InternalMcpCatalogModel {
     // pre-existing deployments of this shape never churn. Renames must never
     // touch it.
     const id = dbValues.id ?? crypto.randomUUID();
+    if (dbValues.localConfig?.resources && !dbValues.deploymentSpecYaml) {
+      resolveMcpServerResources(dbValues.localConfig.resources, id);
+    }
     const deploymentName = dbValues.multitenant
       ? constructLegacyMultitenantMcpDeploymentName(id, dbValues.name)
       : null;
@@ -1397,6 +1401,25 @@ class InternalMcpCatalogModel {
     },
   ): Promise<InternalMcpCatalog | null> {
     const { labels, teams, ...dbValues } = catalogItem;
+
+    if (
+      dbValues.localConfig !== undefined ||
+      dbValues.deploymentSpecYaml !== undefined
+    ) {
+      const current = await InternalMcpCatalogModel.findById(id, {
+        expandSecrets: false,
+      });
+      const localConfig =
+        dbValues.localConfig === undefined
+          ? current?.localConfig
+          : dbValues.localConfig;
+      const yaml =
+        dbValues.deploymentSpecYaml === undefined
+          ? current?.deploymentSpecYaml
+          : dbValues.deploymentSpecYaml;
+      if (localConfig?.resources && !yaml)
+        resolveMcpServerResources(localConfig.resources, id);
+    }
 
     // Name immutability at the generic-update layer: renames flow
     // EXCLUSIVELY through `renameCascade`, which also renames install rows,

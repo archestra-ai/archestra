@@ -1,7 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -91,6 +94,9 @@ vi.mock("@/components/environment-variables-form-field", () => ({
 describe("McpCatalogForm enterprise gating", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     vi.mocked(useFeature).mockImplementation((feature: string) => {
       if (feature === "mcpServerBaseImage") return "";
       if (feature === "orchestratorK8sRuntime") return true;
@@ -453,5 +459,95 @@ describe("McpCatalogForm enterprise gating", () => {
         "mcp-server-123-regcred-containerregistry-example-com-user",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("edits and validates resource overrides only for permitted generated deployments", async () => {
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [
+        {
+          resource: "mcpRegistry",
+          action: "configure-deployment-spec",
+          scope: "*",
+        },
+      ],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
+    const initialValues = {
+      id: "resource-catalog",
+      name: "Resource server",
+      serverType: "local",
+      localConfig: {
+        dockerImage: "example/server:1",
+        resources: {
+          cpuRequest: 0.25,
+          memoryRequestMiB: 256,
+          memoryLimitMiB: 512,
+        },
+      },
+      deploymentSpecYaml: null,
+      labels: [],
+      teams: [],
+    };
+    const onSubmit = vi.fn();
+    const { container, rerender } = render(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={onSubmit}
+        initialValues={initialValues as never}
+      />,
+    );
+    expect(screen.getByLabelText("CPU request (cores)")).toHaveValue(0.25);
+    fireEvent.change(screen.getByLabelText("CPU limit (cores)"), {
+      target: { value: "0.1" },
+    });
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    expect(
+      await screen.findByText("CPU limit must be at least the CPU request"),
+    ).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("CPU limit (cores)"), {
+      target: { value: "1" },
+    });
+    fireEvent.change(screen.getByLabelText("Memory request (MiB)"), {
+      target: { value: "" },
+    });
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0].localConfig.resources).toEqual({
+      cpuRequest: 0.25,
+      cpuLimit: 1,
+      memoryRequestMiB: undefined,
+      memoryLimitMiB: 512,
+    });
+
+    rerender(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={onSubmit}
+        initialValues={
+          { ...initialValues, deploymentSpecYaml: "kind: Deployment" } as never
+        }
+      />,
+    );
+    expect(
+      screen.queryByLabelText("CPU request (cores)"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Resources are configured in the custom Kubernetes deployment YAML.",
+      ),
+    ).toBeInTheDocument();
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
+    rerender(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={onSubmit}
+        initialValues={initialValues as never}
+      />,
+    );
+    expect(
+      screen.queryByLabelText("CPU request (cores)"),
+    ).not.toBeInTheDocument();
   });
 });

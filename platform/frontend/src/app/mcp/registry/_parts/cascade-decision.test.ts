@@ -855,3 +855,37 @@ describe("API-shape prev vs transform-shape next — shape-mismatch regression",
     ).toBe("auto");
   });
 });
+
+describe("MCP resource rollout", () => {
+  test.each([
+    false,
+    true,
+  ])("resource changes require reinstall (multitenant=%s)", (multitenant) => {
+    const prev: CascadeSnapshot = {
+      name: "Resource server",
+      serverType: "local",
+      multitenant,
+      localConfig: { dockerImage: "example/server:1" },
+    };
+    const next = {
+      ...prev,
+      localConfig: {
+        ...prev.localConfig,
+        resources: { cpuRequest: 0.25, memoryLimitMiB: 512 },
+      },
+    };
+    expect(
+      computeCascadeOutcome(prev, next, { affectedServerCount: 1 }).mode,
+    ).toBe(multitenant ? "auto" : "manual");
+    expect(
+      computeCascadeOutcome(next, prev, { affectedServerCount: 1 }).mode,
+    ).toBe(multitenant ? "auto" : "manual");
+    expect(
+      computeCascadeOutcome(
+        prev,
+        { ...prev, localConfig: { ...prev.localConfig, resources: {} } },
+        { affectedServerCount: 1 },
+      ).mode,
+    ).toBe("skip");
+  });
+});

@@ -614,6 +614,7 @@ export function McpCatalogForm({
   const isHttpPortDirty = deploymentField("httpPort");
   const isHttpPathDirty = deploymentField("httpPath");
   const isImagePullPolicyDirty = deploymentField("imagePullPolicy");
+  const isResourcesDirty = deploymentField("resources");
 
   // The per-field `is*Dirty` flags below drive `ReinstallHint` badges
   // next to individual inputs. The form-level cascade decision lives in
@@ -1356,6 +1357,69 @@ export function McpCatalogForm({
                   </>
                 )}
               </SettingsSection>
+
+              {currentServerType === "local" && canUpdateAdvancedSettings && (
+                <SettingsSection
+                  className={configurationSectionClass}
+                  title={
+                    <>
+                      Resources
+                      <ReinstallHint show={isResourcesDirty} />
+                    </>
+                  }
+                  description={
+                    initialValues?.deploymentSpecYaml
+                      ? "Resources are configured in the custom Kubernetes deployment YAML."
+                      : "CPU is measured in cores; memory in MiB. Leave fields blank to use deployment defaults. CPU has no limit by default. Changes apply when the server is installed or reinstalled."
+                  }
+                >
+                  {!initialValues?.deploymentSpecYaml && (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {(
+                        [
+                          ["cpuRequest", "CPU request (cores)"],
+                          ["cpuLimit", "CPU limit (cores)"],
+                          ["memoryRequestMiB", "Memory request (MiB)"],
+                          ["memoryLimitMiB", "Memory limit (MiB)"],
+                        ] as const
+                      ).map(([key, label]) => (
+                        <FormField
+                          key={key}
+                          control={form.control}
+                          name={`localConfig.resources.${key}`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{label}</FormLabel>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  type="number"
+                                  min={key.startsWith("cpu") ? 0.001 : 1}
+                                  step={key.startsWith("cpu") ? 0.001 : 1}
+                                  placeholder={
+                                    key === "cpuLimit"
+                                      ? "No limit"
+                                      : "Deployment default"
+                                  }
+                                  value={field.value ?? ""}
+                                  onChange={(event) =>
+                                    field.onChange(
+                                      event.target.value === ""
+                                        ? undefined
+                                        : event.target.valueAsNumber,
+                                    )
+                                  }
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </SettingsSection>
+              )}
 
               {currentServerType === "local" && (
                 <SettingsSection

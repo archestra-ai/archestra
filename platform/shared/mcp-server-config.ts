@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AgentRuntimeMemoryMiBSchema } from "./agent-runtime-tiers";
 import { ImagePullPolicySchema } from "./mcp-image-pull-policy";
 
 export const OAuthConfigSchema = z
@@ -138,6 +139,43 @@ export const EnvFromSchema = z.object({
   prefix: z.string().optional(),
 });
 
+const McpCpuSchema = z.number().min(0.001).multipleOf(0.001);
+
+/** Per-catalog overrides for generated MCP containers; omitted fields use deployment defaults. */
+export const McpServerResourcesSchema = z
+  .object({
+    cpuRequest: McpCpuSchema.optional(),
+    cpuLimit: McpCpuSchema.nullable().optional(),
+    memoryRequestMiB: AgentRuntimeMemoryMiBSchema.optional(),
+    memoryLimitMiB: AgentRuntimeMemoryMiBSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      value.cpuRequest !== undefined &&
+      value.cpuLimit != null &&
+      value.cpuRequest > value.cpuLimit
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["cpuLimit"],
+        message: "CPU limit must be at least the CPU request",
+      });
+    }
+    if (
+      value.memoryRequestMiB !== undefined &&
+      value.memoryLimitMiB !== undefined &&
+      value.memoryRequestMiB > value.memoryLimitMiB
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["memoryLimitMiB"],
+        message: "Memory limit must be at least the memory request",
+      });
+    }
+  });
+
+export type McpServerResources = z.infer<typeof McpServerResourcesSchema>;
+
 export const LocalConfigSchema = z
   .object({
     command: z.string().optional(),
@@ -152,6 +190,7 @@ export const LocalConfigSchema = z
     serviceAccount: z.string().optional(),
     imagePullSecrets: z.array(ImagePullSecretConfigSchema).optional(),
     imagePullPolicy: ImagePullPolicySchema.optional(),
+    resources: McpServerResourcesSchema.optional(),
   })
   .refine((data) => data.command || data.dockerImage, {
     message:
@@ -171,4 +210,5 @@ export const LocalConfigFormSchema = z.object({
   serviceAccount: z.string().optional(),
   imagePullSecrets: z.array(ImagePullSecretConfigSchema).optional(),
   imagePullPolicy: ImagePullPolicySchema.optional(),
+  resources: McpServerResourcesSchema.optional(),
 });

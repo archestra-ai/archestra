@@ -137,6 +137,7 @@ import {
   UnmuteMcpServerAlertQuerySchema,
   UuidIdSchema,
 } from "@/types";
+import { resolveMcpServerResources } from "@/utils/mcp-server-resources";
 import {
   catalogIconUrl,
   replyWithIconImage,
@@ -995,6 +996,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         requested: restBody.deploymentSpecYaml,
         requestedLocalConfig: restBody.localConfig,
       });
+      if (restBody.localConfig?.resources && !restBody.deploymentSpecYaml) {
+        resolveMcpServerResources(restBody.localConfig.resources, restBody.id);
+      }
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -1651,6 +1655,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         requested: { ...restBody, multitenant: requestedMultitenant },
         current: originalCatalogItemForGate,
       });
+      const effectiveLocalConfig =
+        restBody.localConfig === undefined
+          ? originalCatalogItem.localConfig
+          : restBody.localConfig;
+      const effectiveDeploymentYaml =
+        restBody.deploymentSpecYaml === undefined
+          ? originalCatalogItem.deploymentSpecYaml
+          : restBody.deploymentSpecYaml;
+      if (effectiveLocalConfig?.resources && !effectiveDeploymentYaml) {
+        resolveMcpServerResources(effectiveLocalConfig.resources, id);
+      }
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -2575,6 +2590,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         httpPort: catalogItem.localConfig?.httpPort,
         imagePullSecrets: imagePullSecretsForYaml,
         imagePullPolicy: catalogItem.localConfig?.imagePullPolicy,
+        catalogId: catalogItem.id,
+        resources: catalogItem.localConfig?.resources,
       });
 
       return reply.send({ yaml: yamlTemplate });
@@ -2687,6 +2704,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         httpPort: catalogItem.localConfig?.httpPort,
         imagePullSecrets: imagePullSecretsForYaml,
         imagePullPolicy: catalogItem.localConfig?.imagePullPolicy,
+        catalogId: catalogItem.id,
+        resources: catalogItem.localConfig?.resources,
       });
 
       return reply.send({ yaml: yamlTemplate });

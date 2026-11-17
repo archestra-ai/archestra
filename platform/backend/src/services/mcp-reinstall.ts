@@ -900,6 +900,7 @@ type ComparableLocalConfig = Pick<
   | "httpPath"
   | "serviceAccount"
   | "imagePullPolicy"
+  | "resources"
 >;
 
 /**
@@ -1004,6 +1005,12 @@ function getLocalExecutionConfig(
     httpPath: catalog.localConfig?.httpPath ?? "",
     serviceAccount: catalog.localConfig?.serviceAccount ?? "",
     imagePullPolicy: catalog.localConfig?.imagePullPolicy,
+    resources: {
+      cpuRequest: catalog.localConfig?.resources?.cpuRequest,
+      cpuLimit: catalog.localConfig?.resources?.cpuLimit ?? undefined,
+      memoryRequestMiB: catalog.localConfig?.resources?.memoryRequestMiB,
+      memoryLimitMiB: catalog.localConfig?.resources?.memoryLimitMiB,
+    },
   };
 }
 

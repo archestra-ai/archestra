@@ -1583,3 +1583,66 @@ describe("team access levels", () => {
     expect(data).not.toHaveProperty("scope");
   });
 });
+
+describe("local MCP resources", () => {
+  const resources = {
+    cpuRequest: 0.25,
+    cpuLimit: 1,
+    memoryRequestMiB: 256,
+    memoryLimitMiB: 512,
+  };
+  const item = {
+    id: "resource-catalog",
+    name: "Resource server",
+    serverType: "local",
+    localConfig: { dockerImage: "example/server:1", resources },
+    labels: [],
+    teams: [],
+  } as unknown as Parameters<typeof transformCatalogItemToFormValues>[0];
+
+  it("retains overrides across edit and clone, and lets clearing restore defaults", () => {
+    const values = transformCatalogItemToFormValues(item);
+    expect(values.localConfig?.resources).toEqual(resources);
+    expect(transformFormToApiData(values).localConfig?.resources).toEqual(
+      resources,
+    );
+    expect(
+      transformFormToApiData(buildCloneFormValues(item)).localConfig?.resources,
+    ).toEqual(resources);
+
+    const cleared = transformFormToApiData({
+      ...values,
+      localConfig: {
+        arguments: "",
+        environment: [],
+        ...values.localConfig,
+        resources: undefined,
+      },
+    });
+    expect(cleared.localConfig?.resources).toBeUndefined();
+    expect(
+      transformCatalogItemToFormValues({
+        ...item,
+        localConfig: { dockerImage: "example/server:1" },
+      }).localConfig?.resources,
+    ).toBeUndefined();
+  });
+
+  it("does not send local resource overrides for remote or desktop servers", () => {
+    const values = transformCatalogItemToFormValues(item);
+    expect(
+      transformFormToApiData({
+        ...values,
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+      }).localConfig,
+    ).toBeUndefined();
+    expect(
+      transformFormToApiData({
+        ...values,
+        serverType: "desktop_mcp",
+        desktopConfig: { kind: "command", value: "node server.js" },
+      }).localConfig,
+    ).toBeUndefined();
+  });
+});

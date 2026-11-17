@@ -36,7 +36,10 @@ use crate::{
         BindingFailure, Failure, Fault, failure, fork_refused, invalid_input, invariant,
         is_policy_moved, lease_lost, panicked, policy_moved, receipt_failure, sql_failure, storage,
     },
-    input::{ExecutionOutcome, HookEventKind, Input, OfferOwner, RulingInput, required, validate},
+    input::{
+        ExecutionOutcome, HookEventKind, Input, OfferOwner, RulingInput, open_calls, required,
+        validate,
+    },
     operations::{
         CompletedOperation, OperationState, ResultClaim, YellArguments, cancellation_operation,
         cancelled_call, claim_operation, claim_result, expected_actor, finish_operation,
@@ -962,6 +965,7 @@ impl State {
                 },
                 HookEventKind::TurnEnd => HookEvent::TurnEnd {
                     actor: actor.clone(),
+                    open_calls: open_calls(&input),
                 },
                 HookEventKind::ChildTurnEnd => HookEvent::ChildTurnEnd {
                     root: actor.root.clone(),
@@ -969,6 +973,7 @@ impl State {
                         .child
                         .clone()
                         .ok_or_else(|| invalid_input("not a child session"))?,
+                    open_calls: open_calls(&input),
                 },
                 HookEventKind::ChildEnd => HookEvent::ChildEnd {
                     root: actor.root.clone(),
@@ -977,6 +982,7 @@ impl State {
                         .clone()
                         .ok_or_else(|| invalid_input("not a child session"))?,
                     value: input.output.clone(),
+                    open_calls: open_calls(&input),
                 },
                 HookEventKind::ChildReturn => HookEvent::ChildReturn {
                     root: actor.root.clone(),

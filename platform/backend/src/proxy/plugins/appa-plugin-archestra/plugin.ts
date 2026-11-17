@@ -274,6 +274,8 @@ type AppaPluginBinding = {
    * counted.
    */
   pendingBackgroundSpawns: number;
+  /** Ids of every tool result in this request, read before any filtering. */
+  answeredCallIds: string[];
   /** True on internal loopback Chat requests. */
   chat: boolean;
   compaction: boolean;
@@ -432,6 +434,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       runtimeTaskId: trustedContext.runtimeTaskId,
       turnOpen: false,
       pendingBackgroundSpawns: 0,
+      answeredCallIds: [],
       chat,
       compaction: trustedContext.compaction === true,
       threadContinue: trustedContext.thread === "continue",
@@ -478,6 +481,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): Promise<LlmProxyToolResultsOutcome | undefined> {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
+    binding.answeredCallIds = context.toolResults.map((result) =>
+      withoutTrajectoryStamp(result.id),
+    );
     enterCapturedGuardrailsActivation("active");
     const completions = binding.request.childReturns?.completions ?? [];
     binding.unenforcedCalls = await findUnenforcedCalls({
@@ -2484,10 +2490,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     if (!binding.request.turnEndOperationId) return;
     enterCapturedGuardrailsActivation("active");
-    await endTurn(
-      this.governedSession(binding),
-      binding.request.turnEndOperationId,
-    );
+    const stop = await endTurn({
+      session: this.governedSession(binding),
+      operationId: binding.request.turnEndOperationId,
+      ...answeredCallIds(binding),
+    });
+    if (stop.decision === "held") {
+      logger.debug(
+        { running: stop.running },
+        "OpenAPPA keeps the turn open while its calls run",
+      );
+    }
     return undefined;
   }
 
@@ -2558,7 +2571,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (context.responseText === "") {
       // The recorded return contract decides whether this empty completion
       // closes the child permanently or leaves it available for follow-ups.
-      await endChildTurn({
+      const stop = await endChildTurn({
         session: this.governedSession(binding),
         operationId: binding.request.turnEndOperationId.replace(
           /^turn_end:/,
@@ -2566,7 +2579,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         ),
         spawnCallId,
         ...(childNativeId ? { childNativeId } : {}),
+        ...answeredCallIds(binding),
       });
+      if (stop.decision === "held") return { decision: "release" };
     } else {
       const outcome = await endChild({
         session: this.governedSession(binding),
@@ -2577,7 +2592,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         output: context.responseText,
         spawnCallId,
         ...(childNativeId ? { childNativeId } : {}),
+        ...answeredCallIds(binding),
       });
+      // The child is not finished: its reply stays its own, nothing crosses.
+      if (outcome.decision === "held") return { decision: "release" };
       admitted =
         outcome.decision === "release" ? context.responseText : outcome.content;
       if (!outcome.crossed) {
@@ -5952,6 +5970,12 @@ async function admitChildHandback(params: {
     spawnCallId,
     ...(childNativeId ? { childNativeId } : {}),
   });
+  if (outcome.decision === "held") {
+    return {
+      kind: "deny",
+      feedback: "OpenAPPA holds the return while a tool call is still running.",
+    };
+  }
   const admitted =
     outcome.decision === "release" ? raw : (outcome.content ?? "");
   if (!outcome.crossed) {
@@ -9031,4 +9055,15 @@ function grokUsesDirectGatewayTools(binding: AppaPluginBinding): boolean {
       (tool) => !tool.namespace && tool.name.includes("__"),
     )
   );
+}
+
+/**
+ * Claude Code sends side requests, such as a subagent's progress label, that
+ * read as a stop while a call still runs: its stops hold on a call the
+ * request did not answer instead of closing it.
+ */
+function answeredCallIds(binding: AppaPluginBinding) {
+  return isClaudeCodeFamilyAdapter(binding.adapter?.id)
+    ? { answeredCallIds: binding.answeredCallIds }
+    : {};
 }

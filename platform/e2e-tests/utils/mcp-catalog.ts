@@ -37,7 +37,7 @@ export async function addCustomSelfHostedCatalogItem({
   // source first, then fill the same catalog form the old dialog hosted.
   await expect(
     page.getByRole("heading", {
-      name: /Add MCP Server to the Private Registry/i,
+      name: "Add MCP Server",
     }),
   ).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "Start from scratch" }).click();

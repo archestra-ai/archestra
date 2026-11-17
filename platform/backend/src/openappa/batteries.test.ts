@@ -1469,17 +1469,23 @@ url = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop"
 async function uploadAcme(params: {
   organizationId: string;
   userId: string;
-  /** Leaves the helper's annotator undeclared, which no composition accepts. */
+  /**
+   * Routes the rule through the helper's annotator and leaves that annotator
+   * undeclared, which the runtime refuses.
+   */
   broken?: boolean;
   /** Tells one uploaded version of the battery from another. */
   note?: string;
 }) {
-  const declaration = params.broken
-    ? ""
-    : `[[policy.annotator]]
+  const [declaration, ruling] = params.broken
+    ? ["", `annotator = "acme.check"`]
+    : [
+        `[[policy.annotator]]
 name = "acme.check"
 
-`;
+`,
+        "delta = {}",
+      ];
   return openappaBatteriesService.uploadPackage({
     userId: params.userId,
     organizationId: params.organizationId,
@@ -1493,7 +1499,7 @@ version = 2
 
 ${declaration}[[policy.tool]]
 name = "mcp/acme/list"
-delta = {}
+${ruling}
 
 [externals.annotators."acme.check"]
 command = ["python3", "check.py"]

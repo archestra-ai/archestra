@@ -75,13 +75,11 @@ describe("NewMcpCatalogItemPage", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "Add MCP Server to the Private Registry",
+        name: "Add MCP Server",
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Once you add an MCP server here, it will be available for installation.",
-      ),
+      screen.getByText("Available to install once added."),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "MCP Registry" })).toHaveAttribute(
       "href",

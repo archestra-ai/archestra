@@ -80,9 +80,9 @@ export function AgentRuntimePicker({
   const appName = useAppName();
   const runtimeEnabled = useFeature("agentRuntime");
   const resolver = useResolveRuntimeTemplate();
-  const { templates, isError, isFetching, refetch } =
+  const { templates, customImageOffered, isError, isFetching, refetch } =
     useAvailableAgentCatalogTemplates();
-  const options: Array<{
+  const offered: Array<{
     id: AgentRuntimeSelection;
     name: string;
     runtime: AgentRuntimeConfig | null;
@@ -95,12 +95,21 @@ export function AgentRuntimePicker({
       runtime: template.initialValues.runtime ?? null,
       icon: template.icon,
     })),
-    {
-      id: "custom",
-      name: "Custom image",
-      runtime: defaultAgentRuntime(),
-    },
   ];
+  // An administrator can take Custom image off the list. An agent already on
+  // an image that is none of the offered runtimes keeps the choice, so its
+  // settings are not replaced.
+  const options =
+    customImageOffered || !offered.some((option) => option.id === selectedId)
+      ? [
+          ...offered,
+          {
+            id: "custom" as const,
+            name: "Custom image",
+            runtime: defaultAgentRuntime(),
+          },
+        ]
+      : offered;
   // Hiding a template must not replace an existing agent's runtime settings.
   const visibleSelectedId = options.some((option) => option.id === selectedId)
     ? selectedId

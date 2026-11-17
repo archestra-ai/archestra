@@ -6,7 +6,9 @@ import {
   buildAgentCatalogRuntime,
   buildAgentCatalogSystemPrompt,
   buildCustomAgentRuntime,
+  CUSTOM_IMAGE_RUNTIME_ID,
   getAgentCatalogImages,
+  isIntegrationHidden,
   MESSAGING_CHANNEL_LABELS,
   orderedPopularAgentIds,
   withAgentRuntimeDefaults,
@@ -199,6 +201,13 @@ export function useAvailableAgentCatalogTemplates() {
     custom.isPending;
   return {
     templates,
+    /** Whether an administrator still offers the Custom image choice. */
+    customImageOffered:
+      !!organization &&
+      !isIntegrationHidden(
+        organization.popularAgentOverrides,
+        CUSTOM_IMAGE_RUNTIME_ID,
+      ),
     isError: isError || custom.isError,
     isFetching: isFetching || custom.isFetching,
     isLoading,
@@ -224,7 +233,7 @@ export function AgentCatalog({
   /** Agent Runtimes run in a dedicated container; undefined while loading. */
   runtimeAvailable: boolean | undefined;
 }) {
-  const { templates, isError, isLoading, refetch } =
+  const { templates, customImageOffered, isError, isLoading, refetch } =
     useAvailableAgentCatalogTemplates();
   const resolver = useResolveRuntimeTemplate();
   const appName = useAppName();
@@ -312,24 +321,26 @@ export function AgentCatalog({
                       }
                     />
                   ))}
-                  <CatalogSourceCard
-                    icon={<Code className="size-5" />}
-                    title="Custom image"
-                    description="Run your own container image and command."
-                    onClick={onStartFromImage}
-                    disabled={
-                      !canCreateAgent ||
-                      !canConfigureRuntime ||
-                      !runtimeAvailable
-                    }
-                    disabledReason={
-                      canCreateAgent
-                        ? !canConfigureRuntime
-                          ? "Requires Configure runtime permission."
-                          : "Requires the Agent Sandbox controller."
-                        : "Requires permission to create agents."
-                    }
-                  />
+                  {customImageOffered && (
+                    <CatalogSourceCard
+                      icon={<Code className="size-5" />}
+                      title="Custom image"
+                      description="Run your own container image and command."
+                      onClick={onStartFromImage}
+                      disabled={
+                        !canCreateAgent ||
+                        !canConfigureRuntime ||
+                        !runtimeAvailable
+                      }
+                      disabledReason={
+                        canCreateAgent
+                          ? !canConfigureRuntime
+                            ? "Requires Configure runtime permission."
+                            : "Requires the Agent Sandbox controller."
+                          : "Requires permission to create agents."
+                      }
+                    />
+                  )}
                 </>
               ))}
           </div>

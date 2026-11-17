@@ -26563,6 +26563,9 @@ export type GetRuntimeTemplateSettingsResponses = {
                 hidden?: boolean;
                 position?: number;
             };
+            'custom-image'?: {
+                hidden?: boolean;
+            };
         } | null;
     };
 };
@@ -26649,6 +26652,9 @@ export type SaveRuntimeTemplateSettingsData = {
             openclaw?: {
                 hidden?: boolean;
                 position?: number;
+            };
+            'custom-image'?: {
+                hidden?: boolean;
             };
         } | null;
     };
@@ -26808,6 +26814,9 @@ export type SaveRuntimeTemplateSettingsResponses = {
             openclaw?: {
                 hidden?: boolean;
                 position?: number;
+            };
+            'custom-image'?: {
+                hidden?: boolean;
             };
         } | null;
     };
@@ -106318,6 +106327,9 @@ export type UpdateIntegrationSettingsData = {
             openclaw?: {
                 hidden?: boolean;
                 position?: number;
+            };
+            'custom-image'?: {
+                hidden?: boolean;
             };
         } | null;
         modelProviderOverrides?: {

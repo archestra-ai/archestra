@@ -117,8 +117,9 @@ export default function NewMcpCatalogItemPage() {
 
   return (
     <PageLayout
-      title="Add MCP Server to the Private Registry"
-      description="Once you add an MCP server here, it will be available for installation."
+      // Both short enough to sit whole beside the step indicator.
+      title="Add MCP Server"
+      description="Available to install once added."
       backLink={<PageBackLink href="/mcp/registry">MCP Registry</PageBackLink>}
       actionButton={<SetupStepper activeStep="configuration" />}
       maxWidth="wizard"

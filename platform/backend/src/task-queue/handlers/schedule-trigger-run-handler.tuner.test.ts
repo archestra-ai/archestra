@@ -20,7 +20,7 @@ vi.mock("@/agents/a2a-executor", () => ({
 
 import config from "@/config";
 import db, { schema } from "@/database";
-import { ScheduleTriggerRunModel } from "@/models";
+import { ConversationModel, ScheduleTriggerRunModel } from "@/models";
 import {
   afterEach,
   beforeEach,
@@ -108,6 +108,12 @@ describe("handleScheduleTriggerRunExecution for a tuner", () => {
     expect(settled?.tuner?.outcome).toBe("agent_ran");
     expect(executed?.scheduleTriggerRunId).toBe(run.id);
     expect(executed?.message).not.toBe(trigger.messageTemplate);
+    const conversation = await ConversationModel.findByIdInOrganization({
+      id: settled?.chatConversationId ?? "",
+      organizationId,
+      viewer: { kind: "internal", purpose: "scheduled-run" },
+    });
+    expect(conversation?.userId).toBe(trigger.actorUserId);
   });
 
   test("fails the run when the actor lost tuner access", async ({

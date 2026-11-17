@@ -7,8 +7,10 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import ConversationModel from "@/models/conversation";
 import MessageModel from "@/models/message";
+import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import { projectService } from "@/services/project";
+import { createAndLinkRunConversation } from "@/services/scheduled-run-conversation";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -233,7 +235,7 @@ describe("schedule trigger routes", () => {
     );
   });
 
-  test("a tuner viewer opens a tuner run's conversation, owned by the tuner's actor, but cannot run, toggle or edit the tuner", async ({
+  test("a tuner viewer opens a tuner run's conversation, never minting one, but cannot run, toggle or edit the tuner", async ({
     makeAgent,
     makeCustomRole,
     makeMember,
@@ -242,16 +244,29 @@ describe("schedule trigger routes", () => {
     makeUser,
   }) => {
     config.tuners.enabled = true;
+    const executor = adminUser;
     const agent = await makeAgent({ organizationId, agentType: "agent" });
     const trigger = await makeScheduleTrigger({
       organizationId,
       agentId: agent.id,
-      actorUserId: adminUser.id,
+      actorUserId: executor.id,
       tunerKind: "appa",
     });
-    const run = await makeScheduleTriggerRun(trigger.id, {
+    const [run, unopened] = await Promise.all([
+      makeScheduleTriggerRun(trigger.id, { organizationId, runKind: "due" }),
+      makeScheduleTriggerRun(trigger.id, { organizationId, runKind: "due" }),
+    ]);
+    // What the run handler links when the run starts.
+    await createAndLinkRunConversation({
+      run,
+      trigger,
+      ownerUserId: executor.id,
       organizationId,
-      runKind: "due",
+    });
+    const nextActor = await makeUser();
+    await makeMember(nextActor.id, organizationId, { role: "admin" });
+    await ScheduleTriggerModel.update(trigger.id, {
+      actorUserId: nextActor.id,
     });
     const viewer = await makeUser();
     const { role } = await makeCustomRole(organizationId, {
@@ -259,16 +274,22 @@ describe("schedule trigger routes", () => {
     });
     await makeMember(viewer.id, organizationId, { role });
     adminUser = viewer;
+    const open = (runId: string) =>
+      app.inject({
+        method: "POST",
+        url: `/api/schedule-triggers/${trigger.id}/runs/${runId}/conversation`,
+      });
 
-    const opened = await app.inject({
-      method: "POST",
-      url: `/api/schedule-triggers/${trigger.id}/runs/${run.id}/conversation`,
-    });
+    const opened = await open(run.id);
     expect(opened.statusCode, opened.body).toBe(200);
     expect(opened.json()).toMatchObject({
-      userId: trigger.actorUserId,
+      userId: executor.id,
       agentId: agent.id,
     });
+    expect((await open(unopened.id)).statusCode).toBe(404);
+    expect(
+      (await ScheduleTriggerRunModel.findById(unopened.id))?.chatConversationId,
+    ).toBeNull();
 
     const base = `/api/schedule-triggers/${trigger.id}`;
     const refused = await Promise.all([
@@ -283,7 +304,7 @@ describe("schedule trigger routes", () => {
         organizationId,
         triggerId: trigger.id,
       }),
-    ).toBe(1);
+    ).toBe(2);
   });
 
   test("POST create rejects a payload without a project", async ({

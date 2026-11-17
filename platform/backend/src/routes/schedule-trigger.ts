@@ -499,8 +499,8 @@ async function ensureRunConversation(params: {
 
   // A project-scoped run's conversation was created up front by the handler;
   // otherwise create it now, owned by the requester so follow-up chat uses
-  // their own model/API key access. A tuner viewer only reads the run, so a
-  // tuner run's conversation belongs to the actor it ran as.
+  // their own model/API key access. A tuner run links its conversation for
+  // the user it executes as when it starts, so a tuner viewer never mints one.
   let conversation = run.chatConversationId
     ? await ConversationModel.findByIdInOrganization({
         id: run.chatConversationId,
@@ -509,11 +509,14 @@ async function ensureRunConversation(params: {
       })
     : null;
   if (!conversation) {
+    if (trigger.tunerKind !== null) {
+      throw new ApiError(404, "This tuner run has no conversation");
+    }
     try {
       conversation = await createAndLinkRunConversation({
         run,
         trigger,
-        ownerUserId: trigger.tunerKind === null ? userId : trigger.actorUserId,
+        ownerUserId: userId,
         organizationId,
       });
     } catch {

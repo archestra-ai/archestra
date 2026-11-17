@@ -119,6 +119,16 @@ export async function handleScheduleTriggerRunExecution(
 
     let message = trigger.messageTemplate;
     if (trigger.tunerKind !== null) {
+      // Tuner viewers only read a run, so its conversation belongs to the user
+      // it executes as; the trigger's actor may move before anyone opens it.
+      if (!run.chatConversationId) {
+        await createAndLinkRunConversation({
+          run,
+          trigger,
+          ownerUserId: actor.id,
+          organizationId: trigger.organizationId,
+        });
+      }
       const preflight = await runTunerPreflight({
         runId: run.id,
         trigger: { ...trigger, tunerKind: trigger.tunerKind },

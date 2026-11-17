@@ -3,6 +3,7 @@ import path from "node:path";
 import { BUILT_IN_AGENT_IDS, ChatErrorCode } from "@archestra/shared";
 import { eq, sql } from "drizzle-orm";
 import client from "prom-client";
+import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -929,6 +930,67 @@ describe("chat conversation and message routes", () => {
         }),
       ],
     });
+  });
+
+  test("a tuner run's conversation reads for tuner viewers, not for project oversight without tuner rights", async ({
+    makeAgent,
+    makeCustomRole,
+    makeMember,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+    makeUser,
+  }) => {
+    config.tuners.enabled = true;
+    const memberWith = async (permission: Record<string, string[]>) => {
+      const user = await makeUser();
+      const role = await makeCustomRole(organizationId, { permission });
+      await makeMember(user.id, organizationId, { role: role.role });
+      return { user, roleId: role.id };
+    };
+    const opener = await memberWith({
+      tuner: ["read"],
+      log: ["read", "admin"],
+    });
+    const viewer = await memberWith({
+      tuner: ["read"],
+      log: ["read", "admin"],
+    });
+    const overseer = await memberWith({ project: ["read"] });
+    await grantRoleEverywhere({
+      organizationId,
+      resource: "project",
+      roleId: overseer.roleId,
+      actions: ["read"],
+    });
+    const agent = await makeAgent({ organizationId, agentType: "agent" });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      actorUserId: currentUser.id,
+      agentId: agent.id,
+      tunerKind: "appa",
+    });
+    const run = await makeScheduleTriggerRun(trigger.id, { organizationId });
+    const conversation = await ConversationModel.create({
+      userId: opener.user.id,
+      organizationId,
+      agentId: agent.id,
+    });
+    await ScheduleTriggerRunModel.setChatConversationId(
+      run.id,
+      conversation.id,
+    );
+    const read = async (user: User) => {
+      currentUser = user;
+      return (
+        await app.inject({
+          method: "GET",
+          url: `/api/chat/conversations/${conversation.id}`,
+        })
+      ).statusCode;
+    };
+
+    expect(await read(overseer.user)).toBe(404);
+    expect(await read(viewer.user)).toBe(200);
   });
 
   test("keeps the project link when forking own conversation in a project", async ({

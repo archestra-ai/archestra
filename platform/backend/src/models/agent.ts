@@ -1811,7 +1811,10 @@ class AgentModel {
   static async findA2ARegistryCandidates(
     organizationId: string,
   ): Promise<
-    Pick<Agent, "id" | "name" | "description" | "systemPrompt" | "updatedAt">[]
+    Pick<
+      Agent,
+      "id" | "name" | "description" | "systemPrompt" | "updatedAt" | "modelId"
+    >[]
   > {
     return db
       .select({
@@ -1820,6 +1823,7 @@ class AgentModel {
         description: schema.agentsTable.description,
         systemPrompt: schema.agentsTable.systemPrompt,
         updatedAt: schema.agentsTable.updatedAt,
+        modelId: schema.agentsTable.modelId,
       })
       .from(schema.agentsTable)
       .where(

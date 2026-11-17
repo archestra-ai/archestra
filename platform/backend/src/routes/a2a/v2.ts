@@ -1,9 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
-import { DocsPage, getDocsUrl } from "@archestra/shared";
+import {
+  DocsPage,
+  getDocsUrl,
+  getModelReadableMimeTypes,
+} from "@archestra/shared";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
+import { resolveInboundFileParts } from "@/agents/a2a/a2a-file-parts";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import {
   type A2AProtocolCancelTaskRequest,
@@ -34,7 +39,7 @@ import {
 import { a2aTaskEventNotifier } from "@/agents/a2a/a2a-task-event-notifier";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
-import { AgentModel } from "@/models";
+import { AgentModel, ModelModel } from "@/models";
 import {
   extractBearerToken,
   resolveTokenOrganizationId,
@@ -103,11 +108,12 @@ const A2AAgentCardSchema = z.object({
 });
 
 /**
- * Media types the agent accepts and produces. `text/plain` is listed first
+ * Media types every agent accepts and produces. `text/plain` is listed first
  * because the protocol's text parts are the primary shape; `application/json`
- * covers structured `data` parts.
+ * covers structured `data` parts. The card adds the file types the agent's
+ * model reads on top of the input list (see {@link resolveAgentInputModes}).
  */
-const A2A_DEFAULT_INPUT_MODES = ["text/plain", "application/json"];
+const A2A_TEXT_INPUT_MODES = ["text/plain", "application/json"];
 const A2A_DEFAULT_OUTPUT_MODES = ["text/plain", "application/json"];
 
 const A2AJsonRpcRequestSchema = z.object({
@@ -190,9 +196,16 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       const baseUrl = resolveA2ABaseUrl(request);
-      const agents = permitted
-        .filter((agent) => agent !== null)
-        .map((agent) => buildAgentCard({ agent, baseUrl, endpoint }));
+      const listed = permitted.filter((agent) => agent !== null);
+      const inputModes = await resolveAgentInputModes(listed);
+      const agents = listed.map((agent) =>
+        buildAgentCard({
+          agent,
+          baseUrl,
+          endpoint,
+          inputModes: inputModes.get(agent.id) ?? A2A_TEXT_INPUT_MODES,
+        }),
+      );
 
       // Per-principal output, so any cache must be private. Short-lived
       // because the set changes with team membership, not just card content.
@@ -256,10 +269,12 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(401, "Invalid or unauthorized token");
       }
 
+      const inputModes = await resolveAgentInputModes([agent]);
       const card = buildAgentCard({
         agent,
         baseUrl: resolveA2ABaseUrl(request),
         endpoint,
+        inputModes: inputModes.get(agent.id) ?? A2A_TEXT_INPUT_MODES,
       });
 
       // Cards are cheap to recompute but clients poll them; a weak validator
@@ -719,8 +734,10 @@ function buildAgentCard(params: {
   >;
   baseUrl: string;
   endpoint: string;
+  /** From {@link resolveAgentInputModes}. */
+  inputModes: string[];
 }) {
-  const { agent, baseUrl, endpoint } = params;
+  const { agent, baseUrl, endpoint, inputModes } = params;
   const securitySchemes = buildA2ASecuritySchemes();
 
   // A single skill representing the agent. `tags` is REQUIRED by the spec and
@@ -767,7 +784,7 @@ function buildAgentCard(params: {
     securityRequirements: Object.keys(securitySchemes).map((name) => ({
       [name]: [],
     })),
-    defaultInputModes: A2A_DEFAULT_INPUT_MODES,
+    defaultInputModes: inputModes,
     defaultOutputModes: A2A_DEFAULT_OUTPUT_MODES,
     skills: [
       {
@@ -776,11 +793,45 @@ function buildAgentCard(params: {
         description: agent.description || agent.systemPrompt || agent.name,
         tags: buildSkillTags(agent.name),
         examples: [`Ask ${agent.name} a question and read the reply.`],
-        inputModes: A2A_DEFAULT_INPUT_MODES,
+        inputModes,
         outputModes: A2A_DEFAULT_OUTPUT_MODES,
       },
     ],
   };
+}
+
+/**
+ * Media types each agent accepts as input: text and structured data, then the
+ * file types its model reads directly (images, PDF, audio or video where the
+ * model has them), so a client can tell before sending whether a screenshot
+ * will be looked at. An agent with no pinned model (a pool, a router, the
+ * deployment default) advertises the common readable set. A file of any other
+ * type is still accepted — it is handed to the agent's sandbox when it has one
+ * — so this lists what the model sees, not what the endpoint refuses.
+ *
+ * One model query for the whole list, whatever its length.
+ */
+async function resolveAgentInputModes(
+  agents: Pick<Agent, "id" | "modelId">[],
+): Promise<Map<string, string[]>> {
+  const modelIds = [
+    ...new Set(
+      agents.map((agent) => agent.modelId).filter((id) => id !== null),
+    ),
+  ];
+  const models = new Map(
+    (await ModelModel.findByIds(modelIds)).map((model) => [model.id, model]),
+  );
+  return new Map(
+    agents.map((agent) => {
+      const model = agent.modelId ? models.get(agent.modelId) : undefined;
+      const readable = getModelReadableMimeTypes(
+        model?.inputModalities ?? null,
+        model?.provider ?? null,
+      );
+      return [agent.id, [...new Set([...A2A_TEXT_INPUT_MODES, ...readable])]];
+    }),
+  );
 }
 
 /**
@@ -1008,6 +1059,7 @@ class A2AV2Router {
     // always worked this way.
     const parsed = schema.parse(params) as A2ARouteRequest;
     if (method === "SendMessage") {
+      await this.resolveFileParts(parsed as A2AProtocolSendMessageRequest);
       await this.preflightDetachedAgentRuntime({
         agent,
         actor,
@@ -1052,6 +1104,7 @@ class A2AV2Router {
     }
 
     const parsed = A2AProtocolSendMessageRequestSchema.parse(params);
+    await this.resolveFileParts(parsed);
     await this.preflightDetachedAgentRuntime({
       agent,
       actor,
@@ -1097,6 +1150,20 @@ class A2AV2Router {
       agentId: params.agentId,
       request: { id: params.taskId },
     });
+  }
+
+  /**
+   * Give every file part of a send its bytes (downloading `url` parts) before
+   * a run or an SSE stream starts, so a bad file is an ordinary JSON-RPC error.
+   * Runs only after the caller is authenticated: the server never fetches a
+   * URL for an unknown caller.
+   */
+  private async resolveFileParts(
+    request: A2AProtocolSendMessageRequest,
+  ): Promise<void> {
+    request.message.parts = await resolveInboundFileParts(
+      request.message.parts,
+    );
   }
 
   private async preflightDetachedAgentRuntime(params: {

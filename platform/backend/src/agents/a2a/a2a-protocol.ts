@@ -83,6 +83,36 @@ export const A2AProtocolPartSchema = z.object({
 });
 export type A2AProtocolPart = z.infer<typeof A2AProtocolPartSchema>;
 
+/**
+ * `Part.raw` as it arrives over JSON. `raw` is a protobuf `bytes` field, and
+ * protobuf-JSON carries bytes as a base64 string, so that is what every HTTP
+ * client sends; in-process callers (ChatOps, detached task starts) hand over
+ * the bytes themselves. Both end up as a `Uint8Array`.
+ */
+const A2AProtocolIncomingRawSchema = z.union([
+  Uint8ArraySchema,
+  z.string().transform((value, ctx) => {
+    const bytes = decodeProtoJsonBytes(value);
+    if (!bytes) {
+      ctx.addIssue({ code: "custom", message: "raw must be base64" });
+      return z.NEVER;
+    }
+    return bytes;
+  }),
+]);
+
+/**
+ * Inbound `Part`: {@link A2AProtocolPartSchema} with base64 `raw`, plus the
+ * pre-1.0 file shape (`file: { bytes | uri, mimeType, name }`) folded into the
+ * v1.0 fields so a 0.3 client's attachment is read rather than dropped.
+ */
+const A2AProtocolIncomingPartSchema = z.preprocess(
+  foldLegacyFilePart,
+  A2AProtocolPartSchema.extend({
+    raw: A2AProtocolIncomingRawSchema.optional(),
+  }),
+);
+
 export const A2AProtocolMessageSchema = z.object({
   messageId: z.string(),
   contextId: z.string().optional(),
@@ -134,6 +164,7 @@ const A2AProtocolIncomingMessageIdSchema = z
  */
 const A2AProtocolIncomingMessageSchema = A2AProtocolMessageSchema.extend({
   messageId: A2AProtocolIncomingMessageIdSchema,
+  parts: z.array(A2AProtocolIncomingPartSchema).optional(),
 });
 
 // --- Archestra Task metadata ---
@@ -421,3 +452,35 @@ export const A2AProtocolStreamResponseSchema = z.object({
 export type A2AProtocolStreamResponse = z.infer<
   typeof A2AProtocolStreamResponseSchema
 >;
+
+// === Internal helpers ===
+
+/**
+ * Decode protobuf-JSON `bytes`: standard or URL-safe base64, padded or not
+ * (the proto3 JSON mapping accepts all four). Returns null for anything else,
+ * so a mistyped payload is refused instead of being decoded leniently into
+ * different bytes.
+ */
+function decodeProtoJsonBytes(value: string): Uint8Array | null {
+  const unpadded = value.replace(/=+$/, "");
+  if (value.length - unpadded.length > 2) return null;
+  if (!/^[A-Za-z0-9+/_-]*$/.test(unpadded)) return null;
+  if (unpadded.length % 4 === 1) return null;
+  const standard = unpadded.replace(/-/g, "+").replace(/_/g, "/");
+  return new Uint8Array(Buffer.from(standard, "base64"));
+}
+
+/** Map a pre-1.0 `{ file: { bytes | uri, mimeType, name } }` part onto v1.0 fields. */
+function foldLegacyFilePart(part: unknown): unknown {
+  if (typeof part !== "object" || part === null) return part;
+  const { file, ...rest } = part as Record<string, unknown>;
+  if (typeof file !== "object" || file === null) return part;
+  const legacy = file as Record<string, unknown>;
+  return {
+    ...rest,
+    raw: rest.raw ?? legacy.bytes,
+    url: rest.url ?? legacy.uri,
+    mediaType: rest.mediaType ?? legacy.mimeType,
+    filename: rest.filename ?? legacy.name,
+  };
+}

@@ -115,7 +115,7 @@ describe("cost exports", () => {
     makeOrganization,
   }) => {
     const organization = await makeOrganization();
-    const hour = startOfHour(Date.now() - 2 * HOUR);
+    const hour = startOfPartDayHour(Date.now() - 2 * HOUR);
     const costExport = await makeExport({
       organizationId: organization.id,
       exportedThrough: hour,
@@ -436,6 +436,16 @@ function startOfHour(ms: number): Date {
   const date = new Date(ms);
   date.setUTCMinutes(0, 0, 0);
   return date;
+}
+
+/**
+ * An hour that leaves part of its day to finish. A watermark at midnight UTC
+ * has a whole day ahead of it and nothing to export by the hour, so that one
+ * hour steps back into the previous day.
+ */
+function startOfPartDayHour(ms: number): Date {
+  const hour = startOfHour(ms);
+  return hour.getUTCHours() === 0 ? new Date(hour.getTime() - HOUR) : hour;
 }
 
 function isoDate(date: Date): string {

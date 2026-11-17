@@ -171,6 +171,7 @@ class InternalMcpCatalogModel {
   static async resolveRuntimeResources(
     localConfig: LocalConfig,
     organizationId: string | null | undefined,
+    tx?: Transaction,
   ): Promise<McpServerResources | undefined> {
     if (!localConfig.runtimeTier) return undefined;
     if (!organizationId)
@@ -178,7 +179,7 @@ class InternalMcpCatalogModel {
         400,
         "An organization is required to select an MCP runtime tier",
       );
-    const organization = await OrganizationModel.getById(organizationId);
+    const organization = await OrganizationModel.getById(organizationId, tx);
     if (!organization) throw new ApiError(400, "Organization not found");
     const { tiers } = resolveMcpRuntimeTiers(organization.mcpRuntimeTiers);
     const tier = findMcpRuntimeTier(tiers, localConfig.runtimeTier);
@@ -199,9 +200,10 @@ class InternalMcpCatalogModel {
   static async countRuntimeTierReferences(params: {
     organizationId: string;
     name: string;
+    tx?: Transaction;
   }): Promise<number> {
     const table = schema.internalMcpCatalogTable;
-    const [row] = await db
+    const [row] = await (params.tx ?? db)
       .select({ count: sql<number>`count(*)::int` })
       .from(table)
       .where(
@@ -307,12 +309,6 @@ class InternalMcpCatalogModel {
     // pre-existing deployments of this shape never churn. Renames must never
     // touch it.
     const id = dbValues.id ?? crypto.randomUUID();
-    if (dbValues.localConfig) {
-      await InternalMcpCatalogModel.resolveRuntimeResources(
-        dbValues.localConfig,
-        context?.organizationId,
-      );
-    }
     const deploymentName = dbValues.multitenant
       ? constructLegacyMultitenantMcpDeploymentName(id, dbValues.name)
       : null;
@@ -328,6 +324,15 @@ class InternalMcpCatalogModel {
     };
 
     let createdItem = await withDbTransaction(async (tx) => {
+      if (dbValues.localConfig) {
+        if (context?.organizationId)
+          await OrganizationModel.lockRowForUpdate(context.organizationId, tx);
+        await InternalMcpCatalogModel.resolveRuntimeResources(
+          dbValues.localConfig,
+          context?.organizationId,
+          tx,
+        );
+      }
       const [row] = await tx
         .insert(schema.internalMcpCatalogTable)
         .values(
@@ -1530,26 +1535,6 @@ class InternalMcpCatalogModel {
   ): Promise<InternalMcpCatalog | null> {
     const { labels, teams, ...dbValues } = catalogItem;
 
-    if (
-      dbValues.localConfig !== undefined ||
-      dbValues.deploymentSpecYaml !== undefined
-    ) {
-      const current = await InternalMcpCatalogModel.findById(id, {
-        expandSecrets: false,
-      });
-      const localConfig =
-        dbValues.localConfig === undefined
-          ? current?.localConfig
-          : dbValues.localConfig;
-      // Validate references even while custom YAML controls deployment resources,
-      // so resetting YAML cannot expose an invalid hidden selection.
-      if (localConfig)
-        await InternalMcpCatalogModel.resolveRuntimeResources(
-          localConfig,
-          current?.organizationId,
-        );
-    }
-
     // Name immutability at the generic-update layer: renames flow
     // EXCLUSIVELY through `renameCascade`, which also renames install rows,
     // tool slugs, and name-keyed limits atomically — a bare column update
@@ -1605,11 +1590,51 @@ class InternalMcpCatalogModel {
     let dbItem: typeof schema.internalMcpCatalogTable.$inferSelect | undefined;
 
     if (Object.keys(setValues).length > 0) {
-      [dbItem] = await db
-        .update(schema.internalMcpCatalogTable)
-        .set(setValues)
-        .where(eq(schema.internalMcpCatalogTable.id, id))
-        .returning();
+      if (
+        dbValues.localConfig !== undefined ||
+        dbValues.deploymentSpecYaml !== undefined
+      ) {
+        const [owner] = await db
+          .select({
+            organizationId: schema.internalMcpCatalogTable.organizationId,
+          })
+          .from(schema.internalMcpCatalogTable)
+          .where(eq(schema.internalMcpCatalogTable.id, id));
+        dbItem = await withDbTransaction(async (tx) => {
+          // Lock the organization before reading either tiers or the current
+          // reference, in the same order as tier renames/removals.
+          if (owner?.organizationId)
+            await OrganizationModel.lockRowForUpdate(owner.organizationId, tx);
+          const [current] = await tx
+            .select()
+            .from(schema.internalMcpCatalogTable)
+            .where(eq(schema.internalMcpCatalogTable.id, id));
+          if (!current) return undefined;
+          const localConfig =
+            dbValues.localConfig === undefined
+              ? current.localConfig
+              : dbValues.localConfig;
+          // Custom YAML does not excuse an invalid hidden reference.
+          if (localConfig)
+            await InternalMcpCatalogModel.resolveRuntimeResources(
+              localConfig,
+              current.organizationId,
+              tx,
+            );
+          const [updated] = await tx
+            .update(schema.internalMcpCatalogTable)
+            .set(setValues)
+            .where(eq(schema.internalMcpCatalogTable.id, id))
+            .returning();
+          return updated;
+        });
+      } else {
+        [dbItem] = await db
+          .update(schema.internalMcpCatalogTable)
+          .set(setValues)
+          .where(eq(schema.internalMcpCatalogTable.id, id))
+          .returning();
+      }
     } else {
       [dbItem] = await db
         .select()

@@ -1,9 +1,12 @@
+import { McpRuntimeTierSettingsSchema } from "@archestra/shared";
 import { vi } from "vitest";
+import { withDbTransaction } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import McpServerModel from "@/models/mcp-server";
 import OrganizationModel from "@/models/organization";
+import { prepareMcpRuntimeTierChange } from "@/services/mcp-runtime-tier-settings";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
 import type { User } from "@/types";
@@ -320,6 +323,123 @@ describe("Independent MCP runtime tiers", () => {
     expect(cleared.json().tiers[0]).not.toHaveProperty(
       "memoryLimitMiBOverride",
     );
+  });
+  // PGlite queues transactions. Gate after a real row lock to deterministically
+  // exercise both transaction orders, without timing-dependent sleeps.
+  const holdNextTierLock = () => {
+    const actual = OrganizationModel.lockRowForUpdate.bind(OrganizationModel);
+    let entered!: () => void;
+    let release!: () => void;
+    const locked = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const unlocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let first = true;
+    vi.spyOn(OrganizationModel, "lockRowForUpdate").mockImplementation(
+      async (id, tx) => {
+        await actual(id, tx);
+        if (first) {
+          first = false;
+          entered();
+          await unlocked;
+        }
+      },
+    );
+    return { locked, release };
+  };
+  const writeTiers = (tiers: ReturnType<typeof tier>[]) =>
+    withDbTransaction(async (tx) => {
+      const prepared = await prepareMcpRuntimeTierChange({
+        organizationId,
+        input: McpRuntimeTierSettingsSchema.parse({ tiers }),
+        tx,
+      });
+      await prepared.write(tx);
+      return OrganizationModel.patchInTransaction({
+        id: organizationId,
+        data: { mcpRuntimeTiers: prepared.settings },
+        tx,
+      });
+    });
+  for (const operation of ["create", "update"] as const) {
+    for (const first of ["catalog", "tiers"] as const) {
+      test(`serializes ${operation} against tier removal (${first} first)`, async ({
+        makeInternalMcpCatalog,
+      }) => {
+        const existing =
+          operation === "update"
+            ? await makeInternalMcpCatalog({
+                organizationId,
+                serverType: "local",
+                localConfig: { command: "node" },
+              })
+            : undefined;
+        const catalogWrite = () =>
+          operation === "create"
+            ? InternalMcpCatalogModel.create(
+                {
+                  name: "Concurrent server",
+                  serverType: "local",
+                  localConfig: { command: "node", runtimeTier: "S" },
+                },
+                { organizationId, authorId: user.id },
+              )
+            : InternalMcpCatalogModel.update(existing?.id ?? "", {
+                localConfig: { command: "node", runtimeTier: "S" },
+              });
+        const tierWrite = () => writeTiers([tier("M", 0.5), tier("L", 1)]);
+        const gate = holdNextTierLock();
+        const firstWrite = first === "catalog" ? catalogWrite() : tierWrite();
+        await gate.locked;
+        const secondWrite = first === "catalog" ? tierWrite() : catalogWrite();
+        // Attach rejection handlers before releasing the first writer.
+        const results = Promise.allSettled([firstWrite, secondWrite]);
+        gate.release();
+        const [winner, loser] = await results;
+        expect(winner.status).toBe("fulfilled");
+        expect(loser.status).toBe("rejected");
+        if (loser.status === "rejected")
+          expect(String(loser.reason)).toContain(
+            first === "catalog" ? "is used by" : "not one of",
+          );
+        const stored = (await OrganizationModel.getById(organizationId))
+          ?.mcpRuntimeTiers;
+        if (first === "catalog") expect(stored).toBeNull();
+        else
+          expect(stored?.tiers.map((entry) => entry.name)).toEqual(["M", "L"]);
+      });
+    }
+  }
+  test("a queued rename reads current tiers and rejects stale previousName", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    await writeTiers([tier("Old")]);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "local",
+      localConfig: { command: "node", runtimeTier: "Old" },
+    });
+    const gate = holdNextTierLock();
+    const first = writeTiers([tier("New", 0.1, { previousName: "Old" })]);
+    await gate.locked;
+    const second = writeTiers([tier("Other", 0.1, { previousName: "Old" })]);
+    const results = Promise.allSettled([first, second]);
+    gate.release();
+    const [winner, loser] = await results;
+    expect(winner.status).toBe("fulfilled");
+    expect(loser.status).toBe("rejected");
+    if (loser.status === "rejected")
+      expect(String(loser.reason)).toContain("Unknown previous MCP tier Old");
+    expect(
+      (await OrganizationModel.getById(organizationId))?.mcpRuntimeTiers
+        ?.tiers[0].name,
+    ).toBe("New");
+    expect(
+      (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
+        ?.runtimeTier,
+    ).toBe("New");
   });
   test("only administrators manage tiers", async ({ makeUser, makeMember }) => {
     user = await makeUser();

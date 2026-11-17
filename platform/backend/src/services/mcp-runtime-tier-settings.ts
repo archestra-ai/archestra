@@ -10,20 +10,26 @@ import type { Transaction } from "@/database";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OrganizationModel from "@/models/organization";
 
-export async function organizationMcpRuntimeTiers(organizationId: string) {
-  const organization = await OrganizationModel.getById(organizationId);
+export async function organizationMcpRuntimeTiers(
+  organizationId: string,
+  tx?: Transaction,
+) {
+  const organization = await OrganizationModel.getById(organizationId, tx);
   return resolveMcpRuntimeTiers(organization?.mcpRuntimeTiers);
 }
 
 export async function prepareMcpRuntimeTierChange(params: {
   organizationId: string;
   input: McpRuntimeTierSettingsInput | null;
+  tx: Transaction;
 }): Promise<{
   settings: McpRuntimeTierSettings | null;
   write: (tx: Transaction) => Promise<void>;
 }> {
-  const { organizationId, input } = params;
-  const current = await organizationMcpRuntimeTiers(organizationId);
+  const { organizationId, input, tx } = params;
+  // Readers and reference writers serialize on this same organization row.
+  await OrganizationModel.lockRowForUpdate(organizationId, tx);
+  const current = await organizationMcpRuntimeTiers(organizationId, tx);
   const renames =
     input?.tiers.flatMap((tier) => {
       const before = findMcpRuntimeTier(current.tiers, tier.previousName);
@@ -88,6 +94,7 @@ export async function prepareMcpRuntimeTierChange(params: {
     const count = await InternalMcpCatalogModel.countRuntimeTierReferences({
       organizationId,
       name: tier.name,
+      tx,
     });
     if (count)
       throw new ApiError(

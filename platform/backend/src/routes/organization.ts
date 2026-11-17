@@ -376,11 +376,12 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           403,
           "Only administrators can change MCP runtime tiers",
         );
-      const prepared = await prepareMcpRuntimeTierChange({
-        organizationId,
-        input: body,
-      });
-      await withDbTransaction(async (tx) => {
+      const settings = await withDbTransaction(async (tx) => {
+        const prepared = await prepareMcpRuntimeTierChange({
+          organizationId,
+          input: body,
+          tx,
+        });
         await prepared.write(tx);
         const organization = await OrganizationModel.patchInTransaction({
           id: organizationId,
@@ -388,10 +389,11 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           tx,
         });
         if (!organization) throw new ApiError(404, "Organization not found");
+        return prepared.settings;
       }).finally(() =>
         OrganizationModel.invalidateSettingsCaches(organizationId),
       );
-      return reply.send(resolveMcpRuntimeTiers(prepared.settings));
+      return reply.send(resolveMcpRuntimeTiers(settings));
     },
   );
 

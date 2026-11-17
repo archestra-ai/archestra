@@ -1,5 +1,7 @@
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import logger from "@/logging";
 import {
+  AgentTeamModel,
   ProjectAccessModel,
   ProjectModel,
   ScheduleTriggerModel,
@@ -139,6 +141,24 @@ export async function hasProjectScheduleOversight(params: {
   });
 }
 // SPDX-SnippetEnd
+
+/** Whether a trigger's actor may run its agent; every run rechecks this. */
+export async function scheduleActorCanUseAgent(params: {
+  userId: string;
+  organizationId: string;
+  agentId: string;
+}): Promise<boolean> {
+  const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  return AgentTeamModel.userHasAgentAccess({
+    userId: params.userId,
+    agentId: params.agentId,
+    isAgentAdmin,
+    action: "use",
+  });
+}
 
 /**
  * Records a manual run and queues its execution. Callers authorize first

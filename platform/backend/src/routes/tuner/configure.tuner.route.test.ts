@@ -7,6 +7,7 @@ import {
 import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import AuditLogModel from "@/models/audit-log";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
@@ -146,6 +147,38 @@ describe("PUT /api/tuners/:kind", () => {
     const response = await configure("sre", { enabled: true });
     expect(response.statusCode, response.body).toBe(409);
     expect(await tunerTriggers()).toEqual([]);
+  });
+
+  test("enabling refuses a caller who cannot use the tuner's agent and keeps the trigger's actor", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const manager = (await makeUser()).id;
+    const { role } = await makeCustomRole(organizationId, {
+      permission: { tuner: ["read", "update"], log: ["read", "admin"] },
+    });
+    await makeMember(manager, organizationId, { role });
+    const key = { organizationId, resource: "agent" as const, scope: agentId };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "user", id: adminId }, actions: ["read", "use"] },
+      ],
+    });
+
+    const created = await configure("appa", { enabled: true }, manager);
+    expect(created.statusCode, created.body).toBe(409);
+    expect(await tunerTriggers()).toEqual([]);
+
+    expect((await configure("appa", { enabled: true })).statusCode).toBe(200);
+    const moved = await configure("appa", { enabled: true }, manager);
+    expect(moved.statusCode, moved.body).toBe(409);
+    expect(await tunerTriggers()).toEqual([
+      expect.objectContaining({ actorUserId: adminId, enabled: true }),
+    ]);
   });
 
   test("is not found while tuners are disabled", async () => {

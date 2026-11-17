@@ -6,13 +6,11 @@ import {
   executeA2AMessage,
 } from "@/agents/a2a-executor";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import logger from "@/logging";
 import {
   A2ATaskModel,
   ActiveChatRunModel,
   AgentModel,
-  AgentTeamModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
   UserModel,
@@ -22,6 +20,7 @@ import { ProviderError } from "@/routes/chat/errors";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { startDetachedAgentTask } from "@/services/agent-runtime/start-task";
+import { scheduleActorCanUseAgent } from "@/services/schedule-trigger-access";
 import {
   createAndLinkRunConversation,
   persistRunConversationMessages,
@@ -98,18 +97,13 @@ export async function handleScheduleTriggerRunExecution(
     if (!actor) {
       throw new Error("Scheduled trigger actor no longer exists");
     }
-    const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
-      userId: actor.id,
-      organizationId: trigger.organizationId,
-    });
-
-    const hasAgentAccess = await AgentTeamModel.userHasAgentAccess({
-      userId: actor.id,
-      agentId: trigger.agentId,
-      isAgentAdmin: userIsAgentAdmin,
-      action: "use",
-    });
-    if (!hasAgentAccess) {
+    if (
+      !(await scheduleActorCanUseAgent({
+        userId: actor.id,
+        organizationId: trigger.organizationId,
+        agentId: trigger.agentId,
+      }))
+    ) {
       throw new Error(
         "Scheduled trigger actor no longer has access to the target agent",
       );

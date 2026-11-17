@@ -1,5 +1,8 @@
 import { ScheduleTriggerModel, ScheduleTriggerRunModel } from "@/models";
-import { startManualScheduleTriggerRun } from "@/services/schedule-trigger-access";
+import {
+  scheduleActorCanUseAgent,
+  startManualScheduleTriggerRun,
+} from "@/services/schedule-trigger-access";
 import { ApiError } from "@/types";
 import {
   type ScheduleTrigger,
@@ -77,8 +80,22 @@ export async function configureTuner(params: {
     );
   }
   const agent = await TUNERS[kind].findAgent(organizationId);
-  if (!agent && request.enabled) {
-    throw new ApiError(409, "This tuner is not available in this deployment");
+  if (request.enabled) {
+    if (!agent) {
+      throw new ApiError(409, "This tuner is not available in this deployment");
+    }
+    if (
+      !(await scheduleActorCanUseAgent({
+        userId,
+        organizationId,
+        agentId: agent.id,
+      }))
+    ) {
+      throw new ApiError(
+        409,
+        "You cannot use this tuner's agent, so the tuner cannot run as you",
+      );
+    }
   }
 
   if (!existing) {

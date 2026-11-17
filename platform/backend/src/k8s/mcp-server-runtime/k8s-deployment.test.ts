@@ -3,7 +3,7 @@ import { PassThrough } from "node:stream";
 import type { LocalConfigSchema } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach, Exec, Log } from "@kubernetes/client-node";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { z } from "zod";
 import config from "@/config";
 import {
@@ -8059,14 +8059,9 @@ describe("K8sDeployment.refreshState failed-state recovery", () => {
 describe("K8sDeployment idle hibernation", () => {
   const notFound = { statusCode: 404, message: "not found" };
 
-  // Adoption behaves differently when the deployment does not offer the
-  // feature, so pin the ordinary case — beta flag on, operator kill switch
-  // off — and let the tests that need it flip either gate.
-  beforeEach(() => {
-    config.orchestrator.mcpIdleHibernation.betaEnabled = true;
-  });
+  // Adoption behaves differently when the operator kill switch is set, so
+  // reset it after the tests that flip it.
   afterEach(() => {
-    config.orchestrator.mcpIdleHibernation.betaEnabled = false;
     config.orchestrator.mcpIdleHibernation.hardDisabled = false;
   });
 
@@ -9299,38 +9294,6 @@ describe("K8sDeployment idle hibernation", () => {
       expect(deployment.statusSummary.state).toBe("waking");
     });
 
-    test("scales a hibernated deployment back up on adoption when the beta flag is off", async () => {
-      // Same stranding logic as the kill switch: with the feature not offered,
-      // no sweeper runs, so a sleeping deployment must not stay asleep.
-      config.orchestrator.mcpIdleHibernation.betaEnabled = false;
-      const readNamespacedDeployment = vi
-        .fn()
-        .mockResolvedValue(annotatedDeploymentRead(0));
-      const patchNamespacedDeployment = vi.fn().mockResolvedValue({
-        metadata: { annotations: { [MCP_HIBERNATED_ANNOTATION]: "true" } },
-        spec: { replicas: 1 },
-      });
-      const deployment = makeDeployment({
-        readNamespacedDeployment,
-        patchNamespacedDeployment,
-      });
-      vi.spyOn(deployment, "applyK8sNetworkPolicy").mockResolvedValue(
-        undefined,
-      );
-      vi.spyOn(
-        deployment as unknown as { ensureHttpServerConfigured: () => unknown },
-        "ensureHttpServerConfigured",
-      ).mockResolvedValue(undefined);
-
-      await deployment.startOrCreateDeployment();
-
-      expect(patchNamespacedDeployment).toHaveBeenCalledTimes(1);
-      expect(patchNamespacedDeployment.mock.calls[0][0].body).toEqual({
-        spec: { replicas: 1 },
-      });
-      expect(deployment.statusSummary.state).toBe("waking");
-    });
-
     test("adopts an annotated deployment already scaled back up as waking, not as a cold pending start", async () => {
       // A restart mid-wake: replicas are back but the annotation is only
       // dropped once the deployment is verifiably up.
@@ -10106,10 +10069,6 @@ describe("K8sDeployment default base image follow", () => {
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   describe("idle hibernation", () => {
-    beforeEach(() => {
-      config.orchestrator.mcpIdleHibernation.betaEnabled = true;
-    });
-
     test("moves a hibernated deployment at zero replicas without waking it", async () => {
       const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
       const deployment = makeDeployment({

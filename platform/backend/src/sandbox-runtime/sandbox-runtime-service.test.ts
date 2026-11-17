@@ -59,6 +59,49 @@ describe("sandboxRuntimeService", () => {
     expect(native.runSandbox).not.toHaveBeenCalled();
   });
 
+  test("reports setup failures without putting a healthy runtime into cooldown", async () => {
+    const { sandboxRuntimeService } = await load({ runnerHost: undefined });
+    const message =
+      "sandbox base image setup failed during Python package setup (uv) (exit code 1).";
+    native.runSandbox
+      .mockRejectedValueOnce(
+        Object.assign(new Error(message), { code: "ARCHESTRA_COMMAND_FAILED" }),
+      )
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "ok", stderr: "" });
+
+    await expect(
+      sandboxRuntimeService.runCommand(runParams()),
+    ).rejects.toMatchObject({
+      code: "ARCHESTRA_COMMAND_FAILED",
+      message,
+    });
+    expect(sandboxRuntimeService.isReady).toBe(true);
+    await expect(
+      sandboxRuntimeService.runCommand(runParams()),
+    ).resolves.toMatchObject({ exitCode: 0 });
+  });
+
+  test("keeps shared-runner setup diagnostics through the initialization cooldown", async () => {
+    const { sandboxRuntimeService } = await load({
+      runnerHost: "tcp://dagger-engine:1234",
+    });
+    const message =
+      "sandbox base image setup failed during system package setup (apt) (exit code 100).";
+    native.checkSession.mockRejectedValue(
+      Object.assign(new Error(message), { code: "ARCHESTRA_COMMAND_FAILED" }),
+    );
+    for (let call = 0; call < 2; call++) {
+      await expect(
+        sandboxRuntimeService.runCommand(runParams()),
+      ).rejects.toMatchObject({
+        code: "ARCHESTRA_COMMAND_FAILED",
+        message,
+      });
+    }
+    expect(native.checkSession).toHaveBeenCalledTimes(1);
+    expect(native.runSandbox).not.toHaveBeenCalled();
+  });
+
   test("still reports an unreachable engine as an engine outage", async () => {
     const { sandboxRuntimeService } = await load({ runnerHost: undefined });
     native.runSandbox.mockRejectedValue(

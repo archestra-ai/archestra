@@ -6,6 +6,7 @@ import {
   createCursorPaginatedResponseSchema,
   createPaginatedResponseSchema,
   DEFAULT_APP_NAME,
+  type EnvironmentDeployKind,
   getResourceForAgentType,
   isModelSelectionComplete,
   PaginationQuerySchema,
@@ -895,6 +896,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         environmentId,
+        resource: environmentDeployKindFor(agentType),
       });
       await assertCanWriteAgentNetworkPolicy({
         userId: user.id,
@@ -1825,6 +1827,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             environmentId: resolvedEnvironmentId,
             organizationId,
             userId: user.id,
+            resource: "agent",
           });
         }
         enabled = await isArchestraToolAvailableToAgent({
@@ -1846,6 +1849,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           environmentId: resolvedEnvironmentId,
           organizationId,
           userId: user.id,
+          resource: "agent",
         });
         enabled =
           (await OrganizationModel.getById(organizationId))
@@ -2321,6 +2325,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           organizationId,
           environmentId: body.environmentId,
+          resource: environmentDeployKindFor(existingAgent.agentType),
         });
       }
       await assertCanWriteAgentNetworkPolicy({
@@ -3004,6 +3009,15 @@ function getPermittedAgentTypesForList(params: {
   }
 
   return permittedTypes;
+}
+
+/**
+ * The kind an agent counts as when it is deployed into an environment: MCP
+ * gateways are granted separately from agents, and every other type deploys
+ * as an agent.
+ */
+function environmentDeployKindFor(agentType: AgentType): EnvironmentDeployKind {
+  return agentType === "mcp_gateway" ? "mcpGateway" : "agent";
 }
 
 /**

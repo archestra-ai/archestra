@@ -177,8 +177,7 @@ describe("config routes", () => {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      // Beta-derived flags may inherit an ambient ARCHESTRA_BETA in dev/CI.
-      mcpIdleHibernationBetaEnabled: expect.any(Boolean),
+      mcpIdleHibernationBetaEnabled: true,
       // SPDX-SnippetEnd
     });
     expect(typeof payload.features.incomingEmail.enabled).toBe("boolean");

@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-14
+lastUpdated: 2026-11-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -35,11 +35,10 @@ From a connected client, ask your agent to create one. [`create_agent`](/docs/re
 
 With [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), go to **Settings → Agents → Runtimes** to choose the agents offered during creation.
 
-1. Click **+** to add a choice, or remove one with its **Remove** button.
-2. Drag the agent chips into your preferred order. You can also focus an agent's reorder handle and use the arrow keys.
-3. Click **Save**. The Create Agent cards and Configuration runtime choices follow the saved order.
+1. Choose **Add runtime** to add a choice, or remove one with its **… → Remove from list** action.
+2. Drag the rows into your preferred order. You can also focus a row's reorder handle and use the arrow keys.
 
-Removing a choice preserves existing agents and their runtime configuration.
+Each change saves as you make it. The Create Agent cards and Configuration runtime choices follow the order. Removing a choice preserves existing agents and their runtime configuration.
 
 ### Set a Runtime's Settings
 
@@ -47,7 +46,7 @@ Decide once how a runtime's agents start, such as whether Claude Code bills each
 
 1. Go to **Settings → Agents → Runtimes**, open a runtime's **⋯** menu, and click **Edit runtime**.
 2. Under **Runtime settings**, set its defaults. A built-in runtime has **Claude account** (Claude Code only), run limits, and tiers. A custom runtime also has its image, protocol, and follow-up delivery.
-3. Click **Save runtime**, then click **Save**.
+3. Click **Save runtime**.
 
 Saved settings apply to agents created afterwards. To bring existing agents up to date, reopen the runtime: **Existing agents** shows how many still use older settings, and **Update** gives them the saved ones.
 

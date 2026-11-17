@@ -49,7 +49,7 @@ archestra:
   # Environment variables for e2e testing
   env:
     ENABLE_E2E_TEST_ENDPOINTS: "true"
-    # Beta features on, so the K8s e2e jobs cover idle hibernation.
+    # Beta features on, so the K8s e2e jobs cover them.
     ARCHESTRA_BETA: "true"
     ARCHESTRA_ANALYTICS: disabled
     # LLM Proxy base URLs (for LLM proxy routes)

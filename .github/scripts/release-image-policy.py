@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Classify release PRs and fail closed before reporting required checks."""
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -233,6 +234,14 @@ def main():
                 index["queue_release_source"] = {"number": queue_source["number"],
                     "head_sha": queue_source["head"]["sha"], "base_sha": event["merge_group"]["base_sha"],
                     "tree": release_tree}
+            index["release_indexes"] = release_indexes(records)
+            # attest-release-candidates signs these in this run, the run that
+            # built them; the release pushes the same index bytes.
+            if os.environ.get("GITHUB_OUTPUT"):
+                with open(os.environ["GITHUB_OUTPUT"], "a") as github_output:
+                    github_output.write("subjects<<SUBJECTS\n" + "".join(
+                        f"{entry['public_name']}@{entry['digest']}\n"
+                        for _, entry in sorted(index["release_indexes"].items())) + "SUBJECTS\n")
             output = Path(os.environ["CANDIDATE_INDEX"])
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(json.dumps(index))
@@ -240,6 +249,28 @@ def main():
               "No release image scan required for this event; publication scans its own artifacts.")
     else:
         raise ValueError(f"Unsupported mode: {mode}")
+
+
+def release_indexes(records):
+    """{image: {digest, public_name}}: the multi-arch index of each image's two
+    scanned architectures (release-oci.multi_arch_index), under the name it is
+    published as."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("oci", Path(__file__).with_name("release-oci.py"))
+    oci = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(oci)
+    by_image = {}
+    for record in records:
+        by_image.setdefault(record["image"], {})[record["arch"]] = record["oci"]
+    indexes = {}
+    for image, proofs in sorted(by_image.items()):
+        if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", image):
+            raise ValueError(f"Unexpected release image name: {image}")
+        data = oci.multi_arch_index(proofs)
+        indexes[image] = {"digest": "sha256:" + hashlib.sha256(data).hexdigest(),
+                          "public_name": "docker.io/archestra/platform" if image == "platform"
+                          else f"ghcr.io/archestra-ai/{image}"}
+    return indexes
 
 
 if __name__ == "__main__":

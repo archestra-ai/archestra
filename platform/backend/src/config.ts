@@ -1275,7 +1275,6 @@ function getMcpIdleHibernationConfig() {
 
   return {
     ...parsed,
-    betaEnabled: process.env.ARCHESTRA_BETA === "true",
     lastUsedRefreshIntervalMs: acceleratedE2eTiming ? 1_000 : 30_000,
     demandHeartbeatIntervalMs: acceleratedE2eTiming ? 500 : 15_000,
   };
@@ -1805,10 +1804,10 @@ const MCP_IMAGE_PREPULL_DEFAULTS = {
  * the container registry.
  *
  * `enabled` is a KILL SWITCH, not a feature gate — pre-pulling follows idle
- * hibernation (beta flag + enterprise licence + organization toggle), and this
- * only lets an operator turn the extra per-node pod off while keeping
- * hibernation on. Hence default-on and an explicit `"false"` to disable, the
- * mirror of the hibernation flag's default-off shape.
+ * hibernation (operator kill switch + enterprise licence + organization
+ * toggle), and this only lets an operator turn the extra per-node pod off
+ * while keeping hibernation on. Hence default-on and an explicit `"false"` to
+ * disable.
  *
  * `priorityClassName` is unset by default (the namespace default applies).
  * Point it at a low or negative-priority class so warming a cache can never
@@ -3604,12 +3603,9 @@ const config = {
      * The OPERATOR half of idle hibernation: `windowSeconds` is how long an
      * MCP server must sit unused before it is scaled to zero (default 30 min,
      * floored at 120 s), `hardDisabled` is the kill switch set by an explicit
-     * `…MCP_IDLE_HIBERNATION_SECONDS=0`, and `betaEnabled` is the BETA gate
-     * the whole feature ships behind — off by default, a blank value falling
-     * back to the ARCHESTRA_BETA master switch (see betaFeatureEnabled).
-     * Whether hibernation runs at all is decided together with the enterprise
-     * licence and the organization's own toggle — see
-     * `k8s/mcp-server-runtime/hibernation.ee`.
+     * `…MCP_IDLE_HIBERNATION_SECONDS=0`. Whether hibernation runs at all is
+     * decided together with the enterprise licence and the organization's own
+     * toggle — see `k8s/mcp-server-runtime/hibernation.ee`.
      */
     mcpIdleHibernation: getMcpIdleHibernationConfig(),
     /**

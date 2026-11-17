@@ -16,8 +16,8 @@ import { guardrailsPolicyService } from "@/services/guardrails-policy";
  * - With `github`, the bundled `github` battery (which lacks its credential)
  *   is aimed at `Gh` alone (declared, not enforced) and, beside `acme`, at
  *   `Mixed` (partly enforced).
- * - With `refused`, the uploaded battery binds a helper to an annotator it
- *   never declares, so the runtime refuses the composition.
+ * - With `refused`, the uploaded battery routes a rule through a helper's
+ *   annotator it never declares, so the runtime refuses the composition.
  *
  * `Alpha` is assigned a tool of Docs and one of Acme, `Beta` one of Acme, and
  * with `github`, `Gamma` one of Gh.
@@ -224,7 +224,7 @@ version = 2
 
 [[policy.tool]]
 name = "mcp/acme/list_items"
-delta = { trust = "suspicious", audience = ["internal"] }
+${refused ? `annotator = "acme.check"` : `delta = { trust = "suspicious", audience = ["internal"] }`}
 
 [[policy.tool]]
 name = "mcp/acme/create_item"

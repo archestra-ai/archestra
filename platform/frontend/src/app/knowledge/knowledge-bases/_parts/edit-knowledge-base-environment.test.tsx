@@ -80,7 +80,14 @@ beforeEach(() => {
     ),
     http.get("http://localhost:9000/api/environments", () =>
       HttpResponse.json({
-        environments: [{ id: environmentId, name: "Support", canDeploy: true }],
+        environments: [
+          {
+            id: environmentId,
+            name: "Support",
+            canDeploy: true,
+            deployKinds: ["knowledgeSource"],
+          },
+        ],
       }),
     ),
   );
@@ -138,7 +145,12 @@ it("renames a knowledge base without reassigning its unchanged restricted enviro
     http.get("http://localhost:9000/api/environments", () =>
       HttpResponse.json({
         environments: [
-          { id: environmentId, name: "Support", canDeploy: false },
+          {
+            id: environmentId,
+            name: "Support",
+            canDeploy: false,
+            deployKinds: [],
+          },
         ],
       }),
     ),

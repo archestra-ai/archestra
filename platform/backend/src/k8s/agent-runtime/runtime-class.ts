@@ -1,10 +1,6 @@
 import * as k8s from "@kubernetes/client-node";
 import config from "@/config";
-import {
-  describeK8sApiError,
-  isK8sNotFoundError,
-  loadKubeConfig,
-} from "@/k8s/shared";
+import { describeK8sApiError, loadKubeConfig } from "@/k8s/shared";
 import logger from "@/logging";
 import { tagAgentRunFailure } from "@/services/agent-runtime/run-failure";
 import { ApiError } from "@/types";
@@ -16,15 +12,19 @@ import { ApiError } from "@/types";
  * unprivileged run waiting for a pod that is never created until the startup
  * timeout. A missing class refuses the launch at once with a clear reason.
  *
- * Reading a RuntimeClass needs a cluster-scoped `get` (the Helm chart grants
- * it for the configured name). Without it the answer is unknown: launches go
- * ahead and the platform logs once that it could not check.
+ * The check asks the API server to admit, as a dry run, a pod that names the
+ * class in the Agent Runtime namespace: Kubernetes' RuntimeClass admission
+ * rejects it when the class does not exist, and nothing is ever created. This
+ * needs only the `create pods` the platform already has there, not the
+ * cluster-scoped read of RuntimeClasses. Any other rejection (RBAC, Pod
+ * Security, a policy webhook) leaves the answer unknown: launches go ahead and
+ * the platform logs once that it could not check.
  */
 class AgentRuntimeClassDetector {
   private state: "present" | "missing" | "unknown" | null = null;
   private lastCheckedAt = 0;
   private inFlight: Promise<void> | null = null;
-  private api: k8s.NodeV1Api | null = null;
+  private api: k8s.CoreV1Api | null = null;
   private warnedUnknown = false;
 
   /** Check at startup and log a clear error when the class is missing. */
@@ -50,7 +50,7 @@ class AgentRuntimeClassDetector {
   }
 
   /** @internal exported for tests */
-  reset(api: k8s.NodeV1Api | null = null): void {
+  reset(api: k8s.CoreV1Api | null = null): void {
     this.state = null;
     this.lastCheckedAt = 0;
     this.inFlight = null;
@@ -79,8 +79,13 @@ class AgentRuntimeClassDetector {
     if (!name) return;
     this.lastCheckedAt = Date.now();
     try {
-      this.api ??= loadKubeConfig().kubeConfig.makeApiClient(k8s.NodeV1Api);
-      await this.api.readRuntimeClass({ name });
+      const { kubeConfig, namespace } = loadKubeConfig();
+      this.api ??= kubeConfig.makeApiClient(k8s.CoreV1Api);
+      await this.api.createNamespacedPod({
+        namespace: config.agentRuntime.namespace ?? namespace,
+        body: probePod(name),
+        dryRun: "All",
+      });
       if (this.state === "missing") {
         logger.info(
           { runtimeClassName: name },
@@ -89,7 +94,7 @@ class AgentRuntimeClassDetector {
       }
       this.state = "present";
     } catch (error) {
-      if (isK8sNotFoundError(error)) {
+      if (isMissingRuntimeClassRejection(error, name)) {
         if (this.state !== "missing") {
           logger.error({ runtimeClassName: name }, missingMessage(name));
         }
@@ -105,7 +110,7 @@ class AgentRuntimeClassDetector {
             runtimeClassName: name,
             reason: describeK8sApiError(error) ?? String(error),
           },
-          "Could not verify that the Agent Runtime RuntimeClass exists; runs will start without the check. Grant the platform ServiceAccount get on this RuntimeClass to enable it.",
+          "Could not verify that the Agent Runtime RuntimeClass exists; runs will start without the check. The check is a dry-run pod create in the Agent Runtime namespace.",
         );
       }
       this.state = "unknown";
@@ -120,6 +125,49 @@ export const agentRuntimeClassDetector = new AgentRuntimeClassDetector();
 /** A class that exists rarely disappears; a missing one is re-checked soon. */
 const PRESENT_RECHECK_MS = 5 * 60_000;
 const MISSING_RECHECK_MS = 30_000;
+
+/**
+ * A pod that only exists to be admitted as a dry run. It meets the restricted
+ * Pod Security level, so a namespace that enforces it does not reject it for
+ * an unrelated reason.
+ */
+function probePod(runtimeClassName: string): k8s.V1Pod {
+  return {
+    apiVersion: "v1",
+    kind: "Pod",
+    metadata: {
+      generateName: "archestra-runtime-class-check-",
+      labels: { "app.kubernetes.io/managed-by": "archestra" },
+    },
+    spec: {
+      runtimeClassName,
+      automountServiceAccountToken: false,
+      securityContext: {
+        runAsNonRoot: true,
+        runAsUser: 65532,
+        seccompProfile: { type: "RuntimeDefault" },
+      },
+      containers: [
+        {
+          name: "check",
+          image: "registry.k8s.io/pause:3.10",
+          securityContext: {
+            allowPrivilegeEscalation: false,
+            capabilities: { drop: ["ALL"] },
+          },
+        },
+      ],
+    },
+  };
+}
+
+/** The RuntimeClass admission plugin's rejection: `pod rejected: RuntimeClass "x" not found`. */
+function isMissingRuntimeClassRejection(error: unknown, name: string): boolean {
+  return (
+    describeK8sApiError(error)?.includes(`RuntimeClass "${name}" not found`) ??
+    false
+  );
+}
 
 function missingMessage(name: string): string {
   return `The RuntimeClass "${name}" set in ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME does not exist in this cluster, so Kubernetes rejects unprivileged Agent Runtime pods. Install the RuntimeClass (for example a gVisor node pool) or correct the setting.`;

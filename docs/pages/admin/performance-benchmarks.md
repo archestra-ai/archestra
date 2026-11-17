@@ -37,7 +37,7 @@ Tool calls include authentication, access checks and call logging.
 <!-- mcp-gateway-benchmark-results:start -->
 | Gateway | Requests per Second | Median Added Latency | P95 Added Latency | P99 Added Latency |
 | --- | ---: | ---: | ---: | ---: |
-| Archestra | 434.9 | 108.46 ms | 125.22 ms | 149.92 ms |
+| Archestra | 453.4 | 109.22 ms | 116.52 ms | 142.23 ms |
 
 16 vCPU / ~63 GiB RAM; one worker, 50 concurrent calls, 600 measured calls and zero errors.
 <!-- mcp-gateway-benchmark-results:end -->

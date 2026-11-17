@@ -115,7 +115,7 @@ const resourceDescriptions: Record<ScopedResource, Descriptions> = {
   llmOauthClient: oauthClientDescriptions(),
   environment: {
     view: "View the environment's configuration and network policies without deploying into it.",
-    use: "View the environment and deploy agents or MCP servers into it, subject to its network policies.",
+    use: "View the environment and deploy the selected resources into it, subject to its network policies.",
     edit: "Use the environment and update its configuration and network policies.",
   },
   agentRuntime: {

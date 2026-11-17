@@ -1,8 +1,8 @@
 ## Externals
 
-The `[externals]` sections tell OpenAPPA how to call the components declared in the policy. Each component uses `[externals.<kind>.<name>]`, where `kind` identifies its role and `name` matches its policy declaration. This connection is called a binding.
+The `[externals]` section configures transport bindings for policy components. Each component is defined under `[externals.<kind>.<name>]`, where `<kind>` specifies the component type (`authorities`, `sanitizers`, `annotators`, `recorders`, `audience`, or `context`) and `<name>` matches the policy declaration.
 
-In the example below, OpenAPPA sends approval requests for `support-reviewer` to an HTTP service. The shared settings limit requests to two seconds and responses to 65,536 bytes:
+In the example below, approval requests for `support-reviewer` route to an HTTP endpoint with a 2-second timeout and a 64 KiB response cap:
 
 ```toml
 [externals]
@@ -14,61 +14,66 @@ url = "https://approver.corp/rule"
 token_env = "APPA_APPROVER_TOKEN"
 ```
 
-`timeout_ms` limits the time an endpoint or command has to answer one request. `max_body_bytes` limits the accepted response size. These settings apply to the whole deployment. Each [model implementation](#model-implementations) and [Jev](#jev) has its own `timeout_ms` and `max_concurrent` in its own section. `max_concurrent` limits the requests of one implementation across the whole runtime, all sessions included. A reload that OpenAPPA accepts applies a changed value to later requests of every session. Requests that already run or wait finish under the previous limit.
+Deployment settings:
+- `timeout_ms`: Maximum execution time per consult request (default: 5,000 ms).
+- `max_body_bytes`: Maximum accepted response payload size (default: 65,536 bytes).
+- `review_timeout_ms`: Maximum duration human review requests remain pending (default: 600,000 ms).
 
-The available settings depend on the component's role:
+These settings apply to the whole deployment; a binding cannot override them. [Model implementations](#model-implementations) and [Jev](#jev) configure their own `timeout_ms` and `max_concurrent` limits in their own sections. `max_concurrent` bounds concurrent requests to a backend across all active sessions.
 
-| Component kind | Implementation setting | Requirement |
+Implementation requirements by component type:
+
+| Component kind | Transport options | Binding requirement |
 |---|---|---|
-| `authorities` | Exactly one of `url`, `command`, or `builtin`. | Optional. Without a binding, the authority returns no answer. |
-| `sanitizers` | Exactly one of `url`, `command`, or `builtin`. | Required, except for `attest-schema`. |
-| `annotators` | Exactly one of `url` or `command`. | Required unless the declaration specifies a builtin. |
-| `context` | Exactly one of `url` or `command`. | Optional. Each configured provider is asked about every call that needs a new annotation. |
-| `recorders` | Exactly one of `url` or `command`. | Required for each recorder a tool names. |
-| `audience` | Exactly one of `url`, `command`, or `readers`; `selectors` on a `url` or `command` entry; optional `lookup`. | Required for each referenced provider and each `lookup` target. A non-empty `readers` table is allowed only on a `lookup` target. |
+| `authorities` | Exactly one of `url`, `command`, or `builtin`. | Optional. Unbound authorities return no answer. |
+| `sanitizers` | Exactly one of `url`, `command`, or `builtin`. | Required (except for internal `attest-schema`). |
+| `annotators` | Exactly one of `url` or `command`. | Required unless declaring a `builtin` on the annotator. |
+| `context` | Exactly one of `url` or `command`. | Optional. Queried for every call requiring dynamic annotation. |
+| `recorders` | Exactly one of `url` or `command`. | Required for every recorder referenced by a tool contract. |
+| `audience` | Exactly one of `url`, `command`, or `readers`; requires `selectors` on `url` or `command`; optional `lookup`. | Required for each referenced provider and lookup target. Non-empty `readers` tables are valid only on lookup targets. |
 
-OpenAPPA rejects an external component name that the policy does not declare, or a component that is missing its required implementation. A sanitizer binding is the exception: one with no declaration stays idle, so a root can bind the sanitizers of a battery it may include. For annotators, `builtin` belongs on `[[policy.annotator]]`, not under `[externals]`.
+OpenAPPA rejects declared components missing required bindings, and an authority binding that no declaration names. A sanitizer, annotator, recorder, or audience binding that no declaration names stays idle, so a root can bind the components of a battery it may include. For annotators, `builtin` is declared on `[[policy.annotator]]` rather than under `[externals]`.
 
-Included files can add bindings and annotator builtins. An included file may add `[externals.jev]`, and the section combines field by field: each field is declared by one file only. They cannot replace root settings: `timeout_ms`, `max_body_bytes`, `review_timeout_ms`, `[externals.claude_code]`, or `[externals.llm]`.
+Included files may add external bindings and annotator builtins, as well as `[externals.jev]` configuration. Included files cannot override root settings for `timeout_ms`, `max_body_bytes`, `review_timeout_ms`, `[externals.claude_code]`, or `[externals.llm]`.
 
 ### HTTP services
 
-Set `url` to the service endpoint. Use HTTPS for remote services. Plain HTTP is allowed only for a service on the same machine, at a loopback address such as `127.0.0.1`. Do not put a username or password in the URL.
+Set `url` to the service endpoint. Remote services must use HTTPS; unencrypted HTTP is permitted only for loopback addresses (such as `127.0.0.1`). Credentials must not be embedded in the URL.
 
-If the service requires authentication, set `token_env` to an environment variable such as `APPA_SANITIZER_TOKEN`. OpenAPPA reads its value and sends it as a bearer token. The variable name must start with `APPA_`, but cannot start with `APPA_PROVIDER_`.
+If the endpoint requires authentication, set `token_env` to the name of an environment variable (e.g. `APPA_SANITIZER_TOKEN`). OpenAPPA forwards the variable's value as an HTTP `Bearer` token. Variable names must start with `APPA_` and must not begin with `APPA_PROVIDER_`.
 
 ### Local programs
 
-Set `command` to a list containing the executable and its arguments, such as `command = ["python3", "./sanitize.py"]`. OpenAPPA runs the program on the same machine, without a shell, and ends every process it started when the request completes. An executable named `appa` is the runtime's own executable, which serves the plugins OpenAPPA ships, such as `appa file-tracker`. The shipped batteries run `python3`, which Windows does not always provide. It starts the program in the directory containing the configuration file.
+Set `command` to an array specifying the executable and arguments (e.g. `command = ["python3", "./sanitize.py"]`). OpenAPPA executes the process directly without an intermediate shell, launching it with the configuration directory as its working directory and terminating child processes upon completion. Commands referencing `appa` invoke the runtime's own binary to execute built-in plugins (such as `appa file-tracker`).
 
-The program reads one JSON consult request from standard input and writes one JSON response to standard output. It must respond within `timeout_ms`, and its response must fit within `max_body_bytes`. `APPA_CONSULT_TIMEOUT_MS` gives the program the milliseconds it has left: `timeout_ms` less the wait for a free slot. Each OpenAPPA instance runs at most eight such programs at once.
+Commands read a single JSON consult request from standard input and write a JSON response to standard output within `timeout_ms` and `max_body_bytes`. `APPA_CONSULT_TIMEOUT_MS` informs the process of remaining execution time (accounting for queue wait). The runtime limits concurrent local program executions to eight.
 
-If the program needs a credential, set `token_env` to an environment variable whose name starts with `APPA_PROVIDER_`. OpenAPPA passes that variable to the program. It does not pass other `APPA_*` variables, including its own credentials, except `APPA_CONSULT_TIMEOUT_MS`.
+If a command requires credentials, specify `token_env` with an environment variable name prefixed with `APPA_PROVIDER_`. OpenAPPA passes that variable into the process environment while filtering out other internal `APPA_*` variables.
 
-OpenAPPA does not require this variable when loading the policy. The program must handle a missing credential when it runs.
+OpenAPPA does not require credential variables to be present at policy load time; the process must handle missing credentials at runtime.
 
 ### Model implementations
 
-The `claude-code` and `llm` implementations send the component's instructions and request data to a model. OpenAPPA puts fixed instructions and `declaration` in the system prompt. For an annotator, the fixed instructions include the label guide: the rule and the criteria for each trust and audience leaf, and worked example calls, each with the annotation it gets under the annotator's permits. An example whose labels the permits exclude is left out. OpenAPPA sends `artifact` as the user message, to be processed as data.
+The `claude-code` and `llm` backends dispatch consult requests to language models. OpenAPPA injects fixed instructions and `declaration` constraints into the system prompt, including the label guide for annotators. Call data in `artifact` is sent as user content.
 
-Before an annotator request leaves for a model provider, OpenAPPA redacts what it recognizes as a secret in `artifact.args`. This applies to `claude-code`, `llm`, and `jev`. Each string goes through the detector of `builtin = "redact-secrets"`. The whole value of a field whose name contains `password`, `passwd`, `passphrase`, `secret`, `token`, `api_key`, `private_key`, `access_key`, `authorization`, `cookie`, or `credential`, or is `auth`, is replaced. Each secret becomes `[redacted-secret]`. The tool name is not redacted. Redaction is best effort, not a proof that no secret remains. Authority and sanitizer requests are not redacted, because a sanitizer must see the value it cleans. The consult record keeps the request before redaction.
-
-OpenAPPA builds the expected response format from the declaration. The model returns only the contents of `answer`, without the surrounding `version` and `answer` fields.
+Before dispatching annotator requests to external model providers (`claude-code`, `llm`, or `jev`), OpenAPPA automatically redacts detected credentials in `artifact.args` using the built-in secret detector. Fields matching credential keywords (`password`, `token`, `secret`, `api_key`, `credential`, etc.) or high-entropy tokens are replaced with `[redacted-secret]`. Redaction is best effort. Authority and sanitizer payloads are not redacted, as sanitizers require raw text for processing.
 
 OpenAPPA checks authority and annotator answers against their permits and assigns sanitized data the declared audience or trust rank. The model is responsible for making the correct judgment or removing the required content.
 
-`[externals.claude_code]` configures the local Claude Code implementation:
+OpenAPPA derives expected response schemas from the component's declaration. Model backends return the inner `answer` object directly.
 
-| Field | Purpose |
-|---|---|
-| `command` | Selects the executable. Default: `claude`. |
-| `model` | Selects the model. Default: `sonnet`. |
-| `timeout_ms` | Sets the timeout for one request, including its wait for a free slot. Default: 60,000. |
-| `max_concurrent` | Sets how many requests the runtime runs at once. Default: 4. |
+`[externals.claude_code]` configures the local Claude Code process:
 
-Each request starts a new `claude -p` process. It cannot use tools, load project settings, or reuse a previous conversation. It runs in a new temporary directory with optional background traffic disabled and receives no `APPA_*` environment variables.
+| Field | Description | Default |
+|---|---|---|
+| `command` | Executable path. | `claude` |
+| `model` | Target model name. | `sonnet` |
+| `timeout_ms` | Per-request timeout including queue wait. | `60000` |
+| `max_concurrent` | Maximum concurrent processes. | `4` |
 
-`[externals.llm]` selects the model used by all `builtin = "llm"` components. This example uses an Anthropic model, a token from `APPA_LLM_TOKEN`, a 30-second timeout, and up to four concurrent requests:
+Each consult spawns a fresh `claude -p` process in a temporary working directory with project settings and tools disabled.
+
+`[externals.llm]` configures direct API integrations for `builtin = "llm"` components:
 
 ```toml
 [externals.llm]
@@ -81,19 +86,17 @@ max_concurrent = 4
 # url = "https://gateway.corp/v1"
 ```
 
-Supported providers are `anthropic`, `openai`, `gemini`, and `ollama`. `token_env` follows the rules of [HTTP services](#http-services). An optional `url` selects a custom endpoint and follows the same URL rules. `timeout_ms` defaults to 60,000 and includes the wait for a free slot. `max_concurrent` defaults to 4.
+Supported providers are `anthropic`, `openai`, `gemini`, and `ollama`. `token_env` specifies the environment variable holding the API key. `url` optionally overrides the provider endpoint. `timeout_ms` defaults to 60,000 ms, and `max_concurrent` defaults to 4.
 
-A deployment in which any component uses `builtin = "llm"` opens only when the section's key is available: `token_env` names a variable that is set, or the provider is `ollama` and the section names no `token_env`. A section that no component uses loads without its key.
+Deployments referencing `builtin = "llm"` initialize only if the required API token is set in the environment (or if using `ollama` without authentication). An unused `[externals.llm]` section does not require an API key to load.
 
-An `llm` request that fails with a connection error, status 429, or a 5xx status is retried 500 ms later, at most three attempts in total. A retry starts only when `timeout_ms` leaves time for it. Other failures are not retried. Each attempt takes a free slot, and the wait before a retry holds none.
+Transient failures (connection errors, HTTP 429, or HTTP 5xx) are retried with a 500 ms backoff, up to three attempts in total, if `timeout_ms` permits.
 
-An `llm` request sets no `temperature` or other sampling parameter. The model uses its default values, as it does for `claude-code`.
-
-`openai` uses the Chat Completions API, including when `url` points to a compatible service. `ollama` uses `http://localhost:11434` unless `url` specifies another endpoint, and requires no token.
+Requests use provider default temperature and sampling parameters. `openai` uses the Chat Completions API. `ollama` defaults to `http://localhost:11434` without authentication.
 
 ### Jev
 
-`[externals.jev]` names the key used by all `builtin = "jev"` annotators:
+The `[externals.jev]` section configures TypeSafe's Jev classifier for `builtin = "jev"` annotators:
 
 ```toml
 [externals.jev]
@@ -103,14 +106,14 @@ token_env = "APPA_PROVIDER_JEV_API_KEY"
 # max_concurrent = 16
 ```
 
-| Field | Purpose |
+| Field | Description |
 |---|---|
-| `token_env` | Names the variable that holds the TypeSafe API key. Required. Must start with `APPA_`. |
-| `timeout_ms` | Sets the timeout for one request, including its wait for a free slot. Default: the shared `timeout_ms`. Minimum: 550; OpenAPPA rejects a smaller value, inherited or declared. |
-| `max_concurrent` | Sets how many requests the runtime runs at once. Default: 16. |
+| `token_env` | Environment variable holding the TypeSafe API key. Required; must start with `APPA_`. |
+| `timeout_ms` | Request timeout including queue wait. Defaults to global `timeout_ms` (minimum: 550 ms). |
+| `max_concurrent` | Maximum concurrent requests across the runtime (default: 16). |
 
-A battery that ships this section declares `token_env` only. The root config can then declare `[externals.jev]` with `timeout_ms` or `max_concurrent`, and the section takes the key from the battery and the limits from the root. OpenAPPA rejects a second `token_env`, from the root or from another battery, and a section in which no file declares `token_env`. OpenAPPA sends the key only to TypeSafe's API at `https://api.typesafe.ai/v1/systemone`. A configuration cannot name another endpoint. The operator can set `APPA_PROVIDER_JEV_API_URL` in the OpenAPPA process environment, following the URL rules of [HTTP services](#http-services).
+Battery policies shipping Jev annotators declare `token_env` only; root policies can supply `timeout_ms` and `max_concurrent`. OpenAPPA sends requests strictly to `https://api.typesafe.ai/v1/systemone` (or the URL specified by `APPA_PROVIDER_JEV_API_URL` in the process environment).
 
-A deployment that declares a `jev` annotator opens only when the key's variable is set. A reload that OpenAPPA refuses leaves the running deployment serving. A section that no annotator uses loads without its key.
+Deployments declaring a `jev` annotator initialize only if the configured API key variable is set. An unused `[externals.jev]` section loads without an API key.
 
-Each consult sends the tool's name, description, and arguments to that endpoint, with secrets redacted as for every model provider; see [Model implementations](#model-implementations). A consult larger than 64 KiB is not sent and gets no answer. A slow request is repeated on a new connection, and a server error or a connection failure is retried, within `timeout_ms`. The consult record carries the attempts and the label probabilities under `jev_diagnostics`.
+Each consult transmits the tool name, description, and arguments with credentials redacted as described in [Model implementations](#model-implementations). Payloads exceeding 64 KiB are rejected. Consult records retain diagnostic probabilities under `jev_diagnostics`.

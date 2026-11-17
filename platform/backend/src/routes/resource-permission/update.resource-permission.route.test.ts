@@ -14,6 +14,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { createRestrictedEnvironment } from "@/test/environments";
 import type { User } from "@/types";
 import resourcePermissionRoutes from "./resource-permission.routes";
 
@@ -616,6 +617,93 @@ describe("resource permission routes", () => {
         }),
       ]),
     );
+  });
+
+  test("an environment grant can be limited to some kinds of object, by anyone who may deploy every kind there", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const environment = await createRestrictedEnvironment({
+      organizationId,
+      data: { name: "Launch" },
+    });
+    const manager = await makeUser();
+    const builder = await makeUser();
+    await makeMember(manager.id, organizationId);
+    await makeMember(builder.id, organizationId);
+    const url = `/api/resource-permissions/environment/${environment.id}`;
+    const key = {
+      organizationId,
+      resource: "environment" as const,
+      scope: environment.id,
+    };
+    const full = {
+      subject: { type: "user" as const, id: manager.id },
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
+    };
+    const setup = await app.inject({
+      method: "PUT",
+      url,
+      payload: {
+        revision: (await ResourcePermissionPolicyModel.find(key))?.revision,
+        grants: [full],
+      },
+    });
+    expect(setup.statusCode, setup.body).toBe(200);
+
+    // The manager holds `use`, which deploys every kind, so they may hand on
+    // any one kind without holding its action by name.
+    user = manager;
+    const limited = {
+      subject: { type: "user" as const, id: builder.id },
+      actions: ["read", "deploy-agent", "deploy-app"],
+    };
+    const saved = await app.inject({
+      method: "PUT",
+      url,
+      payload: { revision: setup.json().revision, grants: [full, limited] },
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect((await app.inject({ method: "GET", url })).json().grants).toEqual(
+      expect.arrayContaining([expect.objectContaining(limited)]),
+    );
+    const deploys = (action: "deploy-agent" | "deploy-mcp-registry" | "use") =>
+      ResourcePermissions.allows({
+        ...key,
+        userId: builder.id,
+        action,
+      });
+    expect(await deploys("deploy-agent")).toBe(true);
+    expect(await deploys("deploy-mcp-registry")).toBe(false);
+    expect(await deploys("use")).toBe(false);
+
+    // Kinds beside `use` say nothing `use` does not, so the mix is refused
+    // rather than stored as a level the editor cannot show.
+    const mixed = await app.inject({
+      method: "PUT",
+      url,
+      payload: {
+        revision: saved.json().revision,
+        grants: [
+          full,
+          { ...limited, actions: ["read", "use", "deploy-agent"] },
+        ],
+      },
+    });
+    expect(mixed.statusCode).toBe(400);
+
+    // A limited grant never lets its holder widen itself or anyone else.
+    user = builder;
+    const selfWidened = await app.inject({
+      method: "PUT",
+      url,
+      payload: {
+        revision: saved.json().revision,
+        grants: [full, { ...limited, actions: ["read", "use"] }],
+      },
+    });
+    expect(selfWidened.statusCode).toBe(403);
+    expect(await deploys("use")).toBe(false);
   });
 
   test("can revoke one's last direct grant without a misleading failed save", async ({

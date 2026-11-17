@@ -1,5 +1,5 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
-import { SKILL_TOOL_PREFIX } from "@archestra/shared";
+import { SKILL_TOOL_PREFIX, TOOL_RUN_TOOL_FULL_NAME } from "@archestra/shared";
 import { vi } from "vitest";
 import config from "@/config";
 import { AgentModel, EnvironmentModel, SkillModel } from "@/models";
@@ -300,6 +300,37 @@ describe("skill delegation (agent-designated skills)", () => {
       expect(params.parentDelegationChain).toBe(context.agentId);
     });
   }
+
+  test("dispatches a skill delegation through run_tool", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { target, context } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    mockExecuteA2AMessage.mockResolvedValue({ text: "research complete" });
+
+    const result = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      {
+        tool_name: `${SKILL_TOOL_PREFIX}deep_research`,
+        tool_args: { message: "find prior art for widgets" },
+      },
+      context,
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(result.content).toEqual([
+      { type: "text", text: "research complete" },
+    ]);
+    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
+    expect(mockExecuteA2AMessage.mock.calls[0][0].agentId).toBe(target.id);
+  });
 
   test("refuses dispatch for an unknown skill slug and for automated runs", async ({
     makeOrganization,

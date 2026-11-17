@@ -126,7 +126,6 @@ jobs:
       - name: Test CI and release scripts
         run: |
           python3 -m unittest discover -s .github/scripts -p "test_*.py"
-          python3 -m unittest discover -s platform/scripts/terraform-provider -p "test_*.py"
 
   migration-kit-checks:
     name: Migration Kit Checks

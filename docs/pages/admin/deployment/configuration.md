@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 8
-lastUpdated: 2026-11-15
+lastUpdated: 2026-11-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -905,7 +905,7 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Default: `1800` (30 minutes)
   - Values: `0`, or `120` and above. Lower values are raised to `120`.
   - `0` turns hibernation off for the whole deployment, whatever the organization setting.
-  - Hibernation also needs [`ARCHESTRA_BETA=true`](/docs/admin/deployment/configuration#ARCHESTRA_BETA), an enterprise license, and the organization setting turned on.
+  - Hibernation also needs an enterprise license and the organization setting turned on.
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED`** - Caches MCP server images on every node with a DaemonSet, so hibernated servers wake without pulling from the registry.
   - Default: `true`
@@ -1128,7 +1128,7 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
 - **`ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME`** - RuntimeClass for unprivileged runtime pods, such as `gvisor`, so a run does not share the node's kernel.
   - Default: unset (the cluster's default runtime)
   - Privileged runtime pods ignore it, because gVisor cannot run privileged containers. The cluster needs nodes that serve the RuntimeClass. See [Sandboxed Runtime](/docs/agents/runtime/setup#sandboxed-runtime).
-  - If the RuntimeClass does not exist, unprivileged runs fail at once. To let the platform check, grant its ServiceAccount `get` on this RuntimeClass, or set `archestra.orchestrator.kubernetes.rbac.runtimeClassReader.create: true` in the Helm chart (this creates a ClusterRole, so `helm upgrade` needs cluster-scoped RBAC rights). Without the read, runs start unchecked.
+  - If the RuntimeClass does not exist, unprivileged runs fail at once with a reason that names it. The platform checks with a dry-run pod create in the Agent Runtime namespace, so it needs no extra permissions.
 
 - **`ARCHESTRA_AGENT_RUNTIME_PLATFORM_POD_SELECTOR`** - Label selector for the platform's API pods. Runtime pods may send traffic only to pods that match.
   - Default: `archestra.io/platform-api=true` (set on API pods by the Helm chart)

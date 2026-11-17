@@ -207,7 +207,7 @@ interface DroppedPrepullImage {
 
 /**
  * Whether this deployment offers pre-pulling at all: idle hibernation is
- * offered (beta flag on, not hard-disabled) and the operator has not thrown
+ * offered (not hard-disabled) and the operator has not thrown
  * the pre-pull kill switch. Cheap and synchronous on purpose — it is what
  * keeps a deployment that has opted out from making any Kubernetes call.
  */

@@ -69,6 +69,7 @@ import {
   FOREIGN_RESUME_LIMIT,
   type HibernationRuntimeHost,
   idleHibernationWindowSeconds,
+  isIdleHibernationLicensedAndOffered,
   isIdleHibernationOffered,
   SWEEP_DEADLINE_MS,
   sweepIdleDeployments,
@@ -2056,11 +2057,11 @@ export class McpServerRuntimeManager {
 
     // During a rolling config change, another replica may still be sweeping.
     // Unknown is therefore conservative: the sync accessor starts hydration,
-    // and only a known-false org toggle plus local-off config restores the
-    // zero-cost cache fast path.
+    // and only a known-false org toggle plus local-off config (kill switch
+    // set, or no enterprise licence) restores the zero-cost cache fast path.
     const loaded = this.mcpServerIdToDeploymentMap.get(mcpServerId);
     let hibernationMayExist =
-      isIdleHibernationOffered() ||
+      isIdleHibernationLicensedAndOffered() ||
       Boolean(
         loaded?.hasCredentialBindings &&
           (await loaded.usesRenewableCredentials()),
@@ -2224,7 +2225,7 @@ export class McpServerRuntimeManager {
     if (!deployment) return { ran: true, value: await operation() };
 
     const hibernationMayExist =
-      isIdleHibernationOffered() ||
+      isIdleHibernationLicensedAndOffered() ||
       (deployment.hasCredentialBindings &&
         (await deployment.usesRenewableCredentials())) ||
       OrganizationModel.getMcpIdleHibernationEnabledSync() !== false;

@@ -401,6 +401,12 @@ export function deriveRequestTargetName(body: unknown): string | undefined {
       return typeof params.name === "string" ? params.name : undefined;
     case "resources/read":
       return typeof params.uri === "string" ? params.uri : undefined;
+    // The Tasks extension names the task: a client sends its id as
+    // `Mcp-Name` when it polls, updates or cancels it.
+    case "tasks/get":
+    case "tasks/update":
+    case "tasks/cancel":
+      return typeof params.taskId === "string" ? params.taskId : undefined;
     default:
       return undefined;
   }

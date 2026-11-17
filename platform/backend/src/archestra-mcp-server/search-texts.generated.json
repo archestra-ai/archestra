@@ -60,19 +60,19 @@
     "searchText": "cancel stop abort halt active agent run by run ID, interrupt running agent task, pause execution for later resume continuation"
   },
   "connect_guardrails_repository": {
-    "definitionHash": "1c95de6e457809d0b6cdd3f1f38cf1e3ae795afd53781bf8db7833c2cbf152f0",
-    "searchText": "connect guardrails policy repository, sync OpenAPPA policy file appa.toml from GitHub repo or GitLab project, GitHub App or GitLab token credential, branch tag commit ref, sync interval 15 minutes hourly daily, policy as code, gitops guardrails source, pull requests for policy edits"
+    "definitionHash": "8e8b366aeec96ba29488b258c05f58d3ea4f2d5c7b7a2ed1475245247a809665",
+    "searchText": "connect existing GitHub repository or GitLab project as guardrails policy source, sync OpenAPPA policy file appa.toml path, GitHub App or GitLab access token, branch tag commit ref, sync interval minutes hourly daily, replace current policy, policy as code gitops, pull requests for policy edits"
   },
   "copy_file": {
     "definitionHash": "236268aae8ff8b4fa8c439e5d360d7052a321c6fca8c690a7eb326032d0a94ac",
     "searchText": "copy file between chat and open app, transfer attachment into app file store, export app output to chat files panel, open file in app, save app result, download, project files, rename destination, overwrite existing file"
   },
   "create_agent": {
-    "definitionHash": "218d932af5afc9b6eb1c0e69400c32552edcf6c2a758f1e1a668549e7e1545dc",
+    "definitionHash": "2444476ae628b41ecb4d481d97172b488397d2da75f4ee346d615e3efdfef40a",
     "searchText": "create new AI agent assistant, set name description system prompt, model API key, assign MCP tools, knowledge bases connectors, sub-agent delegation, labels emoji icon, suggested prompts, container runtime Claude Code Codex custom image, network egress policy, sharing permissions grants users teams"
   },
   "create_guardrails_repository": {
-    "definitionHash": "9dee3000d6884b2e37bc9671d4167a0b159493e133fc2a6e8a2ffb6f55266762",
+    "definitionHash": "dbd34e7a29c95419788f69bfc0b5fc896f5d455f2a00f5d9a1e1c53b193d2fb1",
     "searchText": "create private guardrails policy repository from template, seed policies and battery declarations, enable Git sync GitHub App or GitLab token, owner organization group namespace, repo name, sync interval, setup pull request merge request, policy as code version control"
   },
   "create_hook": {
@@ -80,11 +80,11 @@
     "searchText": "create agent lifecycle hook, add Python or shell script, session start, pre tool use, post tool use, block or validate tool calls, inject context at conversation start, tool call guardrail, audit tool results, pip requirements, enable hook"
   },
   "create_knowledge_base": {
-    "definitionHash": "7ec4cb7122a372fbdd30f22d91a7f9ce23809f45054058ae2471a95551d715a7",
+    "definitionHash": "27bde5a2597598ee7efdd3112ed5cd60840f5c4e642e005342e418e02ca67c09",
     "searchText": "create new knowledge base, organize knowledge connectors, name description, initial access grants permissions for users, teams, service accounts, OAuth clients, roles, organization; read use update delete manage permissions; set up RAG document collection sharing"
   },
   "create_knowledge_connector": {
-    "definitionHash": "64e983c4593328729620969f8326819ebbba53674c9348220f7366ced7bc55e8",
+    "definitionHash": "cacdb0b4b581cdf39d7782513f2aaa5d1c8d3e8c9a95d39c154e6ca4b22f42cb",
     "searchText": "create knowledge connector, add data source integration, ingest sync documents from Jira, Confluence, Google Drive, provider configuration, initial access grants for users, teams, roles, service accounts, organization, mirror source document permissions, RAG knowledge base setup"
   },
   "create_limit": {
@@ -92,15 +92,15 @@
     "searchText": "create usage limit, LLM spend budget cap, cost limit, rate limit requests per minute, token quota, MCP server tool call limit, per organization team user agent virtual key environment, model-specific, hourly daily weekly monthly reset, hard block or soft alert"
   },
   "create_mcp_gateway": {
-    "definitionHash": "b2f45393d61561b98483cae1790ae95521a269d0447207f388e50701bd70beaa",
+    "definitionHash": "541d201cdbb3f57f9444e3f49e256e35eaae37fb3f4d3e84963fbab4b440f6d7",
     "searchText": "create new MCP gateway, set up Model Context Protocol server endpoint, assign knowledge bases and connectors, key-value labels, subagent delegation, tool exposure mode, search and run tools, initial access grants permissions for users, teams, roles, service accounts, OAuth clients, organization"
   },
   "create_mcp_server": {
-    "definitionHash": "95839ca237aca8f213c29dd2cbe759f2c55be380767fd209772a25ae78c9fcb7",
-    "searchText": "create register add MCP server private registry catalog, local Kubernetes pod or remote HTTP URL, command arguments environment variables secrets, Docker image, OAuth authentication headers, streamable-http stdio transport, share grants users teams roles permissions, labels, deploy custom tool server"
+    "definitionHash": "3ea672ed3cd7a9534a3703bb05aa81e0ef8130605ce3ad8dd408649708f5fed0",
+    "searchText": "create register add MCP server private registry catalog, local Kubernetes pod or remote HTTP URL, command arguments environment variables secrets, Docker image, image pull policy, OAuth authentication headers, streamable-http stdio transport, share grants users teams roles permissions, labels, deploy custom tool server"
   },
   "create_plugin": {
-    "definitionHash": "faf72bfc9d8f1fe17bbb423922169cb8984fa006e8dc5f794c14ad2640ccd710",
+    "definitionHash": "fac38a7454b1ea78d97b23cf60fd0bd453a133a7cb5dbda73eca1f8957562a22",
     "searchText": "create plugin from file set, upload plugin files path content, publish coding agent extension for Claude Code, Claude Desktop, Codex, Copilot CLI, Cursor, hooks configuration, POSIX Windows platforms, share access grants users teams roles organization permissions, executable file mode, base64"
   },
   "create_project_from_conversation": {
@@ -116,8 +116,8 @@
     "searchText": "create scheduled task, recurring agent run, cron job schedule, timezone, prompt message template, automate daily weekly report, remind agent periodically, enable schedule, project agent automation trigger, timer"
   },
   "create_skill": {
-    "definitionHash": "61e5ac629b264a68f7853ccddf914aecd6ee15f1c0fb154afe92efaccbef40b9",
-    "searchText": "create new agent skill from SKILL.md manifest, YAML frontmatter name description, markdown instructions, bundled files references scripts assets, personal skill, chat slash command, initial permission grants for users teams roles organization, save custom reusable prompt workflow"
+    "definitionHash": "cd37aa7a01d30bf1c9afa6065bb1cae33f8763d21bdaf3442a3cce63a84de939",
+    "searchText": "create new agent skill from SKILL.md manifest, YAML frontmatter name description, markdown instructions, Handlebars templated body, allowed tools, bundled files references scripts assets, personal skill, chat slash command, initial permission grants for users teams roles organization, save custom reusable prompt workflow"
   },
   "create_team": {
     "definitionHash": "9986c34238dba642589e0b0c5f42f9bd2765f63fa3741f9c6214e1e41efbd86c",
@@ -180,7 +180,7 @@
     "searchText": "save sandbox file to persistent conversation files, export container output, persist generated file, copy file from sandbox disk, make file downloadable for user, attachments, overwrite existing file, MIME type, binary or text output"
   },
   "edit_agent": {
-    "definitionHash": "f5911773e9611bcfdbcf8cfa8288490f4f0498b850128a5dd1d7682ddaf9b262",
+    "definitionHash": "5cb96071a3a911c5c200e20a67f72373a8d86d97ee7dab799560698285389184",
     "searchText": "update modify configure existing AI agent settings, rename, change system prompt, description, icon, labels, assign tools, add subagent delegation, knowledge bases, connectors, suggested prompts, LLM model and API key, container runtime Claude Code Codex image, outbound network egress policy allowed domains"
   },
   "edit_app": {
@@ -200,7 +200,7 @@
     "searchText": "edit update MCP server catalog entry metadata, rename display name, change description, emoji icon, documentation URL, source repository link, version, setup usage instructions, key-value labels tags categorize organize server"
   },
   "edit_mcp_gateway": {
-    "definitionHash": "d8b5fb1fe65b7e01aebf56a2856d2772eb02aaad9906b584dec60aabef1ed7d9",
+    "definitionHash": "fc278ce1b6a5397140259bd85d6f2c28fde3eb3a3c84b136df83e49aa3bb16c5",
     "searchText": "edit update MCP gateway settings rename description emoji icon labels, tool exposure mode full or search and run only, dynamic tool access, subagent delegation, assign knowledge bases connectors, configure gateway"
   },
   "edit_plugin": {
@@ -248,8 +248,16 @@
     "searchText": "get read organization guardrails policy toml revision, included batteries, MCP server aliases, effective composed enforcement status, credential bindings, enforcement active check, Git sync setup, deployment hint, recover lost publish response, review policy before editing"
   },
   "get_guardrails_policy_change_status": {
-    "definitionHash": "60f06cc510521a31f71f7dbbea32ce7ac5ac965408faf8e1d853448dc6cb3a19",
-    "searchText": "check guardrails policy change status, pull request review state, PR number, merged approved pending, Git sync processed, policy deployment progress, track policy update approval"
+    "definitionHash": "2df97f11069b766692408b57edd1fba5840d4e06200213992319c3d8800b5df9",
+    "searchText": "check guardrails policy change status, pull request review state, PR number, merged approved pending, Git sync applied, queue sync, policy deployment progress, track policy update approval"
+  },
+  "get_guardrails_server_rules": {
+    "definitionHash": "ab29784127e077516838501b9ac47d30276e365951d36c1cdfb1080b8b2cb200",
+    "searchText": "read one MCP server guardrails rules file, self-service policy repository folder, per-server toml, starter first version naming every tool, appa.toml include, server tools, existing rules from root and included files, organization authorities sanitizers tags, shared servers, edit permission, change one server's rules"
+  },
+  "get_guardrails_server_rules_change_status": {
+    "definitionHash": "62ee9a1653a3e86fabeee77e5ac61f1007d7c2074506e90d3f6a0332aee54843",
+    "searchText": "track MCP server guardrails rules pull request status, phase check pending failed passed, merge pending refused, merged applied closed, auto merge progress, wait for phase change, long poll, Git sync applied, next step instruction"
   },
   "get_knowledge_base": {
     "definitionHash": "ab5cf0494a339772a4610aed3c6767151e0edb3f3d6e33b3aff4a97c97a5edb8",
@@ -304,7 +312,7 @@
     "searchText": "read OpenAPPA policy test files, .appa validation tests, guardrails policy tests version, configured directory, Git commit, git sync repository, review policy tests before proposing changes, list validation test suite"
   },
   "get_openappa_yell": {
-    "definitionHash": "cffd0d80ab359b2f8de0e422655e6233349b24b37b59f2de872ebea27123c854",
+    "definitionHash": "0d6ea43017b0650b066c4539e21a3acd13f8bf9e43a4da58e486f6f21898272b",
     "searchText": "get OpenAPPA yell report by id, read saved report details, view diagnostic message, originating user or service account, organization reports, inspect agent complaint feedback issue, lookup report author"
   },
   "get_plugin": {
@@ -392,7 +400,7 @@
     "searchText": "list external consults per session, OpenAPPA helper call log, debug failed annotator, refused call reason, outcome status filter timeout unreachable non_success, HTTP status, diagnostics raw response, role authority sanitizer context provider audience source, external name, pagination cursor, troubleshoot policy denial"
   },
   "list_openappa_yells": {
-    "definitionHash": "a729cc4e90a142adf14f2fcd1623cd028ad9c26395be4248f9388abcaf26c7b8",
+    "definitionHash": "2d6825c33ba76db55405f7197e05735a40476b706a22be19b02ce816b53eb4ee",
     "searchText": "list OpenAPPA yells alerts agent diagnostic reports, approval waived, block waived, break the glass policy override, filter resolved unresolved status, chat session, message text search, paginate cursor, review flagged tool calls, audit agent issues"
   },
   "list_peer_messages": {
@@ -420,8 +428,8 @@
     "searchText": "list scheduled agent triggers, cron jobs, recurring automations, schedule timezone, enabled disabled status, last fired time, filter by project, agent, all organization users, paginate, review or audit agent schedules, find schedule to edit"
   },
   "list_skills": {
-    "definitionHash": "f7b9ee008d3688be4dd0d60a25fdaf9ea5a7daa4dc86cd6b8b9026209eaec2b2",
-    "searchText": "list available agent skills organization, skill names descriptions catalog, discover capabilities, browse skills before loading instructions, find which skill to use"
+    "definitionHash": "50cdd55b779f2458c4cb53281effb3f0d46000cd6653c6d78cb385bcc6688340",
+    "searchText": "list available agent skills organization, skill names descriptions catalog, search skills by task or keyword, discover capabilities, browse skills before loading instructions, find which skill to use"
   },
   "list_team_external_groups": {
     "definitionHash": "d528bfb7a241557fca1f2046e85243f7f50ca6deb061bc2cba982f640c46aebb",
@@ -440,7 +448,7 @@
     "searchText": "run LLM text completion from prompt, optional system instruction, JSON mode structured output, generate text with language model, ask AI model, summarize, rewrite, classify, chat completion, prompt response generation"
   },
   "load_skill": {
-    "definitionHash": "3dc43c8a1cb19b3291f970f8a030b13d74b37da95e06808ccbdbb4eeab839389",
+    "definitionHash": "9241b1a2f676cfb05038e5c3325468759832a26ec0bedfac7b299bc213e8de24",
     "searchText": "load agent skill by name, read SKILL.md instructions, list bundled files, read skill resource file by path, get reusable instruction set, playbook, capability guide before starting task, open skill reference document"
   },
   "patch_agent_skill_policy": {
@@ -463,9 +471,17 @@
     "definitionHash": "c58978983ccc3019b6431b04fb1fcaf0fc27a7bcbed2cd9bcf83b21915481d42",
     "searchText": "preview guardrails policy change, dry run validate proposed edits to organization policy TOML, show unified diff and changed line counts, replay saved validations pass fail, check rules before publishing, text replacement edits, full rewrite, expected revision"
   },
+  "preview_guardrails_server_rules_change": {
+    "definitionHash": "9c7a65198ad482003306a6d5bd62994f4faa7c23bc5fd0de317bd99e9169a6b3",
+    "searchText": "preview proposed MCP server guardrails rules file, diff, validate whole organization policy, dry run check, appa.toml include change, tool prefix rules, annotators, attention marks, tags, tool output sanitizer confined results, auto merge, expected commit, review before proposing"
+  },
   "preview_guardrails_validation_change": {
     "definitionHash": "4739009787aaf4bc976c591f3f084c7f515629ae2669bda6752c8b1eb636b3aa",
     "searchText": "preview guardrails validation test suite change, dry run, check syntax of .appa test files, replay test cases against saved policy with live annotators, pass/fail results, add replace delete validation files, optimistic concurrency revision version"
+  },
+  "propose_guardrails_server_rules_change": {
+    "definitionHash": "c22607b64a0c1fbb26e3f4a79b50a0f8502facef3bc0df8f7c244d66743e4c12",
+    "searchText": "propose MCP server guardrails rules change, open pull request on policy repository, update per-server rules file, add self-service folder include to appa.toml, change summary for reviewers, Git sync after merge, pull request link, edit tool policy for one server"
   },
   "publish_app": {
     "definitionHash": "510e7d578250669b1f4562fde1900077ae75ed43db61fbfe5d07456bc60e5df1",
@@ -552,7 +568,7 @@
     "searchText": "save file, write inline text or base64 content to persistent conversation files, create note or summary document, store snippet, overwrite replace existing file, filename, MIME type, save to project files, upload binary attachment"
   },
   "scaffold_app": {
-    "definitionHash": "222b2e1edf4fe17ae834efed6c406e3d739b1f38d5b5d185e12660b0c8cece42",
+    "definitionHash": "05c4f974ed0f8b99c48de4449de28a07215f91598aaad1b8d462b6c309c51aa5",
     "searchText": "create new interactive app, build custom UI, dashboard, form, tracker, game, starter template HTML, scaffold web app, assign MCP tools, sharing permissions grants users teams roles, iframe camera microphone geolocation clipboard, emoji icon, labels, link to project"
   },
   "search_files": {
@@ -580,8 +596,8 @@
     "searchText": "set app tools, replace assigned upstream MCP tools for existing app, add remove change app tool assignments, clear all tools, update app tool list by app id, configure app permissions integrations after scaffold"
   },
   "start_agent_run": {
-    "definitionHash": "31392a1f8f944f376ee30ce7340ca3b6c23c32b7c6400b625919042e52fcf840",
-    "searchText": "start background agent run, launch remote agent task, hand off work, delegate coding task to runtime agent, repository handoff with patch and base commit, attachments, credential grants, compute tier CPU memory limits, timeout, max cost budget, returns run id and URL"
+    "definitionHash": "cf56bfdb30d0769d620e2ba1f69c1f58b0a229966d490ca06bb76b4e5e582117",
+    "searchText": "start background agent run, launch remote agent task, hand off work, delegate coding task to runtime agent, load balanced failover, repository handoff with patch and base commit, attachments, credential grants, compute tier CPU memory limits, timeout, max cost budget, returns run id and URL"
   },
   "steer_agent_run": {
     "definitionHash": "c155b183b64e962df48349b381683bf473eb98a759f34345ed6e57fb1ddd285a",
@@ -596,7 +612,7 @@
     "searchText": "write todo list, task tracking checklist, plan and break down complex tasks into steps, update task status pending in progress completed, mark tasks done, track progress visibility, conversation task planner"
   },
   "transfer_credential": {
-    "definitionHash": "7451ae77327d7a4f95caaf0c9f9c211ffad06550893aa6dab17b0ddacdc3890c",
+    "definitionHash": "6d70e7f875c4bb8b5dcd798c8666cfd02b11884023b77be5d3fcaf9fbb3612f9",
     "searchText": "transfer credential to remote agent, share secret API key environment variable, CLI authentication handoff, declare credential get paste link, secure secret entry, ephemeral one-time credential grant TTL, provide token to subagent run, AWS key"
   },
   "transfer_workspace_file": {

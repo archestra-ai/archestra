@@ -1993,6 +1993,39 @@ describe("ModelModel", () => {
 });
 
 describe("published context pricing", () => {
+  test("keeps the complete published schedule when a conflicting synced tier exists", async () => {
+    const row = await ModelModel.create({
+      provider: "github-copilot",
+      modelId: "gpt-6.1-sol",
+      externalId: "github-copilot/gpt-6.1-sol",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      promptPricePerToken: "0",
+      completionPricePerToken: "0",
+      syncedLongContextPricing: {
+        threshold: 100000,
+        pricePerMillionInput: "99",
+        pricePerMillionOutput: "99",
+        pricePerMillionCacheRead: "99",
+        pricePerMillionCacheWrite: "99",
+      },
+    });
+    expect(ModelModel.getLongContextThreshold(row)).toBe(272000);
+    for (const tokens of [100001, 272000, 272001]) {
+      const price = ModelModel.getEffectivePricing(
+        row,
+        undefined,
+        undefined,
+        tokens,
+      );
+      expect(Number(price.pricePerMillionInput)).toBe(tokens > 272000 ? 4 : 2);
+      expect(Number(price.pricePerMillionOutput)).toBe(
+        tokens > 272000 ? 15 : 10,
+      );
+      expect(price.source).toBe("provider");
+    }
+  });
+
   test("uses coherent prices for stale rows and missing rows at strict boundaries", async () => {
     const row = await ModelModel.create({
       provider: "github-copilot",

@@ -988,14 +988,22 @@ export function resolveModelCapabilities(params: {
         crossProviderPrices?.cacheReadPricePerToken ??
         publishedPrices?.cacheReadPricePerToken ??
         null,
-      // A fetcher's own tariff must not gain an unrelated registry context tier.
+      // Keep the tier with its tariff. Metadata-only registry entries must not
+      // hide the fallback tier; an explicit same-provider price (including zero)
+      // without a tier must not borrow a different provider's long rates.
       syncedLongContextPricing:
         fetched?.promptPricePerToken != null ||
-        fetched?.completionPricePerToken != null
+        fetched?.completionPricePerToken != null ||
+        fetched?.cacheReadPricePerToken != null ||
+        fetched?.cacheWritePricePerToken != null
           ? null
-          : capabilities?.syncedLongContextPricing !== undefined
-            ? capabilities.syncedLongContextPricing
-            : (crossProviderPrices?.syncedLongContextPricing ?? null),
+          : capabilities?.promptPricePerToken != null ||
+              capabilities?.completionPricePerToken != null
+            ? (capabilities.syncedLongContextPricing ?? null)
+            : capabilities?.cacheReadPricePerToken != null ||
+                capabilities?.cacheWritePricePerToken != null
+              ? null
+              : (crossProviderPrices?.syncedLongContextPricing ?? null),
       cacheWritePricePerToken:
         fetched?.cacheWritePricePerToken ??
         capabilities?.cacheWritePricePerToken ??

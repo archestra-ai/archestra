@@ -480,11 +480,22 @@ function pricesFromEntries(
   // vendor model. Only an exact full-id match overrides the existing fallback;
   // omitted meters can still use the canonical cache prices.
   const exact = modelsDevCostToPerToken(exactBedrockEntry.cost);
+  const exactTier = modelsDevLongContextPricing(exactBedrockEntry.cost);
+  // An empty cost object supplies no tariff: all flat meters below fall through,
+  // so its tier must follow that same source rather than hiding the fallback.
+  const hasExactPrimaryPrice =
+    exact.promptPricePerToken !== null ||
+    exact.completionPricePerToken !== null;
+  const hasExactCachePrice =
+    exact.cacheReadPricePerToken !== null ||
+    exact.cacheWritePricePerToken !== null;
   return {
     // Never mix a canonical vendor tier with an exact reseller flat tariff.
-    syncedLongContextPricing: modelsDevLongContextPricing(
-      exactBedrockEntry.cost,
-    ),
+    syncedLongContextPricing: hasExactPrimaryPrice
+      ? exactTier
+      : hasExactCachePrice
+        ? null
+        : (fallback?.syncedLongContextPricing ?? null),
     promptPricePerToken:
       exact.promptPricePerToken ?? fallback?.promptPricePerToken ?? null,
     completionPricePerToken:

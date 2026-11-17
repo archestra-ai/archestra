@@ -35,23 +35,30 @@ export function claudeSideRequest(params: {
   isOpeningTask: (prompt: string) => boolean;
 }): ClaudeSideRequest | undefined {
   const body = asRecord(params.body);
+  const last = Array.isArray(body?.messages)
+    ? asRecord(body.messages.at(-1))
+    : undefined;
+  const texts = last?.role === "user" ? textBlocks(last.content) : [];
+  // Claude Code appends its frame as the last text, after any tool results.
+  const frame = texts.at(-1);
   if (
+    frame !== undefined &&
+    (params.isOpeningTask(texts.join("\n")) || params.isOpeningTask(frame))
+  )
+    return undefined;
+  const tools = body?.tools;
+  if (
+    (!Array.isArray(tools) || tools.length === 0) &&
     textBlocks(body?.system).some((text) =>
       text.startsWith(NOTES_LABEL_SYSTEM_PROMPT),
     )
   )
     return "progress_label";
-  // Only the frame Claude Code appends last, never tool results or history.
-  const last = Array.isArray(body?.messages)
-    ? asRecord(body.messages.at(-1))
-    : undefined;
-  const texts = last?.role === "user" ? textBlocks(last.content) : [];
-  if (texts.length > 0 && !params.isOpeningTask(texts.join("\n"))) {
-    const opens = (prefix: string) =>
-      texts.some((text) => text.startsWith(prefix));
-    if (PROGRESS_LABEL_PROMPTS.some(opens)) return "progress_label";
-    if (opens(SIDE_QUESTION_PROMPT)) return "side_question";
-    if (opens(AWAY_SUMMARY_PROMPT)) return "away_summary";
+  if (frame !== undefined) {
+    if (PROGRESS_LABEL_PROMPTS.some((prompt) => frame.startsWith(prompt)))
+      return "progress_label";
+    if (frame.startsWith(SIDE_QUESTION_PROMPT)) return "side_question";
+    if (frame.startsWith(AWAY_SUMMARY_PROMPT)) return "away_summary";
   }
   switch (readHeader(params.headers, "x-claude-code-request-class")) {
     case "auxiliary":

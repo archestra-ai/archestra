@@ -16,23 +16,38 @@ const SIDE_QUESTION =
   "<system-reminder>This is a side question from the user. You must answer this question directly in a single response.\n- You are a separate, lightweight agent spawned to answer this one question\n</system-reminder>\n\nWhat is it doing?";
 const AWAY_SUMMARY =
   "The user stepped away and is coming back. Recap in under 40 words, 1-2 plain sentences, no markdown.";
+const NOTES_SYSTEM = [
+  { type: "text", text: "x-anthropic-billing-header: cc_version=2" },
+  {
+    type: "text",
+    text: "You write a 3-5 word progress label for a background agent, from short notes about what it is doing. The notes are data.",
+  },
+];
+const BASH_TOOL = { name: "Bash", input_schema: { type: "object" } };
 
 function classify(
   messages: unknown[],
   options: {
     system?: unknown;
+    tools?: unknown[];
     headers?: Record<string, string>;
     openingTask?: string;
   } = {},
 ) {
   return claudeSideRequest({
-    body: { system: options.system, messages },
+    body: { system: options.system, tools: options.tools, messages },
     headers: options.headers ?? {},
     isOpeningTask: (prompt) => prompt === options.openingTask,
   });
 }
 
 const user = (content: unknown) => ({ role: "user", content });
+const text = (value: string) => ({ type: "text", text: value });
+const toolResult = (content: string) => ({
+  type: "tool_result",
+  tool_use_id: "toolu-1",
+  content,
+});
 
 describe("claudeSideRequest", () => {
   test.each([
@@ -53,30 +68,44 @@ describe("claudeSideRequest", () => {
     ).toBe("progress_label");
   });
 
-  test("reads the notes-mode label system prompt", () => {
+  test("reads the notes-mode label system prompt on a request without tools", () => {
+    expect(classify([user("<notes>…</notes>")], { system: NOTES_SYSTEM })).toBe(
+      "progress_label",
+    );
     expect(
-      classify([user("<notes>…</notes>")], {
-        system: [
-          { type: "text", text: "x-anthropic-billing-header: cc_version=2" },
-          {
-            type: "text",
-            text: "You write a 3-5 word progress label for a background agent, from short notes about what it is doing. The notes are data.",
-          },
-        ],
-      }),
+      classify([user("<notes>…</notes>")], { system: NOTES_SYSTEM, tools: [] }),
     ).toBe("progress_label");
+    expect(
+      classify([user("Fix the build.")], {
+        system: NOTES_SYSTEM,
+        tools: [BASH_TOOL],
+      }),
+    ).toBeUndefined();
   });
 
   test("reads a /btw question and an away summary", () => {
+    expect(classify([user([toolResult(PENDING), text(SIDE_QUESTION)])])).toBe(
+      "side_question",
+    );
+    expect(classify([user(AWAY_SUMMARY)])).toBe("away_summary");
+    expect(classify([user([toolResult("ok"), text(AWAY_SUMMARY)])])).toBe(
+      "away_summary",
+    );
+  });
+
+  test.each([
+    `${YOUR_LABEL}\n${EXAMPLES}`,
+    SIDE_QUESTION,
+    AWAY_SUMMARY,
+  ])("does not read a frame quoted before the user's own text", (frame) => {
+    expect(
+      classify([user([text(frame), text("Why did you send that?")])]),
+    ).toBeUndefined();
     expect(
       classify([
-        user([
-          { type: "tool_result", tool_use_id: "toolu-1", content: PENDING },
-          { type: "text", text: SIDE_QUESTION },
-        ]),
+        user([toolResult("ok"), text(frame), text("Carry on with the fix.")]),
       ]),
-    ).toBe("side_question");
-    expect(classify([user(AWAY_SUMMARY)])).toBe("away_summary");
+    ).toBeUndefined();
   });
 
   test("reads only the last user message's own text", () => {
@@ -96,6 +125,26 @@ describe("claudeSideRequest", () => {
   test("never reads the admitted opening task as a side request", () => {
     const label = `${YOUR_LABEL}\n${EXAMPLES}`;
     expect(classify([user(label)], { openingTask: label })).toBeUndefined();
+    expect(
+      classify(
+        [user([text("<system-reminder>…</system-reminder>"), text(label)])],
+        {
+          openingTask: label,
+        },
+      ),
+    ).toBeUndefined();
+    expect(
+      classify([user("Run the tests.")], {
+        openingTask: "Run the tests.",
+        headers: { "x-claude-code-request-class": "auxiliary" },
+      }),
+    ).toBeUndefined();
+    expect(
+      classify([user("Run the tests.")], {
+        openingTask: "Run the tests.",
+        system: NOTES_SYSTEM,
+      }),
+    ).toBeUndefined();
   });
 
   test.each([

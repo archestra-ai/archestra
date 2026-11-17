@@ -447,21 +447,6 @@ function extractProviderIdFromSsoUrl(actionUrl: string): string | null {
   }
 }
 
-export function isAuthInstructionText(text: string): boolean {
-  if (resolveAssistantTextAuthState(text)) {
-    return true;
-  }
-
-  return (
-    /(authentication|credentials|credential assignment|personal connection)/i.test(
-      text,
-    ) &&
-    /(install=|reauth=|re-authenticate|set up your credentials|visiting this url|visit this url|agent owner|admin)/i.test(
-      text,
-    )
-  );
-}
-
 const NO_DEVICE_MARKERS = ["No device is linked", "No device is connected"];
 
 const AUTH_REQUIRED_MARKERS = [

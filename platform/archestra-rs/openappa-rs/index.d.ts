@@ -57,6 +57,12 @@ export interface BatteryTargetView {
  */
 export declare function canonicalOpenappaTool(name: string): string | null
 
+/**
+ * The verdict a host-composed policy's contracts alone give one call at a label:
+ * deterministic in the document and the call, with no trajectory, remedy or consult.
+ */
+export declare function checkOpenappaContract(policy: string, call: ContractCallInput): Promise<ContractVerdict>
+
 export interface ChildAddressRecord {
   /** Fully scoped session id of the parent that addressed the child. */
   parentSessionId: string
@@ -150,11 +156,69 @@ export interface ContentEncryption {
   annotatorContext?: string
 }
 
+export interface ContractCallInput {
+  /** The canonical tool, as `canonicalOpenappaTool` spells it. */
+  tool: string
+  /** The call's arguments as JSON text. */
+  arguments: string
+  label: ContractLabel
+  /** The effects the trajectory had committed; absent is none. */
+  effects?: Array<string>
+}
+
+/** One requirement a call missed. */
+export type ContractGap =
+  | { kind: 'trust_floor'; required: string; actual: string }
+  | { kind: 'includes'; required: Array<string> }
+  | { kind: 'prior'; effect: string }
+  | { kind: 'no_prior'; effect: string }
+  | { kind: 'attention'; mark: string }
+
+/**
+ * A label as decisions record it: the trust rank's name, and the audience as union
+ * clauses in the policy's audience-list grammar. No clause is public.
+ */
+export interface ContractLabel {
+  trust: string
+  audience: Array<Array<string>>
+}
+
+export interface ContractNarrowing {
+  from: ContractLabel
+  to: ContractLabel
+}
+
+export type ContractVerdict =
+  | { kind: 'allow' }
+  | { kind: 'deny'; gaps: Array<ContractGap> }
+  | { kind: 'needs_annotator'; annotator: string }
+  | { kind: 'needs_membership'; audiences: Array<string> }
+  | { kind: 'refused'; detail: string }
+
 export interface CredentialDeclaration {
   variable: string
   key: string
   line: number
 }
+
+/**
+ * The structured fields of a recorded decision. Each is absent where the decision does
+ * not record it, as every decision recorded before these fields existed: absent is
+ * unknown, never "no gaps".
+ */
+export interface DecisionDetail {
+  label?: ContractLabel
+  gaps?: Array<ContractGap>
+  narrowing?: ContractNarrowing
+}
+
+/**
+ * Compares two host-composed policy documents' tool contracts: each tool whose contracts
+ * differ, and which way the change moves its calls. A direction other than `unknown`
+ * holds by construction; argument predicates, Annotator routing, bindings and anything
+ * else not modelled are `unknown`. A document that does not compile is refused.
+ */
+export declare function diffOpenappaPolicyContracts(before: string, after: string): Promise<Array<ToolPolicyContractDiff>>
 
 export declare function dispatchHook(input: string, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<string>
 
@@ -315,6 +379,17 @@ export interface OpenappaStatus {
  */
 export declare function parseOpenappaDeclarations(content: string): Promise<PolicyDeclarations>
 
+/**
+ * One difference. Only a `trust_floor`, `includes`, `prior`, `no_prior`, `attention` or
+ * `contract` change ever moves in a direction other than `unknown`.
+ */
+export interface PolicyContractChange {
+  kind: 'contract' | 'trust_floor' | 'includes' | 'prior' | 'no_prior' | 'attention' | 'delta' | 'forwards' | 'emits' | 'parameters' | 'tags' | 'description' | 'annotator' | 'argument_predicates' | 'selection' | 'provider_run' | 'trust_chain' | 'authorities' | 'sanitizers' | 'audience' | 'deployment' | 'bindings'
+  direction: 'tighten' | 'loosen' | 'mixed' | 'unknown'
+  before?: string
+  after?: string
+}
+
 export interface PolicyDeclarations {
   include: Array<IncludeDeclaration>
   serverAliases: Array<ServerAliasDeclaration>
@@ -351,6 +426,9 @@ export interface PolicyEditInput {
   /** Absent removes the variable's binding. */
   key?: string
 }
+
+/** Reads the structured fields of a decision as `dispatchHook` returned it. */
+export declare function readOpenappaDecisionDetail(decision: string): DecisionDetail
 
 export declare function readPeerMessage(input: string, policy: DispatchPolicy): Promise<string>
 
@@ -393,6 +471,18 @@ export interface ServerAliasDeclaration {
 export interface TokenEnvReader {
   variable: string
   reader: string
+}
+
+/**
+ * One tool name whose contracts differ. The `*` entry holds the wildcard contract and
+ * every policy-wide difference; an `unknown` there leaves every tool's direction unknown.
+ */
+export interface ToolPolicyContractDiff {
+  tool: string
+  direction: 'tighten' | 'loosen' | 'mixed' | 'unknown'
+  changes: Array<PolicyContractChange>
+  annotatorChanged: boolean
+  argumentPredicates: boolean
 }
 
 /**

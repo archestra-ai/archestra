@@ -9,6 +9,7 @@ pub mod admin_api;
 mod batteries;
 pub mod child_returns;
 mod consults;
+pub mod contracts;
 mod declarations;
 mod deployments;
 mod errors;
@@ -68,8 +69,8 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnKind, SpawnRef,
-    ToolOutcome, TrajectoryId,
+    Actor, HookDecision, HookEvent, OpenCalls, OutcomeBody, ProposedCall, Ruling, SpawnKind,
+    SpawnRef, ToolOutcome, TrajectoryId,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -962,6 +963,7 @@ impl State {
                 },
                 HookEventKind::TurnEnd => HookEvent::TurnEnd {
                     actor: actor.clone(),
+                    open_calls: OpenCalls::Abandon,
                 },
                 HookEventKind::ChildTurnEnd => HookEvent::ChildTurnEnd {
                     root: actor.root.clone(),
@@ -969,6 +971,7 @@ impl State {
                         .child
                         .clone()
                         .ok_or_else(|| invalid_input("not a child session"))?,
+                    open_calls: OpenCalls::Abandon,
                 },
                 HookEventKind::ChildEnd => HookEvent::ChildEnd {
                     root: actor.root.clone(),
@@ -977,6 +980,7 @@ impl State {
                         .clone()
                         .ok_or_else(|| invalid_input("not a child session"))?,
                     value: input.output.clone(),
+                    open_calls: OpenCalls::Abandon,
                 },
                 HookEventKind::ChildReturn => HookEvent::ChildReturn {
                     root: actor.root.clone(),
@@ -1004,7 +1008,7 @@ impl State {
                 presentation_options(&input),
             )
             .await;
-            wire(&outcome.decision)?
+            session::labelled_wire(&outcome.decision, outcome.label)?
         };
         finish_operation(
             &self.store,

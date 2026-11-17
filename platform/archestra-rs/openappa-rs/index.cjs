@@ -25,5 +25,8 @@ module.exports.parseOpenappaDeclarations = wrapAsync(binding, "parseOpenappaDecl
 module.exports.editOpenappaPolicy = wrapAsync(binding, "editOpenappaPolicy");
 module.exports.listBundledOpenappaBatteries = wrapAsync(binding, "listBundledOpenappaBatteries");
 module.exports.inspectOpenappaBattery = wrapAsync(binding, "inspectOpenappaBattery");
+module.exports.diffOpenappaPolicyContracts = wrapAsync(binding, "diffOpenappaPolicyContracts");
+module.exports.checkOpenappaContract = wrapAsync(binding, "checkOpenappaContract");
+module.exports.readOpenappaDecisionDetail = wrapSync(binding, "readOpenappaDecisionDetail");
 
 module.exports.collectOpenappaMetrics = wrapSync(binding, "collectOpenappaMetrics");

@@ -9,7 +9,7 @@ use crate::{
 };
 use appa_eventlog::{OperationKey, ProcessedResultKey, ReceiptBinding, SessionScope};
 use appa_runtime::api::EmbeddedPresentationOptions;
-use appa_runtime_api::{HookDecision, TrajectoryId, WireDecision};
+use appa_runtime_api::{DecisionLabel, HookDecision, TrajectoryId, WireDecision};
 use serde_json::Value;
 
 /// The engine's reason for holding a child return while one of the child's
@@ -32,8 +32,16 @@ pub(crate) fn mark_busy_hold(mut decision: Value) -> Value {
 }
 
 pub(crate) fn wire(decision: &HookDecision) -> napi::Result<Value> {
+    labelled_wire(decision, None)
+}
+
+/// [`wire`], with the label the runtime evaluated the call at.
+pub(crate) fn labelled_wire(
+    decision: &HookDecision,
+    label: Option<DecisionLabel>,
+) -> napi::Result<Value> {
     require_decision(decision)?;
-    serde_json::to_value(WireDecision::of(decision)).map_err(invariant)
+    serde_json::to_value(WireDecision::of(decision).labelled(label)).map_err(invariant)
 }
 
 pub(crate) fn require_decision(decision: &HookDecision) -> napi::Result<()> {

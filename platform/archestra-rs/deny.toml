@@ -21,6 +21,11 @@ ignore = [
   # ledger is PostgreSQL. Remove this entry once Archestra pins an OpenAPPA
   # release with rusqlite 0.41.
   { id = "RUSTSEC-2026-0459", reason = "fixed libsqlite3-sys needs rusqlite 0.41, which no OpenAPPA release has yet (on OpenAPPA main since #859); the OpenAPPA ledger here is PostgreSQL" },
+  # chrono is marked unmaintained, with no fixed release. It reaches us through
+  # appa and openappa_rs, and through rmcp and schemars under appa, so dropping
+  # it needs those crates to move to jiff or time first. Remove this entry
+  # once `cargo tree -i chrono` is empty.
+  { id = "RUSTSEC-2026-0543", reason = "chrono is unmaintained with no fixed release; rmcp and schemars still depend on it" },
 ]
 
 [bans]

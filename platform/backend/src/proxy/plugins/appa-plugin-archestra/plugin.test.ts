@@ -1086,7 +1086,9 @@ describe("asking through the client's own question tool", () => {
           quoted: { content: quoted, outputSource: "tool" },
         },
       });
-    const endTurn = vi.spyOn(appaService, "endTurn").mockResolvedValue();
+    const endTurn = vi
+      .spyOn(appaService, "endTurn")
+      .mockResolvedValue({ decision: "taken" });
     const request = {
       input: [],
       tool_choice: "auto",
@@ -11688,7 +11690,9 @@ describe("AppaPluginArchestra", () => {
       content: "SUMMARY(24 characters): safe",
       crossed: true,
     });
-    const endTurn = vi.spyOn(appaService, "endTurn").mockResolvedValue();
+    const endTurn = vi
+      .spyOn(appaService, "endTurn")
+      .mockResolvedValue({ decision: "taken" });
     const quoted =
       '[appa] Blocked: execute_remedy_plan(offer_id: "foreign-quote", plan: "quoted plan")';
     const processResults = vi
@@ -11816,7 +11820,9 @@ describe("AppaPluginArchestra", () => {
       decision: "release",
       crossed: true,
     });
-    const endTurn = vi.spyOn(appaService, "endTurn").mockResolvedValue();
+    const endTurn = vi
+      .spyOn(appaService, "endTurn")
+      .mockResolvedValue({ decision: "taken" });
     const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
     const organization = await makeOrganization();
     const context = requestContext({

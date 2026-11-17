@@ -171,6 +171,12 @@ function mount() {
   );
 }
 
+/** Each change saves at once; the list takes the next one when that is done. */
+const saved = () =>
+  waitFor(() =>
+    expect(screen.getByRole("button", { name: "Add runtime" })).toBeEnabled(),
+  );
+
 describe("RuntimeTemplateSection", () => {
   it("edits a built-in runtime's settings, then updates the agents on older ones", async () => {
     const user = userEvent.setup();
@@ -202,7 +208,7 @@ describe("RuntimeTemplateSection", () => {
     await user.click(
       within(dialog).getByRole("button", { name: "Save runtime" }),
     );
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    // Saving the runtime is the whole save: no second button on the page.
     await waitFor(() =>
       expect(settings.builtIns["claude-code"]).toMatchObject({
         settings: {
@@ -212,6 +218,10 @@ describe("RuntimeTemplateSection", () => {
       }),
     );
 
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     agentsBehind = 2;
     dialog = await openClaudeCode();
     expect(
@@ -243,39 +253,39 @@ describe("RuntimeTemplateSection", () => {
     );
   });
 
-  it("refreshes after a conflict and lets Cancel start the next edit from the latest revision", async () => {
+  it("puts the list back after a conflict, so the next change starts from the latest revision", async () => {
     mount();
     const user = userEvent.setup();
     const actions = await screen.findByRole("button", {
       name: "Actions for Codex",
     });
     await waitFor(() => expect(actions).toBeEnabled());
-    await user.click(actions);
-    await user.click(
-      screen.getByRole("menuitem", { name: "Remove from list" }),
-    );
-    // Another administrator changes the list while this draft is open.
+    // Another administrator changes the list while this page is open.
     settings = {
       ...settings,
       revision: 1,
       popularAgentOverrides: { opencode: { hidden: true } },
     };
     overrides = settings.popularAgentOverrides;
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Save" })).toBeEnabled(),
+    await user.click(actions);
+    await user.click(
+      screen.getByRole("menuitem", { name: "Remove from list" }),
     );
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    // The refused change is undone and the other administrator's shows.
     await waitFor(() =>
       expect(
         screen.queryByRole("button", { name: "Actions for OpenCode" }),
       ).not.toBeInTheDocument(),
     );
-    await user.click(screen.getByRole("button", { name: "Actions for Codex" }));
+    const retry = await screen.findByRole("button", {
+      name: "Actions for Codex",
+    });
+    await waitFor(() => expect(retry).toBeEnabled());
+    expect(settings.revision).toBe(1);
+    await user.click(retry);
     await user.click(
       screen.getByRole("menuitem", { name: "Remove from list" }),
     );
-    await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(settings.revision).toBe(2));
     expect(settings.popularAgentOverrides?.opencode?.hidden).toBe(true);
     expect(settings.popularAgentOverrides?.codex?.hidden).toBe(true);
@@ -337,9 +347,11 @@ describe("RuntimeTemplateSection", () => {
         name: "Add runtime",
       }),
     );
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    // Adding it in the dialog saves it: nothing else to click.
     await waitFor(() => expect(settings.templates).toHaveLength(1));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
     expect(overrides?.codex?.hidden).toBe(true);
     expect(settings.templates[0]).toMatchObject({
       name: "Engineering workspace",
@@ -361,7 +373,7 @@ describe("RuntimeTemplateSection", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("edits and reorders visible entries, with cancel-safe removal and persistent add-back", async () => {
+  it("edits, reorders, removes and adds back entries, saving each change as it is made", async () => {
     settings.templates = [
       {
         id: "00000000-0000-4000-8000-000000000001",
@@ -388,6 +400,10 @@ describe("RuntimeTemplateSection", () => {
     await user.clear(name);
     await user.type(name, "Review workspace");
     await user.click(screen.getByRole("button", { name: "Save runtime" }));
+    await waitFor(() =>
+      expect(settings.templates[0].name).toBe("Review workspace"),
+    );
+    await saved();
     await user.click(screen.getByRole("button", { name: "Actions for Codex" }));
     expect(
       screen.getByRole("menuitem", { name: "Edit runtime" }),
@@ -398,31 +414,20 @@ describe("RuntimeTemplateSection", () => {
     expect(
       screen.queryByRole("button", { name: "Actions for Codex" }),
     ).not.toBeInTheDocument();
+    await waitFor(() => expect(overrides?.codex?.hidden).toBe(true));
+    await saved();
     screen.getByRole("button", { name: "Reorder Review workspace" }).focus();
     await user.keyboard("{ArrowDown}");
-    await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
-      expect(settings.templates[0].name).toBe("Review workspace"),
+      expect(settings.templates[0].position).toBeGreaterThan(0),
     );
-    expect(settings.templates[0].position).toBeGreaterThan(0);
-    expect(overrides?.codex?.hidden).toBe(true);
+    await saved();
     await user.click(
       screen.getByRole("button", { name: "Actions for Review workspace" }),
     );
     await user.click(
       screen.getByRole("menuitem", { name: "Remove from list" }),
     );
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(
-      screen.getByRole("button", { name: "Actions for Review workspace" }),
-    ).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: "Actions for Review workspace" }),
-    );
-    await user.click(
-      screen.getByRole("menuitem", { name: "Remove from list" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(settings.templates[0].hidden).toBe(true));
     expect(settings.templates[0].runtime.image).toBe(
       "registry.example.com/dev:v1",
@@ -436,18 +441,19 @@ describe("RuntimeTemplateSection", () => {
     ).not.toBeInTheDocument();
     await user.click(add);
     await user.click(screen.getByRole("menuitem", { name: /Codex/ }));
+    await waitFor(() => expect(overrides?.codex?.hidden).toBe(false));
+    await saved();
     await user.click(add);
     await user.click(
       screen.getByRole("menuitem", { name: "Review workspace" }),
     );
+    await waitFor(() => expect(settings.templates[0].hidden).toBe(false));
+    await saved();
     const rows = within(
       screen.getByRole("list", { name: "Available runtimes" }),
     ).getAllByRole("listitem");
     expect(rows.at(-2)).toHaveTextContent("Codex");
     expect(rows.at(-1)).toHaveTextContent("Review workspace");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(settings.templates[0].hidden).toBe(false));
-    expect(overrides?.codex?.hidden).toBe(false);
     expect(settings.templates[0].runtime.image).toBe(
       "registry.example.com/dev:v1",
     );
@@ -474,8 +480,43 @@ describe("RuntimeTemplateSection", () => {
     expect(
       screen.getByRole("button", { name: "Actions for OpenCode" }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(overrides?.opencode?.hidden).toBe(false));
+  });
+
+  it("turns custom images off, keeps that through a reorder, and turns them back on", async () => {
+    const view = mount();
+    const user = userEvent.setup();
+    const toggle = await screen.findByRole("switch", {
+      name: "Allow custom images",
+    });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    expect(toggle).toBeChecked();
+    await user.click(toggle);
+    await waitFor(() =>
+      expect(overrides?.["custom-image"]).toEqual({ hidden: true }),
+    );
+    await saved();
+    // Not a runtime, so it is not offered beside the removed ones.
+    await user.click(screen.getByRole("button", { name: "Add runtime" }));
+    expect(
+      screen.queryByRole("menuitem", { name: /Custom image/ }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    screen.getByRole("button", { name: "Reorder Codex" }).focus();
+    await user.keyboard("{ArrowDown}");
+    await waitFor(() => expect(overrides?.codex?.position).toBeGreaterThan(0));
+    expect(overrides?.["custom-image"]).toEqual({ hidden: true });
+    view.unmount();
+    mount();
+    const restored = await screen.findByRole("switch", {
+      name: "Allow custom images",
+    });
+    await waitFor(() => expect(restored).toBeEnabled());
+    expect(restored).not.toBeChecked();
+    await user.click(restored);
+    await waitFor(() =>
+      expect(overrides?.["custom-image"]).toEqual({ hidden: false }),
+    );
   });
 
   it("appends new templates after existing choices when saved positions contain gaps", async () => {
@@ -517,7 +558,6 @@ describe("RuntimeTemplateSection", () => {
         name: "Add runtime",
       }),
     );
-    await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(settings.templates).toHaveLength(3));
     const ordered = [...settings.templates].sort(
       (a, b) => a.position - b.position,

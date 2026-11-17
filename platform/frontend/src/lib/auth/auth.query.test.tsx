@@ -53,7 +53,7 @@ beforeEach(() => {
   vi.mocked(authClient.getSession).mockResolvedValue({
     data: {
       user: { id: "test-user", email: "test@example.com" },
-      session: { id: "test-session" },
+      session: { id: "test-session", activeOrganizationId: "org-1" },
     },
   } as Awaited<ReturnType<typeof authClient.getSession>>);
 });
@@ -99,7 +99,7 @@ describe("useSession", () => {
     });
     const session = {
       user: { id: "viewer", email: "viewer@example.com" },
-      session: { id: "viewer-session" },
+      session: { id: "viewer-session", activeOrganizationId: "org-1" },
     };
     queryClient.setQueryData(authQueryKeys.session(), session);
     queryClient.setQueryData(authQueryKeys.userPermissions(), {
@@ -153,7 +153,7 @@ describe("useSession", () => {
     });
     queryClient.setQueryData(authQueryKeys.session(), {
       user: { id: "viewer" },
-      session: { id: "viewer-session" },
+      session: { id: "viewer-session", activeOrganizationId: "org-1" },
     });
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -191,6 +191,57 @@ describe("useSession", () => {
 
     expect(result.current.data).toEqual(mockSession);
     expect(authClient.getSession).toHaveBeenCalled();
+  });
+
+  it("picks up the organization of a member who signed in before the server saw it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = { id: "user123", email: "test@example.com" };
+      vi.mocked(authClient.getSession)
+        .mockResolvedValueOnce({
+          data: { user, session: { id: "s", activeOrganizationId: null } },
+        } as Awaited<ReturnType<typeof authClient.getSession>>)
+        .mockResolvedValue({
+          data: { user, session: { id: "s", activeOrganizationId: "org-1" } },
+        } as Awaited<ReturnType<typeof authClient.getSession>>);
+
+      const { result } = renderHook(() => useSession(), {
+        wrapper: createWrapper(),
+      });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data?.session.activeOrganizationId).toBeNull();
+
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+
+      await waitFor(() =>
+        expect(result.current.data?.session.activeOrganizationId).toBe("org-1"),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not poll a session that names its organization", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.mocked(authClient.getSession).mockResolvedValue({
+        data: {
+          user: { id: "user123", email: "test@example.com" },
+          session: { id: "s", activeOrganizationId: "org-1" },
+        },
+      } as Awaited<ReturnType<typeof authClient.getSession>>);
+
+      const { result } = renderHook(() => useSession(), {
+        wrapper: createWrapper(),
+      });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+
+      expect(authClient.getSession).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -474,7 +525,7 @@ describe("usePermissionMap", () => {
       resolveSession({
         data: {
           user: { id: "viewer", email: "viewer@example.com" },
-          session: { id: "viewer-session" },
+          session: { id: "viewer-session", activeOrganizationId: "org-1" },
         },
         error: null,
       } as Awaited<ReturnType<typeof authClient.getSession>>);
@@ -488,7 +539,7 @@ describe("usePermissionMap", () => {
     });
     queryClient.setQueryData(authQueryKeys.session(), {
       user: { id: "viewer", email: "viewer@example.com" },
-      session: { id: "viewer-session" },
+      session: { id: "viewer-session", activeOrganizationId: "org-1" },
     });
     queryClient.setQueryData(authQueryKeys.userPermissions(), {
       project: ["read"],

@@ -158,26 +158,29 @@ test("configures popular agent templates and preserves the creation wizard", asy
     (name) => name !== "Claude Code" && name !== "Codex",
   );
   const actions = () => settings.getByRole("button", { name: /^Actions for / });
-  const remove = async (name: string) => {
-    await settings
-      .getByRole("button", { name: `Actions for ${name}`, exact: true })
-      .click();
-    await page
-      .getByRole("menuitem", { name: "Remove from list", exact: true })
-      .click();
-  };
-  const save = async () => {
+  // Every change to the list saves at once: wait for that save, and for the
+  // list to take the next change.
+  const saved = async (change: () => Promise<void>) => {
     const response = page.waitForResponse(
       (r) =>
         r.url().endsWith("/api/agent-runtime-templates/settings") &&
         r.request().method() === "PUT",
     );
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await change();
     expect((await response).ok()).toBe(true);
     await expect(
-      page.getByRole("button", { name: "Save", exact: true }),
-    ).toHaveCount(0);
+      page.getByRole("button", { name: "Add runtime", exact: true }),
+    ).toBeEnabled();
   };
+  const remove = (name: string) =>
+    saved(async () => {
+      await settings
+        .getByRole("button", { name: `Actions for ${name}`, exact: true })
+        .click();
+      await page
+        .getByRole("menuitem", { name: "Remove from list", exact: true })
+        .click();
+    });
 
   try {
     expect(
@@ -190,7 +193,6 @@ test("configures popular agent templates and preserves the creation wizard", asy
     await goToPage(page, "/settings/agents/runtimes");
     await expect(actions()).toHaveCount(names.length + customCount);
     for (const name of removedNames) await remove(name);
-    await save();
     await page.reload();
     await expect(actions()).toHaveCount(2 + customCount);
 
@@ -221,7 +223,6 @@ test("configures popular agent templates and preserves the creation wizard", asy
     await goToPage(page, "/settings/agents/runtimes");
     await expect(actions()).toHaveCount(2 + customCount);
     for (const name of ["Claude Code", "Codex"]) await remove(name);
-    await save();
     // Hiding the built-ins preserves custom images and the other creation flows.
     await goToPage(page, "/agents/new");
     for (const name of names) {
@@ -241,12 +242,13 @@ test("configures popular agent templates and preserves the creation wizard", asy
 
     await goToPage(page, "/settings/agents/runtimes");
     for (const name of names) {
-      await page
-        .getByRole("button", { name: "Add runtime", exact: true })
-        .click();
-      await page.getByRole("menuitem", { name: new RegExp(name) }).click();
+      await saved(async () => {
+        await page
+          .getByRole("button", { name: "Add runtime", exact: true })
+          .click();
+        await page.getByRole("menuitem", { name: new RegExp(name) }).click();
+      });
     }
-    await save();
     await goToPage(page, "/agents/new");
     for (const name of names)
       await expect(

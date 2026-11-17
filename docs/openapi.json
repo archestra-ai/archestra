@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "v1.5.0-rc.37"
+    "version": "v1.5.0-rc.38"
   },
   "components": {
     "schemas": {
@@ -102930,6 +102930,15 @@
                             }
                           },
                           "additionalProperties": false
+                        },
+                        "custom-image": {
+                          "type": "object",
+                          "properties": {
+                            "hidden": {
+                              "type": "boolean"
+                            }
+                          },
+                          "additionalProperties": false
                         }
                       },
                       "additionalProperties": false
@@ -103618,6 +103627,15 @@
                           }
                         },
                         "additionalProperties": false
+                      },
+                      "custom-image": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
                       }
                     },
                     "additionalProperties": false
@@ -104064,6 +104082,15 @@
                               "type": "integer",
                               "minimum": 0,
                               "maximum": 9007199254740991
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "custom-image": {
+                          "type": "object",
+                          "properties": {
+                            "hidden": {
+                              "type": "boolean"
                             }
                           },
                           "additionalProperties": false
@@ -508326,6 +508353,15 @@
                             "type": "integer",
                             "minimum": 0,
                             "maximum": 9007199254740991
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "custom-image": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
                           }
                         },
                         "additionalProperties": false

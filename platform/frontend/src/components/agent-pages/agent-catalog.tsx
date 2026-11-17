@@ -6,7 +6,9 @@ import {
   buildAgentCatalogRuntime,
   buildAgentCatalogSystemPrompt,
   buildCustomAgentRuntime,
+  CUSTOM_IMAGE_RUNTIME_ID,
   getAgentCatalogImages,
+  isIntegrationHidden,
   MESSAGING_CHANNEL_LABELS,
   orderedPopularAgentIds,
   withAgentRuntimeDefaults,
@@ -235,7 +237,13 @@ export function useAvailableAgentCatalogTemplates() {
   return {
     templates,
     /** Whether the reader may run an image that is none of the runtimes. */
-    canUseCustomImage: access.data?.canConfigureAny === true,
+    canUseCustomImage:
+      access.data?.canConfigureAny === true &&
+      !!organization &&
+      !isIntegrationHidden(
+        organization.popularAgentOverrides,
+        CUSTOM_IMAGE_RUNTIME_ID,
+      ),
     /** Whether the reader may use any runtime; undefined while loading. */
     hasRuntimeAccess: access.data
       ? access.data.canConfigureAny ||

@@ -80,7 +80,7 @@ export function CustomRuntimeDialog({
   template,
   names,
   savedScope,
-  hasUnsavedChanges,
+  isSaving,
   onClose,
   onSave,
 }: {
@@ -90,8 +90,8 @@ export function CustomRuntimeDialog({
   names: string[];
   /** Its permission scope once saved; until then it has no permissions. */
   savedScope: string | null;
-  /** The runtime list has changes not yet saved. */
-  hasUnsavedChanges: boolean;
+  /** The runtime list is being saved. */
+  isSaving: boolean;
   onClose: () => void;
   onSave: (template: TemplateDraft) => void;
 }) {
@@ -172,7 +172,7 @@ export function CustomRuntimeDialog({
       footer={
         <>
           <DialogCancelButton>Cancel</DialogCancelButton>
-          <Button type="submit">
+          <Button type="submit" disabled={isSaving}>
             <span>{template ? "Save runtime" : "Add runtime"}</span>
           </Button>
         </>
@@ -313,9 +313,9 @@ export function CustomRuntimeDialog({
             settings="container, inference API, follow-up messages and limits"
             blockedReason={
               savedScope === null
-                ? "Once you add this runtime and save the page, you can update agents that use it."
-                : isDirty || hasUnsavedChanges
-                  ? "Updates use the saved settings. Save this runtime and the page first."
+                ? "Once you add this runtime, you can update agents that use it."
+                : isDirty
+                  ? "Updates use the saved settings. Save this runtime first."
                   : null
             }
           />
@@ -335,7 +335,7 @@ export function BuiltInRuntimeDialog({
   image,
   value,
   scope,
-  hasUnsavedChanges,
+  isSaving,
   onClose,
   onSave,
 }: {
@@ -345,8 +345,8 @@ export function BuiltInRuntimeDialog({
   value: BuiltInRuntime | undefined;
   /** Its permission scope. */
   scope: string;
-  /** The runtime list has changes not yet saved. */
-  hasUnsavedChanges: boolean;
+  /** The runtime list is being saved. */
+  isSaving: boolean;
   onClose: () => void;
   onSave: (value: BuiltInRuntime) => void;
 }) {
@@ -404,7 +404,7 @@ export function BuiltInRuntimeDialog({
       footer={
         <>
           <DialogCancelButton>Cancel</DialogCancelButton>
-          <Button type="submit">
+          <Button type="submit" disabled={isSaving}>
             <span>Save runtime</span>
           </Button>
         </>
@@ -478,8 +478,8 @@ export function BuiltInRuntimeDialog({
               runtime.claudeCode ? "Claude account and limits" : "limits"
             }
             blockedReason={
-              isDirty || hasUnsavedChanges
-                ? "Updates use the saved settings. Save this runtime and the page first."
+              isDirty
+                ? "Updates use the saved settings. Save this runtime first."
                 : null
             }
           />

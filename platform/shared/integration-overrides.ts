@@ -166,24 +166,34 @@ const popularAgentOverrideShape = {
 };
 const PopularAgentOverrideSchema = z.strictObject(popularAgentOverrideShape);
 
+/**
+ * The "Custom image" choice: running an image that is none of the offered
+ * runtimes. It is no runtime of its own, so it has no place in the order and
+ * no permissions; an administrator can only take it off the list.
+ */
+export const CUSTOM_IMAGE_RUNTIME_ID = "custom-image";
+
 // Explicit properties keep the generated OpenAPI/SDK request contract closed.
 // The satisfies check requires every maintained template to be represented.
 export const PopularAgentOverridesSchema = z.strictObject({
-  "claude-code": PopularAgentOverrideSchema.optional(),
-  codex: PopularAgentOverrideSchema.optional(),
-  opencode: PopularAgentOverrideSchema.optional(),
-  hermes: PopularAgentOverrideSchema.optional(),
-  openclaw: PopularAgentOverrideSchema.optional(),
-  grok: PopularAgentOverrideSchema.optional(),
-  kimi: PopularAgentOverrideSchema.optional(),
-  copilot: PopularAgentOverrideSchema.optional(),
-} satisfies Record<
-  AgentCatalogId,
-  z.ZodOptional<typeof PopularAgentOverrideSchema>
->);
+  ...({
+    "claude-code": PopularAgentOverrideSchema.optional(),
+    codex: PopularAgentOverrideSchema.optional(),
+    opencode: PopularAgentOverrideSchema.optional(),
+    hermes: PopularAgentOverrideSchema.optional(),
+    openclaw: PopularAgentOverrideSchema.optional(),
+    grok: PopularAgentOverrideSchema.optional(),
+    kimi: PopularAgentOverrideSchema.optional(),
+    copilot: PopularAgentOverrideSchema.optional(),
+  } satisfies Record<
+    AgentCatalogId,
+    z.ZodOptional<typeof PopularAgentOverrideSchema>
+  >),
+  [CUSTOM_IMAGE_RUNTIME_ID]: IntegrationToggleSchema.optional(),
+});
 
 export const StoredPopularAgentOverridesSchema = z.partialRecord(
-  PopularAgentIdSchema,
+  z.enum([...PopularAgentIdSchema.options, CUSTOM_IMAGE_RUNTIME_ID]),
   z.object(popularAgentOverrideShape),
 );
 export type PopularAgentOverrides = z.infer<
@@ -411,15 +421,20 @@ export function withOrderedPopularAgentIds(
   catalog: readonly AgentCatalogId[],
   allowed: readonly string[],
 ): PopularAgentOverrides {
-  return Object.fromEntries(
-    catalog.map((id) => {
-      const position = allowed.indexOf(id);
-      return [
-        id,
-        position < 0 ? { ...overrides?.[id], hidden: true } : { position },
-      ];
-    }),
-  );
+  const customImage = overrides?.[CUSTOM_IMAGE_RUNTIME_ID];
+  return {
+    ...Object.fromEntries(
+      catalog.map((id) => {
+        const position = allowed.indexOf(id);
+        return [
+          id,
+          position < 0 ? { ...overrides?.[id], hidden: true } : { position },
+        ];
+      }),
+    ),
+    // Not part of the order, so reordering leaves its switch as it was.
+    ...(customImage && { [CUSTOM_IMAGE_RUNTIME_ID]: customImage }),
+  };
 }
 
 // ===================================================================

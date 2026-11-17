@@ -222,6 +222,11 @@ import {
   appendPeerMessageMarker,
   escapeRelayMarkup,
 } from "./adapters/claude-code-relay";
+import {
+  type ClaudeSideRequest,
+  claudeSideRequest,
+  isClaudePendingResult,
+} from "./adapters/claude-side-request";
 import { labeledQuestionRuling } from "./adapters/native-question-ruling";
 import { openCodeReviewQuestion } from "./adapters/opencode-review";
 import { nativeId, referencesChildTranscriptPath } from "./adapters/trajectory";
@@ -274,6 +279,10 @@ type AppaPluginBinding = {
    * counted.
    */
   pendingBackgroundSpawns: number;
+  /** Ids of this request's results that answer their calls, read unfiltered. */
+  answeredCallIds: string[];
+  /** A Claude Code request beside its agent loop: its reply ends nothing. */
+  sideRequest: ClaudeSideRequest | undefined;
   /** True on internal loopback Chat requests. */
   chat: boolean;
   compaction: boolean;
@@ -432,6 +441,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       runtimeTaskId: trustedContext.runtimeTaskId,
       turnOpen: false,
       pendingBackgroundSpawns: 0,
+      answeredCallIds: [],
+      sideRequest: isClaudeCodeFamilyAdapter(trajectory.adapter?.id)
+        ? claudeSideRequest({
+            body: context.requestBody,
+            headers: context.headers,
+            isOpeningTask: (prompt) => {
+              const digest = trajectory.child?.lineage?.spawnPromptDigest;
+              return digest !== undefined && isDelegatedPrompt(prompt, digest);
+            },
+          })
+        : undefined,
       chat,
       compaction: trustedContext.compaction === true,
       threadContinue: trustedContext.thread === "continue",
@@ -478,6 +498,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): Promise<LlmProxyToolResultsOutcome | undefined> {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
+    // A pending placeholder answers nothing: its call runs on, and its real
+    // result is reported when it arrives. The model still reads it as sent.
+    const answers = context.toolResults.filter(
+      (result) => !isClaudePendingResult(result),
+    );
+    // The reporting-recovery pass sees a filtered subset of this request's results.
+    if (!binding.reportingRecovery)
+      binding.answeredCallIds = answers.map((result) =>
+        withoutTrajectoryStamp(result.id),
+      );
     enterCapturedGuardrailsActivation("active");
     const completions = binding.request.childReturns?.completions ?? [];
     binding.unenforcedCalls = await findUnenforcedCalls({
@@ -501,7 +531,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // The runtime never saw a call the model made while enforcement was off,
     // nor the run of a denied call Break the glass let through, so OpenAPPA
     // ignores its result: the result reaches the model as it is.
-    const toolResults = context.toolResults.filter((result) => {
+    const toolResults = answers.filter((result) => {
       const reason = binding.unenforcedCalls.reasons.get(
         withoutTrajectoryStamp(result.id),
       );
@@ -2467,7 +2497,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const binding = this.bindings.get(context.resources);
     if (binding?.compaction || isCompactionOnlyResponse(context.response))
       return;
-    if (!binding?.request.tools || binding.turnOpen) return;
+    if (!binding?.request.tools || binding.turnOpen || binding.sideRequest)
+      return;
     if (binding.session.parent_id) {
       return;
     }
@@ -2484,10 +2515,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     if (!binding.request.turnEndOperationId) return;
     enterCapturedGuardrailsActivation("active");
-    await endTurn(
-      this.governedSession(binding),
-      binding.request.turnEndOperationId,
-    );
+    const stop = await endTurn({
+      session: this.governedSession(binding),
+      operationId: binding.request.turnEndOperationId,
+      ...answeredCallIds(binding),
+    });
+    if (stop.decision === "held") {
+      logger.debug(
+        { running: stop.running },
+        "OpenAPPA keeps the turn open while its calls run",
+      );
+    }
     return undefined;
   }
 
@@ -2510,19 +2548,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       return;
     }
     if (
-      isClaudeCodeFamilyAdapter(binding.adapter?.id) &&
-      (binding.request.declaredTools?.some(
-        (tool) =>
-          !tool.namespace &&
-          binding.adapter?.isChildHandbackTool?.(tool.name) === true,
-      ) ||
-        isClaudeProgressLabelRequest(
-          binding.requestBody,
-          binding.child?.lineage?.spawnPromptDigest,
+      binding.sideRequest ||
+      (isClaudeCodeFamilyAdapter(binding.adapter?.id) &&
+        binding.request.declaredTools?.some(
+          (tool) =>
+            !tool.namespace &&
+            binding.adapter?.isChildHandbackTool?.(tool.name) === true,
         ))
     ) {
       // With a native handback, intermediate text does not cross to the parent.
-      // Claude's progress-label side call also does not finish its active child.
+      // A side request's reply does not finish its active child either.
       return { decision: "release" };
     }
     if (!binding.request.turnEndOperationId) {
@@ -2558,7 +2593,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (context.responseText === "") {
       // The recorded return contract decides whether this empty completion
       // closes the child permanently or leaves it available for follow-ups.
-      await endChildTurn({
+      const stop = await endChildTurn({
         session: this.governedSession(binding),
         operationId: binding.request.turnEndOperationId.replace(
           /^turn_end:/,
@@ -2566,7 +2601,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         ),
         spawnCallId,
         ...(childNativeId ? { childNativeId } : {}),
+        ...answeredCallIds(binding),
       });
+      if (stop.decision === "held") return { decision: "release" };
     } else {
       const outcome = await endChild({
         session: this.governedSession(binding),
@@ -2577,7 +2614,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         output: context.responseText,
         spawnCallId,
         ...(childNativeId ? { childNativeId } : {}),
+        ...answeredCallIds(binding),
       });
+      // The child is not finished: its reply stays its own, nothing crosses.
+      if (outcome.decision === "held") return { decision: "release" };
       admitted =
         outcome.decision === "release" ? context.responseText : outcome.content;
       if (!outcome.crossed) {
@@ -5952,6 +5992,12 @@ async function admitChildHandback(params: {
     spawnCallId,
     ...(childNativeId ? { childNativeId } : {}),
   });
+  if (outcome.decision === "held") {
+    return {
+      kind: "deny",
+      feedback: "OpenAPPA holds the return while a tool call is still running.",
+    };
+  }
   const admitted =
     outcome.decision === "release" ? raw : (outcome.content ?? "");
   if (!outcome.crossed) {
@@ -7950,32 +7996,6 @@ async function pendingReviewResult(
   });
 }
 
-function isClaudeProgressLabelRequest(
-  request: unknown,
-  spawnPromptDigest: string | undefined,
-): boolean {
-  if (!isRecord(request) || !Array.isArray(request.messages)) return false;
-  const last = request.messages.at(-1);
-  if (!isRecord(last) || last.role !== "user") return false;
-  const prompt =
-    typeof last.content === "string"
-      ? last.content
-      : Array.isArray(last.content)
-        ? last.content
-            .filter((block) => isRecord(block) && block.type === "text")
-            .map((block) => block.text)
-            .join("\n")
-        : "";
-  // An admitted opening task can use the same prefix as a progress-label frame.
-  if (spawnPromptDigest && isDelegatedPrompt(prompt, spawnPromptDigest))
-    return false;
-  // Claude appends this dedicated user frame for a UI label, not a task result.
-  // Do not match tool_result text or historical task instructions.
-  return prompt.startsWith(
-    "Describe your most recent action in 3-5 words using present tense (-ing). Name the file or function, not the branch. Do not use tools.\n\n",
-  );
-}
-
 async function pendingNativeHitlOfferIds(params: {
   binding: AppaPluginBinding;
   results: LlmProxyToolResultsContext["toolResults"];
@@ -9031,4 +9051,15 @@ function grokUsesDirectGatewayTools(binding: AppaPluginBinding): boolean {
       (tool) => !tool.namespace && tool.name.includes("__"),
     )
   );
+}
+
+/**
+ * Claude Code sends side requests, such as a subagent's progress label, that
+ * read as a stop while a call still runs: its stops hold on a call the
+ * request did not answer instead of closing it.
+ */
+function answeredCallIds(binding: AppaPluginBinding) {
+  return isClaudeCodeFamilyAdapter(binding.adapter?.id)
+    ? { answeredCallIds: binding.answeredCallIds }
+    : {};
 }

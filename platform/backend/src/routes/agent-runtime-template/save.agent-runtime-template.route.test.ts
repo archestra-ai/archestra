@@ -31,6 +31,8 @@ describe("PUT /api/agent-runtime-templates/settings", () => {
     const overrides = {
       codex: { position: 0 },
       "claude-code": { position: 2, hidden: true },
+      // Taking the Custom image choice off the list is saved with the rest.
+      "custom-image": { hidden: true },
     };
     const created = await save({
       revision: 0,

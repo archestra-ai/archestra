@@ -27601,6 +27601,9 @@ export type GetRuntimeTemplateSettingsResponses = {
                 hidden?: boolean;
                 position?: number;
             };
+            'custom-image'?: {
+                hidden?: boolean;
+            };
         } | null;
     };
 };
@@ -27695,6 +27698,9 @@ export type SaveRuntimeTemplateSettingsData = {
             copilot?: {
                 hidden?: boolean;
                 position?: number;
+            };
+            'custom-image'?: {
+                hidden?: boolean;
             };
         } | null;
     };
@@ -27862,6 +27868,9 @@ export type SaveRuntimeTemplateSettingsResponses = {
             copilot?: {
                 hidden?: boolean;
                 position?: number;
+            };
+            'custom-image'?: {
+                hidden?: boolean;
             };
         } | null;
     };
@@ -130865,6 +130874,9 @@ export type UpdateIntegrationSettingsData = {
             copilot?: {
                 hidden?: boolean;
                 position?: number;
+            };
+            'custom-image'?: {
+                hidden?: boolean;
             };
         } | null;
         modelProviderOverrides?: {

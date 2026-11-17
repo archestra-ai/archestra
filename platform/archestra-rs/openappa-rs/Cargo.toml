@@ -58,11 +58,16 @@ crate-type = ["cdylib"]
 # annotator gave no answer refused as unanswered (#890), and a refusal of numbers
 # whose canonical form is an unsafe integer (#891); then battery sanitizers,
 # which stay off until a root binds them (#791), and logs written before #790
-# replaying (#897).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1a0b18ac8a7e337dbb66c7c4b4b7c0af00024481", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1a0b18ac8a7e337dbb66c7c4b4b7c0af00024481" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1a0b18ac8a7e337dbb66c7c4b4b7c0af00024481", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1a0b18ac8a7e337dbb66c7c4b4b7c0af00024481" }
+# replaying (#897); then v0.43.1 and selector alternatives with `|` (#900),
+# file tracking as its own battery, with an annotator binding no declaration
+# names left idle instead of refused (#909), opencode background subagents
+# (#731), the archestra battery ruling `list_openappa_operations` and
+# `propose_tuner_suggestion` (#926), and stops held while a call they did not
+# answer still runs (#936).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "60ce02b60fbf4c72c9727519d3b8532954722939", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "60ce02b60fbf4c72c9727519d3b8532954722939" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "60ce02b60fbf4c72c9727519d3b8532954722939", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "60ce02b60fbf4c72c9727519d3b8532954722939" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

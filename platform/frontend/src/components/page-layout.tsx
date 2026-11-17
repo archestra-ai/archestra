@@ -360,11 +360,13 @@ export function PageLayout({
                           // Detail titles name a record and run long; a step
                           // smaller on phones keeps them to a line or two.
                           backLink && "text-xl sm:text-2xl",
+                          // One line with an ellipsis: a wizard's header never
+                          // changes height, and a title cut at a line break
+                          // reads as a finished one.
                           maxWidthKey === "wizard" &&
-                            (stackHeaderOnMobile
-                              ? "sm:max-h-10 sm:overflow-hidden"
-                              : "max-h-10 overflow-hidden"),
+                            (stackHeaderOnMobile ? "sm:truncate" : "truncate"),
                         )}
+                        title={typeof title === "string" ? title : undefined}
                       >
                         <span key={pathname}>{title}</span>
                       </h1>

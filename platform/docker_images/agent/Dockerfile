@@ -272,8 +272,8 @@ USER root
 # required MCP startup guard and refreshes runtime bindings on session resume.
 COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
 RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
-    hermes_version=0.23.0 \
- && hermes_commit=2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19 \
+    hermes_version=0.23.1 \
+ && hermes_commit=3b421578588243f920886e6fe79a6faa87ea026e \
  && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
  && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
  && case "${TARGETARCH}" in amd64) python_target=linux-x64 ;; arm64) python_target=linux-arm64 ;; *) exit 1 ;; esac \
@@ -362,14 +362,14 @@ ARG TARGETARCH
 ENV GROK_DISABLE_AUTOUPDATER=1
 USER root
 RUN case "$TARGETARCH" in \
-      amd64) grok_arch=x64; checksum=93e7d0274631b7741bacd46acb6dd8608a27b7092e601b8723183e81dc98f7fa ;; \
-      arm64) grok_arch=arm64; checksum=df946f1f130c81538abdd414845358dccd6a769e33280d5cbec9e2dd4c2c8b33 ;; \
+      amd64) grok_arch=x64; checksum=62caf590f69b031821fbbae03650a1c57923aaf680a1861082ea7a324fbc546f ;; \
+      arm64) grok_arch=arm64; checksum=805875012d15c191868806dcda1f49522e382fe1848ff962e8371b07641fc64b ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /tmp/grok /opt/grok/bin \
  && cd /tmp/grok \
- && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.77" \
- && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.77.tgz" \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.80" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.80.tgz" \
  && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
  && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
  && chmod 0755 /opt/grok/bin/grok \
@@ -422,13 +422,13 @@ FROM agent-base AS agent-copilot
 USER root
 ENV COPILOT_AUTO_UPDATE=false
 RUN case "$TARGETARCH" in \
-      amd64) copilot_arch=x64; copilot_checksum=0a13c4b826ff33cf670b4bf26166014c206c48657e562801c0f3c22487c9b607817f18d524d1e116c4f20365c2eefe2e678ed25ad97c2b9af11e9e259c9f4ac9 ;; \
-      arm64) copilot_arch=arm64; copilot_checksum=7e035faaeaf75dd08df29de62e04631a1ebfcc008b9b1347d865af6d194a63593c383245a1864147690b5ff2f05008f40aae6d853039f4b686ece1a95bab6186 ;; \
+      amd64) copilot_arch=x64; copilot_checksum=2435538cc4e28431606a18ed70fc324428d926ac3f753597d32fe2dc9cfaf3e8b4d98f7f1251eca4625c2798a7bb442b48cfe1bf9400c69f21c45607ad19e10b ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=8f032a726b44d3c84010e279f2e993e41de447090b902af8f1148727375aeb6f1e0cbe7db6d3e0f9548194546da34c376af05823071b4c315e9bd5ea62c4a207 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /opt/copilot \
  && cd /tmp \
- && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.107)" copilot.tgz \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.108)" copilot.tgz \
  && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
  && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
  && test -s /opt/copilot/LICENSE.md \

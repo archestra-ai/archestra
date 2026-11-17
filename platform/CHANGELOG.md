@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.34](https://github.com/archestra-ai/archestra/compare/platform-v1.4.33...platform-v1.4.34) (2026-11-17)
+
+
+### Bug Fixes
+
+* custom image agents, runtime settings saving, MCP registry headers and mobile settings nav (backport release/1.4) ([#10812](https://github.com/archestra-ai/archestra/issues/10812)) ([a6502f5](https://github.com/archestra-ai/archestra/commit/a6502f508d9fccf2df65418e9bead08116581e32))
+
 ## [1.4.33](https://github.com/archestra-ai/archestra/compare/platform-v1.4.32...platform-v1.4.33) (2026-11-16)
 
 

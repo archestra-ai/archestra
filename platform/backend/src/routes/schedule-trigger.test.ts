@@ -257,11 +257,30 @@ describe("schedule trigger routes", () => {
       makeScheduleTriggerRun(trigger.id, { organizationId, runKind: "due" }),
     ]);
     // What the run handler links when the run starts.
-    await createAndLinkRunConversation({
+    const linked = await createAndLinkRunConversation({
       run,
       trigger,
       ownerUserId: executor.id,
       organizationId,
+    });
+    await MessageModel.create({
+      conversationId: linked.id,
+      role: "assistant",
+      content: {
+        id: "message-1",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "Filed one suggestion" },
+          { type: "data-hook-run", data: { hook: "pre-tool", stdout: "x" } },
+        ],
+      },
+    });
+    config.hooks.enabled = true;
+    await ConversationModel.setHooksDebugEnabled({
+      id: linked.id,
+      userId: executor.id,
+      organizationId,
+      enabled: true,
     });
     const nextActor = await makeUser();
     await makeMember(nextActor.id, organizationId, { role: "admin" });
@@ -280,12 +299,21 @@ describe("schedule trigger routes", () => {
         url: `/api/schedule-triggers/${trigger.id}/runs/${runId}/conversation`,
       });
 
+    const partTypes = (body: { messages: { parts: { type: string }[] }[] }) =>
+      body.messages.flatMap((m) => m.parts.map((p) => p.type));
     const opened = await open(run.id);
     expect(opened.statusCode, opened.body).toBe(200);
     expect(opened.json()).toMatchObject({
       userId: executor.id,
       agentId: agent.id,
     });
+    expect(partTypes(opened.json())).toEqual(["text"]);
+    adminUser = executor;
+    expect(partTypes((await open(run.id)).json())).toEqual([
+      "text",
+      "data-hook-run",
+    ]);
+    adminUser = viewer;
     expect((await open(unopened.id)).statusCode).toBe(404);
     expect(
       (await ScheduleTriggerRunModel.findById(unopened.id))?.chatConversationId,

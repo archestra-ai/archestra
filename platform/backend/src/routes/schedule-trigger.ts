@@ -6,6 +6,9 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
+import config from "@/config";
+import { stripHookRunParts } from "@/hooks/hook-run-parts";
 import {
   ConversationModel,
   ScheduleTriggerModel,
@@ -29,6 +32,7 @@ import {
 } from "@/services/scheduled-run-conversation";
 import {
   ApiError,
+  type ChatMessage,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ScheduleTriggerResponseSchema,
@@ -478,7 +482,21 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      return reply.send(conversation);
+      // The same requester-side gate as the chat read: hook-run parts only for
+      // an agent admin while the conversation is in debug mode.
+      const hooksDebugVisible =
+        config.hooks.enabled &&
+        conversation.hooksDebugEnabled &&
+        (await hasAnyAgentTypeAdminPermission({
+          userId: user.id,
+          organizationId,
+        }));
+      return reply.send({
+        ...conversation,
+        messages: stripHookRunParts(conversation.messages as ChatMessage[], {
+          visible: hooksDebugVisible,
+        }),
+      });
     },
   );
 };

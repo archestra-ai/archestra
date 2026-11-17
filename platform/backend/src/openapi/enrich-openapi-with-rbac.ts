@@ -389,6 +389,8 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
     "Restricted to the built-in Admin and Platform Admin roles. No permission grants it: `skill:delete` and even `skill:admin` reach the trash, not past it, and a service account never qualifies. A caller without it gets 404, not 403, so the endpoint never confirms the skill exists.",
   [RouteId.PermanentlyDeleteProject]:
     "Restricted to the built-in Admin and Platform Admin roles. No permission grants it: `project:delete`, `project:admin`, and ownership of the project all reach the trash, not past it, and a service account never qualifies. A caller without it gets 404, not 403, so the endpoint never confirms the project exists.",
+  [RouteId.CreateScheduleTriggerRunConversation]:
+    "Checked dynamically based on the trigger. A schedule trigger requires `project:create` and the right to run that schedule. A tuner trigger requires `tuner:read` and `log:admin`, and only opens a conversation the run already linked.",
 } satisfies Partial<Record<RouteId, string>>;
 
 const STATIC_ROUTE_PERMISSION_NOTES = {

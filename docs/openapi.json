@@ -546554,7 +546554,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Create or return the chat conversation linked to a schedule run\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`project:create`](/docs/reference/permissions#project:create): Create projects and schedules, and trigger schedule runs",
+        "description": "Create or return the chat conversation linked to a schedule run\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nChecked dynamically based on the trigger. A schedule trigger requires [`project:create`](/docs/reference/permissions#project:create) and the right to run that schedule. A tuner trigger requires [`tuner:read`](/docs/reference/permissions#tuner:read) and [`log:admin`](/docs/reference/permissions#log:admin), and only opens a conversation the run already linked.",
         "parameters": [
           {
             "schema": {
@@ -547378,10 +547378,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "project:create"
-          ]
+          "kind": "dynamic",
+          "note": "Checked dynamically based on the trigger. A schedule trigger requires `project:create` and the right to run that schedule. A tuner trigger requires `tuner:read` and `log:admin`, and only opens a conversation the run already linked.",
+          "permissions": []
         }
       }
     },

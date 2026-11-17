@@ -1776,9 +1776,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetScheduleTriggerRun]: {
     project: ["read"],
   },
-  [RouteId.CreateScheduleTriggerRunConversation]: {
-    project: ["create"],
-  },
+  // Checked per trigger kind in findAccessibleScheduleTriggerOrThrow.
+  [RouteId.CreateScheduleTriggerRunConversation]: {},
 
   // Knowledge Base Routes
   [RouteId.GetKnowledgeBases]: { knowledgeSource: ["read"] },

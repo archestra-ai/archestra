@@ -12689,7 +12689,7 @@ export const getScheduleTriggerRun = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * [`project:create`](/docs/reference/permissions#project:create): Create projects and schedules, and trigger schedule runs
+ * Checked dynamically based on the trigger. A schedule trigger requires [`project:create`](/docs/reference/permissions#project:create) and the right to run that schedule. A tuner trigger requires [`tuner:read`](/docs/reference/permissions#tuner:read) and [`log:admin`](/docs/reference/permissions#log:admin), and only opens a conversation the run already linked.
  */
 export const createScheduleTriggerRunConversation = <ThrowOnError extends boolean = false>(options: Options<CreateScheduleTriggerRunConversationData, ThrowOnError>) => (options.client ?? client).post<CreateScheduleTriggerRunConversationResponses, CreateScheduleTriggerRunConversationErrors, ThrowOnError>({ url: '/api/schedule-triggers/{id}/runs/{runId}/conversation', ...options });
 

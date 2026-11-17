@@ -1,4 +1,6 @@
+import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
+import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import {
   AgentTeamModel,
@@ -44,6 +46,22 @@ export async function findAccessibleScheduleTriggerOrThrow(params: {
       return trigger;
     }
     throw new ApiError(404, "Schedule trigger not found");
+  }
+  if (
+    params.access === "open_run" &&
+    !(await userHasPermission(
+      params.userId,
+      params.organizationId,
+      "project",
+      "create",
+    ))
+  ) {
+    throw new ApiError(
+      403,
+      buildForbiddenErrorMessage({
+        missingPermissions: { project: ["create"] },
+      }),
+    );
   }
   const access = params.access === "open_run" ? "use" : params.access;
 
@@ -206,8 +224,9 @@ export async function startManualScheduleTriggerRun(params: {
  * rewrite or fire another member's schedule would let them act as that actor.
  * Restricted to the actor themselves or the corresponding organization-wide Project grant.
  *
- * `open_run` — opening a run's conversation, which may mint it. It needs `use`
- * on a generic trigger; on a tuner trigger, tuner read access is enough.
+ * `open_run` — opening a run's conversation, which may mint it. It needs
+ * `project:create` and `use` on a generic trigger; on a tuner trigger, tuner
+ * read access is enough.
  */
 type ScheduleTriggerAccess = ScheduleTriggerAction | "open_run";
 

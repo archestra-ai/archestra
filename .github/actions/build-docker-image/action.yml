@@ -76,6 +76,10 @@ inputs:
     description: "Set up a new Buildx builder; disable to reuse the current job builder"
     required: false
     default: "true"
+  reproducible:
+    description: "Build with SOURCE_DATE_EPOCH set to the context's commit time, and rewrite file timestamps in exported images to it. Set 'false' to build with wall-clock timestamps."
+    required: false
+    default: "true"
 
 outputs:
   digest:
@@ -143,12 +147,29 @@ runs:
         INPUT_CACHE_FROM: ${{ inputs.cache-from }}
         INPUT_CACHE_TO: ${{ inputs.cache-to }}
         REUSE_BUILDER: ${{ inputs.setup-builder == 'false' }}
+        REPRODUCIBLE: ${{ inputs.reproducible }}
         SECRET_SENTRY_AUTH_TOKEN: ${{ inputs.sentry-auth-token }}
       run: |
         set -euo pipefail
 
         FILE="${INPUT_DOCKERFILE:-${INPUT_CONTEXT}/Dockerfile}"
         METADATA_FILE="${RUNNER_TEMP}/build-docker-image-metadata.json"
+
+        # Buildx forwards SOURCE_DATE_EPOCH from the environment as a build
+        # arg, which fixes the image config and history timestamps. File
+        # timestamps inside the layers need rewrite-timestamp on the exporter
+        # as well: without it two builds of one commit differ in digest.
+        REWRITE_TIMESTAMP=""
+        if [ "${REPRODUCIBLE}" = "true" ]; then
+          if SOURCE_DATE_EPOCH="$(git -C "${INPUT_CONTEXT}" log -1 --pretty=%ct 2>/dev/null)" \
+            && [[ "${SOURCE_DATE_EPOCH}" =~ ^[0-9]+$ ]]; then
+            export SOURCE_DATE_EPOCH
+            REWRITE_TIMESTAMP=",rewrite-timestamp=true"
+          else
+            unset SOURCE_DATE_EPOCH
+            echo "::warning::No commit time for ${INPUT_CONTEXT}; building with wall-clock timestamps"
+          fi
+        fi
 
         ARGS=(
           --file "${FILE}"
@@ -189,8 +210,18 @@ runs:
 
         # A custom --output wins (it can encode push-by-digest / compression /
         # push=true itself); otherwise fall back to the push/load shorthands.
+        # Images that leave the runner get their file timestamps rewritten; an
+        # image loaded into the local daemon is never published, so it skips
+        # the extra layer rewrite.
         if [ -n "${INPUT_OUTPUTS}" ]; then
+          case "${INPUT_OUTPUTS}" in
+            *rewrite-timestamp=*) ;;
+            type=image*|type=registry*|type=oci*) INPUT_OUTPUTS+="${REWRITE_TIMESTAMP}" ;;
+          esac
           ARGS+=( --output "${INPUT_OUTPUTS}" )
+        elif [ "${INPUT_PUSH}" = "true" ] && [ -n "${REWRITE_TIMESTAMP}" ]; then
+          # --push is shorthand for --output type=registry.
+          ARGS+=( --output "type=registry${REWRITE_TIMESTAMP}" )
         elif [ "${INPUT_PUSH}" = "true" ]; then
           ARGS+=( --push )
         elif [ "${INPUT_LOAD}" = "true" ]; then

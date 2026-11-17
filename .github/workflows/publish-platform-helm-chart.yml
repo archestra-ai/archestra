@@ -65,7 +65,20 @@ jobs:
         env:
           IMAGE_TAG: ${{ inputs.version }}
         run: |
+          # Helm stamps every packaged file with SOURCE_DATE_EPOCH, so two
+          # packages of one commit are the same bytes.
+          SOURCE_DATE_EPOCH="$(git log -1 --pretty=%ct)"
+          export SOURCE_DATE_EPOCH
           helm package . --version "$IMAGE_TAG" --app-version "$IMAGE_TAG"
+          # Helm before 4.3.0 ignores the variable without saying so.
+          python3 -I - "archestra-platform-$IMAGE_TAG.tgz" "$SOURCE_DATE_EPOCH" <<'EOF'
+          import sys, tarfile
+          epoch = int(sys.argv[2])
+          with tarfile.open(sys.argv[1]) as chart:
+              stale = [member.name for member in chart if member.mtime != epoch]
+          if stale:
+              print(f"::warning::{len(stale)} chart files do not carry the commit time: this Helm ignored SOURCE_DATE_EPOCH")
+          EOF
 
       - name: Preserve chart for attestation and publication
         uses: $/.github/actions/github-upload-artifact

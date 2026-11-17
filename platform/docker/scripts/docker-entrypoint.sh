@@ -6,9 +6,15 @@ set -e
 # - bootstraps a persistent auth secret when one is not provided
 # - optionally provisions and wires up an embedded KinD cluster for quickstart mode
 # - initializes or upgrades the bundled PostgreSQL data directory when using the internal DB
-# - injects the resolved DATABASE_URL and optional ngrok programs into supervisord config
+# - writes the supervisord config for this start, with the postgres program
+#   when the bundled database is used
 # - starts supervisord in the background so container signals can trigger graceful cleanup
 # - tears down the embedded KinD cluster on shutdown when this container created it
+
+# The image starts as root; a Kubernetes securityContext or `docker run --user`
+# can start it as another user (the image's archestra user is UID 10001).
+RUN_AS_ROOT=false
+[ "$(id -u)" = "0" ] && RUN_AS_ROOT=true
 
 # Track if we created a KinD cluster for cleanup
 KIND_CLUSTER=""
@@ -52,11 +58,15 @@ if [ -z "$ARCHESTRA_AUTH_SECRET" ]; then
         export ARCHESTRA_AUTH_SECRET=$(cat "$SECRET_FILE")
         echo "Loaded existing ARCHESTRA_AUTH_SECRET from $SECRET_FILE"
     else
+        if ! mkdir -p /app/data 2>/dev/null || [ ! -w /app/data ]; then
+            echo "ERROR: ARCHESTRA_AUTH_SECRET is not set, and /app/data is not writable by user $(id -u) to keep a generated one."
+            echo "Set ARCHESTRA_AUTH_SECRET, or mount a volume at /app/data that this user can write."
+            exit 1
+        fi
         # Generate new random secret (64 characters)
         export ARCHESTRA_AUTH_SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 64 | head -n 1)
 
         # Persist it
-        mkdir -p /app/data
         echo "$ARCHESTRA_AUTH_SECRET" > "$SECRET_FILE"
         chmod 600 "$SECRET_FILE"
         echo "Generated and saved new ARCHESTRA_AUTH_SECRET to $SECRET_FILE"
@@ -108,6 +118,11 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     if [ ! -S /var/run/docker.sock ]; then
         echo "Quickstart mode is on but Docker socket is not mounted"
         echo "Add: -v /var/run/docker.sock:/var/run/docker.sock to your docker run command"
+        exit 1
+    fi
+    if [ ! -w /var/run/docker.sock ]; then
+        echo "Quickstart mode needs write access to the Docker socket, which user $(id -u) does not have."
+        echo "Run the quickstart as root (the image's default user), or add the socket's group with --group-add."
         exit 1
     fi
     echo "WARNING: Docker socket mounted - this mode is for development only, not for production use."
@@ -391,7 +406,20 @@ fi
 # Parse DATABASE_URL (prefer ARCHESTRA_DATABASE_URL, fallback to DATABASE_URL)
 EFFECTIVE_DATABASE_URL="${ARCHESTRA_DATABASE_URL:-$DATABASE_URL}"
 
+# supervisord reads the config written here, never /etc/supervisord.conf.
+SUPERVISOR_CONF=/run/archestra/supervisord.conf
+if [ "$RUN_AS_ROOT" = "true" ]; then
+    cp /etc/supervisord.conf "$SUPERVISOR_CONF"
+else
+    sed '/^user=root$/d' /etc/supervisord.conf > "$SUPERVISOR_CONF"
+fi
+
 if [ "$USE_EXTERNAL_DB" = "false" ]; then
+    if [ "$RUN_AS_ROOT" != "true" ]; then
+        echo "ERROR: The bundled PostgreSQL runs as its own system user, so the container must start as root to use it."
+        echo "Start the container as root (the image's default user), or set ARCHESTRA_DATABASE_URL to an external PostgreSQL database."
+        exit 1
+    fi
     echo "Using internal PostgreSQL database"
 
     # Use defaults for internal database
@@ -400,10 +428,7 @@ if [ "$USE_EXTERNAL_DB" = "false" ]; then
     POSTGRES_DB=${POSTGRES_DB:-archestra_dev}
     EFFECTIVE_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
 
-    # Append postgres program to supervisord config. /etc survives a container
-    # restart, so append only once.
-    grep -q '^\[program:postgres\]' /etc/supervisord.conf \
-        || cat /etc/supervisord.postgres.conf >> /etc/supervisord.conf
+    cat /etc/supervisord.postgres.conf >> "$SUPERVISOR_CONF"
 
     # The setup below prints several screens of initdb and server output on a
     # healthy start. Keep it out of `docker logs` unless a step fails, and send
@@ -527,7 +552,7 @@ export ARCHESTRA_SERVER_SUPERVISOR_STOP_SECONDS
 
 # Start supervisord in foreground but allow signal handling
 # Run in background and wait so trap can catch signals
-/usr/bin/supervisord -c /etc/supervisord.conf &
+/usr/bin/supervisord -c "$SUPERVISOR_CONF" &
 SUPERVISOR_PID=$!
 
 # Wait for supervisord to exit (or for a signal)

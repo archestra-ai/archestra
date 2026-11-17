@@ -1386,7 +1386,27 @@ source: no bundled or external database and no named entry supplies it.
 securityContext for the chart's own containers, from archestra.containerSecurityContext.
 */}}
 {{- define "archestra-platform.containerSecurityContext" -}}
-{{- with .Values.archestra.containerSecurityContext -}}
+{{- $context := deepCopy (.Values.archestra.containerSecurityContext | default dict) }}
+{{- if .Values.archestra.runAsNonRoot }}
+{{- $context = merge $context (dict "capabilities" (dict "drop" (list "ALL"))) }}
+{{- end }}
+{{- with $context -}}
+securityContext:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
+
+{{/*
+Pod-level securityContext for the web, worker, and migration pods. With
+archestra.runAsNonRoot they run as the image's archestra user (UID 10001);
+values in archestra.podSecurityContext win.
+*/}}
+{{- define "archestra-platform.podSecurityContext" -}}
+{{- $context := deepCopy (.Values.archestra.podSecurityContext | default dict) }}
+{{- if .Values.archestra.runAsNonRoot }}
+{{- $context = merge $context (dict "runAsNonRoot" true "runAsUser" 10001 "runAsGroup" 10001 "fsGroup" 10001) }}
+{{- end }}
+{{- with $context -}}
 securityContext:
   {{- toYaml . | nindent 2 }}
 {{- end }}

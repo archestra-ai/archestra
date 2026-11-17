@@ -189,6 +189,15 @@ archestra:
   #     azure.workload.identity/use: "true"
   podLabels: {}
 
+  # Run the web, worker, and migration pods as the image's non-root archestra
+  # user (UID 10001), as the restricted Pod Security level and OpenShift
+  # require. It adds runAsNonRoot, runAsUser, runAsGroup and fsGroup to
+  # podSecurityContext and drops all capabilities in containerSecurityContext;
+  # a value set there wins. fsGroup lets these users write the file-storage
+  # and diagnostics volumes, including files a root pod wrote before, on
+  # volume types that support ownership changes (NFS does not).
+  runAsNonRoot: false
+
   # Pod-level securityContext for the web, worker, and migration pods.
   # RuntimeDefault applies the container runtime's default syscall filter,
   # which the platform image runs under unchanged.
@@ -203,9 +212,10 @@ archestra:
   # To harden further, add for example:
   #   capabilities:
   #     drop: ["ALL"]
-  # The platform image runs as root today, so runAsNonRoot is not supported
-  # yet, and readOnlyRootFilesystem needs writable emptyDir mounts (see
-  # extraVolumes) for /tmp, /var/log/supervisor, and /var/run.
+  # To run as non-root, set runAsNonRoot above. readOnlyRootFilesystem needs
+  # writable emptyDir mounts (see extraVolumes) for /tmp, /run/archestra,
+  # /var/log/supervisor, /app/data, /home/archestra, and
+  # /app/frontend/.next/cache.
   containerSecurityContext:
     allowPrivilegeEscalation: false
 

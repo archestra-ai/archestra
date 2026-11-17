@@ -23,6 +23,12 @@ set -eu
 # - Helm diagnostics storage mounts a PVC at /var/diagnostics and sets the env var
 export ARCHESTRA_NODE_DIAGNOSTIC_DIR="${ARCHESTRA_NODE_DIAGNOSTIC_DIR:-/app/data/diagnostics}"
 
+# An arbitrary UID (OpenShift) has no home directory, so HOME is `/`. The
+# backend's caches live under HOME; give them the image's writable one.
+if [ ! -w "${HOME:-/}" ] && [ -w /home/archestra ]; then
+  export HOME=/home/archestra
+fi
+
 mkdir -p "$ARCHESTRA_NODE_DIAGNOSTIC_DIR"
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

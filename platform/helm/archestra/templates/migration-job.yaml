@@ -81,9 +81,8 @@ spec:
       {{- end }}
       automountServiceAccountToken: {{ $automount }}
       restartPolicy: Never
-      {{- with .Values.archestra.podSecurityContext }}
-      securityContext:
-        {{- toYaml . | nindent 8 }}
+      {{- with include "archestra-platform.podSecurityContext" . }}
+      {{- . | nindent 6 }}
       {{- end }}
       initContainers:
         {{- include "archestra-platform.initContainers" $migrationContext | nindent 8 }}

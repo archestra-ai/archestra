@@ -1,6 +1,5 @@
 import {
   and,
-  desc,
   eq,
   inArray,
   isNotNull,

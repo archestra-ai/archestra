@@ -15162,7 +15162,7 @@ describe("soft-block emergency override", () => {
     "Agent",
     "SendMessage",
   ]) {
-    test(`releases ${tool} with an executable remedy and disables enforcement without an earlier waiver`, async ({
+    test(`keeps ${tool} with an executable remedy held and the session enforced`, async ({
       makeOrganization,
     }) => {
       const organizationId = (await makeOrganization()).id;
@@ -15181,15 +15181,8 @@ describe("soft-block emergency override", () => {
         const calls = [{ id: "first", name: tool, arguments: {} }];
         expect(
           await plugin.onToolCalls({ ...context, toolCalls: calls }),
-        ).toEqual({ decision: "allow", toolCalls: calls });
-        expect(await isUnenforcedSession(trusted.session)).toBe(true);
-        expect(
-          await plugin.onBufferedModelResponse({
-            ...context,
-            response: {},
-            responseText: "done",
-          }),
-        ).toBeUndefined();
+        ).not.toEqual({ decision: "allow", toolCalls: calls });
+        expect(await isUnenforcedSession(trusted.session)).toBe(false);
       } finally {
         evaluate.mockRestore();
       }

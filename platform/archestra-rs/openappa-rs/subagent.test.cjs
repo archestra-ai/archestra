@@ -192,11 +192,15 @@ test('a spawn a person approved runs on its retry, declared ahead like its first
   assert.ok(retry.spawn_binding, 'the approved retry starts its child');
 });
 
-test('without context control a return is not declared, so the spawn is refused before it is ruled', { skip: !databaseUrl }, async () => {
+test('without context control a return is not declared, and the spawn is still ruled under its own call', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2);
   const run = family(approvalPolicy(false));
   await run.hook(run.parent, { event: 'session_start' });
   await assert.rejects(run.remedy(run.parent, 's1:return', { label: {} }), (error) => error.code === 'remedy');
+
+  const held = await run.hook(run.parent, run.spawnCall('s1'));
+  assert.equal(held.decision, 'deny_call', JSON.stringify(held));
+  assert.ok(held.review?.length, 'the approval is offered under the call the client sent');
 });
 
 /** The attempts the family's log recorded declarations ahead under, in log order. */

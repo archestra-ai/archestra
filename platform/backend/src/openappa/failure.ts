@@ -64,18 +64,6 @@ export function undeclaredToolNotice(error: unknown): string | null {
 }
 
 /**
- * A subagent call whose return the runtime refused to declare, for example in
- * a deployment without context control. Nothing is recorded for the call, so
- * this notice answers it, or null for any other failure.
- */
-export function undeclaredReturnNotice(error: unknown): string | null {
-  const cause = error instanceof ApiError ? error.cause : error;
-  return runtimeFailureCode(cause) === "remedy" && cause instanceof Error
-    ? `[appa] Blocked: this subagent call did not run because its return could not be declared (${cause.message}). No remedy plan is available. Stop and explain the refusal to the user.`
-    : null;
-}
-
-/**
  * The notice that replaces one tool call whose annotator gave no answer, or
  * null for any other failure.
  *

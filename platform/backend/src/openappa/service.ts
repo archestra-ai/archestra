@@ -56,7 +56,6 @@ import {
   type RuntimeFailureCode,
   runtimeFailureCode,
   unansweredAnnotationNotice,
-  undeclaredReturnNotice,
   undeclaredToolNotice,
 } from "@/openappa/failure";
 import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
@@ -1389,9 +1388,8 @@ type AppaCallDecision =
        */
       recorded?: true;
       /**
-       * The runtime never ruled on the call: its annotator gave no answer or
-       * its return could not be declared. The runtime has no record of the
-       * call, so its result is answered by the proxy, not the runtime.
+       * The call's annotator gave no answer. The runtime has no record of
+       * the call, so its result is answered by the proxy, not the runtime.
        */
       unanswered?: true;
     };
@@ -1570,13 +1568,12 @@ export async function evaluateToolCalls(
         ? options.declareSpawnReturn?.(call)
         : undefined;
       if (declaration) {
-        const refusal = await declareSpawnReturn({
+        await declareSpawnReturn({
           session,
           callId: call.id,
           declaration,
           controlToolName: options.control?.name,
         });
-        if (refusal) return refusal;
       }
       let decision: Awaited<ReturnType<typeof dispatchCall>>;
       try {
@@ -2048,25 +2045,24 @@ export type SpawnReturnDeclaration =
 /**
  * Declares a spawn's return ahead of it, so the spawn is the only operation
  * the runtime rules on: its block, offers and approval belong to the call the
- * client sent. A probe of the call would spend that call's approval. Returns
- * the refusal the caller reports instead of dispatching; the runtime holds no
- * record of it.
+ * client sent. A probe of the call would spend that call's approval. A
+ * declaration the runtime refuses, for example without context control, is
+ * not a ruling: the spawn is still dispatched and ruled undeclared.
  */
 async function declareSpawnReturn(params: {
   session: OpenAppaSession;
   callId: string;
   declaration: SpawnReturnDeclaration;
   controlToolName?: string;
-}): Promise<AppaCallDecision | undefined> {
+}): Promise<void> {
   const args = {
     label: {},
     ...(params.declaration.kind === "attested"
       ? { return_schema: normalizeReturnSchemaNode(params.declaration.schema) }
       : {}),
   };
-  let declared: Awaited<ReturnType<typeof executeRemedyByOffer>>;
   try {
-    declared = await executeRemedyByOffer({
+    const declared = await executeRemedyByOffer({
       organizationId: params.session.organization_id,
       callerId: params.session.caller_id,
       sessionId: params.session.session_id,
@@ -2078,19 +2074,26 @@ async function declareSpawnReturn(params: {
       originalArguments: JSON.stringify(args),
       args,
     });
+    if (declared.result.isError) logUndeclaredReturn(params, declared.result);
   } catch (error) {
-    const notice = undeclaredReturnNotice(error);
-    if (notice === null) throw error;
-    return { kind: "deny", feedback: notice, unanswered: true };
+    const cause = error instanceof ApiError ? error.cause : error;
+    if (runtimeFailureCode(cause) !== "remedy") throw error;
+    logUndeclaredReturn(params, cause);
   }
-  if (!declared.result.isError) return undefined;
-  return {
-    kind: "deny",
-    feedback: declared.result.content
-      .flatMap((block) => (block.type === "text" ? [block.text] : []))
-      .join("\n"),
-    unanswered: true,
-  };
+}
+
+function logUndeclaredReturn(
+  params: { session: OpenAppaSession; callId: string },
+  refusal: unknown,
+) {
+  logger.info(
+    {
+      sessionId: params.session.session_id,
+      toolCallId: params.callId,
+      refusal,
+    },
+    "OpenAPPA did not declare a delegation's return ahead; the call is ruled undeclared",
+  );
 }
 
 function normalizeReturnSchemaNode(node: unknown): unknown {

@@ -369,7 +369,6 @@ export interface ReportingOptions {
  * Reads an offer's original refusal from authenticated, host-scoped journal
  * records, including encrypted and escaped decisions. Executes no remedy.
  */
-export declare function retainedOfferRefusal(input: string, encryption?: ContentEncryption | undefined | null): string | null
 
 export declare function sendPeerMessage(input: string, policy: DispatchPolicy): Promise<string>
 

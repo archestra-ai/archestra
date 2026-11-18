@@ -1577,7 +1577,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         : [],
     );
     binding.authorityRulingSeen ||= decisions.some(
-      (decision) => decision.kind === "hold" && decision.authorityRuling,
+      (decision) =>
+        decision.kind === "hold" &&
+        "authorityRuling" in decision &&
+        decision.authorityRuling === true,
     );
     if (!isUnwaivable(binding)) {
       await refuseSoftBlock(
@@ -1873,6 +1876,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         decision.kind === "deny" &&
         isHardBlock(decision.diagnostic ?? decision.feedback),
     );
+    binding.authorityRulingSeen ||= relayEvaluations.some(isAuthorityRuling);
     const admittedRelayIds = new Set<string>();
     const withheldRelayDecisions = new Map<
       string,
@@ -1922,6 +1926,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         decision.kind === "deny" &&
         isHardBlock(decision.diagnostic ?? decision.feedback),
     );
+    // Latched before any later await can fail into a waiver: a waiver
+    // releases the whole batch, so one ruling an authority answers keeps it.
+    binding.authorityRulingSeen ||= decisions.some(isAuthorityRuling);
     const decisionById = new Map(
       rest.map((call, index) => [call.id, decisions[index]]),
     );
@@ -1977,11 +1984,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         : [],
     );
     binding.hardBlockSeen ||= refusals.some(isHardBlock);
-    // A waiver releases the whole batch, so one ruling an authority answers
-    // keeps every refusal in it.
-    binding.authorityRulingSeen ||= [...decisionById.values()].some(
-      isAuthorityRuling,
-    );
     if (
       refusals.length &&
       !isUnwaivable(binding) &&

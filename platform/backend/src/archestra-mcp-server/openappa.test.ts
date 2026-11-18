@@ -649,7 +649,6 @@ describe("OpenAPPA tool execution", () => {
       feedback: "requires attention: blocked",
       offerId: "retained-hard-offer",
     });
-    const execute = vi.spyOn(openappaService, "executeRemedyByOffer");
     const result = await executeArchestraTool(
       toolFullName,
       {
@@ -660,7 +659,6 @@ describe("OpenAPPA tool execution", () => {
       { ...mockContext, openappaSession: session },
     );
     expect(result.isError).toBe(true);
-    expect(execute).not.toHaveBeenCalled();
     expect(await isUnenforcedSession(session)).toBe(false);
     expect(
       await db.select().from(schema.openappaUnenforcedSessionsTable),

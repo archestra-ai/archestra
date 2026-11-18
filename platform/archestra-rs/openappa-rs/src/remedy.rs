@@ -2,8 +2,8 @@ use crate::{
     Sql,
     admin_api::{ContentEncryption, DispatchPolicy},
     errors::{
-        BindingFailure, Failure, failure, invalid_input, invariant, panicked, remedy_refused,
-        sql_failure, storage,
+        BindingFailure, Failure, failure, invalid_input, invariant, remedy_refused, sql_failure,
+        storage,
     },
     initialized,
     input::{
@@ -14,7 +14,7 @@ use crate::{
         UNRELEASED_CALL_CODE, canonical_tool, encrypted_receipts, routing_owner, spelled_tool,
         validate_trajectory,
     },
-    retained_refusal, run, sealed,
+    run, sealed,
     session::session_actor,
 };
 use appa_eventlog::encryption::StorageCipher;
@@ -26,7 +26,7 @@ use napi_derive::napi;
 use serde::Serialize;
 use serde_json::{Value, json, value::RawValue};
 use sha2::{Digest, Sha256};
-use std::{panic::AssertUnwindSafe, time::SystemTime};
+use std::time::SystemTime;
 
 /// Executes a remedy for the proxy-stamped trajectory, resolving that session
 /// from PostgreSQL. The caller, when present, is the receipt spender.
@@ -128,25 +128,6 @@ pub struct OfferReviewOutput {
     pub scope: Option<String>,
     /// The ruling authority's own hint to the reviewer, when it declares one.
     pub hint: Option<String>,
-}
-
-/// Reads an offer's original refusal from authenticated, host-scoped journal
-/// records, including encrypted and escaped decisions. Executes no remedy.
-#[napi(js_name = "retainedOfferRefusal")]
-pub fn retained_offer_refusal(
-    input: String,
-    encryption: Option<ContentEncryption>,
-) -> napi::Result<Option<String>> {
-    std::panic::catch_unwind(AssertUnwindSafe(|| {
-        let input = serde_json::from_str(&input).map_err(invalid_input)?;
-        let cipher = match encryption {
-            Some(encryption) => StorageCipher::encrypted(encryption.key.as_ref(), encryption.scope)
-                .map_err(invalid_input)?,
-            None => StorageCipher::Plain,
-        };
-        retained_refusal::find(input, &cipher).map_err(invalid_input)
-    }))
-    .map_err(|_| panicked("OpenAPPA retained refusal lookup failed"))?
 }
 
 /// Loads the review entry for an offer from the retained DenyCall in PostgreSQL.

@@ -22,7 +22,6 @@ mod peer;
 mod policy;
 pub mod remedy;
 mod replay;
-mod retained_refusal;
 mod sealed;
 mod session;
 

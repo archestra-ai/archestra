@@ -1918,9 +1918,11 @@ async function handleObservedLLMProxy<
           unsupportedClientAction,
         },
         chatSource: isInternalChat ? source : undefined,
-        // Only narrows what the response may do, so the source needs no proof.
+        // A summary skips the turn and child-return lifecycle, so only this
+        // process may claim one.
         summaryRequest:
-          source === "chat:compaction" || source === "a2a:compaction",
+          proof.inProcess &&
+          (source === "chat:compaction" || source === "a2a:compaction"),
         externalAgentId,
         inProcessRequest: internalCall,
         internalCall: proof.guardrail,

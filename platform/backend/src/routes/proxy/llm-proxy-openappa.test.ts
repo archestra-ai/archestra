@@ -9356,17 +9356,32 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     );
   });
 
-  test.for([
-    "chat:compaction",
-    "a2a:compaction",
-  ])("rejects a %s summary's tool call before recording it", async (source) => {
+  test.for(
+    (["chat:compaction", "a2a:compaction"] as const).flatMap((source) =>
+      (["refuse", "allow"] as const).map((blockMode) => ({
+        source,
+        blockMode,
+      })),
+    ),
+  )("rejects a $source summary's tool call before recording it (unapprovable blocks: $blockMode)", async ({
+    source,
+    blockMode,
+  }) => {
     // The summary request carries the turn's tools only so the cached prefix
-    // matches; a call it makes is never the conversation's.
+    // matches; a call it makes is never the conversation's. Nor is it a soft
+    // block to waive: that would release it and exempt the session.
+    const overrides = config.openappa.breakTheGlassOverrides;
+    config.openappa.breakTheGlassOverrides = {
+      ...overrides,
+      unapprovableBlockMode: blockMode,
+    };
     const response = await post(payload(false), {
       "x-archestra-source": source,
+    }).finally(() => {
+      config.openappa.breakTheGlassOverrides = overrides;
     });
 
-    expect(response.statusCode, response.body).toBe(503);
+    expect(response.statusCode, response.body).toBe(422);
     expect(response.json().error.message).toBe(
       "OpenAPPA rejected tool calls from a compaction response",
     );

@@ -74,7 +74,10 @@ import {
 } from "@/routes/mcp-gateway/utils";
 import { assertCallerMayStartTurn } from "@/services/agent-credential-readiness";
 import { compactionTranscriptToolOutput } from "@/services/compaction-llm";
-import { generateInContextSummary } from "@/services/context-compaction";
+import {
+  createCompactionSummarizer,
+  generateInContextSummary,
+} from "@/services/context-compaction";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
@@ -602,43 +605,53 @@ export async function executeA2AMessage(
     const contextLength = modelRow
       ? ModelModel.resolveEffectiveContextLength(modelRow)
       : null;
+    // Summaries run in the run's own session as `a2a:compaction`: the proxy
+    // governs the tool results they repeat and never takes one for the run's
+    // turn or a child's answer.
     let compactionModel: Promise<LLMModel> | undefined;
+    const summaryModel = () =>
+      (compactionModel ??= createLLMModelForAgent({
+        organizationId,
+        userId,
+        agentId: agent.id,
+        model: selectedModel,
+        provider,
+        sessionId,
+        source: "a2a:compaction",
+        externalAgentId: delegationChain,
+        agentLlmApiKeyId: llmApiKeyId,
+        modelPoolId,
+        autoRouterId,
+        appaSubagentToken: params.appaSubagent?.token,
+        unattended: scheduleTriggerRunId !== undefined,
+      }).then((created) => authorizeModel(created.model)));
     const stepContextGuard = createStepContextGuard({
-      model,
       contextLength,
       systemPrompt,
       abortSignal,
       logContext: { agentId: agent.id, sessionId },
       transcriptToolOutput: compactionTranscriptToolOutput,
-      // In the run's own session, so the proxy governs the tool results it
-      // repeats; the transcript summary is the fallback.
-      summarizeMessages: async ({ messages, hasPreviousSummary }) => {
-        compactionModel ??= createLLMModelForAgent({
-          organizationId,
-          userId,
-          agentId: agent.id,
-          model: selectedModel,
-          provider,
-          sessionId,
-          source: "a2a:compaction",
-          externalAgentId: delegationChain,
-          agentLlmApiKeyId: llmApiKeyId,
-          modelPoolId,
-          autoRouterId,
-          appaSubagentToken: params.appaSubagent?.token,
-          unattended: scheduleTriggerRunId !== undefined,
-        }).then((created) => authorizeModel(created.model));
-        return generateInContextSummary({
-          model: await compactionModel,
+      summarizeMessages: async ({ messages, hasPreviousSummary }) =>
+        generateInContextSummary({
+          model: await summaryModel(),
           systemPrompt,
           messages,
           tools: mcpTools,
           hasPreviousSummary,
           contextLength,
           abortSignal,
+          // As the turn sends it: stored item references break otherwise.
+          ...(provider === "openai" &&
+            requiresOpenAiResponsesApi(selectedModel) && {
+              providerOptions: { openai: { store: false } },
+            }),
           logFields: { agentId: agent.id, sessionId, provider },
-        });
-      },
+        }),
+      summarizeTranscript: async (transcript) =>
+        createCompactionSummarizer({
+          model: await summaryModel(),
+          abortSignal,
+        })(transcript),
       ...(usesStepPromptCache({ provider, anthropicNativeEndpoint }) && {
         promptCache: {
           provider,

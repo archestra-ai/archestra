@@ -417,7 +417,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (!trustedContext) return;
     const enforcement = await enforcementFor(trustedContext);
     if (enforcement !== "active") {
-      await this.observe(context, trustedContext);
+      // A summary is no turn or child run of the session.
+      if (!isSummaryRequest(trustedContext))
+        await this.observe(context, trustedContext);
       return;
     }
     const chat = trustedContext.chatSource !== undefined;
@@ -1615,14 +1617,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   private async guardedToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
-    const trusted = getTrustedContext(context.resources);
-    // Rejected before an observer records the call as the session's.
-    if (trusted && isSummaryRequest(trusted) && context.toolCalls.length > 0) {
-      throw new ApiError(
-        503,
-        "OpenAPPA rejected tool calls from a compaction response",
-      );
-    }
     const observer = this.observers.get(context.resources);
     if (observer) {
       // A call is signed only once the record that this session made it
@@ -2763,6 +2757,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    // Before the soft-block waiver, which would release the call and exempt
+    // the session, and before an observer records it as the session's. Not
+    // retryable: the same summary request would only be paid for again.
+    const trusted = getTrustedContext(context.resources);
+    if (trusted && isSummaryRequest(trusted) && context.toolCalls.length > 0) {
+      throw new ApiError(
+        422,
+        "OpenAPPA rejected tool calls from a compaction response",
+      );
+    }
     const adapter = this.bindings.get(context.resources)?.adapter;
     if (
       context.toolCalls.some((call) => isChildContinuationCall(adapter, call))

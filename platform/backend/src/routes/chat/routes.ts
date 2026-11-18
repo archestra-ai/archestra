@@ -1652,6 +1652,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             hasPreviousSummary,
                             contextLength,
                             abortSignal: chatAbortController.signal,
+                            // As the turn sends it: stored item references
+                            // break otherwise.
+                            ...(provider === "openai" &&
+                              requiresOpenAiResponsesApi(selectedModel) && {
+                                providerOptions: { openai: { store: false } },
+                              }),
                             logFields: { conversationId, provider },
                           });
                         },

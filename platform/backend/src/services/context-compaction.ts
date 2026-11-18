@@ -235,6 +235,8 @@ export async function generateInContextSummary(params: {
   hasPreviousSummary: boolean;
   contextLength: number | null;
   abortSignal?: AbortSignal;
+  /** The turn's own options that change how the history is serialized. */
+  providerOptions?: GenerateTextParams["providerOptions"];
   logFields?: Record<string, unknown>;
 }): Promise<string | null> {
   // Provider-executed tools cannot be made read-only by removing local
@@ -260,6 +262,9 @@ export async function generateInContextSummary(params: {
       ...(tools ? { tools } : {}),
       temperature: 0,
       maxOutputTokens: CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
+      ...(params.providerOptions && {
+        providerOptions: params.providerOptions,
+      }),
       abortSignal: params.abortSignal,
     });
     // Bedrock's SDK drops tool history it cannot send (a toolContent warning).
@@ -521,6 +526,8 @@ const CONTINUATION_PREFIX = "[… continued] ";
 const TRANSCRIPT_TOOL_INPUT_MAX_CHARS = 2_000;
 const TRANSCRIPT_TOOL_RESULT_MAX_CHARS = 8_000;
 const WITHHELD_TOOL_OUTPUT = "(output withheld from this summary)";
+
+type GenerateTextParams = Parameters<typeof generateText>[0];
 
 const PROXY_WRITTEN_MEMBERS: ReadonlyArray<
   readonly [shortName: string, members: readonly string[]]

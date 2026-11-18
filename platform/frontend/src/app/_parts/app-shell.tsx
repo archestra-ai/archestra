@@ -109,7 +109,7 @@ export function AppShell({
   // scroll, so we only bound the chain for these to avoid clipping content.
   const isChat = pathname === "/chat" || pathname.startsWith("/chat/");
   const isProjectDetail = /^\/projects\/[^/]+/.test(pathname);
-  // The policy source fills the viewport like an editor, above the version line.
+  // The policy source fills the viewport like an editor, with no version line.
   const isPolicySource = pathname === "/openappa/policy";
   const isViewportLocked = isChat || isProjectDetail || isPolicySource;
   const [sidebarOpen, setSidebarOpen] = useSidebarOpenState(initialSidebarOpen);
@@ -263,9 +263,10 @@ export function AppShell({
                   only after it mounts: rendering it there would draw two
                   lines on the server and drop one as the page starts,
                   moving the centred composer. */}
-              {pathname !== "/chat" && !seededConversationId(pathname) && (
-                <Version />
-              )}
+              {/* The policy editor takes the whole height, so it has none. */}
+              {pathname !== "/chat" &&
+                !seededConversationId(pathname) &&
+                !isPolicySource && <Version />}
             </div>
           </main>
           <Toaster />

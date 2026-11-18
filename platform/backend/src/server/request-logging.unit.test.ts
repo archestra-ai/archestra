@@ -1,5 +1,5 @@
 import { Writable } from "node:stream";
-import Fastify, { LogController } from "fastify";
+import Fastify, { type FastifyBaseLogger, LogController } from "fastify";
 import pino from "pino";
 import { expect, test } from "vitest";
 import { registerRequestLogging } from "./request-logging";
@@ -63,8 +63,9 @@ function makeApp() {
       callback();
     },
   });
+  const logger: FastifyBaseLogger = pino({ level: "debug" }, stream);
   const app = Fastify({
-    loggerInstance: pino({ level: "debug" }, stream),
+    loggerInstance: logger,
     logController: new LogController({ disableRequestLogging: true }),
   });
   registerRequestLogging(app);

@@ -951,6 +951,8 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
+      assertSystemKeyCredentialsUnchanged({ apiKey: apiKeyFromDB, body });
+
       // A key for a provider the admins switched off is frozen: it can be
       // deleted, but not renamed, rescoped, or rotated back into service.
       await assertModelProviderAllowed({
@@ -1598,6 +1600,42 @@ async function authorizeApiKeyAccess(params: {
   });
 }
 // SPDX-SnippetEnd
+
+/**
+ * A system key's credentials and connection settings come from environment
+ * variables, so an update may change only what the platform stores itself:
+ * its name, labels, and primary flag. Who can reach it is edited through its
+ * permission policy.
+ */
+function assertSystemKeyCredentialsUnchanged(params: {
+  apiKey: { isSystem: boolean };
+  body: {
+    apiKey?: string;
+    baseUrl?: string | null;
+    inferenceBaseUrl?: string | null;
+    extraHeaders?: Record<string, string> | null;
+    awsAccessKeyId?: string;
+    awsSecretAccessKey?: string;
+    awsSessionToken?: string;
+  };
+}): void {
+  const { apiKey, body } = params;
+  if (!apiKey.isSystem) return;
+  const changesCredentials =
+    body.apiKey !== undefined ||
+    body.baseUrl !== undefined ||
+    body.inferenceBaseUrl !== undefined ||
+    body.extraHeaders !== undefined ||
+    body.awsAccessKeyId !== undefined ||
+    body.awsSecretAccessKey !== undefined ||
+    body.awsSessionToken !== undefined;
+  if (changesCredentials) {
+    throw new ApiError(
+      400,
+      "System API keys are configured through environment variables; their credentials and connection settings cannot be changed",
+    );
+  }
+}
 
 function assertApiKeyIsNotSystem(apiKey: { isSystem: boolean }): void {
   if (apiKey.isSystem) {

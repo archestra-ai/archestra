@@ -574,6 +574,55 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(await LlmProviderApiKeyModel.findById(systemKey.id)).not.toBeNull();
   });
 
+  test.for([
+    ["an API key value", { apiKey: "sk-override" }],
+    ["a base URL", { baseUrl: "https://example.com/v1" }],
+    ["extra headers", { extraHeaders: { "x-test": "1" } }],
+  ] as const)("refuses to give a system API key %s", async ([
+    _label,
+    payload,
+  ]) => {
+    const systemKey = await LlmProviderApiKeyModel.createSystemKey({
+      organizationId,
+      name: "System Gemini",
+      provider: "gemini",
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${systemKey.id}`,
+      payload,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toBe(
+      "System API keys are configured through environment variables; their credentials and connection settings cannot be changed",
+    );
+    const stored = await LlmProviderApiKeyModel.findById(systemKey.id);
+    expect(stored?.secretId).toBeNull();
+    expect(stored?.baseUrl).toBeNull();
+    expect(stored?.extraHeaders).toBeNull();
+  });
+
+  test("renames a system API key", async () => {
+    const systemKey = await LlmProviderApiKeyModel.createSystemKey({
+      organizationId,
+      name: "System Gemini",
+      provider: "gemini",
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${systemKey.id}`,
+      payload: { name: "Vertex AI" },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect((await LlmProviderApiKeyModel.findById(systemKey.id))?.name).toBe(
+      "Vertex AI",
+    );
+  });
+
   test("deleting a key backing the organization's OCR configuration clears that setting", async () => {
     const createResponse = await app.inject({
       method: "POST",

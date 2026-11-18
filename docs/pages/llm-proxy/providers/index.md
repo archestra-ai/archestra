@@ -28,6 +28,8 @@ The new key appears in the **Provider API keys** table as **Configured**, and it
 
 You can also set a key through an environment variable, `ARCHESTRA_CHAT_<PROVIDER>_API_KEY` (for example [`ARCHESTRA_CHAT_OPENAI_API_KEY`](/docs/reference/configuration#ARCHESTRA_CHAT_OPENAI_API_KEY)). It is the fallback when no stored key applies.
 
+Keys that come from deployment settings, such as [Vertex AI](/docs/llm-proxy/providers/gemini#using-vertex-ai), show **Env Vars** under **Storage**. Their credentials change only in the environment, and they cannot be deleted. Edit one to choose who can use it.
+
 <span id="turning-providers-off"></span>
 
 To hide a provider your company does not use, go to **Settings → LLM → Model providers** and switch **Available** off. It leaves every picker, and nobody can add a key for it. Its existing keys keep working. On the same page, you can give a provider a display name.

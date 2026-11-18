@@ -161,18 +161,35 @@ for (const viewport of [
 
       // All consequences use the card's width; neither button can sit beside
       // or overlap them, even on a phone.
-      const listBox = await consequences.boundingBox();
-      const approveBox = await approve.boundingBox();
-      const denyBox = await deny.boundingBox();
-      if (!listBox || !approveBox || !denyBox) {
-        throw new Error("Approval review is missing its content or actions");
-      }
-      expect(approveBox.y).toBeGreaterThan(listBox.y + listBox.height);
-      expect(denyBox.y).toBe(approveBox.y);
-      expect(denyBox.x + denyBox.width).toBeLessThanOrEqual(viewport.width);
-      expect(
-        await card.evaluate((el) => el.scrollWidth <= el.clientWidth),
-      ).toBe(true);
+      // Read all positions in one frame: the chat scrolls to follow the
+      // incoming review, so separate boundingBox calls can observe different
+      // scroll offsets even though the elements never overlap.
+      const layout = await page.evaluate(
+        ({ list, approve, deny, card }) => {
+          if (!list || !approve || !deny || !card) {
+            throw new Error("Approval review is missing content or actions");
+          }
+          const listBox = list.getBoundingClientRect();
+          const approveBox = approve.getBoundingClientRect();
+          const denyBox = deny.getBoundingClientRect();
+          return {
+            actionsBelow: approveBox.top > listBox.bottom,
+            actionsAligned: approveBox.top === denyBox.top,
+            rightEdge: denyBox.right,
+            noOverflow: card.scrollWidth <= card.clientWidth,
+          };
+        },
+        {
+          list: await consequences.elementHandle(),
+          approve: await approve.elementHandle(),
+          deny: await deny.elementHandle(),
+          card: await card.elementHandle(),
+        },
+      );
+      expect(layout.actionsBelow).toBe(true);
+      expect(layout.actionsAligned).toBe(true);
+      expect(layout.rightEdge).toBeLessThanOrEqual(viewport.width);
+      expect(layout.noOverflow).toBe(true);
 
       if (viewport.width === 1280) {
         await card.screenshot({ path: testInfo.outputPath("review.png") });

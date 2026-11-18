@@ -287,6 +287,21 @@ export class Authnz {
 
   private isAuthenticated = async (request: FastifyRequest) => {
     const headers = new Headers(request.headers as HeadersInit);
+    const authHeader = headers.get("authorization");
+
+    // Service-account tokens go before the session lookup. With
+    // enableSessionForAPIKeys, Better Auth's api-key hook reads the
+    // Authorization header on every getSession call and throws "Invalid API
+    // key" for anything that is not an API key, so a service-account request
+    // could never resolve a session anyway. Asking first spares each one a
+    // failed hook, which tracing records as an error span.
+    if (
+      authHeader &&
+      (await this.verifyServiceAccountToken(request, authHeader))
+    ) {
+      logger.trace("[Authnz] Service account token verification succeeded");
+      return true;
+    }
 
     try {
       logger.trace("[Authnz] Attempting session-based authentication");
@@ -309,19 +324,11 @@ export class Authnz {
       );
     }
 
-    const authHeader = headers.get("authorization");
     if (authHeader) {
-      // Service-account tokens go first. Both token kinds carry the platform
-      // prefix, but a service-account token is one indexed lookup by hash,
-      // while Better Auth's API-key check reads the apikey table by key and
-      // logs an error on every miss. Checking API keys first charged every
-      // service-account request that miss twice: here and again in
-      // populateUserInfo.
-      if (await this.verifyServiceAccountToken(request, authHeader)) {
-        logger.trace("[Authnz] Service account token verification succeeded");
-        return true;
-      }
-
+      // Service-account tokens were checked above. Both token kinds carry the
+      // platform prefix, but a service-account token is one indexed lookup by
+      // hash, while Better Auth's API-key check reads the apikey table by key
+      // and logs an error on every miss.
       const apiKey = await this.verifyApiKey(request, authHeader);
       if (apiKey?.valid) {
         logger.trace("[Authnz] API key verification succeeded");

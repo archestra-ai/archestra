@@ -114,7 +114,9 @@ describe("team listing authenticated caller", () => {
     expect(response.json().data.map((item: { id: string }) => item.id)).toEqual(
       [team.id],
     );
-    expect(getSession).toHaveBeenCalledTimes(1);
+    // A service-account token never resolves a session, so the middleware
+    // does not ask for one.
+    expect(getSession).not.toHaveBeenCalled();
   });
 });
 

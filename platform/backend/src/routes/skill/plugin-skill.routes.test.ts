@@ -145,15 +145,17 @@ describe("plugin Skill routes", () => {
       lookups,
     });
     expect(readable.map((skill) => skill.pluginId)).toEqual([visible.id]);
-    // A caller without plugin:read cannot borrow the previous caller's cache,
-    // even for a plugin they own or one shared with the organization.
+    // The next caller does not borrow the previous caller's cache: grants
+    // decide, so a member without plugin:read sees the plugin they authored.
     expect(
-      await listPluginSkills({
-        organizationId: ctx.organizationId,
-        userId: other.id,
-        lookups,
-      }),
-    ).toEqual([]);
+      (
+        await listPluginSkills({
+          organizationId: ctx.organizationId,
+          userId: other.id,
+          lookups,
+        })
+      ).map((skill) => skill.pluginId),
+    ).toEqual([hidden.id]);
   });
 
   test("lists portable skills across plugins, skipping invalid manifests", async () => {

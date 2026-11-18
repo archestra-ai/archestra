@@ -415,6 +415,17 @@ describe("SkillsPage rows", () => {
       isFetching: false,
       // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
     } as any);
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [
+        {
+          organizationId: "org-1",
+          resource: "plugin",
+          scope: PLUGIN_SKILL.pluginId,
+          action: "read",
+        },
+      ],
+      isPending: false,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
 
     render(<SkillsPage />);
 
@@ -449,12 +460,19 @@ describe("SkillsPage rows", () => {
     );
   });
 
-  it("shows plugin sources without a detail link for readers", async () => {
-    vi.mocked(useHasPermissions).mockImplementation(
-      (permissions: Record<string, string[]>) =>
-        // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
-        ({ data: !permissions.plugin?.includes("update") }) as any,
-    );
+  it("shows plugin sources without a detail link when the plugin is not readable", async () => {
+    // A read grant on another plugin does not open this one.
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [
+        {
+          organizationId: "org-1",
+          resource: "plugin",
+          scope: "another-plugin",
+          action: "read",
+        },
+      ],
+      isPending: false,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     mockUseFeature.mockImplementation((name: string) => name === "plugins");
     vi.mocked(usePluginSkills).mockReturnValue({
       data: [PLUGIN_SKILL],

@@ -147,10 +147,13 @@ function PluginDetailView({
     searchParams.get("tab") === "permissions" ? "permissions" : "general";
   const pluginHref = `/plugins/${plugin.id}`;
   const { data: canDelete } = useHasPermissions(
-    { plugin: ["delete", "update"] },
-    "*",
+    { plugin: ["delete"] },
+    plugin.id,
   );
-  const { data: canUpdate } = useHasPermissions({ plugin: ["update"] }, "*");
+  const { data: canUpdate } = useHasPermissions(
+    { plugin: ["update"] },
+    plugin.id,
+  );
   const isReadOnly = canUpdate === false;
   const updatePlugin = useUpdatePlugin(plugin.id);
 
@@ -466,7 +469,7 @@ function PluginDetailView({
             <div className="flex items-center gap-2">
               <PermissionButton
                 permissions={{ plugin: ["update"] }}
-                permissionScope="*"
+                permissionScope={plugin.id}
                 disabled={!isDirty || !isComplete || isGone || isSaving}
                 onClick={handleSave}
               >

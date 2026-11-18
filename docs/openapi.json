@@ -528715,7 +528715,7 @@
         "tags": [
           "Ownership"
         ],
-        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`plugin:update`](/docs/reference/permissions#plugin:update): Modify plugin metadata and files",
+        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -529001,10 +529001,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "plugin:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -529549,7 +529548,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "List plugins for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`plugin:read`](/docs/reference/permissions#plugin:read): View plugins and their file metadata",
+        "description": "List plugins for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -530210,10 +530209,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "plugin:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "post": {
@@ -534013,7 +534011,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Preview the latest tracked GitHub commit without changing approved bytes\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`plugin:update`](/docs/reference/permissions#plugin:update): Modify plugin metadata and files",
+        "description": "Preview the latest tracked GitHub commit without changing approved bytes\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -534388,10 +534386,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "plugin:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -534401,7 +534398,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Re-fetch and explicitly approve the latest tracked GitHub commit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`plugin:update`](/docs/reference/permissions#plugin:update): Modify plugin metadata and files",
+        "description": "Re-fetch and explicitly approve the latest tracked GitHub commit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -535132,10 +535129,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "plugin:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -535145,7 +535141,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Change or pause a Plugin Git sync schedule\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`plugin:update`](/docs/reference/permissions#plugin:update): Modify plugin metadata and files",
+        "description": "Change or pause a Plugin Git sync schedule\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -535864,10 +535860,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "plugin:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -535877,7 +535872,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Queue an immediate Plugin Git source check\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`plugin:update`](/docs/reference/permissions#plugin:update): Modify plugin metadata and files",
+        "description": "Queue an immediate Plugin Git source check\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -536144,10 +536139,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "plugin:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -536157,7 +536151,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Get one plugin and its opaque files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`plugin:read`](/docs/reference/permissions#plugin:read): View plugins and their file metadata",
+        "description": "Get one plugin and its opaque files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -536842,10 +536836,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "plugin:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "put": {
@@ -536853,7 +536846,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Update plugin metadata, GitHub source settings, or files. Access is edited through the resource permissions API.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`plugin:update`](/docs/reference/permissions#plugin:update): Modify plugin metadata and files",
+        "description": "Update plugin metadata, GitHub source settings, or files. Access is edited through the resource permissions API.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -537725,10 +537718,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "plugin:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -537736,7 +537728,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Delete a plugin\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`plugin:delete`](/docs/reference/permissions#plugin:delete): Delete plugins",
+        "description": "Delete a plugin\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -538003,10 +537995,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "plugin:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },

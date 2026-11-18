@@ -139,7 +139,7 @@ Keep at least one recipient with **Manage access**. If a role or team change wou
 
 ## Transfer Ownership
 
-Choose **Make owner** on another person's row in the permissions editor. You need edit and full access on the item; plugins require edit access to every plugin.
+Choose **Make owner** on another person's row in the permissions editor. You need edit and full access on the item.
 
 The new owner receives **Full access**. The previous owner keeps their grant until you remove it separately. An owner's grant cannot be removed while they still own the resource.
 

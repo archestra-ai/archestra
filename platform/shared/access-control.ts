@@ -718,7 +718,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Ownership transfers on per-entry resources need update and
   // manage-permissions grants on the entry itself (authorizeOwnershipTransfer).
   [RouteId.TransferSkillOwnership]: {},
-  [RouteId.TransferPluginOwnership]: { plugin: ["update"] },
+  [RouteId.TransferPluginOwnership]: {},
   [RouteId.TransferProjectOwnership]: { project: ["update"] },
   [RouteId.TransferAppOwnership]: {},
   [RouteId.TransferMcpCatalogOwnership]: {},
@@ -1976,25 +1976,27 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOpenappaRemedies]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaRemediesActivity]: { guardrailsPolicy: ["read"] },
   [RouteId.UpdateSkillGithubSync]: {},
-  [RouteId.GetPlugins]: { plugin: ["read"] },
+  // Plugin Routes - access to one plugin is a grant on it, enforced in the
+  // handlers; only creating a plugin is a role action.
+  [RouteId.GetPlugins]: {},
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },
   [RouteId.GetPluginLabelValues]: { plugin: ["read"] },
   [RouteId.CreatePlugin]: { plugin: ["create"] },
-  [RouteId.GetPlugin]: { plugin: ["read"] },
-  [RouteId.UpdatePlugin]: { plugin: ["update"] },
-  [RouteId.DeletePlugin]: { plugin: ["delete"] },
+  [RouteId.GetPlugin]: {},
+  [RouteId.UpdatePlugin]: {},
+  [RouteId.DeletePlugin]: {},
   [RouteId.PreviewGithubPlugin]: { plugin: ["create"] },
   [RouteId.ImportGithubPlugin]: { plugin: ["create"] },
-  [RouteId.PreviewGithubPluginUpdate]: { plugin: ["update"] },
-  [RouteId.ApplyGithubPluginUpdate]: { plugin: ["update"] },
+  [RouteId.PreviewGithubPluginUpdate]: {},
+  [RouteId.ApplyGithubPluginUpdate]: {},
   [RouteId.DiscoverGithubPluginMarketplace]: {
     plugin: ["create"],
   },
   [RouteId.ImportGithubPluginMarketplace]: {
     plugin: ["create"],
   },
-  [RouteId.UpdatePluginGithubSync]: { plugin: ["update"] },
-  [RouteId.TriggerPluginGithubSync]: { plugin: ["update"] },
+  [RouteId.UpdatePluginGithubSync]: {},
+  [RouteId.TriggerPluginGithubSync]: {},
   // Skills projected from plugin file trees: a Skills surface over plugin
   // metadata, so it needs both floors — per-plugin visibility is enforced
   // in the handlers.

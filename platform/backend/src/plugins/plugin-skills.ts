@@ -1,5 +1,3 @@
-import { isPermissionActionGranted } from "@archestra/shared";
-import { userHasPermission } from "@/auth";
 import type { RequestLookups } from "@/auth/request-lookups";
 import {
   PluginModel,
@@ -187,34 +185,18 @@ async function resolvePluginAccess(params: {
       organizationId: params.organizationId,
     });
   }
-  const canRead = params.lookups
-    ? isPermissionActionGranted({
-        resource: "plugin",
-        grantedActions:
-          (
-            await params.lookups.permissions({
-              userId: params.userId,
-              organizationId: params.organizationId,
-            })
-          ).plugin ?? [],
-        requiredAction: "read",
-      })
-    : await userHasPermission(
-        params.userId,
-        params.organizationId,
-        "plugin",
-        "read",
-      );
-  if (!canRead) return [];
-  const isAdmin = await ResourcePermissions.allows({
+  // Grants decide plugin visibility: a read grant at `*` sees every plugin,
+  // and anyone else sees the plugins granted to them, which is none for a
+  // caller with no plugin grant at all.
+  const canReadAll = await ResourcePermissions.allows({
     userId: params.userId,
     organizationId: params.organizationId,
     resource: "plugin",
     scope: "*",
-    action: "update",
+    action: "read",
     lookups: params.lookups,
   });
-  return isAdmin
+  return canReadAll
     ? undefined
     : PluginTeamModel.getUserAccessiblePluginIds({
         organizationId: params.organizationId,

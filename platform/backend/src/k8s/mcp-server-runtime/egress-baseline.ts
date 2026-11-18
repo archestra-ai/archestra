@@ -86,6 +86,24 @@ export async function ensureEgressBaselineNetworkPolicy(params: {
   }
 }
 
+/**
+ * Remove the baseline from a namespace, in whichever kind it was written.
+ * For a namespace the runtime is leaving for good: an environment's own
+ * cluster, when the environment is deleted. Left behind, a deny-all policy
+ * would go on applying to whatever uses the namespace next.
+ */
+export async function removeEgressBaselineNetworkPolicy(params: {
+  networkingApi: k8s.NetworkingV1Api;
+  customObjectsApi: k8s.CustomObjectsApi;
+  namespace: string;
+}): Promise<void> {
+  await deleteBaselineNetworkPolicy(params.networkingApi, params.namespace);
+  await deleteBaselineApplicationNetworkPolicy(
+    params.customObjectsApi,
+    params.namespace,
+  );
+}
+
 // === Internal helpers ===
 
 const BASELINE_LABELS = {

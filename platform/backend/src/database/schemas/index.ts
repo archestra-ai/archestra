@@ -135,6 +135,7 @@ export { default as desktopDeviceServersTable } from "./desktop-device-server";
 export { default as desktopMcpRequestsTable } from "./desktop-mcp-request";
 export { default as encryptionKeyCanariesTable } from "./encryption-key-canary";
 export { default as environmentsTable } from "./environment";
+export { default as environmentClusterWritesTable } from "./environment-cluster-write";
 export { default as environmentDefaultUserLimitsTable } from "./environment-default-user-limits";
 export { default as environmentLabelsTable } from "./environment-label";
 export { default as environmentResourceDefaultsTable } from "./environment-resource-default";

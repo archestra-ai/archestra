@@ -1,4 +1,5 @@
 use std::fmt;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -306,6 +307,11 @@ pub struct EnvironmentTarget {
     #[cfg_attr(feature = "napi", napi(js_name = "environmentId"))]
     pub environment_id: String,
     pub namespace: String,
+    /// The kubeconfig of the cluster the engine runs in, for an environment
+    /// bound to a cluster other than the platform's own. Omitted, the engine is
+    /// reached with the process's own cluster credentials.
+    #[cfg_attr(feature = "napi", napi(js_name = "kubeconfigPath"))]
+    pub kubeconfig_path: Option<String>,
 }
 
 /// The domain target the session pool keys by and the Dagger backend resolves to
@@ -317,13 +323,17 @@ pub(crate) enum RuntimeTarget {
     Environment {
         environment_id: String,
         namespace: String,
+        /// Part of the key: a session is attached to one cluster with one
+        /// credential, so a different kubeconfig file is a different session.
+        kubeconfig_path: Option<PathBuf>,
     },
 }
 
 /// Validate untrusted JS input and convert it into the domain [`RuntimeTarget`].
 /// `environment_id` must be a UUID and `namespace` an RFC1123 label, so a
 /// malformed environment can neither produce an invalid transport address nor
-/// reach another tenant's namespace.
+/// reach another tenant's namespace. `kubeconfig_path` must be absolute: the
+/// session child resolves a relative `KUBECONFIG` against its own directory.
 fn runtime_target_from(env: Option<EnvironmentTarget>) -> Result<RuntimeTarget> {
     let Some(env) = env else {
         return Ok(RuntimeTarget::Default);
@@ -340,9 +350,18 @@ fn runtime_target_from(env: Option<EnvironmentTarget>) -> Result<RuntimeTarget> 
             env.namespace
         )));
     }
+    let kubeconfig_path = env.kubeconfig_path.map(PathBuf::from);
+    if let Some(path) = &kubeconfig_path
+        && !path.is_absolute()
+    {
+        return Err(SandboxError::InvalidInput(format!(
+            "kubeconfig path is not absolute: {path:?}"
+        )));
+    }
     Ok(RuntimeTarget::Environment {
         environment_id: env.environment_id,
         namespace: env.namespace,
+        kubeconfig_path,
     })
 }
 
@@ -590,6 +609,7 @@ mod tests {
         EnvironmentTarget {
             environment_id: id.into(),
             namespace: ns.into(),
+            kubeconfig_path: None,
         }
     }
 
@@ -605,8 +625,38 @@ mod tests {
             RuntimeTarget::Environment {
                 environment_id: VALID_ID.to_string(),
                 namespace: "ns-production".to_string(),
+                kubeconfig_path: None,
             }
         );
+    }
+
+    #[test]
+    fn kubeconfig_path_is_part_of_the_target() {
+        let target = |path: &str| {
+            runtime_target_from(Some(EnvironmentTarget {
+                kubeconfig_path: Some(path.into()),
+                ..env(VALID_ID, "ns-production")
+            }))
+        };
+
+        assert_eq!(
+            target("/run/kubeconfigs/a").unwrap(),
+            RuntimeTarget::Environment {
+                environment_id: VALID_ID.to_string(),
+                namespace: "ns-production".to_string(),
+                kubeconfig_path: Some(PathBuf::from("/run/kubeconfigs/a")),
+            }
+        );
+        // a rotated credential is written to a new file, and must not reuse the
+        // session attached with the old one.
+        assert_ne!(
+            target("/run/kubeconfigs/a").unwrap(),
+            target("/run/kubeconfigs/b").unwrap()
+        );
+        assert!(matches!(
+            target("kubeconfigs/a"),
+            Err(SandboxError::InvalidInput(_))
+        ));
     }
 
     #[test]

@@ -1476,7 +1476,9 @@ class AgentModel {
   /**
    * Runtime Agents run since `since`, most recently run first. The warm pool
    * reconciler takes distinct configurations from the top, so its limited
-   * pools follow the Agents people actually use.
+   * pools follow the Agents people actually use. Agents of an environment
+   * with its own cluster are left out: spares are kept only in the
+   * platform's cluster, and their runs never claim one.
    */
   static async listWarmPoolCandidates(params: { since: Date }) {
     const recentRuns = db
@@ -1521,6 +1523,7 @@ class AgentModel {
         and(
           isNotNull(schema.agentsTable.runtime),
           notDeleted(schema.agentsTable),
+          isNull(schema.environmentsTable.kubeconfigSecretId),
         ),
       )
       .orderBy(desc(recentRuns.lastRunAt), schema.agentsTable.id);

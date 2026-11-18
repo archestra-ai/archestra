@@ -21,12 +21,19 @@ import { EnvironmentsSection } from "./environments-section";
 vi.mock("next/navigation");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/organization.query");
+vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/environment.query", () => ({
   useBulkDeleteEnvironments: vi.fn(),
   useCreateEnvironment: vi.fn(),
   useDeleteEnvironment: vi.fn(),
   useEnvironments: vi.fn(),
   useK8sCapabilities: vi.fn(),
+  useTestEnvironmentCluster: vi.fn(() => ({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    data: undefined,
+  })),
   useUpdateEnvironment: vi.fn(),
 }));
 

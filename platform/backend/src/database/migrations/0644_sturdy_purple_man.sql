@@ -1,0 +1,3 @@
+-- drizzle-migration-linter: allow-breaking
+-- drizzle-migration-linter: reason=The index covers only rows whose kubeconfig_server is set. That column is added by migration 0642 of the same release and is NULL on every existing row, so the index is built over no rows and no older writer sets the column.
+CREATE UNIQUE INDEX "environments_cluster_namespace_uidx" ON "environments" USING btree ("kubeconfig_server","namespace") WHERE "environments"."kubeconfig_server" IS NOT NULL;

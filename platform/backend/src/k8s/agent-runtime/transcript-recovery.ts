@@ -7,6 +7,7 @@ import type {
 import { isK8sNotFoundError } from "@/k8s/shared";
 import type { AgentRunRecord } from "@/types";
 import { AGENT_RUNTIME_CONTAINER_NAME } from "./manifests";
+import { kubernetesRuntimeNamespace } from "./runtime-scope";
 import { readWorkspaceSandbox } from "./warm-pool";
 
 /** Read retained output without resuming the workspace or extending its deadline. */
@@ -22,7 +23,7 @@ export async function withTranscriptRecoveryPod(params: {
 }): Promise<void> {
   params.abortSignal?.throwIfAborted();
   const { clients, session } = params;
-  const namespace = session.runtimeScope;
+  const namespace = kubernetesRuntimeNamespace(session.runtimeScope);
   const sandbox = await readWorkspaceSandbox({
     api: clients.customObjectsApi,
     namespace,

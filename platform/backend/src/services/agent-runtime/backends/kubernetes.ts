@@ -3,7 +3,12 @@ import type WebSocket from "ws";
 import config from "@/config";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import { resolveAgentRuntimeNamespace } from "@/k8s/agent-runtime/runtime-namespace";
+import {
+  parseKubernetesRuntimeScope,
+  serializeKubernetesRuntimeScope,
+} from "@/k8s/agent-runtime/runtime-scope";
 import { hasAgentRuntimeImagePullFailure } from "@/k8s/agent-runtime/startup-phase";
+import { environmentClusters } from "@/k8s/environment-clusters";
 import type {
   AgentRunInput,
   AgentRunRecord,
@@ -29,22 +34,43 @@ import type {
 class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
   readonly name = "kubernetes" as const;
 
+  /**
+   * Work can run when the platform's own cluster serves the Agent Sandbox
+   * API, or when an environment deploys into another cluster, which may.
+   * Whether the cluster a given run goes to serves it is `assertReady`'s
+   * question.
+   */
   get isEnabled(): boolean {
-    return agentRuntimeManager.isEnabled;
+    return (
+      agentRuntimeManager.isEnabled ||
+      environmentClusters.hasEnvironmentClusters
+    );
   }
 
   resolveRuntimeScope(params: {
     environmentScope?: string | null;
     organizationScope?: string | null;
+    environmentClusterId?: string | null;
   }): string {
-    return resolveAgentRuntimeNamespace({
-      environmentNamespace: params.environmentScope,
-      organizationNamespace: params.organizationScope,
+    return serializeKubernetesRuntimeScope({
+      clusterEnvironmentId: params.environmentClusterId ?? null,
+      namespace: resolveAgentRuntimeNamespace({
+        environmentNamespace: params.environmentScope,
+        organizationNamespace: params.organizationScope,
+      }),
     });
   }
 
-  async assertReady(): Promise<void> {
-    await agentRuntimeManager.assertSandboxApiInstalled();
+  beginWorkspacePlacement(runtimeScope: string): Promise<() => Promise<void>> {
+    // A workspace in an environment's own cluster holds off the deletion of
+    // that environment from before its first record exists.
+    return environmentClusters.beginWrite(
+      parseKubernetesRuntimeScope(runtimeScope).clusterEnvironmentId,
+    );
+  }
+
+  async assertReady(environmentId: string | null): Promise<void> {
+    await agentRuntimeManager.assertSandboxApiInstalledFor(environmentId);
   }
 
   async launch(spec: AgentRunLaunchSpec): Promise<void> {

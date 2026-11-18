@@ -285,7 +285,7 @@ export async function preflightAgentRuntimeLaunch(params: {
 }) {
   const { runtime, agent, actor } = params;
   const userId = actor.kind === "user" ? actor.id : null;
-  await prepareAgentRuntimeBackendDriver(runtime.backend);
+  await prepareAgentRuntimeBackendDriver(runtime);
   const modelCompatibility = await preflightAgentRuntimeModelCompatibility({
     runtime,
     agent,

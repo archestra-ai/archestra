@@ -1357,6 +1357,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateEnvironmentResourceDefaults]: {
     environment: ["update"],
   },
+  // Testing a kubeconfig comes before creating the environment it is for;
+  // testing the cluster of an existing environment goes with editing it.
+  [RouteId.TestEnvironmentKubeconfig]: {
+    environment: ["create"],
+  },
+  [RouteId.TestEnvironmentCluster]: {
+    environment: ["update"],
+  },
   [RouteId.GetK8sCapabilities]: {
     environment: ["update"],
   },

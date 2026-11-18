@@ -139,12 +139,25 @@ export const K8sCapabilitiesSchema = z.object({
   agentSandbox: K8sAgentSandboxCapabilitiesSchema,
 });
 
+/**
+ * An environment as the API returns it. The kubeconfig stays out of it: a
+ * non-null `kubeconfigServer` is how a client learns the environment deploys
+ * into another cluster than the platform's own.
+ */
 export const SelectEnvironmentSchema = createSelectSchema(
   schema.environmentsTable,
-).extend({
-  networkPolicy: NetworkPolicySchema.nullable(),
-  trustedImageRegistries: TrustedImageRegistriesSchema.nullable(),
-});
+)
+  .omit({ kubeconfigSecretId: true, kubeconfigVersion: true })
+  .extend({
+    networkPolicy: NetworkPolicySchema.nullable(),
+    trustedImageRegistries: TrustedImageRegistriesSchema.nullable(),
+  });
+
+/**
+ * An environment row, including which cluster it is bound to. For the runtime
+ * code that deploys into it; never serialized.
+ */
+export type EnvironmentRow = typeof schema.environmentsTable.$inferSelect;
 
 export const ReadEnvironmentSchema = SelectEnvironmentSchema.extend({
   labels: z.array(LabelWithDetailsSchema),
@@ -199,6 +212,26 @@ export const EnvironmentListSchema = z.object({
   resourceDefaults: EnvironmentResourceDefaultsSchema,
 });
 
+/** One result of testing an environment's cluster. */
+export const EnvironmentClusterCheckSchema = z.object({
+  id: z.enum([
+    "api",
+    "deployAccess",
+    "networkPolicy",
+    "codeSandbox",
+    "agentRuntime",
+  ]),
+  // "unverified": nothing failed, but the platform cannot observe the result.
+  status: z.enum(["ok", "failed", "unverified"]),
+  message: z.string(),
+});
+
+export const EnvironmentClusterTestResultSchema = z.object({
+  /** API server URL of the cluster that was tested. */
+  server: z.string(),
+  checks: z.array(EnvironmentClusterCheckSchema),
+});
+
 export const KubernetesNamespaceSchema = z
   .string()
   .trim()
@@ -209,10 +242,38 @@ export const KubernetesNamespaceSchema = z
     "Must be a valid Kubernetes namespace name (lowercase letters, numbers, and hyphens only)",
   );
 
+/**
+ * Where Agent Runtime pods in the environment's cluster reach the platform.
+ * Only the origin matters: the paths are the platform's own.
+ */
+const AgentRuntimePlatformBaseUrlSchema = z
+  .string()
+  .trim()
+  .max(2048)
+  .refine(
+    (value) => {
+      try {
+        const url = new URL(value);
+        return url.protocol === "http:" || url.protocol === "https:";
+      } catch {
+        return false;
+      }
+    },
+    { message: "Must be an http:// or https:// URL" },
+  );
+
 export const CreateEnvironmentSchema = z.object({
   name: z.string().trim().min(1).max(50),
   description: z.string().trim().max(500).nullable().optional(),
   namespace: KubernetesNamespaceSchema.nullable().optional(),
+  /**
+   * Kubeconfig of the cluster this environment deploys into. Write-only, and
+   * accepted only here: the cluster of an environment is fixed when it is
+   * created. Omitted, the environment deploys into the platform's own cluster.
+   */
+  kubeconfig: z.string().min(1).optional(),
+  agentRuntimePlatformBaseUrl:
+    AgentRuntimePlatformBaseUrlSchema.nullable().optional(),
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   restricted: RetiredSharingUpdateFieldSchema,
   validationRegex: ValidationRegexSchema.nullable().optional(),
@@ -228,6 +289,13 @@ export const UpdateEnvironmentSchema = z.object({
   name: z.string().trim().min(1).max(50).optional(),
   description: z.string().trim().max(500).nullable().optional(),
   namespace: KubernetesNamespaceSchema.nullable().optional(),
+  /**
+   * A new credential for the cluster the environment is already bound to.
+   * Write-only. A kubeconfig for a different cluster is rejected.
+   */
+  kubeconfig: z.string().min(1).optional(),
+  agentRuntimePlatformBaseUrl:
+    AgentRuntimePlatformBaseUrlSchema.nullable().optional(),
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   restricted: RetiredSharingUpdateFieldSchema,
   validationRegex: ValidationRegexSchema.nullable().optional(),
@@ -236,6 +304,12 @@ export const UpdateEnvironmentSchema = z.object({
 });
 
 export type Environment = z.infer<typeof SelectEnvironmentSchema>;
+export type EnvironmentClusterCheck = z.infer<
+  typeof EnvironmentClusterCheckSchema
+>;
+export type EnvironmentClusterTestResult = z.infer<
+  typeof EnvironmentClusterTestResultSchema
+>;
 export type EnvironmentWithAssignedCount = z.infer<
   typeof EnvironmentWithAssignedCountSchema
 >;

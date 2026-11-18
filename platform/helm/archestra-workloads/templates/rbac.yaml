@@ -1,0 +1,28 @@
+{{- range $namespace := (include "archestra-workloads.namespaces" . | fromJsonArray) }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "archestra-workloads.serviceAccountName" $ }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "archestra-workloads.labels" $ | nindent 4 }}
+rules:
+  {{- include "archestra-workloads.rules" $ | nindent 2 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "archestra-workloads.serviceAccountName" $ }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "archestra-workloads.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "archestra-workloads.serviceAccountName" $ }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "archestra-workloads.serviceAccountName" $ }}
+    namespace: {{ $.Release.Namespace }}
+{{- end }}

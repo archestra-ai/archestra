@@ -197,6 +197,9 @@ vi.mock("@/k8s/mcp-server-runtime", () => {
       usesStreamableHttp: mockUsesStreamableHttp,
       getHttpEndpointUrl: mockGetHttpEndpointUrl,
       getRunningPodHttpEndpoint: mockGetRunningPodHttpEndpoint,
+      // These servers run in the platform's own cluster: no tunnel.
+      isInEnvironmentCluster: vi.fn().mockResolvedValue(false),
+      createHttpTunnel: vi.fn().mockResolvedValue(undefined),
       getOrLoadDeployment: mockGetOrLoadDeployment,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

@@ -59982,6 +59982,9 @@ export type ListEnvironmentsResponses = {
             } | null;
             validationRegex: string | null;
             trustedImageRegistries: Array<string> | null;
+            kubeconfigServer: string | null;
+            agentRuntimePlatformBaseUrl: string | null;
+            deletingAt: string | null;
             sortOrder: number;
             createdAt: string;
             updatedAt: string;
@@ -60012,6 +60015,8 @@ export type CreateEnvironmentData = {
         name: string;
         description?: string | null;
         namespace?: string | null;
+        kubeconfig?: string;
+        agentRuntimePlatformBaseUrl?: string | null;
         networkPolicy?: {
             egressMode?: 'off' | 'restricted' | 'unrestricted';
             domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
@@ -60119,6 +60124,9 @@ export type CreateEnvironmentResponses = {
         } | null;
         validationRegex: string | null;
         trustedImageRegistries: Array<string> | null;
+        kubeconfigServer: string | null;
+        agentRuntimePlatformBaseUrl: string | null;
+        deletingAt: string | null;
         sortOrder: number;
         createdAt: string;
         updatedAt: string;
@@ -60132,7 +60140,12 @@ export type DeleteEnvironmentData = {
     path: {
         id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Delete the environment even when its workloads could not be removed from its own cluster; they are left there.
+         */
+        skipClusterCleanup?: 'true' | 'false';
+    };
     url: '/api/environments/{id}';
 };
 
@@ -60310,6 +60323,9 @@ export type GetEnvironmentResponses = {
         } | null;
         validationRegex: string | null;
         trustedImageRegistries: Array<string> | null;
+        kubeconfigServer: string | null;
+        agentRuntimePlatformBaseUrl: string | null;
+        deletingAt: string | null;
         sortOrder: number;
         createdAt: string;
         updatedAt: string;
@@ -60329,6 +60345,8 @@ export type UpdateEnvironmentData = {
         name?: string;
         description?: string | null;
         namespace?: string | null;
+        kubeconfig?: string;
+        agentRuntimePlatformBaseUrl?: string | null;
         networkPolicy?: {
             egressMode?: 'off' | 'restricted' | 'unrestricted';
             domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
@@ -60438,6 +60456,9 @@ export type UpdateEnvironmentResponses = {
         } | null;
         validationRegex: string | null;
         trustedImageRegistries: Array<string> | null;
+        kubeconfigServer: string | null;
+        agentRuntimePlatformBaseUrl: string | null;
+        deletingAt: string | null;
         sortOrder: number;
         createdAt: string;
         updatedAt: string;
@@ -60641,6 +60662,198 @@ export type BulkDeleteEnvironmentsResponses = {
 };
 
 export type BulkDeleteEnvironmentsResponse = BulkDeleteEnvironmentsResponses[keyof BulkDeleteEnvironmentsResponses];
+
+export type TestEnvironmentKubeconfigData = {
+    body: {
+        kubeconfig: string;
+        namespace: string;
+        agentRuntimePlatformBaseUrl?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/environments/kubeconfig/test';
+};
+
+export type TestEnvironmentKubeconfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TestEnvironmentKubeconfigError = TestEnvironmentKubeconfigErrors[keyof TestEnvironmentKubeconfigErrors];
+
+export type TestEnvironmentKubeconfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        server: string;
+        checks: Array<{
+            id: 'api' | 'deployAccess' | 'networkPolicy' | 'codeSandbox' | 'agentRuntime';
+            status: 'ok' | 'failed' | 'unverified';
+            message: string;
+        }>;
+    };
+};
+
+export type TestEnvironmentKubeconfigResponse = TestEnvironmentKubeconfigResponses[keyof TestEnvironmentKubeconfigResponses];
+
+export type TestEnvironmentClusterData = {
+    body: {
+        kubeconfig?: string;
+        namespace?: string;
+        agentRuntimePlatformBaseUrl?: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/environments/{id}/cluster/test';
+};
+
+export type TestEnvironmentClusterErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TestEnvironmentClusterError = TestEnvironmentClusterErrors[keyof TestEnvironmentClusterErrors];
+
+export type TestEnvironmentClusterResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        server: string;
+        checks: Array<{
+            id: 'api' | 'deployAccess' | 'networkPolicy' | 'codeSandbox' | 'agentRuntime';
+            status: 'ok' | 'failed' | 'unverified';
+            message: string;
+        }>;
+    };
+};
+
+export type TestEnvironmentClusterResponse = TestEnvironmentClusterResponses[keyof TestEnvironmentClusterResponses];
 
 export type GetExternalMcpSkillsData = {
     body?: never;

@@ -90,6 +90,7 @@ const SANDBOX_BASE_MARKER: &str = "/etc/archestra-sandbox-base";
 /// spawned `dagger session` child only (never the parent) to pin a
 /// per-environment engine; `DAGGER_CLI_BIN_ENV` overrides the CLI binary path.
 const DAGGER_RUNNER_HOST_ENV: &str = "_EXPERIMENTAL_DAGGER_RUNNER_HOST";
+const KUBECONFIG_ENV: &str = "KUBECONFIG";
 const DAGGER_CLI_BIN_ENV: &str = "_EXPERIMENTAL_DAGGER_CLI_BIN";
 
 const SESSION_READY_TIMEOUT: Duration = Duration::from_secs(60);
@@ -302,21 +303,34 @@ impl SandboxBackend for DaggerBackend {
     }
 }
 
-/// The Dagger runner host for a runtime target: `Default` -> `None` (use the
+/// How a session child reaches one environment's engine: the engine pod's
+/// `kube-pod://` address and, when the engine runs in another cluster than the
+/// platform's own, the kubeconfig the address is resolved against.
+#[derive(Debug, PartialEq, Eq)]
+struct EngineRoute {
+    runner_host: String,
+    kubeconfig_path: Option<PathBuf>,
+}
+
+/// The engine route for a runtime target: `Default` -> `None` (use the
 /// process-default engine), an environment -> its engine's `kube-pod://` address.
 /// `environment_id` / `namespace` were validated (UUID / RFC1123 label) at the
 /// NAPI boundary, so the formatted address needs no escaping. The pod name and
 /// container MUST match the engine StatefulSet the TS dagger-environment-runtime
 /// manager creates (`daggerEngineDeploymentName` + the `dagger-engine` container).
-fn runtime_target_host(target: &RuntimeTarget) -> Option<String> {
+fn runtime_target_route(target: &RuntimeTarget) -> Option<EngineRoute> {
     match target {
         RuntimeTarget::Default => None,
         RuntimeTarget::Environment {
             environment_id,
             namespace,
-        } => Some(format!(
-            "kube-pod://dagger-engine-{environment_id}-0?namespace={namespace}&container=dagger-engine"
-        )),
+            kubeconfig_path,
+        } => Some(EngineRoute {
+            runner_host: format!(
+                "kube-pod://dagger-engine-{environment_id}-0?namespace={namespace}&container=dagger-engine"
+            ),
+            kubeconfig_path: kubeconfig_path.clone(),
+        }),
     }
 }
 
@@ -335,10 +349,12 @@ fn session_args(workdir: &Path) -> Vec<String> {
     ]
 }
 
-/// Build the `dagger session` child command. The per-environment runner host is
+/// Build the `dagger session` child command. The per-environment engine route is
 /// set on **this child only** (never the parent process env); `None` leaves it
-/// unset so the child inherits the parent's default engine.
-fn build_session_command(cli: &Path, workdir: &Path, runner_host: Option<&str>) -> Command {
+/// unset so the child inherits the parent's default engine. The `kube-pod://`
+/// driver runs `kubectl exec`, which takes the cluster and its credential from
+/// `KUBECONFIG`.
+fn build_session_command(cli: &Path, workdir: &Path, route: Option<&EngineRoute>) -> Command {
     let mut cmd = Command::new(cli);
     cmd.args(session_args(workdir))
         .stdin(Stdio::piped())
@@ -348,8 +364,11 @@ fn build_session_command(cli: &Path, workdir: &Path, runner_host: Option<&str>) 
         // path aborts `connect_task` before `proc.shutdown()` can run, so without
         // this a hung `dagger session` would outlive its connect attempt.
         .kill_on_drop(true);
-    if let Some(host) = runner_host {
-        cmd.env(DAGGER_RUNNER_HOST_ENV, host);
+    if let Some(route) = route {
+        cmd.env(DAGGER_RUNNER_HOST_ENV, &route.runner_host);
+        if let Some(kubeconfig_path) = &route.kubeconfig_path {
+            cmd.env(KUBECONFIG_ENV, kubeconfig_path);
+        }
     }
     cmd
 }
@@ -457,14 +476,14 @@ async fn spawn_and_read_connect_params(
 }
 
 /// Connect to a Dagger engine and drive `f` for the connection's lifetime,
-/// setting the runner host on the spawned CLI **child** only — never the parent
-/// process env. `runner_host = None` lets the child inherit the parent's default
+/// setting the engine route on the spawned CLI **child** only — never the parent
+/// process env. `route = None` lets the child inherit the parent's default
 /// host. This owns the thin glue `dagger_sdk::connect_opts` would run (pinned to
 /// `=0.21.11`), so a per-environment host is bound to one child at spawn instead
 /// of mutated into process-global, non-synchronized state.
 async fn connect_target<F, Fut>(
     cfg: Config,
-    runner_host: Option<&str>,
+    route: Option<&EngineRoute>,
     f: F,
 ) -> std::result::Result<(), ConnectError>
 where
@@ -481,7 +500,7 @@ where
     let workdir =
         std::fs::canonicalize("/").map_err(|e| ConnectError::FailedToConnect(e.into()))?;
 
-    let cmd = build_session_command(&cli, &workdir, runner_host);
+    let cmd = build_session_command(&cli, &workdir, route);
 
     let (conn, proc) = spawn_and_read_connect_params(cmd)
         .await
@@ -563,7 +582,7 @@ pub(crate) async fn spawn(target: RuntimeTarget) -> Result<Arc<SessionHandle>> {
     let (ready_tx, ready_rx) = oneshot::channel::<()>();
     let (fail_tx, fail_rx) = oneshot::channel::<SandboxError>();
 
-    let runner_host = runtime_target_host(&target);
+    let route = runtime_target_route(&target);
 
     let connect_task = tokio::spawn(async move {
         let cfg = Config::builder()
@@ -572,7 +591,7 @@ pub(crate) async fn spawn(target: RuntimeTarget) -> Result<Arc<SessionHandle>> {
             .build();
         let mut ready_tx = Some(ready_tx);
         let mut fail_tx = Some(fail_tx);
-        let result = connect_target(cfg, runner_host.as_deref(), move |client| async move {
+        let result = connect_target(cfg, route.as_ref(), move |client| async move {
             if let Some(tx) = ready_tx.take() {
                 let _ = tx.send(());
             }
@@ -1386,7 +1405,11 @@ mod tests {
 
         // an environment target pins the runner host on the child command, never
         // the parent process env — the tenant-isolation boundary this fix exists for.
-        let env_cmd = build_session_command(cli, Path::new("/"), Some(host));
+        let route = EngineRoute {
+            runner_host: host.to_string(),
+            kubeconfig_path: None,
+        };
+        let env_cmd = build_session_command(cli, Path::new("/"), Some(&route));
         let runner_override = env_cmd
             .as_std()
             .get_envs()
@@ -1394,6 +1417,14 @@ mod tests {
         assert_eq!(
             runner_override,
             Some((OsStr::new(DAGGER_RUNNER_HOST_ENV), Some(OsStr::new(host))))
+        );
+        // with no kubeconfig of its own the child reaches the engine with the
+        // process's cluster credentials.
+        assert!(
+            env_cmd
+                .as_std()
+                .get_envs()
+                .all(|(key, _)| key != OsStr::new(KUBECONFIG_ENV))
         );
 
         // the default target sets no override, so the child inherits the parent's
@@ -1404,6 +1435,33 @@ mod tests {
                 .as_std()
                 .get_envs()
                 .all(|(key, _)| key != OsStr::new(DAGGER_RUNNER_HOST_ENV))
+        );
+    }
+
+    #[test]
+    fn session_command_points_kubectl_at_the_environments_cluster_on_the_child_only() {
+        let route = EngineRoute {
+            runner_host: "kube-pod://dagger-engine-env-a-0?namespace=ns&container=dagger-engine"
+                .to_string(),
+            kubeconfig_path: Some(PathBuf::from("/run/kubeconfigs/env-a")),
+        };
+
+        let cmd = build_session_command(
+            Path::new("/usr/local/bin/dagger"),
+            Path::new("/"),
+            Some(&route),
+        );
+
+        let kubeconfig = cmd
+            .as_std()
+            .get_envs()
+            .find(|(key, _)| *key == OsStr::new(KUBECONFIG_ENV));
+        assert_eq!(
+            kubeconfig,
+            Some((
+                OsStr::new(KUBECONFIG_ENV),
+                Some(OsStr::new("/run/kubeconfigs/env-a"))
+            ))
         );
     }
 
@@ -1641,17 +1699,19 @@ mod tests {
     }
 
     #[test]
-    fn runtime_target_host_builds_a_kube_pod_address_for_an_environment() {
-        assert_eq!(runtime_target_host(&RuntimeTarget::Default), None);
+    fn runtime_target_route_builds_a_kube_pod_address_for_an_environment() {
+        assert_eq!(runtime_target_route(&RuntimeTarget::Default), None);
         assert_eq!(
-            runtime_target_host(&RuntimeTarget::Environment {
+            runtime_target_route(&RuntimeTarget::Environment {
                 environment_id: "abcdef00-1111-2222-3333-444455556666".to_string(),
                 namespace: "ns-production".to_string(),
+                kubeconfig_path: Some(PathBuf::from("/run/kubeconfigs/env")),
             }),
-            Some(
-                "kube-pod://dagger-engine-abcdef00-1111-2222-3333-444455556666-0?namespace=ns-production&container=dagger-engine"
-                    .to_string()
-            )
+            Some(EngineRoute {
+                runner_host: "kube-pod://dagger-engine-abcdef00-1111-2222-3333-444455556666-0?namespace=ns-production&container=dagger-engine"
+                    .to_string(),
+                kubeconfig_path: Some(PathBuf::from("/run/kubeconfigs/env")),
+            })
         );
     }
 

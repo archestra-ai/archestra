@@ -174,7 +174,11 @@ describe("Dagger environment lifecycle", () => {
       name: "Disposable",
       namespace: "env-test",
     });
-    await EnvironmentModel.delete(env.id, org.id);
+    await EnvironmentModel.deleteUnused({
+      id: env.id,
+      organizationId: org.id,
+      blocking: [],
+    });
     await manager.reconcileEnvironment(env);
     expect([...resources.keys()]).toEqual([]);
   });
@@ -202,7 +206,11 @@ describe("Dagger environment lifecycle", () => {
     };
     const reconcile = manager.reconcileEnvironment(env);
     await Promise.race([reached, reconcile]);
-    await EnvironmentModel.delete(env.id, org.id);
+    await EnvironmentModel.deleteUnused({
+      id: env.id,
+      organizationId: org.id,
+      blocking: [],
+    });
     await manager.teardownEnvironmentEngine(env);
     signalRelease();
     await reconcile;
@@ -224,7 +232,11 @@ describe("Dagger environment lifecycle", () => {
       delete resource.metadata.labels?.["archestra.io/dagger-organization"];
     }
     await recordDeletion(env);
-    await EnvironmentModel.delete(env.id, org.id);
+    await EnvironmentModel.deleteUnused({
+      id: env.id,
+      organizationId: org.id,
+      blocking: [],
+    });
     await manager.reconcileAll();
     expect(engineResources(env.id)).toEqual([]);
     // The org default has no Environment row; it must survive every sweep.
@@ -247,7 +259,11 @@ describe("Dagger environment lifecycle", () => {
       metadata: { name },
     });
     await recordDeletion(env);
-    await EnvironmentModel.delete(env.id, org.id);
+    await EnvironmentModel.deleteUnused({
+      id: env.id,
+      organizationId: org.id,
+      blocking: [],
+    });
     await manager.reconcileAll();
     expect(engineResources(env.id)).toEqual([]);
   });
@@ -262,7 +278,11 @@ describe("Dagger environment lifecycle", () => {
       namespace: "env-test",
     });
     await manager.reconcileEnvironment(env);
-    await EnvironmentModel.delete(env.id, org.id);
+    await EnvironmentModel.deleteUnused({
+      id: env.id,
+      organizationId: org.id,
+      blocking: [],
+    });
     pvcDeleteFailures = 1;
     await manager.teardownEnvironmentEngine(env);
     expect(engineResources(env.id)).toHaveLength(3);
@@ -281,7 +301,11 @@ describe("Dagger environment lifecycle", () => {
       namespace: "env-test",
     });
     await manager.reconcileEnvironment(env);
-    await EnvironmentModel.delete(env.id, org.id);
+    await EnvironmentModel.deleteUnused({
+      id: env.id,
+      organizationId: org.id,
+      blocking: [],
+    });
     await manager.reconcileAll();
     expect(engineResources(env.id)).toEqual([]);
   });
@@ -297,7 +321,11 @@ describe("Dagger environment lifecycle", () => {
     });
     await manager.reconcileEnvironment(env);
     const before = engineResources(env.id);
-    await EnvironmentModel.delete(env.id, org.id);
+    await EnvironmentModel.deleteUnused({
+      id: env.id,
+      organizationId: org.id,
+      blocking: [],
+    });
     holdWorkloadDeletion = true;
     let signalRead!: () => void;
     const workloadRead = new Promise<void>((resolve) => {
@@ -325,7 +353,11 @@ describe("Dagger environment lifecycle", () => {
       namespace: "env-test",
     });
     await manager.reconcileEnvironment(env);
-    await EnvironmentModel.delete(env.id, org.id);
+    await EnvironmentModel.deleteUnused({
+      id: env.id,
+      organizationId: org.id,
+      blocking: [],
+    });
     policyDeleteFailures = 1;
     await manager.teardownEnvironmentEngine(env);
     expect(engineResources(env.id)).toHaveLength(2);
@@ -344,7 +376,11 @@ describe("Dagger environment lifecycle", () => {
     });
     await manager.reconcileEnvironment(env);
     await recordDeletion(env);
-    await EnvironmentModel.delete(env.id, org.id);
+    await EnvironmentModel.deleteUnused({
+      id: env.id,
+      organizationId: org.id,
+      blocking: [],
+    });
     for (const resource of resources.values()) {
       resource.metadata.labels = {
         ...resource.metadata.labels,
@@ -371,7 +407,11 @@ describe("Dagger environment lifecycle", () => {
       metadata: { name },
     });
     await recordDeletion(env);
-    await EnvironmentModel.delete(env.id, org.id);
+    await EnvironmentModel.deleteUnused({
+      id: env.id,
+      organizationId: org.id,
+      blocking: [],
+    });
     await manager.reconcileAll();
     expect(engineResources(env.id)).toHaveLength(1);
   });
@@ -393,7 +433,11 @@ describe("Dagger environment lifecycle", () => {
     });
     await manager.reconcileEnvironment(foreign);
     await recordDeletion(foreign);
-    await EnvironmentModel.delete(foreign.id, org.id);
+    await EnvironmentModel.deleteUnused({
+      id: foreign.id,
+      organizationId: org.id,
+      blocking: [],
+    });
     for (const resource of resources.values()) {
       if (resource.metadata.name.includes(foreign.id)) {
         resource.metadata.labels = {
@@ -424,7 +468,11 @@ describe("Dagger environment lifecycle", () => {
       namespace: "env-test",
     });
     await manager.reconcileEnvironment(env);
-    await EnvironmentModel.delete(env.id, org.id);
+    await EnvironmentModel.deleteUnused({
+      id: env.id,
+      organizationId: org.id,
+      blocking: [],
+    });
     const before = engineResources(env.id);
     failListings = true;
     await manager.reconcileAll();

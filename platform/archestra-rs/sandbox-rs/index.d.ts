@@ -32,6 +32,12 @@ export interface CommandExecution {
 export interface EnvironmentTarget {
   environmentId: string
   namespace: string
+  /**
+   * The kubeconfig of the cluster the engine runs in, for an environment
+   * bound to a cluster other than the platform's own. Omitted, the engine is
+   * reached with the process's own cluster credentials.
+   */
+  kubeconfigPath?: string
 }
 
 export interface Limits {

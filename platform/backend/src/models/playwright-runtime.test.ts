@@ -283,7 +283,11 @@ describe("PlaywrightRuntimeModel", () => {
       await PlaywrightRuntimeModel.findForEnvironment(environment.id),
     );
 
-    await EnvironmentModel.delete(environment.id, organization.id);
+    await EnvironmentModel.deleteUnused({
+      id: environment.id,
+      organizationId: organization.id,
+      blocking: [],
+    });
     await PlaywrightRuntimeModel.retireLegacyInstallations();
 
     expect(await McpServerModel.findById(runtime.id)).toBeNull();

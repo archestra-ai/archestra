@@ -12,6 +12,7 @@ import {
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach, Exec } from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
+import type { Agent } from "undici";
 import type z from "zod";
 import config from "@/config";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
@@ -21,6 +22,8 @@ import {
   constructLegacyMultitenantMcpDeploymentName,
   ensureStringIsRfc1123Compliant,
 } from "@/k8s/deployment-names";
+import { ENVIRONMENT_CLUSTER_LABEL } from "@/k8s/environment-clusters";
+import { createPodTunnelAgent } from "@/k8s/pod-tunnel";
 import {
   describeK8sApiError,
   isK8sConflictError,
@@ -568,6 +571,13 @@ interface K8sDeploymentOptions {
   effectiveNetworkPolicy?: EffectiveNetworkPolicy | null;
   networkPolicyCapabilities?: K8sNetworkPolicyCapabilities | null;
   k8sExec: Exec;
+  /**
+   * The environment whose own cluster these clients talk to. Omitted or null
+   * for the platform's own cluster.
+   */
+  clusterEnvironmentId?: string | null;
+  /** Reaches the pod's HTTP port through the API server; needed off the platform's cluster. */
+  k8sPortForward?: k8s.PortForward;
 }
 
 /**
@@ -585,6 +595,8 @@ export default class K8sDeployment {
   private k8sAttach: Attach;
   private k8sLog: k8s.Log;
   private k8sExec: Exec;
+  private k8sPortForward?: k8s.PortForward;
+  private readonly environmentClusterId: string | null;
   private defaultNamespace: string;
   private deploymentName: string; // Used for deployment name
   private state: McpDeploymentState = "not_created";
@@ -635,6 +647,8 @@ export default class K8sDeployment {
     this.k8sAttach = options.k8sAttach;
     this.k8sLog = options.k8sLog;
     this.k8sExec = options.k8sExec;
+    this.k8sPortForward = options.k8sPortForward;
+    this.environmentClusterId = options.clusterEnvironmentId ?? null;
     this.defaultNamespace = options.namespace;
     this.catalogItem = options.catalogItem;
     this.userConfigValues = options.userConfigValues;
@@ -725,6 +739,18 @@ export default class K8sDeployment {
    */
   private get namespace(): string {
     return this.defaultNamespace;
+  }
+
+  /**
+   * Whether the pod is addressed by its Service's cluster DNS name: when the
+   * platform runs inside this cluster, and always in an environment's own
+   * cluster, where a NodePort on the platform's host would lead nowhere.
+   */
+  private get reachesPodsThroughClusterNetwork(): boolean {
+    return (
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster ||
+      this.environmentClusterId !== null
+    );
   }
 
   /**
@@ -927,11 +953,13 @@ export default class K8sDeployment {
     // DNS). Cached per client, so this lookup is cheap on the common path.
     const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
       this.k8sApi,
+      { platformCluster: this.environmentClusterId === null },
     );
     const clusterIpFamilies = await clusterIpFamilyResolver.getIpFamilies({
       coreApi: this.k8sApi,
       namespace: this.namespace,
       clusterDnsIps,
+      clusterEnvironmentId: this.environmentClusterId,
     });
 
     if (isAwsApplicationNetworkPolicyProvider(this.networkPolicyCapabilities)) {
@@ -1083,6 +1111,7 @@ export default class K8sDeployment {
   ): Promise<void> {
     const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
       this.k8sApi,
+      { platformCluster: this.environmentClusterId === null },
     );
     if (clusterDnsIps.length === 0) {
       logger.warn(
@@ -1212,6 +1241,9 @@ export default class K8sDeployment {
     k8s.V1OwnerReference[] | undefined
   > {
     if (this.runtimeOwnerReferences) return this.runtimeOwnerReferences;
+    // The owner is a Role of the platform's own release; an environment's own
+    // cluster has no such object to own anything.
+    if (this.environmentClusterId !== null) return undefined;
     try {
       const ownerReferences = await resolveRuntimeOwnerReferences(
         this.k8sRbacApi,
@@ -2071,11 +2103,18 @@ export default class K8sDeployment {
    * These labels are used for identification and cannot be overridden by user configuration.
    */
   private getSystemLabels(): Record<string, string> {
-    return sanitizeMetadataLabels({
-      app: "mcp-server",
-      "mcp-server-id": this.getPodSelectorServerId(),
-      "mcp-server-name": this.mcpServer.name,
-    });
+    return {
+      ...sanitizeMetadataLabels({
+        app: "mcp-server",
+        "mcp-server-id": this.getPodSelectorServerId(),
+        "mcp-server-name": this.mcpServer.name,
+      }),
+      // In an environment's own cluster, cleanup finds its workloads by this.
+      // Added after the sanitizer, which would drop the "/" of its key.
+      ...(this.clusterEnvironmentId !== null
+        ? { [ENVIRONMENT_CLUSTER_LABEL]: this.clusterEnvironmentId }
+        : {}),
+    };
   }
 
   /**
@@ -2963,8 +3002,9 @@ export default class K8sDeployment {
 
     // Resolve HTTP Endpoint URL
     let baseUrl: string;
-    if (config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster) {
-      // In-cluster: use service DNS name
+    if (this.reachesPodsThroughClusterNetwork) {
+      // In-cluster: use service DNS name. In an environment's own cluster the
+      // name is never resolved: requests travel a tunnel to the pod.
       const serviceName = this.constructHttpServiceName();
       baseUrl = `http://${serviceName}.${this.namespace}.svc.${config.orchestrator.kubernetes.clusterDomain}:${httpPort}`;
     } else if (configuredNodePort) {
@@ -3297,8 +3337,16 @@ export default class K8sDeployment {
 
       // Get the cached nodeSelector and tolerations from the platform pod (if available)
       // This allows MCP servers to inherit the same scheduling constraints
-      const platformNodeSelector = getCachedPlatformNodeSelector();
-      const platformTolerations = getCachedPlatformTolerations();
+      // Only in the platform's own cluster: its nodes and taints say nothing
+      // about another cluster's.
+      const platformNodeSelector =
+        this.environmentClusterId === null
+          ? getCachedPlatformNodeSelector()
+          : null;
+      const platformTolerations =
+        this.environmentClusterId === null
+          ? getCachedPlatformTolerations()
+          : null;
 
       // Create the pod's egress policy before the pod itself, so the pod is
       // confined the instant it starts. A pod that starts before its policy lands
@@ -4777,8 +4825,7 @@ export default class K8sDeployment {
 
       // Create the service
       // Use NodePort for local dev, ClusterIP for production
-      const serviceType = config.orchestrator.kubernetes
-        .loadKubeconfigFromCurrentCluster
+      const serviceType = this.reachesPodsThroughClusterNetwork
         ? "ClusterIP"
         : "NodePort";
 
@@ -5954,11 +6001,24 @@ export default class K8sDeployment {
     return this.k8sAttach;
   }
 
+  /** The core API of the cluster this deployment is in. */
+  get k8sCoreApi(): k8s.CoreV1Api {
+    return this.k8sApi;
+  }
+
   /**
    * Get the Kubernetes namespace
    */
   get k8sNamespace(): string {
     return this.namespace;
+  }
+
+  /**
+   * The environment whose own cluster this deployment is in, or null for the
+   * platform's own cluster.
+   */
+  get clusterEnvironmentId(): string | null {
+    return this.environmentClusterId;
   }
 
   /**
@@ -6003,6 +6063,15 @@ export default class K8sDeployment {
       return undefined;
     }
 
+    // In an environment's own cluster a pod IP means nothing to the platform.
+    // The session is pinned by pod name alone, and the tunnel goes to that pod.
+    if (this.environmentClusterId !== null) {
+      await this.ensureHttpServerConfigured();
+      return this.httpEndpointUrl
+        ? { endpointUrl: this.httpEndpointUrl, podName }
+        : undefined;
+    }
+
     const catalogItem = await this.getCatalogItem();
     const httpPort = catalogItem?.localConfig?.httpPort || 8080;
     const httpPath = catalogItem?.localConfig?.httpPath || "/mcp";
@@ -6011,6 +6080,56 @@ export default class K8sDeployment {
       endpointUrl: `http://${podIp}:${httpPort}${httpPath}`,
       podName,
     };
+  }
+
+  /**
+   * An HTTP dispatcher that reaches this server's pod through its cluster's
+   * API server, for a server in an environment's own cluster: the platform
+   * cannot reach that cluster's pod or Service network. Undefined in the
+   * platform's own cluster, where the endpoint URL is dialed directly.
+   *
+   * `pinnedPodName` is the pod a resumed session lives on; without it each
+   * connection goes to the pod that is running at that moment. The caller
+   * owns the dispatcher and must destroy it.
+   */
+  async createHttpTunnel(
+    pinnedPodName?: string | null,
+  ): Promise<Agent | undefined> {
+    if (this.environmentClusterId === null) return undefined;
+    if (!this.k8sPortForward) {
+      throw new Error(
+        `MCP server ${this.deploymentName} is in an environment's own cluster but has no port-forward client`,
+      );
+    }
+    const catalogItem = await this.getCatalogItem();
+    // One tunnel serves one MCP session, and a session lives in one pod: every
+    // connection of the tunnel goes to the pod its first connection found.
+    // The lookup is shared, so connections opened together agree on the pod.
+    let podName: Promise<string> | null = pinnedPodName
+      ? Promise.resolve(pinnedPodName)
+      : null;
+    const findRunningPod = async (): Promise<string> => {
+      const running = await this.getRunningPodName();
+      if (!running) {
+        throw new Error(
+          `MCP server ${this.deploymentName} has no running pod to connect to`,
+        );
+      }
+      return running;
+    };
+    return createPodTunnelAgent({
+      portForward: this.k8sPortForward,
+      namespace: this.namespace,
+      port: catalogItem?.localConfig?.httpPort || 8080,
+      resolvePodName: () => {
+        podName ??= findRunningPod().catch((error) => {
+          // Not found yet: the next connection looks again.
+          podName = null;
+          throw error;
+        });
+        return podName;
+      },
+    });
   }
 
   /**

@@ -938,7 +938,7 @@ async function launchDelegatedTask(params: {
       throw error;
     }
     try {
-      await prepareAgentRuntimeBackendDriver(runtime.backend);
+      await prepareAgentRuntimeBackendDriver(runtime);
     } catch (error) {
       if (error instanceof ApiError) {
         return failedLaunch("backend_unavailable", errorResult(error.message));

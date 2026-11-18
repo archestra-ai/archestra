@@ -170,6 +170,7 @@ import {
   captureServerExtensions,
   type DirectServerSession,
 } from "./mcp-server-extensions";
+import { PodTunnelStreamableHttpTransport } from "./pod-tunnel-transport";
 
 type PassiveMcpClient = {
   execute: <T>(operation: (client: Client) => Promise<T>) => Promise<
@@ -2971,13 +2972,20 @@ class McpClient {
               },
               "Using stored MCP HTTP session metadata",
             );
-          } else if (
-            config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster
-          ) {
+          } else {
+            // Pinned to a pod when the platform reaches pods one by one: by
+            // their address inside its own cluster, or through a tunnel into
+            // an environment's own cluster. Undefined when it goes through a
+            // Service it cannot see behind.
             const runningPodEndpoint =
-              await McpServerRuntimeManager.getRunningPodHttpEndpoint(
+              config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster ||
+              (await McpServerRuntimeManager.isInEnvironmentCluster(
                 targetMcpServerId,
-              );
+              ))
+                ? await McpServerRuntimeManager.getRunningPodHttpEndpoint(
+                    targetMcpServerId,
+                  )
+                : undefined;
             if (runningPodEndpoint) {
               endpointUrl = runningPodEndpoint.endpointUrl;
               sessionEndpointPodName = runningPodEndpoint.podName;
@@ -3012,10 +3020,26 @@ class McpClient {
         mergePassthroughHeaders(localHeaders, tokenAuth?.passthroughHeaders);
         this.trackTransportCredentialFingerprint(connectionKey, localHeaders);
 
-        return new StreamableHTTPClientTransport(new URL(endpointUrl), {
+        const transportOptions = {
           sessionId,
           requestInit: { headers: new Headers(localHeaders) },
-        });
+        };
+        // A server in an environment's own cluster is reached through that
+        // cluster's API server; its endpoint URL cannot be dialed from here.
+        const tunnel = await McpServerRuntimeManager.createHttpTunnel(
+          targetMcpServerId,
+          sessionEndpointPodName,
+        );
+        return tunnel
+          ? new PodTunnelStreamableHttpTransport(
+              new URL(endpointUrl),
+              transportOptions,
+              tunnel,
+            )
+          : new StreamableHTTPClientTransport(
+              new URL(endpointUrl),
+              transportOptions,
+            );
       }
 
       if (catalogItem.serverType === "remote") {

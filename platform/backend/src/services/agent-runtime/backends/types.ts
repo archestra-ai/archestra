@@ -116,10 +116,27 @@ export interface AgentRuntimeBackendDriver {
   resolveRuntimeScope(params: {
     environmentScope?: string | null;
     organizationScope?: string | null;
+    /**
+     * The run's environment, when that environment deploys into a cluster of
+     * its own rather than the platform's. The scope must then name it, so the
+     * workload is found there for as long as it exists.
+     */
+    environmentClusterId?: string | null;
   }): string;
 
-  /** Throw an actionable error when the backend's infrastructure is missing. */
-  assertReady(): Promise<void>;
+  /**
+   * Begin placing a new workspace in `runtimeScope`, and resolve to the
+   * function that ends it. Called before the first record that names the
+   * scope is written; the returned function is called when the launch has
+   * ended, however it ended. Throws when nothing may be placed there any more.
+   */
+  beginWorkspacePlacement(runtimeScope: string): Promise<() => Promise<void>>;
+
+  /**
+   * Throw an actionable error when the backend's infrastructure is missing
+   * where it places the work of `environmentId` (null: no environment).
+   */
+  assertReady(environmentId: string | null): Promise<void>;
 
   /** Schedule the workload. Returns once accepted, not once running. */
   launch(spec: AgentRunLaunchSpec): Promise<void>;

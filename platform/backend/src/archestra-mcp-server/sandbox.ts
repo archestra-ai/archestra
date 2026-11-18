@@ -1997,7 +1997,7 @@ async function resolveEnvironmentTarget(
     );
   }
   const target =
-    daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(
+    await daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(
       environment,
     );
   if (!target) {
@@ -2023,8 +2023,11 @@ async function resolveAgentEngineTarget(params: {
 }): Promise<EnvironmentTarget> {
   const { agent, organizationId } = params;
   let namespace: string | null;
+  let environment: Awaited<
+    ReturnType<typeof EnvironmentModel.findByIdForOrganization>
+  > = null;
   if (agent.environmentId) {
-    const environment = await EnvironmentModel.findByIdForOrganization(
+    environment = await EnvironmentModel.findByIdForOrganization(
       agent.environmentId,
       organizationId,
     );
@@ -2052,9 +2055,10 @@ async function resolveAgentEngineTarget(params: {
     }
     namespace = organization.defaultEnvironmentNamespace;
   }
-  const target = daggerEnvironmentRuntimeManager.agentTarget({
+  const target = await daggerEnvironmentRuntimeManager.agentTarget({
     id: agent.id,
     namespace,
+    environment,
   });
   if (!target) {
     logger.error(

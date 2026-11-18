@@ -784,7 +784,10 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
           terminalRetained,
           portForwardCommand:
             connection && ports.length
-              ? `kubectl port-forward -n ${owned.runtimeScope} pod/${connection.hostname.split(".")[0]} ${[...new Set(ports)].map((port) => `:${port}`).join(" ")}`
+              ? // The hostname is `<pod>.<namespace>`. The scope itself can
+                // carry more than a namespace (a run in an environment's own
+                // cluster), and the command then needs that cluster's kubeconfig.
+                `kubectl port-forward -n ${connection.hostname.split(".")[1]} pod/${connection.hostname.split(".")[0]} ${[...new Set(ports)].map((port) => `:${port}`).join(" ")}`
               : null,
           workspace: workspace
             ? {

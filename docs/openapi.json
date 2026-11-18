@@ -223265,6 +223265,19 @@
                               "pattern": "^[a-z0-9._:/-]+$"
                             }
                           },
+                          "kubeconfigServer": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "agentRuntimePlatformBaseUrl": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "deletingAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
                           "sortOrder": {
                             "type": "integer",
                             "minimum": -2147483648,
@@ -223327,6 +223340,9 @@
                           "networkPolicy",
                           "validationRegex",
                           "trustedImageRegistries",
+                          "kubeconfigServer",
+                          "agentRuntimePlatformBaseUrl",
+                          "deletingAt",
                           "sortOrder",
                           "createdAt",
                           "updatedAt",
@@ -223666,6 +223682,15 @@
                     "maxLength": 63,
                     "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
                   },
+                  "kubeconfig": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "agentRuntimePlatformBaseUrl": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 2048
+                  },
                   "networkPolicy": {
                     "nullable": true,
                     "type": "object",
@@ -223845,6 +223870,19 @@
                         "pattern": "^[a-z0-9._:/-]+$"
                       }
                     },
+                    "kubeconfigServer": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "agentRuntimePlatformBaseUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "deletingAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "sortOrder": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -223868,6 +223906,9 @@
                     "networkPolicy",
                     "validationRegex",
                     "trustedImageRegistries",
+                    "kubeconfigServer",
+                    "agentRuntimePlatformBaseUrl",
+                    "deletingAt",
                     "sortOrder",
                     "createdAt",
                     "updatedAt"
@@ -224220,6 +224261,19 @@
                         "pattern": "^[a-z0-9._:/-]+$"
                       }
                     },
+                    "kubeconfigServer": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "agentRuntimePlatformBaseUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "deletingAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "sortOrder": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -224274,6 +224328,9 @@
                     "networkPolicy",
                     "validationRegex",
                     "trustedImageRegistries",
+                    "kubeconfigServer",
+                    "agentRuntimePlatformBaseUrl",
+                    "deletingAt",
                     "sortOrder",
                     "createdAt",
                     "updatedAt",
@@ -224554,6 +224611,15 @@
                     "maxLength": 63,
                     "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
                   },
+                  "kubeconfig": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "agentRuntimePlatformBaseUrl": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 2048
+                  },
                   "networkPolicy": {
                     "nullable": true,
                     "type": "object",
@@ -224742,6 +224808,19 @@
                         "pattern": "^[a-z0-9._:/-]+$"
                       }
                     },
+                    "kubeconfigServer": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "agentRuntimePlatformBaseUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "deletingAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "sortOrder": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -224765,6 +224844,9 @@
                     "networkPolicy",
                     "validationRegex",
                     "trustedImageRegistries",
+                    "kubeconfigServer",
+                    "agentRuntimePlatformBaseUrl",
+                    "deletingAt",
                     "sortOrder",
                     "createdAt",
                     "updatedAt"
@@ -225019,8 +225101,21 @@
         "tags": [
           "Organization"
         ],
-        "description": "Delete an org-level environment. Fails with 409 if any catalog items are still assigned to it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`environment:delete`](/docs/reference/permissions#environment:delete): Delete deployment environments",
+        "description": "Delete an org-level environment. Fails with 409 if any catalog items are still assigned to it. An environment with its own cluster has its workloads removed from that cluster first; if that fails the delete fails with 409, unless `skipClusterCleanup` is set.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`environment:delete`](/docs/reference/permissions#environment:delete): Delete deployment environments",
         "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "in": "query",
+            "name": "skipClusterCleanup",
+            "required": false,
+            "description": "Delete the environment even when its workloads could not be removed from its own cluster; they are left there."
+          },
           {
             "schema": {
               "type": "string",
@@ -225966,6 +226061,682 @@
           "kind": "static",
           "permissions": [
             "environment:delete"
+          ]
+        }
+      }
+    },
+    "/api/environments/kubeconfig/test": {
+      "post": {
+        "operationId": "testEnvironmentKubeconfig",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Test a kubeconfig before creating an environment with it: reports, per feature, what its cluster lets the platform do in the given namespace. Nothing is stored or deployed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`environment:create`](/docs/reference/permissions#environment:create): Create deployment environments",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kubeconfig": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "namespace": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 63,
+                    "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+                  },
+                  "agentRuntimePlatformBaseUrl": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kubeconfig",
+                  "namespace"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "server": {
+                      "type": "string"
+                    },
+                    "checks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "deployAccess",
+                              "networkPolicy",
+                              "codeSandbox",
+                              "agentRuntime"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "ok",
+                              "failed",
+                              "unverified"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "server",
+                    "checks"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "environment:create"
+          ]
+        }
+      }
+    },
+    "/api/environments/{id}/cluster/test": {
+      "post": {
+        "operationId": "testEnvironmentCluster",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Test the cluster of an environment that has its own: reports, per feature, what the cluster lets the platform do. With `kubeconfig`, tests that credential instead of the stored one. Nothing is stored or deployed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`environment:update`](/docs/reference/permissions#environment:update): Modify deployment environments, including the org default environment",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kubeconfig": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "namespace": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 63,
+                    "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+                  },
+                  "agentRuntimePlatformBaseUrl": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "server": {
+                      "type": "string"
+                    },
+                    "checks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "deployAccess",
+                              "networkPolicy",
+                              "codeSandbox",
+                              "agentRuntime"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "ok",
+                              "failed",
+                              "unverified"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "server",
+                    "checks"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "environment:update"
           ]
         }
       }

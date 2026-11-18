@@ -180,8 +180,11 @@ class AgentWarmPoolManager {
         ...(config.agentRuntime.namespace
           ? [config.agentRuntime.namespace]
           : []),
+        // An environment with its own cluster names a namespace there.
         ...environments.flatMap((environment) =>
-          environment.namespace ? [environment.namespace] : [],
+          environment.namespace && !environment.kubeconfigSecretId
+            ? [environment.namespace]
+            : [],
         ),
         ...organizations.flatMap((organization) =>
           organization.defaultEnvironmentNamespace

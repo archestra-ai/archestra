@@ -395,7 +395,7 @@ describe("sandbox tools (runtime enabled)", () => {
           daggerEnvironmentRuntimeManager,
           "environmentTargetForEnvironment",
         )
-        .mockReturnValue(envTarget);
+        .mockResolvedValue(envTarget);
       const orgSpy = vi.spyOn(
         daggerEnvironmentRuntimeManager,
         "organizationDefaultTarget",
@@ -444,7 +444,7 @@ describe("sandbox tools (runtime enabled)", () => {
       };
       const agentSpy = vi
         .spyOn(daggerEnvironmentRuntimeManager, "agentTarget")
-        .mockReturnValue(agentTarget);
+        .mockResolvedValue(agentTarget);
 
       await executeArchestraTool(
         TOOL_RUN_COMMAND_FULL_NAME,
@@ -456,6 +456,7 @@ describe("sandbox tools (runtime enabled)", () => {
       expect(agentSpy).toHaveBeenCalledWith({
         id: ctx.agent.id,
         namespace: "env-ns",
+        environment: expect.objectContaining({ id: environment.id }),
       });
       expect(runSpy).toHaveBeenCalledWith(
         expect.objectContaining({ environment: agentTarget }),
@@ -479,9 +480,10 @@ describe("sandbox tools (runtime enabled)", () => {
         environmentId: "33333333-3333-4333-8333-333333333333",
         namespace: "org-ns",
       };
-      vi.spyOn(daggerEnvironmentRuntimeManager, "agentTarget").mockReturnValue(
-        agentTarget,
-      );
+      vi.spyOn(
+        daggerEnvironmentRuntimeManager,
+        "agentTarget",
+      ).mockResolvedValue(agentTarget);
 
       await executeArchestraTool(
         TOOL_RUN_COMMAND_FULL_NAME,
@@ -505,9 +507,10 @@ describe("sandbox tools (runtime enabled)", () => {
         { networkPolicy: { egressMode: "off" } },
       );
       const runSpy = stubRunCommand("sbx-1");
-      vi.spyOn(daggerEnvironmentRuntimeManager, "agentTarget").mockReturnValue(
-        undefined,
-      );
+      vi.spyOn(
+        daggerEnvironmentRuntimeManager,
+        "agentTarget",
+      ).mockResolvedValue(undefined);
 
       const result = await executeArchestraTool(
         TOOL_RUN_COMMAND_FULL_NAME,
@@ -570,7 +573,7 @@ describe("sandbox tools (runtime enabled)", () => {
       vi.spyOn(
         daggerEnvironmentRuntimeManager,
         "environmentTargetForEnvironment",
-      ).mockReturnValue(undefined);
+      ).mockResolvedValue(undefined);
 
       const result = await executeArchestraTool(
         TOOL_RUN_COMMAND_FULL_NAME,
@@ -603,7 +606,11 @@ describe("sandbox tools (runtime enabled)", () => {
         seedAndAssignArchestraTools,
         environment.id,
       );
-      await EnvironmentModel.delete(environment.id, organizationId);
+      await EnvironmentModel.deleteUnused({
+        id: environment.id,
+        organizationId: organizationId,
+        blocking: [],
+      });
       const runSpy = stubRunCommand("sbx-1");
       (config.daggerRuntime as { runnerHost?: string }).runnerHost = undefined;
       const orgTarget = {

@@ -33,6 +33,7 @@ vi.mock("@kubernetes/client-node", () => {
     Attach: vi.fn(),
     Exec: vi.fn(),
     Log: vi.fn(),
+    PortForward: vi.fn(),
   };
 });
 

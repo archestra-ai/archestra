@@ -90,11 +90,17 @@ export const getExternalProxyUrls = (): string[] => {
  * fallback. A server render that knows the document's origin adds that itself.
  */
 export const getConfiguredExternalProxyUrls = (): string[] =>
+  getConfiguredApiBaseUrls().map(appendProxySuffix);
+
+/**
+ * The API's addresses as the deployment configures them in
+ * NEXT_PUBLIC_ARCHESTRA_API_BASE_URL, in their configured order.
+ */
+export const getConfiguredApiBaseUrls = (): string[] =>
   (env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL") ?? "")
     .split(",")
     .map((url) => url.trim())
-    .filter((url) => url.length > 0)
-    .map(appendProxySuffix);
+    .filter((url) => url.length > 0);
 
 /**
  * Get the WebSocket URL for general communication.

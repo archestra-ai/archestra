@@ -139,7 +139,13 @@ describe("EnvironmentModel", () => {
       organizationId: org.id,
       name: "Temp",
     });
-    expect(await EnvironmentModel.delete(env.id, org.id)).toBe(true);
+    expect(
+      await EnvironmentModel.deleteUnused({
+        id: env.id,
+        organizationId: org.id,
+        blocking: [],
+      }),
+    ).toBe("deleted");
     expect(
       await EnvironmentModel.findByIdForOrganization(env.id, org.id),
     ).toBeNull();

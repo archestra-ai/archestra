@@ -626,6 +626,38 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     });
   }
 
+  test("labels a deployment in an environment's own cluster with that environment, so cleanup can select it", () => {
+    const environmentId = "5fa31046-05db-45a2-bf79-ac0c03342553";
+    const k8sDeployment = new K8sDeployment({
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+      mcpServer: { id: "test-server-id", name: "test-server" } as any,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as k8s.Attach,
+      k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
+      namespace: "team-a",
+      catalogItem: null,
+      clusterEnvironmentId: environmentId,
+    });
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      "my-docker-image:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+    );
+
+    expect(deploymentSpec.metadata?.labels).toMatchObject({
+      app: "mcp-server",
+      "archestra.io/environment-cluster": environmentId,
+    });
+    // Not part of the selector, which a Deployment cannot change later.
+    expect(deploymentSpec.spec?.selector.matchLabels).not.toHaveProperty(
+      "archestra.io/environment-cluster",
+    );
+  });
+
   test("generates basic deploymentSpec for stdio-based MCP server without HTTP port", () => {
     const mcpServer: McpServer = {
       id: "test-server-id",

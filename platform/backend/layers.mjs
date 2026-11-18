@@ -722,6 +722,7 @@ const layerTable = [
       "src/services/dev-feedback.ts",
       "src/services/discovered-model-enrichment.ts",
       "src/services/environments/deployment-reconciliation.ts",
+      "src/services/environments/environment-cluster.ts",
       "src/services/environments/environment.ts",
       "src/services/environments/network-policy-match.ts",
       "src/services/environments/remote-server-network-policy.ts",

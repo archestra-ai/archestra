@@ -8,9 +8,13 @@ import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import type WebSocket from "ws";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
-import { getK8sCapabilities } from "@/k8s/capabilities";
+import {
+  getK8sCapabilities,
+  getK8sCapabilitiesFromApi,
+} from "@/k8s/capabilities";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
 import { clusterIpFamilyResolver } from "@/k8s/cluster-ip-families";
+import { environmentClusters } from "@/k8s/environment-clusters";
 import { resolveRuntimeOwnerReferences } from "@/k8s/mcp-server-runtime/runtime-owner";
 import {
   createK8sClients,
@@ -27,6 +31,7 @@ import {
   AgentRunInputModel,
   AgentRunModel,
   AgentWorkspaceModel,
+  EnvironmentModel,
   OAuthAccessTokenModel,
   OrganizationModel,
   VirtualApiKeyModel,
@@ -112,13 +117,22 @@ import {
   type AgentRuntimeEgressPolicyObject,
   buildAgentRuntimeEnvironmentEgressPolicies,
 } from "./network-policy";
-import { resolvePlatformServiceDestination } from "./platform-service";
+import {
+  resolveExternalPlatformDestination,
+  resolvePlatformServiceDestination,
+  resolvePlatformUrlForEnvironmentCluster,
+} from "./platform-service";
 import {
   agentRuntimePodTier,
   classifyAgentRuntimePodFailure,
   describeAgentRuntimePodFailure,
 } from "./pod-failure";
-import { agentSandboxApi } from "./sandbox-api";
+import {
+  type KubernetesRuntimePlacement,
+  kubernetesRuntimeNamespace,
+  parseKubernetesRuntimeScope,
+} from "./runtime-scope";
+import { agentSandboxApi, inspectAgentSandboxApi } from "./sandbox-api";
 import {
   type AgentRuntimeStartupProgress,
   type AgentRuntimeStartupProgressReporter,
@@ -171,29 +185,57 @@ class AgentRuntimeManager {
   }
 
   /**
+   * As `assertSandboxApiInstalled`, for the cluster that runs of this
+   * environment go to: its own when it has one, else the platform's.
+   */
+  async assertSandboxApiInstalledFor(
+    environmentId: string | null,
+  ): Promise<void> {
+    const environment = environmentId
+      ? await EnvironmentModel.findById(environmentId)
+      : null;
+    if (!environment?.kubeconfigSecretId) {
+      return this.assertSandboxApiInstalled();
+    }
+    return this.assertSandboxApiInstalledIn(
+      {
+        clusterEnvironmentId: environment.id,
+        namespace: environment.namespace ?? "",
+      },
+      await environmentClusters.forEnvironment(environment),
+    );
+  }
+
+  /**
    * Create the Kubernetes objects for one session. The Secret is written
    * before the Job so the pod cannot start against a half-populated
    * environment, and the network policy before both so a pod is never
    * schedulable without its egress isolation in force.
    */
   async launch(spec: AgentRunLaunchSpec): Promise<void> {
-    await this.assertSandboxApiInstalled();
-    const clients = this.requireClients();
-    const names = agentRuntimeNames(spec.frozenName);
     const { runtimeScope, ...runtimeSpec } = spec;
+    const placement = parseKubernetesRuntimeScope(runtimeScope);
+    const clients = await this.clientsFor(runtimeScope);
+    await this.assertSandboxApiInstalledIn(placement, clients);
+    const names = agentRuntimeNames(spec.frozenName);
     const withOwner: KubernetesAgentRunLaunchSpec = {
       ...runtimeSpec,
-      namespace: runtimeScope,
-      ownerReferences: await resolveRuntimeOwnerReferences(
-        clients.rbacApi,
-        runtimeScope,
-      ).catch((error) => {
-        logger.warn(
-          { error },
-          "Could not resolve runtime owner references for an Agent run",
-        );
-        return undefined;
-      }),
+      namespace: placement.namespace,
+      // The owner is a Role of the platform's own release; an environment's
+      // own cluster has no such object.
+      ownerReferences:
+        placement.clusterEnvironmentId === null
+          ? await resolveRuntimeOwnerReferences(
+              clients.rbacApi,
+              placement.namespace,
+            ).catch((error) => {
+              logger.warn(
+                { error },
+                "Could not resolve runtime owner references for an Agent run",
+              );
+              return undefined;
+            })
+          : undefined,
     };
 
     const sandboxKey = `${withOwner.namespace}/${names.sandbox}`;
@@ -250,42 +292,16 @@ class AgentRuntimeManager {
       { label: "create Agent Runtime secret" },
     );
 
-    const capabilities = (await getK8sCapabilities()).networkPolicy;
-    const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
-      clients.coreApi,
-    );
-    await this.applyEgressPolicies(
-      buildAgentRuntimeEnvironmentEgressPolicies({
-        spec: withOwner,
-        capabilities,
-        clusterDnsIps,
-        clusterIpFamilies: await clusterIpFamilyResolver.getIpFamilies({
-          coreApi: clients.coreApi,
-          namespace: withOwner.namespace,
-          clusterDnsIps,
-        }),
-      }),
-    );
-    await this.applyNetworkPolicy(
-      buildAgentRuntimePlatformEgressPolicy({
-        spec: withOwner,
-        clusterDnsIps,
-        platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
-        platformPodLabels: config.agentRuntime.platformPodSelector,
-        platformPorts: [config.api.port],
-        platformService: await resolvePlatformServiceDestination({
-          coreApi: clients.coreApi,
-          baseUrl: config.agentRuntime.platformBaseUrl,
-          runtimeNamespace: withOwner.namespace,
-          platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
-        }),
-      }),
-    );
+    await this.applyRunEgressPolicies({ placement, clients, spec: withOwner });
 
-    const claimed = await agentWarmPoolManager.claim({
-      api: clients.customObjectsApi,
-      spec: withOwner,
-    });
+    // Warm spares exist only in the platform's own cluster.
+    const claimed =
+      placement.clusterEnvironmentId === null
+        ? await agentWarmPoolManager.claim({
+            api: clients.customObjectsApi,
+            spec: withOwner,
+          })
+        : null;
     if (claimed) {
       if (claimed.tier !== withOwner.tier)
         await AgentRunModel.updateRuntimeLimitsTier({
@@ -346,6 +362,30 @@ class AgentRuntimeManager {
         "Adopting an existing Agent Sandbox with the same frozen name",
       );
     });
+
+    // In an environment's own cluster, a deletion of the environment that
+    // began while this launch was in flight wins. Its cleanup may already be
+    // done, and afterwards nothing can reach that cluster, so the launch
+    // removes what it created, with the clients it still holds.
+    if (placement.clusterEnvironmentId !== null) {
+      const environment = await EnvironmentModel.findById(
+        placement.clusterEnvironmentId,
+      );
+      if (!environment || environment.deletingAt) {
+        await this.deleteWorkspace(
+          {
+            id: spec.taskId,
+            runtimeScope,
+            workloadName: spec.frozenName,
+          },
+          clients,
+        );
+        throw new ApiError(
+          409,
+          "The Agent's environment is being deleted, so the run was not started.",
+        );
+      }
+    }
   }
 
   /** Read or atomically replace a bounded file in the owning workspace. */
@@ -415,8 +455,8 @@ class AgentRuntimeManager {
     timeoutMs: number;
   }): Promise<{ stdout: Readable; completed: Promise<void> }> {
     return streamAgentRuntimeCommand({
-      exec: this.requireClients().exec,
-      namespace: params.session.runtimeScope,
+      exec: (await this.clientsFor(params.session.runtimeScope)).exec,
+      namespace: kubernetesRuntimeNamespace(params.session.runtimeScope),
       podName: await this.requireRunningPodName(params.session),
       container: AGENT_RUNTIME_CONTAINER_NAME,
       command: [
@@ -507,10 +547,20 @@ class AgentRuntimeManager {
     spec: AgentRunLaunchSpec;
     initial?: boolean;
   }): Promise<void> {
-    const clients = this.requireClients();
+    await this.asClusterWrite(params.session.runtimeScope, () =>
+      this.continueRunInWorkspace(params),
+    );
+  }
+
+  private async continueRunInWorkspace(params: {
+    session: AgentRunRecord;
+    spec: AgentRunLaunchSpec;
+    initial?: boolean;
+  }): Promise<void> {
+    const clients = await this.clientsFor(params.session.runtimeScope);
     let sandbox = await readWorkspaceSandbox({
       api: clients.customObjectsApi,
-      namespace: params.session.runtimeScope,
+      namespace: kubernetesRuntimeNamespace(params.session.runtimeScope),
       name: params.session.workloadName,
     });
     let container = findAgentRuntimeContainer(sandbox);
@@ -554,7 +604,7 @@ class AgentRuntimeManager {
     await this.refreshWorkspaceEgress({ sandbox, spec: params.spec });
     await clients.coreApi.patchNamespacedSecret(
       {
-        namespace: params.session.runtimeScope,
+        namespace: kubernetesRuntimeNamespace(params.session.runtimeScope),
         name: agentRuntimeNames(params.session.workloadName).secret,
         body: {
           stringData: {
@@ -576,7 +626,7 @@ class AgentRuntimeManager {
       ({ secretRef }) => secretRef?.name === initialSecretName,
     )
       ? await clients.coreApi.readNamespacedSecret({
-          namespace: params.session.runtimeScope,
+          namespace: kubernetesRuntimeNamespace(params.session.runtimeScope),
           name: initialSecretName,
         })
       : null;
@@ -586,7 +636,7 @@ class AgentRuntimeManager {
     ];
     await clients.coreApi
       .createNamespacedSecret({
-        namespace: params.session.runtimeScope,
+        namespace: kubernetesRuntimeNamespace(params.session.runtimeScope),
         body: {
           metadata: {
             name: pendingTurnSecretName(params.session),
@@ -620,10 +670,16 @@ class AgentRuntimeManager {
   }
 
   async recoverRun(session: AgentRunRecord): Promise<void> {
-    const clients = this.requireClients();
+    await this.asClusterWrite(session.runtimeScope, () =>
+      this.recoverRunInWorkspace(session),
+    );
+  }
+
+  private async recoverRunInWorkspace(session: AgentRunRecord): Promise<void> {
+    const clients = await this.clientsFor(session.runtimeScope);
     const pending = await clients.coreApi
       .readNamespacedSecret({
-        namespace: session.runtimeScope,
+        namespace: kubernetesRuntimeNamespace(session.runtimeScope),
         name: pendingTurnSecretName(session),
       })
       .catch((error) => {
@@ -632,7 +688,7 @@ class AgentRuntimeManager {
       });
     const sandbox = await readWorkspaceSandbox({
       api: clients.customObjectsApi,
-      namespace: session.runtimeScope,
+      namespace: kubernetesRuntimeNamespace(session.runtimeScope),
       name: session.workloadName,
     });
     if (
@@ -666,7 +722,7 @@ class AgentRuntimeManager {
     await clients.customObjectsApi.patchNamespacedCustomObject(
       {
         ...AGENT_SANDBOX_API,
-        namespace: session.runtimeScope,
+        namespace: kubernetesRuntimeNamespace(session.runtimeScope),
         name: sandbox.metadata.name ?? session.workloadName,
         body: { spec: { operatingMode: "Running" } },
       },
@@ -735,10 +791,13 @@ class AgentRuntimeManager {
   async refreshCredentials(
     session: AgentRunRecord,
   ): Promise<Array<{ key: string; credentialId: string }>> {
-    const clients = this.requireClients();
+    const clients = await this.clientsFor(session.runtimeScope);
     const name = agentRuntimeNames(session.workloadName).secret;
     const secret = await clients.coreApi
-      .readNamespacedSecret({ namespace: session.runtimeScope, name })
+      .readNamespacedSecret({
+        namespace: kubernetesRuntimeNamespace(session.runtimeScope),
+        name,
+      })
       .catch((error) => {
         if (isK8sNotFoundError(error)) return null;
         throw error;
@@ -795,7 +854,7 @@ class AgentRuntimeManager {
     const patched = await clients.coreApi
       .patchNamespacedSecret(
         {
-          namespace: session.runtimeScope,
+          namespace: kubernetesRuntimeNamespace(session.runtimeScope),
           name,
           body: {
             metadata: { resourceVersion: secret?.metadata?.resourceVersion },
@@ -823,8 +882,8 @@ class AgentRuntimeManager {
     const pod = await this.findPod(session);
     if (pod?.status?.phase !== "Running" || !pod.metadata?.name) return false;
     const output = await execAgentRuntimeCommand({
-      exec: this.requireClients().exec,
-      namespace: session.runtimeScope,
+      exec: (await this.clientsFor(session.runtimeScope)).exec,
+      namespace: kubernetesRuntimeNamespace(session.runtimeScope),
       podName: pod.metadata.name,
       container: AGENT_RUNTIME_CONTAINER_NAME,
       command: [
@@ -850,20 +909,20 @@ class AgentRuntimeManager {
     if (!retainCredentials) {
       await this.revokeRunCredentials(session);
     }
-    const clients = this.requireClients();
+    const clients = await this.clientsFor(session.runtimeScope);
     // Keep the names for continuation's inherited-env unset list, but prevent
     // replacement Pods and their exec shells from receiving stale credentials.
     const name = agentRuntimeNames(session.workloadName).secret;
     await withK8sApiRetry(
       async () => {
         const secret = await clients.coreApi.readNamespacedSecret({
-          namespace: session.runtimeScope,
+          namespace: kubernetesRuntimeNamespace(session.runtimeScope),
           name,
         });
         if (!Object.values(secret.data ?? {}).some(Boolean)) return;
         await clients.coreApi.patchNamespacedSecret(
           {
-            namespace: session.runtimeScope,
+            namespace: kubernetesRuntimeNamespace(session.runtimeScope),
             name,
             body: {
               metadata: { resourceVersion: secret.metadata?.resourceVersion },
@@ -888,7 +947,7 @@ class AgentRuntimeManager {
     if (!retainCredentials) await this.projectWarmCredentials(session);
     await clients.coreApi
       .deleteNamespacedSecret({
-        namespace: session.runtimeScope,
+        namespace: kubernetesRuntimeNamespace(session.runtimeScope),
         name: pendingTurnSecretName(session),
       })
       .catch((error) => {
@@ -926,14 +985,16 @@ class AgentRuntimeManager {
     session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
   ): Promise<void> {
     const sandbox = await readWorkspaceSandbox({
-      api: this.requireClients().customObjectsApi,
-      namespace: session.runtimeScope,
+      api: (await this.clientsFor(session.runtimeScope)).customObjectsApi,
+      namespace: kubernetesRuntimeNamespace(session.runtimeScope),
       name: session.workloadName,
     });
-    await this.requireClients().customObjectsApi.patchNamespacedCustomObject(
+    await (
+      await this.clientsFor(session.runtimeScope)
+    ).customObjectsApi.patchNamespacedCustomObject(
       {
         ...AGENT_SANDBOX_API,
-        namespace: session.runtimeScope,
+        namespace: kubernetesRuntimeNamespace(session.runtimeScope),
         name: sandbox.metadata.name ?? session.workloadName,
         body: { spec: { operatingMode: "Suspended" } },
       },
@@ -969,8 +1030,8 @@ class AgentRuntimeManager {
     let sandbox: AgentSandbox;
     try {
       sandbox = await readWorkspaceSandbox({
-        api: this.requireClients().customObjectsApi,
-        namespace: session.runtimeScope,
+        api: (await this.clientsFor(session.runtimeScope)).customObjectsApi,
+        namespace: kubernetesRuntimeNamespace(session.runtimeScope),
         name: session.workloadName,
       });
     } catch (error) {
@@ -983,13 +1044,13 @@ class AgentRuntimeManager {
     }
     const name = sandbox.metadata.name ?? session.workloadName;
     return {
-      hostname: `${name}.${session.runtimeScope}`,
+      hostname: `${name}.${kubernetesRuntimeNamespace(session.runtimeScope)}`,
       shellCommand: [
         "kubectl",
         "exec",
         "-it",
         "-n",
-        session.runtimeScope,
+        kubernetesRuntimeNamespace(session.runtimeScope),
         name,
         "-c",
         AGENT_RUNTIME_CONTAINER_NAME,
@@ -1005,10 +1066,16 @@ class AgentRuntimeManager {
   }
 
   async resumeWorkspace(session: AgentRunRecord): Promise<void> {
-    const clients = this.requireClients();
+    await this.asClusterWrite(session.runtimeScope, () =>
+      this.resumeWorkspaceInPlace(session),
+    );
+  }
+
+  private async resumeWorkspaceInPlace(session: AgentRunRecord): Promise<void> {
+    const clients = await this.clientsFor(session.runtimeScope);
     const sandbox = await readWorkspaceSandbox({
       api: clients.customObjectsApi,
-      namespace: session.runtimeScope,
+      namespace: kubernetesRuntimeNamespace(session.runtimeScope),
       name: session.workloadName,
     });
     if (
@@ -1049,7 +1116,7 @@ class AgentRuntimeManager {
     await clients.customObjectsApi.patchNamespacedCustomObject(
       {
         ...AGENT_SANDBOX_API,
-        namespace: session.runtimeScope,
+        namespace: kubernetesRuntimeNamespace(session.runtimeScope),
         name: sandbox.metadata.name ?? session.workloadName,
         body: { spec: { operatingMode: "Running" } },
       },
@@ -1086,7 +1153,9 @@ class AgentRuntimeManager {
     agentId: string;
     organizationId: string;
   }): Promise<void> {
-    if (!this.isEnabled) return;
+    // Workspaces can be in an environment's own cluster while the platform's
+    // own cluster serves no Agent Sandbox API.
+    if (!this.isEnabled && !environmentClusters.hasEnvironmentClusters) return;
     const workspaces = await AgentWorkspaceModel.listRunningForAgent(params);
     if (workspaces.length === 0) return;
     const agent = await AgentModel.findById(params.agentId);
@@ -1098,23 +1167,27 @@ class AgentRuntimeManager {
       environmentId: agent.environmentId,
       defaultNetworkPolicy: organization?.defaultNetworkPolicy,
     });
-    const clients = this.requireClients();
     for (const workspace of workspaces) {
       try {
-        const sandbox = await readWorkspaceSandbox({
-          api: clients.customObjectsApi,
-          namespace: workspace.runtimeScope,
-          name: workspace.workloadName,
-        });
-        await this.refreshWorkspaceEgress({
-          sandbox,
-          spec: {
-            taskId: workspace.lastTaskId,
-            agentRuntimeId: workspace.agentId,
-            frozenName: workspace.workloadName,
-            runtimeScope: workspace.runtimeScope,
-            effectiveNetworkPolicy,
-          },
+        // Each workspace is refreshed where it lives: a batch can span the
+        // platform's cluster and environments' own.
+        await this.asClusterWrite(workspace.runtimeScope, async () => {
+          const clients = await this.clientsFor(workspace.runtimeScope);
+          const sandbox = await readWorkspaceSandbox({
+            api: clients.customObjectsApi,
+            namespace: kubernetesRuntimeNamespace(workspace.runtimeScope),
+            name: workspace.workloadName,
+          });
+          await this.refreshWorkspaceEgress({
+            sandbox,
+            spec: {
+              taskId: workspace.lastTaskId,
+              agentRuntimeId: workspace.agentId,
+              frozenName: workspace.workloadName,
+              runtimeScope: workspace.runtimeScope,
+              effectiveNetworkPolicy,
+            },
+          });
         });
       } catch (err) {
         logger.warn(
@@ -1198,7 +1271,7 @@ class AgentRuntimeManager {
       }
       await AgentWorkspaceModel.recordActivity(workspace.id, new Date());
     }
-    const clients = this.requireClients();
+    const clients = await this.clientsFor(params.session.runtimeScope);
     // A2A marks the durable task working before Kubernetes necessarily has a
     // Running pod. Chat can therefore open the terminal during image pull or
     // scheduling; wait for that normal transition instead of turning it into
@@ -1225,7 +1298,7 @@ class AgentRuntimeManager {
       podName,
       command: ["/bin/sh", "-c", buildAgentRuntimeTerminalIntegrationScript()],
     });
-    const namespace = params.session.runtimeScope;
+    const namespace = kubernetesRuntimeNamespace(params.session.runtimeScope);
     const socket = await clients.exec.exec(
       namespace,
       podName,
@@ -1282,9 +1355,9 @@ class AgentRuntimeManager {
 
   /** Pod carrying a session, or null when nothing is scheduled. */
   async findPodName(session: AgentRunRecord): Promise<string | null> {
-    const clients = this.requireClients();
+    const clients = await this.clientsFor(session.runtimeScope);
     const pods = await clients.coreApi.listNamespacedPod({
-      namespace: session.runtimeScope,
+      namespace: kubernetesRuntimeNamespace(session.runtimeScope),
       labelSelector: `${AGENT_RUNTIME_WORKSPACE_LABEL}=${session.workloadName}`,
     });
     const running = pods.items.find(
@@ -1332,9 +1405,9 @@ class AgentRuntimeManager {
   async findPod(
     session: Pick<AgentRunRecord, "taskId" | "runtimeScope" | "workloadName">,
   ): Promise<k8s.V1Pod | null> {
-    const clients = this.requireClients();
+    const clients = await this.clientsFor(session.runtimeScope);
     const pods = await clients.coreApi.listNamespacedPod({
-      namespace: session.runtimeScope,
+      namespace: kubernetesRuntimeNamespace(session.runtimeScope),
       labelSelector: `${AGENT_RUNTIME_WORKSPACE_LABEL}=${session.workloadName}`,
     });
     return (
@@ -1362,7 +1435,7 @@ class AgentRuntimeManager {
     reason?: string;
     failure?: A2ATaskFailure;
   }> {
-    const clients = this.requireClients();
+    const clients = await this.clientsFor(params.session.runtimeScope);
     const { sandbox: sandboxName } = agentRuntimeNames(
       params.session.workloadName,
     );
@@ -1379,7 +1452,7 @@ class AgentRuntimeManager {
         const sandbox = await readWorkspaceSandbox({
           api: clients.customObjectsApi,
           name: sandboxName,
-          namespace: params.session.runtimeScope,
+          namespace: kubernetesRuntimeNamespace(params.session.runtimeScope),
         }).catch((error) => {
           if (isK8sNotFoundError(error)) return null;
           throw error;
@@ -1483,7 +1556,7 @@ class AgentRuntimeManager {
         const condition = finished ?? expired;
         const podFailure = describeAgentRuntimePodFailure(
           pod,
-          params.session.runtimeScope,
+          kubernetesRuntimeNamespace(params.session.runtimeScope),
           condition,
         );
         if (finished || expired || podFailure) {
@@ -1598,12 +1671,27 @@ class AgentRuntimeManager {
 
   async deleteWorkspace(
     session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
+    /**
+     * Clients a launch already holds, for removing what it created in an
+     * environment that began being deleted meanwhile: the registry would no
+     * longer hand them out.
+     */
+    heldClients?: K8sClients,
   ): Promise<void> {
-    if (!this.isEnabled) return;
+    // Nothing to remove from the platform's own cluster when it serves no
+    // Agent Sandbox API; an environment's own cluster answers for itself.
+    if (
+      !this.isEnabled &&
+      parseKubernetesRuntimeScope(session.runtimeScope).clusterEnvironmentId ===
+        null
+    ) {
+      return;
+    }
 
-    const clients = this.requireClients();
+    const clients =
+      heldClients ?? (await this.clientsFor(session.runtimeScope));
     const names = agentRuntimeNames(session.workloadName);
-    const namespace = session.runtimeScope;
+    const namespace = kubernetesRuntimeNamespace(session.runtimeScope);
     this.terminatingSandboxes.add(`${namespace}/${names.sandbox}`);
 
     const deletions: Array<[string, () => Promise<unknown>]> = [
@@ -1720,7 +1808,7 @@ class AgentRuntimeManager {
     sandbox: AgentSandbox;
     image: string;
   }): Promise<AgentSandbox> {
-    const clients = this.requireClients();
+    const clients = await this.clientsFor(params.session.runtimeScope);
     const previous = findAgentRuntimeContainer(params.sandbox)?.image;
     logger.info(
       {
@@ -1750,7 +1838,7 @@ class AgentRuntimeManager {
     await clients.customObjectsApi.patchNamespacedCustomObject(
       {
         ...AGENT_SANDBOX_API,
-        namespace: params.session.runtimeScope,
+        namespace: kubernetesRuntimeNamespace(params.session.runtimeScope),
         name: params.sandbox.metadata.name ?? params.session.workloadName,
         // A merge patch replaces arrays whole, so send every container back.
         body: {
@@ -1770,7 +1858,7 @@ class AgentRuntimeManager {
     );
     return readWorkspaceSandbox({
       api: clients.customObjectsApi,
-      namespace: params.session.runtimeScope,
+      namespace: kubernetesRuntimeNamespace(params.session.runtimeScope),
       name: params.session.workloadName,
     });
   }
@@ -1782,11 +1870,11 @@ class AgentRuntimeManager {
   private async waitForPodRemoval(
     session: Pick<AgentRunRecord, "runtimeScope" | "workloadName">,
   ): Promise<void> {
-    const clients = this.requireClients();
+    const clients = await this.clientsFor(session.runtimeScope);
     const deadline = Date.now() + AGENT_RUNTIME_POD_REMOVAL_TIMEOUT_MS;
     while (Date.now() < deadline) {
       const pods = await clients.coreApi.listNamespacedPod({
-        namespace: session.runtimeScope,
+        namespace: kubernetesRuntimeNamespace(session.runtimeScope),
         labelSelector: `${AGENT_RUNTIME_WORKSPACE_LABEL}=${session.workloadName}`,
       });
       if (pods.items.length === 0) return;
@@ -1808,8 +1896,10 @@ class AgentRuntimeManager {
       !pod.metadata.name
     )
       return;
-    const secret = await this.requireClients().coreApi.readNamespacedSecret({
-      namespace: session.runtimeScope,
+    const secret = await (
+      await this.clientsFor(session.runtimeScope)
+    ).coreApi.readNamespacedSecret({
+      namespace: kubernetesRuntimeNamespace(session.runtimeScope),
       name: agentRuntimeNames(session.workloadName).secret,
     });
     const data = secret.data?.[AGENT_RUNTIME_CREDENTIALS_SECRET_KEY];
@@ -1836,7 +1926,7 @@ class AgentRuntimeManager {
       | "effectiveNetworkPolicy"
     >;
   }): Promise<void> {
-    const clients = this.requireClients();
+    const clients = await this.clientsFor(params.spec.runtimeScope);
     // The retained Pod keeps its original selector even though this turn has
     // a new task ID. Policies must continue selecting that Pod after a wake-up.
     const taskId =
@@ -1845,42 +1935,19 @@ class AgentRuntimeManager {
       ];
     if (!taskId)
       throw new Error("The Agent is missing its network policy selector");
+    const placement = parseKubernetesRuntimeScope(params.spec.runtimeScope);
     const spec = {
       ...params.spec,
       taskId,
       frozenName: params.spec.frozenName,
-      namespace: params.spec.runtimeScope,
+      namespace: placement.namespace,
       ownerReferences: params.sandbox.metadata.ownerReferences,
     };
-    const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
-      clients.coreApi,
-    );
-    const policies = buildAgentRuntimeEnvironmentEgressPolicies({
+    const policies = await this.applyRunEgressPolicies({
+      placement,
+      clients,
       spec,
-      capabilities: (await getK8sCapabilities()).networkPolicy,
-      clusterDnsIps,
-      clusterIpFamilies: await clusterIpFamilyResolver.getIpFamilies({
-        coreApi: clients.coreApi,
-        namespace: spec.namespace,
-        clusterDnsIps,
-      }),
     });
-    await this.applyEgressPolicies(policies);
-    await this.applyNetworkPolicy(
-      buildAgentRuntimePlatformEgressPolicy({
-        spec,
-        clusterDnsIps,
-        platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
-        platformPodLabels: config.agentRuntime.platformPodSelector,
-        platformPorts: [config.api.port],
-        platformService: await resolvePlatformServiceDestination({
-          coreApi: clients.coreApi,
-          baseUrl: config.agentRuntime.platformBaseUrl,
-          runtimeNamespace: spec.namespace,
-          platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
-        }),
-      }),
-    );
     // Policies are additive. Leaving an old allow policy of a different kind
     // would defeat a tightened Environment policy. Finish pruning before the
     // continuation request is published or a suspended Pod is woken.
@@ -1920,8 +1987,106 @@ class AgentRuntimeManager {
     }
   }
 
-  private async applyNetworkPolicy(body: k8s.V1NetworkPolicy): Promise<void> {
-    const clients = this.requireClients();
+  /**
+   * Apply one run's egress policies in the cluster it is in: its
+   * environment's policy, and the policy that lets it reach the platform.
+   * Resolves to the environment policies, for a caller that prunes the kinds
+   * no longer wanted.
+   */
+  private async applyRunEgressPolicies(params: {
+    placement: KubernetesRuntimePlacement;
+    clients: K8sClients;
+    spec: Parameters<
+      typeof buildAgentRuntimeEnvironmentEgressPolicies
+    >[0]["spec"] &
+      Parameters<typeof buildAgentRuntimePlatformEgressPolicy>[0]["spec"];
+  }): Promise<AgentRuntimeEgressPolicyObject[]> {
+    const { placement, clients, spec } = params;
+    const platformCluster = placement.clusterEnvironmentId === null;
+    const capabilities = (
+      platformCluster
+        ? await getK8sCapabilities()
+        : await getK8sCapabilitiesFromApi(clients.customObjectsApi, {
+            coreApi: clients.coreApi,
+            namespace: placement.namespace,
+          })
+    ).networkPolicy;
+    const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
+      clients.coreApi,
+      { platformCluster },
+    );
+    const policies = buildAgentRuntimeEnvironmentEgressPolicies({
+      spec,
+      capabilities,
+      clusterDnsIps,
+      clusterIpFamilies: await clusterIpFamilyResolver.getIpFamilies({
+        coreApi: clients.coreApi,
+        namespace: placement.namespace,
+        clusterDnsIps,
+        clusterEnvironmentId: placement.clusterEnvironmentId,
+      }),
+    });
+    await this.applyEgressPolicies(clients, policies);
+
+    const platformNamespace = process.env.POD_NAMESPACE || getK8sNamespace();
+    const platformBaseUrl = await this.platformBaseUrlFor(placement);
+    const platformService =
+      (await resolvePlatformServiceDestination({
+        coreApi: clients.coreApi,
+        baseUrl: platformBaseUrl,
+        runtimeNamespace: placement.namespace,
+        // In an environment's own cluster a two-label name can only be a
+        // Service of the run's namespace or an external host.
+        platformNamespace: platformCluster
+          ? platformNamespace
+          : placement.namespace,
+      })) ??
+      // In the platform's own cluster its pods are selected by label. In an
+      // environment's own cluster an external host name is the only way in.
+      (platformCluster
+        ? undefined
+        : await resolveExternalPlatformDestination(platformBaseUrl));
+    await this.applyNetworkPolicy(
+      clients,
+      buildAgentRuntimePlatformEgressPolicy({
+        spec,
+        clusterDnsIps,
+        platformNamespace,
+        platformPodLabels: config.agentRuntime.platformPodSelector,
+        platformPorts: [config.api.port],
+        platformPodsInCluster: platformCluster,
+        platformService,
+      }),
+    );
+    return policies;
+  }
+
+  /**
+   * The URL a run's pods call the platform at: the install-wide one in the
+   * platform's own cluster, the environment's in an environment's own.
+   */
+  private async platformBaseUrlFor(
+    placement: KubernetesRuntimePlacement,
+  ): Promise<string> {
+    if (placement.clusterEnvironmentId === null) {
+      return config.agentRuntime.platformBaseUrl;
+    }
+    const environment = await EnvironmentModel.findById(
+      placement.clusterEnvironmentId,
+    );
+    const resolved = resolvePlatformUrlForEnvironmentCluster({
+      environmentUrl: environment?.agentRuntimePlatformBaseUrl ?? null,
+      installUrl: config.agentRuntime.platformBaseUrl,
+      platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
+    });
+    if ("problem" in resolved) throw new Error(resolved.problem);
+    return resolved.url;
+  }
+
+  private async applyNetworkPolicy(
+    clients: K8sClients,
+    body: k8s.V1NetworkPolicy,
+  ): Promise<void> {
     const namespace = body.metadata?.namespace;
     const name = body.metadata?.name;
     if (!namespace || !name) {
@@ -1945,21 +2110,22 @@ class AgentRuntimeManager {
   }
 
   private async applyEgressPolicies(
+    clients: K8sClients,
     policies: AgentRuntimeEgressPolicyObject[],
   ): Promise<void> {
     for (const policy of policies) {
       if (policy.kind === "NetworkPolicy") {
-        await this.applyNetworkPolicy(policy.object);
+        await this.applyNetworkPolicy(clients, policy.object);
         continue;
       }
-      await this.applyCustomEgressPolicy(policy);
+      await this.applyCustomEgressPolicy(clients, policy);
     }
   }
 
   private async applyCustomEgressPolicy(
+    clients: K8sClients,
     policy: Exclude<AgentRuntimeEgressPolicyObject, { kind: "NetworkPolicy" }>,
   ): Promise<void> {
-    const clients = this.requireClients();
     const metadata = policy.object.metadata as
       | { name?: string; namespace?: string }
       | undefined;
@@ -2035,12 +2201,14 @@ class AgentRuntimeManager {
     if (!pod || pod.phase !== "Running") {
       if (params.follow)
         throw new Error("This session has no running pod to read output from");
-      return withTranscriptRecoveryPod({
-        clients: this.requireClients(),
-        session: params.session,
-        abortSignal: params.abortSignal,
-        read: (podName) => this.readTurnOutput({ ...params, podName }),
-      });
+      return this.asClusterWrite(params.session.runtimeScope, async () =>
+        withTranscriptRecoveryPod({
+          clients: await this.clientsFor(params.session.runtimeScope),
+          session: params.session,
+          abortSignal: params.abortSignal,
+          read: (podName) => this.readTurnOutput({ ...params, podName }),
+        }),
+      );
     }
     const path = `/var/run/archestra/turns/${params.session.taskId}`;
     // Read fixed byte ranges so growing output cannot duplicate bytes between
@@ -2056,7 +2224,7 @@ fi
 sleep 1
 done`
       : `cat '${path}.log'`;
-    const clients = this.requireClients();
+    const clients = await this.clientsFor(params.session.runtimeScope);
     await new Promise<void>((resolve, reject) => {
       let socket: WebSocket | undefined;
       let settled = false;
@@ -2088,7 +2256,7 @@ done`
       params.destination.on("error", finish);
       clients.exec
         .exec(
-          params.session.runtimeScope,
+          kubernetesRuntimeNamespace(params.session.runtimeScope),
           pod.name,
           AGENT_RUNTIME_CONTAINER_NAME,
           ["/bin/sh", "-c", script],
@@ -2178,8 +2346,8 @@ done`
     timeoutMs?: number;
   }): Promise<string> {
     return execAgentRuntimeCommand({
-      exec: this.requireClients().exec,
-      namespace: params.session.runtimeScope,
+      exec: (await this.clientsFor(params.session.runtimeScope)).exec,
+      namespace: kubernetesRuntimeNamespace(params.session.runtimeScope),
       podName: params.podName,
       container: AGENT_RUNTIME_CONTAINER_NAME,
       command: params.command,
@@ -2217,7 +2385,7 @@ done`
       if (phase === "Running" && pod?.metadata?.name) return pod.metadata.name;
       const podFailure = describeAgentRuntimePodFailure(
         pod,
-        params.session.runtimeScope,
+        kubernetesRuntimeNamespace(params.session.runtimeScope),
       );
       if (podFailure && pod)
         throw tagAgentRunFailure(
@@ -2288,7 +2456,31 @@ done`
     throw new Error("Timed out waiting for the Agent terminal");
   }
 
-  private requireClients(): K8sClients {
+  /**
+   * The clients of the cluster a run's scope names. A scope of an environment
+   * whose cluster is no longer available throws: it never resolves to the
+   * platform's own cluster, where the workload is not.
+   */
+  /**
+   * Run an operation that creates or changes objects of a workspace where
+   * that workspace lives. In an environment's own cluster the operation is
+   * recorded, so the environment is not deleted under it.
+   */
+  private asClusterWrite<T>(
+    runtimeScope: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    return environmentClusters.withWrite(
+      parseKubernetesRuntimeScope(runtimeScope).clusterEnvironmentId,
+      operation,
+    );
+  }
+
+  private async clientsFor(runtimeScope: string): Promise<K8sClients> {
+    const { clusterEnvironmentId } = parseKubernetesRuntimeScope(runtimeScope);
+    if (clusterEnvironmentId !== null) {
+      return environmentClusters.forEnvironmentId(clusterEnvironmentId);
+    }
     if (!this.isEnabled) {
       throw new Error("Agent Runtime is not enabled");
     }
@@ -2299,6 +2491,29 @@ done`
       );
     }
     return this.clients;
+  }
+
+  /**
+   * Reject a run into a cluster without the Agent Sandbox controller: the
+   * platform's own (checked and remembered by `agentSandboxApi`), or the
+   * run's environment's.
+   */
+  private async assertSandboxApiInstalledIn(
+    placement: KubernetesRuntimePlacement,
+    clients: K8sClients,
+  ): Promise<void> {
+    if (placement.clusterEnvironmentId === null) {
+      return this.assertSandboxApiInstalled();
+    }
+    const { installed } = await inspectAgentSandboxApi(
+      clients.customObjectsApi,
+    );
+    if (!installed) {
+      throw tagAgentRunFailure(
+        new ApiError(503, AGENT_SANDBOX_CONTROLLER_MISSING_MESSAGE),
+        "launch.controller_missing",
+      );
+    }
   }
 }
 

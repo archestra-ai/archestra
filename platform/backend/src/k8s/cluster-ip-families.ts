@@ -28,14 +28,21 @@ class ClusterIpFamilyResolver {
    * Returns the IP families of running pods in `namespace`, falling back to
    * the families of the cluster DNS IPs when no pod has an address yet. An
    * empty array means the families could not be determined. Determined results
-   * are cached per namespace for a few minutes.
+   * are cached per cluster and namespace for a few minutes.
+   * `clusterEnvironmentId` names the environment whose cluster `coreApi`
+   * talks to; omit it for the platform's own cluster.
    */
   async getIpFamilies(params: {
     coreApi: k8s.CoreV1Api;
     namespace: string;
     clusterDnsIps: string[];
+    clusterEnvironmentId?: string | null;
   }): Promise<ClusterIpFamily[]> {
-    const cached = this.cache.get(params.namespace);
+    // A namespace name can exist in two clusters with different families.
+    const cacheKey = params.clusterEnvironmentId
+      ? `${params.clusterEnvironmentId}/${params.namespace}`
+      : params.namespace;
+    const cached = this.cache.get(cacheKey);
     if (cached) {
       return cached;
     }
@@ -50,7 +57,7 @@ class ClusterIpFamilyResolver {
     const families =
       fromPods.length > 0 ? fromPods : ipFamiliesOf(params.clusterDnsIps);
     if (families.length > 0) {
-      this.cache.set(params.namespace, families);
+      this.cache.set(cacheKey, families);
     }
     return families;
   }

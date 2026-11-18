@@ -57,8 +57,9 @@ import {
   loadKubeConfig,
 } from "@/k8s/shared";
 import OrganizationModel from "@/models/organization";
-import type { Environment, NetworkPolicy, Organization } from "@/types";
+import type { EnvironmentRow, NetworkPolicy, Organization } from "@/types";
 import { isUuid } from "@/utils/uuid";
+import { environmentClusters } from "../environment-clusters";
 import { daggerEnvironmentRuntimeManager } from "./manager";
 
 const mockIsK8sConfigured = vi.mocked(isK8sConfigured);
@@ -71,11 +72,13 @@ const mockGetClusterDnsIps = vi.mocked(clusterDnsResolver.getClusterDnsIps);
 let testOrganizationId: string;
 beforeEach(async ({ makeOrganization }) => {
   testOrganizationId = (await makeOrganization()).id;
+  // Each test stubs its own cluster clients; drop the ones the last test built.
+  environmentClusters.stop();
 });
 
 // Policy/scheduling tests use real Environment rows; lifecycle races are tested
 // separately against the real Kubernetes client at its HTTP boundary.
-async function reconcilePersistedEnvironment(environment: Environment) {
+async function reconcilePersistedEnvironment(environment: EnvironmentRow) {
   const [row] = await db
     .insert(schema.environmentsTable)
     .values({
@@ -118,14 +121,16 @@ const OFF_POLICY: NetworkPolicy = {
   allowedCidrs: [],
 };
 
-function makeEnv(overrides: Partial<Environment> = {}): Environment {
+function makeEnv(overrides: Partial<EnvironmentRow> = {}): EnvironmentRow {
   return {
     id: "abcdef00-1111-2222-3333-444455556666",
     organizationId: "org-1",
     namespace: null,
     networkPolicy: null,
+    kubeconfigSecretId: null,
+    kubeconfigVersion: 0,
     ...overrides,
-  } as unknown as Environment;
+  } as unknown as EnvironmentRow;
 }
 
 function makeOrg(overrides: Partial<Organization> = {}): Organization {
@@ -143,30 +148,32 @@ describe("environmentTargetForEnvironment", () => {
     mockGetK8sNamespace.mockReturnValue("archestra-release");
   });
 
-  it("returns undefined when Kubernetes is not configured", () => {
+  it("returns undefined when Kubernetes is not configured", async () => {
     mockIsK8sConfigured.mockReturnValue(false);
     expect(
-      daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(
+      await daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(
         makeEnv(),
       ),
     ).toBeUndefined();
   });
 
-  it("returns the environment id + its explicit namespace", () => {
+  it("returns the environment id + its explicit namespace", async () => {
     mockIsK8sConfigured.mockReturnValue(true);
     const env = makeEnv({ namespace: "ns-production" });
     expect(
-      daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(env),
+      await daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(
+        env,
+      ),
     ).toEqual({
       environmentId: "abcdef00-1111-2222-3333-444455556666",
       namespace: "ns-production",
     });
   });
 
-  it("falls back to the release namespace when the environment has no namespace", () => {
+  it("falls back to the release namespace when the environment has no namespace", async () => {
     mockIsK8sConfigured.mockReturnValue(true);
     expect(
-      daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(
+      await daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(
         makeEnv({ namespace: null }),
       ),
     ).toEqual({
@@ -175,11 +182,13 @@ describe("environmentTargetForEnvironment", () => {
     });
   });
 
-  it("treats a blank namespace as no namespace", () => {
+  it("treats a blank namespace as no namespace", async () => {
     mockIsK8sConfigured.mockReturnValue(true);
     expect(
-      daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(
-        makeEnv({ namespace: "   " }),
+      (
+        await daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(
+          makeEnv({ namespace: "   " }),
+        )
       )?.namespace,
     ).toBe("archestra-release");
   });
@@ -834,10 +843,6 @@ describe("reconcileOrganizationDefault", () => {
     );
 
     // Everything is deleted in the OLD namespace it moved away from.
-    expect(mockCreateK8sClients).toHaveBeenCalledWith(
-      expect.anything(),
-      "old-ns",
-    );
     expect(clients.appsApi.deleteNamespacedStatefulSet).toHaveBeenCalledWith(
       expect.objectContaining({ namespace: "old-ns" }),
     );
@@ -896,10 +901,6 @@ describe("reconcileOrganizationDefault", () => {
       }),
     );
 
-    expect(mockCreateK8sClients).toHaveBeenCalledWith(
-      expect.anything(),
-      "env-ns",
-    );
     expect(clients.appsApi.deleteNamespacedStatefulSet).toHaveBeenCalledWith(
       expect.objectContaining({ namespace: "env-ns" }),
     );
@@ -984,9 +985,10 @@ describe("reconcileOrganizationDefault", () => {
       environmentId: environment.id,
       networkPolicy: OFF_POLICY,
     });
-    const target = daggerEnvironmentRuntimeManager.agentTarget({
+    const target = await daggerEnvironmentRuntimeManager.agentTarget({
       id: agent.id,
       namespace: environment.namespace,
+      environment,
     });
 
     await daggerEnvironmentRuntimeManager.reconcileAgent(agent.id);
@@ -1023,10 +1025,13 @@ describe("reconcileOrganizationDefault", () => {
     await daggerEnvironmentRuntimeManager.reconcileAgent(agent.id);
 
     expect(clients.appsApi.createNamespacedStatefulSet).not.toHaveBeenCalled();
-    const engineId = daggerEnvironmentRuntimeManager.agentTarget({
-      id: agent.id,
-      namespace: null,
-    })?.environmentId;
+    const engineId = (
+      await daggerEnvironmentRuntimeManager.agentTarget({
+        id: agent.id,
+        namespace: null,
+        environment: null,
+      })
+    )?.environmentId;
     expect(clients.appsApi.deleteNamespacedStatefulSet).toHaveBeenCalledWith(
       expect.objectContaining({
         namespace: "release-ns",

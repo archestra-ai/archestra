@@ -12,7 +12,7 @@ const {
 // Only an explicit `false` turns the orchestrator off.
 const orchestratorEnabled = config.orchestrator.enabled !== false;
 
-interface K8sClients {
+export interface K8sClients {
   kubeConfig: k8s.KubeConfig;
   coreApi: k8s.CoreV1Api;
   appsApi: k8s.AppsV1Api;
@@ -24,7 +24,21 @@ interface K8sClients {
   attach: k8s.Attach;
   exec: k8s.Exec;
   log: k8s.Log;
+  portForward: k8s.PortForward;
   namespace: string;
+}
+
+/**
+ * The clients of one Kubernetes cluster the platform deploys into.
+ *
+ * `environmentId` is null for the platform's own cluster (the one the
+ * `ARCHESTRA_ORCHESTRATOR_*` settings name). Otherwise it is the environment
+ * whose kubeconfig these clients were built from. That binding is fixed when
+ * the environment is created, so the id names one cluster for as long as the
+ * environment exists and is safe to put in keys and stored placement.
+ */
+export interface K8sCluster extends K8sClients {
+  environmentId: string | null;
 }
 
 // SPDX-SnippetBegin
@@ -173,6 +187,7 @@ export function createK8sClients(
     attach: new k8s.Attach(kubeConfig),
     exec: new k8s.Exec(kubeConfig),
     log: new k8s.Log(kubeConfig),
+    portForward: new k8s.PortForward(kubeConfig),
     namespace: resolvedNamespace,
   };
 }

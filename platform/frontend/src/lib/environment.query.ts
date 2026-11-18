@@ -7,8 +7,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
+import {
+  type EnvironmentDeleteBlock,
+  environmentDeleteBlock,
+} from "@/lib/environment-cluster";
 import { resolveDefaultEnvironmentId } from "@/lib/resolve-default-environment";
-import { handleApiError, throwOnApiError } from "@/lib/utils/api";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 export const environmentKeys = {
   all: ["environments"] as const,
@@ -170,21 +174,37 @@ export function useDefaultEnvironmentIdForResource(
   };
 }
 
+/**
+ * Deletes an environment. For an environment with a Kubernetes cluster of its
+ * own, the platform first removes its workloads from that cluster; a delete it
+ * refuses for a reason the person can act on resolves to that reason, for the
+ * dialog to show, instead of a toast. `skipClusterCleanup` deletes the
+ * environment and leaves its workloads in the cluster.
+ */
 export function useDeleteEnvironment() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { data, error } = await archestraApiSdk.deleteEnvironment({
-        path: { id },
+    mutationFn: async (params: {
+      id: string;
+      skipClusterCleanup?: boolean;
+    }): Promise<{ block: EnvironmentDeleteBlock | null }> => {
+      const { error } = await archestraApiSdk.deleteEnvironment({
+        path: { id: params.id },
+        query: params.skipClusterCleanup
+          ? { skipClusterCleanup: "true" }
+          : undefined,
       });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
+      if (!error) return { block: null };
+      const block = environmentDeleteBlock(error);
+      if (block) return { block };
+      handleApiError(error);
+      throw toApiError(error);
     },
-    onSuccess: () => {
+    onSuccess: ({ block }) => {
+      // A refused delete may still have marked the environment as being
+      // deleted, which the list shows.
       queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
+      if (block) return;
       // Catalog items assigned to the deleted environment fall back to the
       // virtual Default target (FK set null), so refresh catalog views too.
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
@@ -193,6 +213,38 @@ export function useDeleteEnvironment() {
       // environment by the same FK.
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       toast.success("Environment deleted");
+    },
+  });
+}
+
+/**
+ * Reports what a Kubernetes cluster lets the platform do, per feature: the
+ * cluster of a pasted kubeconfig, or, with `environmentId`, the cluster that
+ * environment already deploys into (with `kubeconfig`, a replacement
+ * credential for it). Nothing is stored or deployed.
+ */
+export function useTestEnvironmentCluster() {
+  return useMutation({
+    mutationFn: async (params: {
+      environmentId?: string;
+      kubeconfig?: string;
+      namespace: string;
+      agentRuntimePlatformBaseUrl: string | null;
+    }) => {
+      const { environmentId, kubeconfig, ...rest } = params;
+      const { data, error } = environmentId
+        ? await archestraApiSdk.testEnvironmentCluster({
+            path: { id: environmentId },
+            body: { ...rest, ...(kubeconfig ? { kubeconfig } : {}) },
+          })
+        : await archestraApiSdk.testEnvironmentKubeconfig({
+            body: { ...rest, kubeconfig: kubeconfig ?? "" },
+          });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
     },
   });
 }

@@ -72,6 +72,7 @@ vi.mock("@kubernetes/client-node", () => {
     Attach: vi.fn(),
     Log: vi.fn(),
     Exec: vi.fn(),
+    PortForward: vi.fn(),
     // A regular function so `new Watch(...)` works (arrows aren't constructable)
     Watch: vi.fn(function mockWatch() {
       return { watch: vi.fn().mockResolvedValue(new AbortController()) };
@@ -2853,13 +2854,19 @@ describe("McpServerRuntimeManager.adoptDeploymentNames", () => {
         namespace: "env-staging-ns",
       },
     ]);
+    // The catalog's environment deploys into its own namespace of the
+    // platform's cluster.
     (
       manager as unknown as {
-        resolveNamespaceForCatalog: (
-          catalogItem: typeof catalog,
-        ) => Promise<string>;
+        resolveTargetForCatalog: (catalogItem: typeof catalog) => Promise<{
+          clients: { clusterEnvironmentId: null };
+          namespace: string;
+        }>;
       }
-    ).resolveNamespaceForCatalog = vi.fn().mockResolvedValue("env-staging-ns");
+    ).resolveTargetForCatalog = vi.fn().mockResolvedValue({
+      clients: { clusterEnvironmentId: null },
+      namespace: "env-staging-ns",
+    });
 
     await callAdopt(manager, {
       localServers: [server],

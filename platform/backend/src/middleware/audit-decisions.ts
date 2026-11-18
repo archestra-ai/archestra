@@ -334,6 +334,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "Ephemeral task handles for in-flight tool calls; the calls themselves are logged in mcp_tool_calls",
   },
+  environmentClusterWritesTable: {
+    audited: false,
+    reason:
+      "Ephemeral records of operations in progress in an environment's cluster; the actions themselves (installs, runs, environment changes) are audited",
+  },
   mcpDeploymentLeasesTable: {
     audited: false,
     reason:

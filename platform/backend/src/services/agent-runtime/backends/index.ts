@@ -38,11 +38,13 @@ export function resolveAgentRuntimeBackendDriver(
 }
 
 /** New launches must await discovery, rather than treating a cold cache as unavailable. */
-export async function prepareAgentRuntimeBackendDriver(
-  name: AgentRuntimeBackendName,
-): Promise<AgentRuntimeBackendDriver> {
-  const backend = getAgentRuntimeBackendDriver(name);
-  await backend.assertReady();
+export async function prepareAgentRuntimeBackendDriver(runtime: {
+  backend: AgentRuntimeBackendName;
+  /** The environment whose work is about to be placed; null for none. */
+  environmentId: string | null;
+}): Promise<AgentRuntimeBackendDriver> {
+  const backend = getAgentRuntimeBackendDriver(runtime.backend);
+  await backend.assertReady(runtime.environmentId);
   return backend;
 }
 

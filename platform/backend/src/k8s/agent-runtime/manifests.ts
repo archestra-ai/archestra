@@ -470,6 +470,11 @@ export function buildAgentRuntimePlatformEgressPolicy(params: {
   platformPorts: number[];
   clusterDnsIps: string[];
   platformService?: { ips: string[]; port: number };
+  /**
+   * False for a run in an environment's own cluster: the platform's pods are
+   * not there, so a rule selecting them could only match something else.
+   */
+  platformPodsInCluster?: boolean;
 }): k8s.V1NetworkPolicy {
   const names = agentRuntimeNames(params.spec.frozenName);
   return {
@@ -490,22 +495,26 @@ export function buildAgentRuntimePlatformEgressPolicy(params: {
       },
       policyTypes: ["Egress"],
       egress: [
-        {
-          to: [
-            {
-              namespaceSelector: {
-                matchLabels: {
-                  "kubernetes.io/metadata.name": params.platformNamespace,
-                },
+        ...(params.platformPodsInCluster === false
+          ? []
+          : [
+              {
+                to: [
+                  {
+                    namespaceSelector: {
+                      matchLabels: {
+                        "kubernetes.io/metadata.name": params.platformNamespace,
+                      },
+                    },
+                    podSelector: { matchLabels: params.platformPodLabels },
+                  },
+                ],
+                ports: params.platformPorts.map((port) => ({
+                  protocol: "TCP" as const,
+                  port,
+                })),
               },
-              podSelector: { matchLabels: params.platformPodLabels },
-            },
-          ],
-          ports: params.platformPorts.map((port) => ({
-            protocol: "TCP",
-            port,
-          })),
-        },
+            ]),
         // Some CNIs enforce egress before Service DNAT. Pod selectors cover
         // endpoint IPs, so the configured Service also needs an exact IP rule.
         ...(params.platformService?.ips.length

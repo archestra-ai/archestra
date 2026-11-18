@@ -21,6 +21,7 @@ import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { getBedrockRegion } from "@/clients/bedrock-credentials";
 import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import config from "@/config";
+import { resolvePlatformUrlForEnvironmentCluster } from "@/k8s/agent-runtime/platform-service";
 import {
   AgentModel,
   AgentWorkspaceModel,
@@ -125,6 +126,11 @@ export async function buildAgentRunLaunchSpec(params: {
   actor: A2AActor;
   organizationId: string;
   runtimeScope: string;
+  /**
+   * Set when the run goes to its environment's own cluster: the URL that
+   * environment names for its pods to reach the platform at, if any.
+   */
+  environmentCluster?: { agentRuntimePlatformBaseUrl: string | null };
   effectiveNetworkPolicy: EffectiveNetworkPolicy;
   /** White-label product name rendered by the built-in terminal UI. */
   appName: string;
@@ -148,10 +154,9 @@ export async function buildAgentRunLaunchSpec(params: {
   virtualApiKeyId: string | null;
   gatewayTokenId: string | null;
 }> {
-  const platformBaseUrl = config.agentRuntime.platformBaseUrl.replace(
-    /\/+$/,
-    "",
-  );
+  const platformBaseUrl = resolvePlatformBaseUrl(
+    params.environmentCluster,
+  ).replace(/\/+$/, "");
   if (!platformBaseUrl) {
     // Refusing beats starting a session that would call providers directly,
     // outside every policy and cost record the proxy exists to keep.
@@ -661,6 +666,27 @@ function claudeCodeCustomHeaders(params: {
       ? [`X-Archestra-Virtual-Key: ${params.passthroughKey}`]
       : []),
   ].join("\n");
+}
+
+/**
+ * The URL a run's pods call the platform at. A run in its environment's own
+ * cluster cannot use a name that only the platform's cluster resolves, so it
+ * is refused rather than started against an address it can never reach.
+ */
+function resolvePlatformBaseUrl(
+  environmentCluster:
+    | { agentRuntimePlatformBaseUrl: string | null }
+    | undefined,
+): string {
+  if (!environmentCluster) return config.agentRuntime.platformBaseUrl;
+  const resolved = resolvePlatformUrlForEnvironmentCluster({
+    environmentUrl: environmentCluster.agentRuntimePlatformBaseUrl,
+    installUrl: config.agentRuntime.platformBaseUrl,
+    platformNamespace:
+      process.env.POD_NAMESPACE || config.orchestrator.kubernetes.namespace,
+  });
+  if ("problem" in resolved) throw new ApiError(400, resolved.problem);
+  return resolved.url;
 }
 
 async function createProviderBackedVirtualKey(params: {

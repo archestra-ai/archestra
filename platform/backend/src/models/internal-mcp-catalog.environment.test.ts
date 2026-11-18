@@ -25,7 +25,11 @@ describe("catalog environment assignment", () => {
     );
     expect(item.environmentId).toBe(env.id);
 
-    await EnvironmentModel.delete(env.id, org.id);
+    await EnvironmentModel.deleteUnused({
+      id: env.id,
+      organizationId: org.id,
+      blocking: [],
+    });
     const reloaded = await InternalMcpCatalogModel.findById(item.id);
     expect(reloaded?.environmentId).toBeNull();
   });

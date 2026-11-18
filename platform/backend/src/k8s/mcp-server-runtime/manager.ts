@@ -4,8 +4,13 @@ import {
 } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import { Watch } from "@kubernetes/client-node";
+import type { Agent } from "undici";
 import config from "@/config";
 import { getK8sCapabilitiesFromApi } from "@/k8s/capabilities";
+import {
+  ENVIRONMENT_CLUSTER_LABEL,
+  environmentClusters,
+} from "@/k8s/environment-clusters";
 import {
   checkNamespaceDeployAccess,
   createK8sClients,
@@ -48,11 +53,15 @@ import type {
 import { ApiError } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { mapWithConcurrency } from "@/utils/concurrency";
+import { isUuid } from "@/utils/uuid";
 import {
   MCP_DEPLOYMENT_TRANSITION_DEADLINE_MS,
   MCP_DEPLOYMENT_TRANSITION_LEASE_SCOPE,
 } from "./deployment-transition";
-import { ensureEgressBaselineNetworkPolicy } from "./egress-baseline";
+import {
+  ensureEgressBaselineNetworkPolicy,
+  removeEgressBaselineNetworkPolicy,
+} from "./egress-baseline";
 import {
   createHardResetStatusMarker,
   HARD_RESET_STATUS_MARKER_PREFIX,
@@ -117,6 +126,31 @@ type DockerRegistrySecretSummary = {
   name: string;
   registryServers: string[];
 };
+
+/**
+ * The Kubernetes clients of one cluster, named as a K8sDeployment takes them.
+ * `clusterEnvironmentId` is null for the platform's own cluster, otherwise the
+ * environment whose own cluster this is.
+ */
+interface ClusterClients {
+  clusterEnvironmentId: string | null;
+  kubeConfig?: k8s.KubeConfig;
+  k8sApi: k8s.CoreV1Api;
+  k8sAppsApi: k8s.AppsV1Api;
+  k8sRbacApi?: k8s.RbacAuthorizationV1Api;
+  k8sNetworkingApi: k8s.NetworkingV1Api;
+  k8sCustomObjectsApi: k8s.CustomObjectsApi;
+  k8sAttach: k8s.Attach;
+  k8sLog: k8s.Log;
+  k8sExec: k8s.Exec;
+  k8sPortForward?: k8s.PortForward;
+}
+
+/** Where an MCP server's Kubernetes objects live: a cluster and a namespace in it. */
+interface DeploymentTarget {
+  clients: ClusterClients;
+  namespace: string;
+}
 
 /**
  * What a hard reset actually did, reported back to the administrator who asked
@@ -247,10 +281,15 @@ export class McpServerRuntimeManager {
   private k8sExec?: k8s.Exec;
   private namespace: string = "default";
   private kubeConfig?: k8s.KubeConfig;
+  // The KubeConfig of each environment's own cluster this process has used,
+  // for the watch streams (k8s.Watch takes the config). Each is that
+  // cluster's one long-lived object, so a rotated credential shows up in it.
+  private kubeConfigByEnvironmentId = new Map<string, k8s.KubeConfig>();
   private mcpServerIdToDeploymentMap: Map<string, K8sDeployment> = new Map();
-  // Per-namespace in-flight ensure of the egress default-deny baseline, so
-  // concurrent deploys share one call; cleared on start() to re-assert on re-init.
-  private egressBaselineByNamespace: Map<string, Promise<void>> = new Map();
+  // Per-target (cluster + namespace) in-flight ensure of the egress
+  // default-deny baseline, so concurrent deploys share one call; cleared on
+  // start() to re-assert on re-init.
+  private egressBaselineByTarget: Map<string, Promise<void>> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
   // Periodic sweep of Failed/Evicted MCP pods (DiskPressure eviction cascades
   // can leave hundreds of Failed pod corpses that nothing else cleans up).
@@ -318,7 +357,12 @@ export class McpServerRuntimeManager {
   // keyed `${namespace}|${kind}`.
   private deploymentStateWatchersStarted = false;
   private deploymentStateWatchersStopped = false;
-  private watchedNamespaces = new Set<string>();
+  // Keyed by deploymentTargetKey: the cluster config and namespace each pair
+  // of streams watches.
+  private watchedTargets = new Map<
+    string,
+    { kubeConfig: k8s.KubeConfig; namespace: string }
+  >();
   private expectedWatchStreams = new Set<string>();
   private liveWatchStreams = new Set<string>();
   private watchStreamAborts = new Map<string, AbortController>();
@@ -440,7 +484,7 @@ export class McpServerRuntimeManager {
 
     try {
       this.status = "initializing";
-      this.egressBaselineByNamespace.clear();
+      this.egressBaselineByTarget.clear();
       logger.debug("Initializing Kubernetes MCP Server Runtime...");
 
       // Verify K8s connectivity
@@ -457,21 +501,60 @@ export class McpServerRuntimeManager {
       const installedServers = await McpServerModel.findAll();
 
       // Filter for local servers only (remote servers don't need deployments)
-      const localServers: McpServer[] = [];
-      const localCatalogItems: CatalogItem[] = [];
+      const installedLocalServers: McpServer[] = [];
+      const installedLocalCatalogItems: CatalogItem[] = [];
       for (const server of installedServers) {
         if (server.catalogId) {
           const catalogItem = await InternalMcpCatalogModel.findById(
             server.catalogId,
           );
           if (catalogItem?.serverType === "local") {
-            localServers.push(server);
-            localCatalogItems.push(catalogItem);
+            installedLocalServers.push(server);
+            installedLocalCatalogItems.push(catalogItem);
           }
         }
       }
 
-      logger.debug(`Found ${localServers.length} local MCP servers to start`);
+      logger.debug(
+        `Found ${installedLocalServers.length} local MCP servers to start`,
+      );
+
+      const networkPolicyResolutionCache =
+        await this.buildNetworkPolicyResolutionCache(
+          installedLocalCatalogItems,
+        );
+
+      // Servers of an environment with its own cluster are brought up after,
+      // and apart from, the platform cluster's: a cluster that does not answer
+      // must cost the others nothing. `localServers` are the platform
+      // cluster's from here on.
+      const localServers: McpServer[] = [];
+      const localCatalogItems: CatalogItem[] = [];
+      const environmentPartitions = new Map<
+        string,
+        { servers: McpServer[]; catalogs: CatalogItem[] }
+      >();
+      for (let i = 0; i < installedLocalServers.length; i++) {
+        const server = installedLocalServers[i];
+        const catalogItem = installedLocalCatalogItems[i];
+        const environment = catalogItem?.environmentId
+          ? networkPolicyResolutionCache.environmentsById.get(
+              catalogItem.environmentId,
+            )
+          : undefined;
+        if (!environment?.kubeconfigSecretId) {
+          localServers.push(server);
+          localCatalogItems.push(catalogItem);
+          continue;
+        }
+        const partition = environmentPartitions.get(environment.id) ?? {
+          servers: [],
+          catalogs: [],
+        };
+        environmentPartitions.set(environment.id, partition);
+        partition.servers.push(server);
+        partition.catalogs.push(catalogItem);
+      }
 
       // Freeze deployment identity BEFORE anything touches K8s: the
       // startServer loop below redeploys every install, so a pre-upgrade row
@@ -489,14 +572,9 @@ export class McpServerRuntimeManager {
         throw error;
       }
 
-      const networkPolicyCapabilities = (
-        await getK8sCapabilitiesFromApi(
-          this.k8sCustomObjectsApi,
-          this.networkPolicyProbeSource(),
-        )
-      ).networkPolicy;
-      const networkPolicyResolutionCache =
-        await this.buildNetworkPolicyResolutionCache(localCatalogItems);
+      const networkPolicyCapabilities = await this.networkPolicyCapabilitiesFor(
+        this.platformTarget(this.namespace),
+      );
 
       // Start all local servers with bounded parallelism: each startServer
       // fires a burst of K8s API calls, and reconciling every install at
@@ -544,6 +622,16 @@ export class McpServerRuntimeManager {
 
       logger.debug("MCP Server Runtime initialization complete");
       this.onRuntimeStartupSuccess();
+
+      for (const [environmentId, partition] of environmentPartitions) {
+        void this.startEnvironmentClusterServers({
+          environment:
+            networkPolicyResolutionCache.environmentsById.get(environmentId),
+          servers: partition.servers,
+          catalogs: partition.catalogs,
+          cache: networkPolicyResolutionCache,
+        });
+      }
 
       // Fire-and-forget: backfill team-id labels on existing regcred secrets
       this.backfillRegcredTeamLabels(installedServers).catch((err) => {
@@ -599,31 +687,34 @@ export class McpServerRuntimeManager {
   }
 
   private async ensureEgressBaseline(
-    namespace: string,
+    target: DeploymentTarget,
     capabilities: K8sNetworkPolicyCapabilities,
   ): Promise<void> {
-    let ensured = this.egressBaselineByNamespace.get(namespace);
+    const { clients, namespace } = target;
+    const key = deploymentTargetKey(target);
+    let ensured = this.egressBaselineByTarget.get(key);
     if (!ensured) {
-      const networkingApi = this.k8sNetworkingApi;
-      const customObjectsApi = this.k8sCustomObjectsApi;
-      if (!networkingApi || !customObjectsApi) return Promise.resolve();
-      const ownerReferences = this.k8sRbacApi
-        ? await resolveRuntimeOwnerReferences(this.k8sRbacApi, namespace).catch(
-            () => undefined,
-          )
-        : undefined;
+      // The owner is a Role of the platform's own release, which only the
+      // platform's cluster has.
+      const ownerReferences =
+        clients.clusterEnvironmentId === null && clients.k8sRbacApi
+          ? await resolveRuntimeOwnerReferences(
+              clients.k8sRbacApi,
+              namespace,
+            ).catch(() => undefined)
+          : undefined;
       ensured = ensureEgressBaselineNetworkPolicy({
-        networkingApi,
-        customObjectsApi,
+        networkingApi: clients.k8sNetworkingApi,
+        customObjectsApi: clients.k8sCustomObjectsApi,
         namespace,
         capabilities,
         ownerReferences,
       }).then((succeeded) => {
         // Don't cache a failed attempt as done — drop it so the next deploy in
         // this namespace retries rather than leaving pods without the baseline.
-        if (!succeeded) this.egressBaselineByNamespace.delete(namespace);
+        if (!succeeded) this.egressBaselineByTarget.delete(key);
       });
-      this.egressBaselineByNamespace.set(namespace, ensured);
+      this.egressBaselineByTarget.set(key, ensured);
     }
     return ensured;
   }
@@ -643,28 +734,6 @@ export class McpServerRuntimeManager {
     capabilities: K8sNetworkPolicyCapabilities;
     cache: NetworkPolicyResolutionCache;
   }): Promise<void> {
-    const {
-      k8sApi,
-      k8sAppsApi,
-      k8sRbacApi,
-      k8sNetworkingApi,
-      k8sCustomObjectsApi,
-      k8sAttach,
-      k8sLog,
-      k8sExec,
-    } = this;
-    if (
-      !k8sApi ||
-      !k8sAppsApi ||
-      !k8sNetworkingApi ||
-      !k8sCustomObjectsApi ||
-      !k8sAttach ||
-      !k8sLog ||
-      !k8sExec
-    ) {
-      return;
-    }
-
     logger.debug(
       `Reconciling egress policies for ${params.localServers.length} MCP server(s)`,
     );
@@ -673,21 +742,14 @@ export class McpServerRuntimeManager {
       const mcpServer = params.localServers[i];
       const catalogItem = params.localCatalogItems[i];
       try {
-        const namespace = await this.resolveNamespaceForCatalog(
+        const target = await this.resolveTargetForCatalog(
           catalogItem,
           params.cache,
         );
         const k8sDeployment = new K8sDeployment({
           mcpServer,
-          k8sApi,
-          k8sAppsApi,
-          k8sRbacApi,
-          k8sNetworkingApi,
-          k8sCustomObjectsApi,
-          k8sAttach,
-          k8sLog,
-          k8sExec,
-          namespace,
+          ...target.clients,
+          namespace: target.namespace,
           catalogItem,
           effectiveNetworkPolicy: null,
           networkPolicyCapabilities: params.capabilities,
@@ -698,21 +760,40 @@ export class McpServerRuntimeManager {
             key: McpServerRuntimeManager.physicalDeploymentKey(k8sDeployment),
             timeoutMs: MCP_DEPLOYMENT_TRANSITION_DEADLINE_MS,
           },
-          async (lease) => {
-            await lease.assertOwned();
-            k8sDeployment.setEffectiveNetworkPolicy(
-              await this.resolveNetworkPolicyForDeployment({
-                mcpServer,
-                catalogItem,
-              }),
-            );
-            await lease.assertOwned();
-            await this.ensureEgressBaseline(namespace, params.capabilities);
-            await lease.assertOwned();
-            await lease.runFencedMutation(() =>
-              k8sDeployment.applyK8sNetworkPolicy(),
-            );
-          },
+          (lease) =>
+            environmentClusters.withWrite(
+              target.clients.clusterEnvironmentId,
+              async () => {
+                await lease.assertOwned();
+                k8sDeployment.setEffectiveNetworkPolicy(
+                  await this.resolveNetworkPolicyForDeployment({
+                    mcpServer,
+                    catalogItem,
+                  }),
+                );
+                await lease.assertOwned();
+                await this.ensureEgressBaseline(target, params.capabilities);
+                await lease.assertOwned();
+                await lease.runFencedMutation(() =>
+                  k8sDeployment.applyK8sNetworkPolicy(),
+                );
+                // As in startServer: a deletion or move that overtook this pass
+                // wins, and the pass removes the policy it just wrote.
+                if (target.clients.clusterEnvironmentId !== null) {
+                  const placement = await this.placementInEnvironmentCluster(
+                    mcpServer.id,
+                    target,
+                  );
+                  if (placement !== "placed") {
+                    await this.removeOvertakenWrite({
+                      placement,
+                      target,
+                      remove: () => k8sDeployment.deleteK8sNetworkPolicy(),
+                    });
+                  }
+                }
+              },
+            ),
         );
       } catch (err) {
         logger.warn(
@@ -723,14 +804,19 @@ export class McpServerRuntimeManager {
     }
   }
 
-  private async resolveNamespaceForCatalog(
+  /**
+   * Where a catalog item's servers are deployed: the cluster and namespace of
+   * its environment. An environment without a kubeconfig, and the default
+   * environment, deploy into the platform's own cluster.
+   */
+  private async resolveTargetForCatalog(
     catalogItem:
       | Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
       | null
       | undefined,
     cache?: NetworkPolicyResolutionCache,
-  ): Promise<string> {
-    if (!catalogItem) return this.namespace;
+  ): Promise<DeploymentTarget> {
+    if (!catalogItem) return this.platformTarget(this.namespace);
     if (!catalogItem.environmentId) {
       // Default-environment catalog (environment_id = NULL): its namespace
       // lives on the organization row, not in `environments`.
@@ -738,12 +824,156 @@ export class McpServerRuntimeManager {
         ? (cache?.organizationsById.get(catalogItem.organizationId) ??
           (await OrganizationModel.getById(catalogItem.organizationId)))
         : await OrganizationModel.getFirst();
-      return organization?.defaultEnvironmentNamespace ?? this.namespace;
+      return this.platformTarget(
+        organization?.defaultEnvironmentNamespace ?? this.namespace,
+      );
     }
     const env =
       cache?.environmentsById.get(catalogItem.environmentId) ??
       (await EnvironmentModel.findById(catalogItem.environmentId));
-    return env?.namespace ?? this.namespace;
+    return this.environmentTarget(env);
+  }
+
+  /**
+   * Whether the rows still place a server in the environment's own cluster it
+   * was just written to. Read fresh, with no cache.
+   *
+   * - "placed": the server, its catalog item and the environment stand, and
+   *   the catalog item still resolves to `target`.
+   * - "moved": the server or catalog item is gone, or resolves elsewhere.
+   * - "environment-gone": the environment of `target` was deleted or is
+   *   being deleted; nothing of this installation may remain in its cluster.
+   */
+  private async placementInEnvironmentCluster(
+    mcpServerId: string,
+    target: DeploymentTarget,
+  ): Promise<"placed" | "moved" | "environment-gone"> {
+    const environmentId = target.clients.clusterEnvironmentId;
+    const environment = environmentId
+      ? await EnvironmentModel.findById(environmentId)
+      : null;
+    if (!environment || environment.deletingAt) return "environment-gone";
+    const mcpServer = await McpServerModel.findById(mcpServerId);
+    const catalogItem = mcpServer?.catalogId
+      ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
+      : null;
+    if (!catalogItem) return "moved";
+    try {
+      return deploymentTargetKey(
+        await this.resolveTargetForCatalog(catalogItem),
+      ) === deploymentTargetKey(target)
+        ? "placed"
+        : "moved";
+    } catch {
+      return "moved";
+    }
+  }
+
+  /**
+   * Undo a write into an environment's own cluster that a deletion or a move
+   * overtook, with the clients the writer still holds. When the environment
+   * itself is going, the namespace's shared egress baseline goes too: the
+   * deletion's own cleanup may already be past it.
+   */
+  private async removeOvertakenWrite(params: {
+    placement: "moved" | "environment-gone";
+    target: DeploymentTarget;
+    remove: () => Promise<void>;
+  }): Promise<void> {
+    await params.remove();
+    if (params.placement !== "environment-gone") return;
+    await removeEgressBaselineNetworkPolicy({
+      networkingApi: params.target.clients.k8sNetworkingApi,
+      customObjectsApi: params.target.clients.k8sCustomObjectsApi,
+      namespace: params.target.namespace,
+    }).catch((err) =>
+      logger.warn(
+        { err, deploymentTarget: deploymentTargetKey(params.target) },
+        "Could not remove the egress baseline of an environment that is being deleted",
+      ),
+    );
+  }
+
+  /**
+   * The cluster and namespace an environment row deploys into. An environment
+   * that is being deleted has none, except for the deletion's own cleanup.
+   */
+  private async environmentTarget(
+    environment: EnvironmentRow | null | undefined,
+    purpose: { forCleanup?: boolean } = {},
+  ): Promise<DeploymentTarget> {
+    const namespace = environment?.namespace ?? this.namespace;
+    if (!environment?.kubeconfigSecretId) return this.platformTarget(namespace);
+    const cluster = await environmentClusters.forEnvironment(
+      environment,
+      purpose,
+    );
+    if (cluster.kubeConfig) {
+      this.kubeConfigByEnvironmentId.set(environment.id, cluster.kubeConfig);
+    }
+    return {
+      namespace,
+      clients: {
+        clusterEnvironmentId: environment.id,
+        kubeConfig: cluster.kubeConfig,
+        k8sApi: cluster.coreApi,
+        k8sAppsApi: cluster.appsApi,
+        k8sRbacApi: cluster.rbacApi,
+        k8sNetworkingApi: cluster.networkingApi,
+        k8sCustomObjectsApi: cluster.customObjectsApi,
+        k8sAttach: cluster.attach,
+        k8sLog: cluster.log,
+        k8sExec: cluster.exec,
+        k8sPortForward: cluster.portForward,
+      },
+    };
+  }
+
+  /** A namespace of the platform's own cluster. Throws when its clients did not load. */
+  private platformTarget(namespace: string): DeploymentTarget {
+    const clients = this.platformClusterClients();
+    if (!clients) {
+      throw new Error("Kubernetes API client not initialized");
+    }
+    return { clients, namespace };
+  }
+
+  /** The platform's own cluster, or undefined when its clients did not load. */
+  private platformClusterClients(): ClusterClients | undefined {
+    // The constructor loads every client or none of them.
+    if (!this.k8sApi && !this.k8sAppsApi) return undefined;
+    return {
+      clusterEnvironmentId: null,
+      kubeConfig: this.kubeConfig,
+      k8sApi: this.k8sApi,
+      k8sAppsApi: this.k8sAppsApi,
+      k8sRbacApi: this.k8sRbacApi,
+      k8sNetworkingApi: this.k8sNetworkingApi,
+      k8sCustomObjectsApi: this.k8sCustomObjectsApi,
+      k8sAttach: this.k8sAttach,
+      k8sLog: this.k8sLog,
+      k8sExec: this.k8sExec,
+    } as ClusterClients;
+  }
+
+  /**
+   * The network policy capabilities of a target's cluster. The enforcement
+   * probe's verdict is read where the probe ran: the platform's namespace in
+   * its own cluster, the environment's namespace in an environment's cluster.
+   */
+  private async networkPolicyCapabilitiesFor(
+    target: DeploymentTarget,
+  ): Promise<K8sNetworkPolicyCapabilities> {
+    const { clients } = target;
+    return (
+      await getK8sCapabilitiesFromApi(clients.k8sCustomObjectsApi, {
+        coreApi: clients.k8sApi,
+        namespace:
+          clients.clusterEnvironmentId === null
+            ? this.namespace
+            : target.namespace,
+      })
+    ).networkPolicy;
   }
 
   private async resolveNetworkPolicyForDeployment(params: {
@@ -864,12 +1094,7 @@ export class McpServerRuntimeManager {
     ) {
       throw new Error("The built-in browser MCP is disabled");
     }
-    if (
-      !this.k8sApi ||
-      !this.k8sAppsApi ||
-      !this.k8sNetworkingApi ||
-      !this.k8sCustomObjectsApi
-    ) {
+    if (!this.platformClusterClients()) {
       throw new Error("Kubernetes API client not initialized");
     }
 
@@ -883,10 +1108,6 @@ export class McpServerRuntimeManager {
         catalogItem = await InternalMcpCatalogModel.findById(
           mcpServer.catalogId,
         );
-      }
-
-      if (!this.k8sAttach || !this.k8sLog || !this.k8sExec) {
-        throw new Error("Kubernetes clients not initialized");
       }
 
       // If environmentValues not provided but server has a secretId,
@@ -1006,39 +1227,29 @@ export class McpServerRuntimeManager {
         };
       }
 
-      const deploymentNamespace = await this.resolveNamespaceForCatalog(
+      const target = await this.resolveTargetForCatalog(
         catalogItem,
         options?.networkPolicyResolutionCache,
       );
       // A server can land in a namespace (new environment) the state
       // watchers aren't covering yet.
-      this.ensureWatchedNamespace(deploymentNamespace);
+      this.ensureWatchedTarget(target);
+      // Capabilities passed in describe the platform's own cluster.
       const networkPolicyCapabilities =
-        options?.networkPolicyCapabilities ??
-        (
-          await getK8sCapabilitiesFromApi(
-            this.k8sCustomObjectsApi,
-            this.networkPolicyProbeSource(),
-          )
-        ).networkPolicy;
+        (target.clients.clusterEnvironmentId === null
+          ? options?.networkPolicyCapabilities
+          : undefined) ?? (await this.networkPolicyCapabilitiesFor(target));
 
       const k8sDeployment = new K8sDeployment({
         mcpServer,
-        k8sApi: this.k8sApi,
-        k8sAppsApi: this.k8sAppsApi,
-        k8sRbacApi: this.k8sRbacApi,
-        k8sNetworkingApi: this.k8sNetworkingApi,
-        k8sCustomObjectsApi: this.k8sCustomObjectsApi,
-        k8sAttach: this.k8sAttach,
-        k8sLog: this.k8sLog,
-        namespace: deploymentNamespace,
+        ...target.clients,
+        namespace: target.namespace,
         catalogItem,
         userConfigValues,
         environmentValues: effectiveEnvironmentValues,
         credentialExpiresAt,
         effectiveNetworkPolicy: null,
         networkPolicyCapabilities,
-        k8sExec: this.k8sExec,
       });
 
       if (options?.freshImagePull) {
@@ -1098,10 +1309,7 @@ export class McpServerRuntimeManager {
         // Declarative prerequisites can span several API calls. Keep them out
         // of the DB row-lock transaction; ownership is rechecked between each
         // convergent phase, while destructive/final writes fence themselves.
-        await this.ensureEgressBaseline(
-          deploymentNamespace,
-          networkPolicyCapabilities,
-        );
+        await this.ensureEgressBaseline(target, networkPolicyCapabilities);
         await lease.assertOwned();
 
         if (secretData && Object.keys(secretData).length > 0) {
@@ -1133,9 +1341,42 @@ export class McpServerRuntimeManager {
           },
         );
         await lease.assertOwned();
+
+        // In an environment's own cluster, a deletion or a move that happened
+        // while this start was in flight wins. Once the environment is gone
+        // nothing else can find this deployment or reach its cluster, so the
+        // start that created it removes it, with the clients it still holds.
+        if (target.clients.clusterEnvironmentId !== null) {
+          const placement = await this.placementInEnvironmentCluster(
+            id,
+            target,
+          );
+          if (placement !== "placed") {
+            await this.removeOvertakenWrite({
+              placement,
+              target,
+              remove: () =>
+                k8sDeployment.removeDeployment({
+                  runFencedMutation: lease.runFencedMutation,
+                  uidPrecondition: true,
+                }),
+            });
+            this.mcpServerIdToDeploymentMap.delete(id);
+            throw new Error(
+              `MCP server ${name} was moved or its environment deleted while it was starting; its deployment was removed`,
+            );
+          }
+        }
       };
+      // Everything `start` puts into an environment's own cluster is recorded
+      // as a write to it, which holds off a deletion of that environment and
+      // is refused once one has begun.
+      const recordedStart = (lease: ClusterLeaseGuard) =>
+        environmentClusters.withWrite(target.clients.clusterEnvironmentId, () =>
+          start(lease),
+        );
       if (options?.transitionLease) {
-        await start(options.transitionLease);
+        await recordedStart(options.transitionLease);
       } else {
         await McpDeploymentLeaseModel.withLeaseWhenAvailable(
           {
@@ -1143,7 +1384,7 @@ export class McpServerRuntimeManager {
             key: McpServerRuntimeManager.physicalDeploymentKey(k8sDeployment),
             timeoutMs: MCP_DEPLOYMENT_TRANSITION_DEADLINE_MS,
           },
-          start,
+          recordedStart,
         );
       }
       logger.debug(
@@ -1280,13 +1521,28 @@ export class McpServerRuntimeManager {
    */
   async getOrLoadDeployment(
     mcpServerId: string,
-    opts?: { namespaceOverride?: string },
+    opts?: {
+      /** A namespace of the platform's own cluster to build the deployment in. */
+      namespaceOverride?: string;
+    },
   ): Promise<K8sDeployment | undefined> {
-    // An explicit namespace override (relocation teardown) bypasses the cache: a
-    // cached entry can hold a stale namespace, the one value we must not trust
-    // here. Build fresh, pinned to the given namespace; don't touch the cache.
-    const namespaceOverride = opts?.namespaceOverride;
-    if (!namespaceOverride) {
+    return this.loadDeployment(mcpServerId, {
+      targetOverride:
+        opts?.namespaceOverride && this.platformClusterClients()
+          ? this.platformTarget(opts.namespaceOverride)
+          : undefined,
+    });
+  }
+
+  private async loadDeployment(
+    mcpServerId: string,
+    opts: { targetOverride?: DeploymentTarget },
+  ): Promise<K8sDeployment | undefined> {
+    // An explicit target override (relocation teardown) bypasses the cache: a
+    // cached entry can hold a stale placement, the one value we must not trust
+    // here. Build fresh, pinned to the given target; don't touch the cache.
+    const targetOverride = opts.targetOverride;
+    if (!targetOverride) {
       // First check if already in memory
       const existing = this.mcpServerIdToDeploymentMap.get(mcpServerId);
       if (existing) {
@@ -1295,15 +1551,7 @@ export class McpServerRuntimeManager {
     }
 
     // Not in memory - try to load from database
-    if (
-      !this.k8sApi ||
-      !this.k8sAppsApi ||
-      !this.k8sNetworkingApi ||
-      !this.k8sCustomObjectsApi ||
-      !this.k8sAttach ||
-      !this.k8sLog ||
-      !this.k8sExec
-    ) {
+    if (!this.platformClusterClients()) {
       logger.warn(
         `Cannot load deployment for ${mcpServerId}: K8s clients not initialized`,
       );
@@ -1336,35 +1584,24 @@ export class McpServerRuntimeManager {
       // Create the K8sDeployment object and register it
       // Note: We don't call startOrCreateDeployment() because the deployment
       // should already exist in K8s (created by another replica)
+      const target =
+        targetOverride ?? (await this.resolveTargetForCatalog(catalogItem));
       const k8sDeployment = new K8sDeployment({
         mcpServer,
-        k8sApi: this.k8sApi,
-        k8sAppsApi: this.k8sAppsApi,
-        k8sRbacApi: this.k8sRbacApi,
-        k8sNetworkingApi: this.k8sNetworkingApi,
-        k8sCustomObjectsApi: this.k8sCustomObjectsApi,
-        k8sAttach: this.k8sAttach,
-        k8sLog: this.k8sLog,
-        namespace:
-          namespaceOverride ??
-          (await this.resolveNamespaceForCatalog(catalogItem)),
+        ...target.clients,
+        namespace: target.namespace,
         catalogItem,
         effectiveNetworkPolicy: await this.resolveNetworkPolicyForDeployment({
           mcpServer,
           catalogItem,
         }),
-        networkPolicyCapabilities: (
-          await getK8sCapabilitiesFromApi(
-            this.k8sCustomObjectsApi,
-            this.networkPolicyProbeSource(),
-          )
-        ).networkPolicy,
-        k8sExec: this.k8sExec,
+        networkPolicyCapabilities:
+          await this.networkPolicyCapabilitiesFor(target),
       });
 
-      // Teardown path (explicit namespace): skip endpoint resolution and the
+      // Teardown path (explicit target): skip endpoint resolution and the
       // cache so a torn-down deployment never overwrites a live cache entry.
-      if (namespaceOverride) {
+      if (targetOverride) {
         return k8sDeployment;
       }
 
@@ -1375,7 +1612,7 @@ export class McpServerRuntimeManager {
       // A lazy load is how a deployment enters THIS process (the worker never
       // runs startServer), so its namespace joins the watch set here or not at
       // all — set-guarded, and a no-op until the watchers are started.
-      this.ensureWatchedNamespace(k8sDeployment.k8sNamespace);
+      this.ensureWatchedTarget(target);
       logger.info(
         `Lazy-loaded MCP server deployment ${mcpServerId} into memory`,
       );
@@ -1411,12 +1648,12 @@ export class McpServerRuntimeManager {
     if (!this.isEnabled || !catalogSnapshot) {
       return;
     }
-    const namespace = await this.resolveNamespaceForCatalog(catalogSnapshot);
+    const target = await this.resolveTargetForCatalog(catalogSnapshot);
     const installs = await McpServerModel.findByCatalogId(catalogSnapshot.id);
     await Promise.all(
       installs.map(async (mcpServer) => {
-        const deployment = await this.getOrLoadDeployment(mcpServer.id, {
-          namespaceOverride: namespace,
+        const deployment = await this.loadDeployment(mcpServer.id, {
+          targetOverride: target,
         });
         if (!deployment) {
           return;
@@ -1427,6 +1664,73 @@ export class McpServerRuntimeManager {
         this.mcpServerIdToDeploymentMap.delete(mcpServer.id);
       }),
     );
+  }
+
+  /**
+   * Remove every MCP deployment this installation has in an environment's own
+   * cluster: any Deployment there whose server is a row of this installation
+   * (the environment's built-in browser server, and whatever a server that
+   * moved away left behind), then the namespace's shared egress baseline.
+   * Called once the environment is marked as being deleted, so nothing new
+   * can appear. Deployments of other installations sharing the namespace are
+   * not touched. Throws when the cluster cannot be listed or a removal fails.
+   */
+  async removeEnvironmentClusterDeployments(
+    environment: EnvironmentRow,
+  ): Promise<void> {
+    if (!this.isEnabled) return;
+    const target = await this.environmentTarget(environment, {
+      forCleanup: true,
+    });
+    const deployments =
+      await target.clients.k8sAppsApi.listNamespacedDeployment({
+        namespace: target.namespace,
+        labelSelector: mcpDeploymentSelector(target.clients),
+      });
+    for (const live of deployments.items) {
+      const selectorId = live.metadata?.labels?.["mcp-server-id"];
+      const liveName = live.metadata?.name;
+      if (!selectorId || !liveName || !isUuid(selectorId)) continue;
+      // The label is the install's id, or the catalog item's for a shared
+      // (multitenant) deployment.
+      const mcpServer =
+        (await McpServerModel.findById(selectorId)) ??
+        (await McpServerModel.findByCatalogId(selectorId))[0];
+      // With its row, everything of the server goes (Service, Secrets,
+      // policy). Without one, as after an uninstall whose cleanup failed, the
+      // label still says the Deployment is this environment's.
+      const deployment = mcpServer
+        ? await this.loadDeployment(mcpServer.id, { targetOverride: target })
+        : undefined;
+      if (deployment) {
+        await this.removeDeploymentWithTransitionLease(deployment);
+      }
+      // No row, or a deployment under an older name than the row gives it now.
+      if (!deployment || deployment.k8sDeploymentName !== liveName) {
+        await target.clients.k8sAppsApi
+          .deleteNamespacedDeployment({
+            name: liveName,
+            namespace: target.namespace,
+          })
+          .catch((error) => {
+            if (!isK8sNotFoundError(error)) throw error;
+          });
+      }
+      if (mcpServer) this.mcpServerIdToDeploymentMap.delete(mcpServer.id);
+    }
+    // The baseline policy is the namespace's, not the environment's: it goes
+    // only when no MCP server of anyone is left there to rely on it.
+    const remaining = await target.clients.k8sAppsApi.listNamespacedDeployment({
+      namespace: target.namespace,
+      labelSelector: "app=mcp-server",
+      limit: 1,
+    });
+    if (remaining.items.length > 0) return;
+    await removeEgressBaselineNetworkPolicy({
+      networkingApi: target.clients.k8sNetworkingApi,
+      customObjectsApi: target.clients.k8sCustomObjectsApi,
+      namespace: target.namespace,
+    });
   }
 
   /**
@@ -2045,7 +2349,8 @@ export class McpServerRuntimeManager {
       this.hardResetInFlightByPhysicalKey.has(hardResetPhysicalKey)
     ) {
       throw new McpServerHardResetInProgressError(
-        hardResetPhysicalKey.slice(hardResetPhysicalKey.indexOf("/") + 1),
+        // The Deployment name is the key's last segment in both of its forms.
+        hardResetPhysicalKey.slice(hardResetPhysicalKey.lastIndexOf("/") + 1),
       );
     }
 
@@ -2364,6 +2669,29 @@ export class McpServerRuntimeManager {
       return undefined;
     }
     return k8sDeployment.getRunningPodHttpEndpoint();
+  }
+
+  /** Whether a server is deployed into an environment's own cluster. */
+  async isInEnvironmentCluster(mcpServerId: string): Promise<boolean> {
+    const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
+    return (
+      k8sDeployment !== undefined && k8sDeployment.clusterEnvironmentId !== null
+    );
+  }
+
+  /**
+   * An HTTP dispatcher that reaches a streamable-http server through its
+   * cluster's API server, for a server in an environment's own cluster; the
+   * platform cannot dial that cluster's pods. Undefined for a server in the
+   * platform's own cluster. `pinnedPodName` is the pod a resumed session lives
+   * on. The caller owns the dispatcher and must destroy it.
+   */
+  async createHttpTunnel(
+    mcpServerId: string,
+    pinnedPodName?: string | null,
+  ): Promise<Agent | undefined> {
+    const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
+    return k8sDeployment?.createHttpTunnel(pinnedPodName);
   }
 
   /**
@@ -2836,18 +3164,27 @@ export class McpServerRuntimeManager {
   private async adoptDeploymentNames(params: {
     localServers: McpServer[];
     localCatalogItems: CatalogItem[];
+    /**
+     * The environment's own cluster and namespace these servers are in.
+     * Omitted for the servers of the platform's own cluster.
+     */
+    environmentTarget?: DeploymentTarget;
   }): Promise<void> {
-    const { localServers, localCatalogItems } = params;
-    if (!this.k8sAppsApi) {
+    const { localServers, localCatalogItems, environmentTarget } = params;
+    const clients = environmentTarget?.clients ?? this.platformClusterClients();
+    if (!clients) {
       throw new Error("Kubernetes API client not initialized");
     }
 
-    // List every namespace local catalogs deploy into (platform + per-environment),
-    // then group live deployments by their selector identity label (server id
-    // single-tenant, catalog id multitenant).
-    const namespaces = await this.namespacesForLocalCatalogs(localCatalogItems);
+    // List every namespace these catalogs deploy into (in the platform's
+    // cluster: its own namespace plus each environment's), then group live
+    // deployments by their selector identity label (server id single-tenant,
+    // catalog id multitenant).
+    const namespaces = environmentTarget
+      ? [environmentTarget.namespace]
+      : await this.platformNamespacesForCatalogs(localCatalogItems);
     const deploymentsBySelectorId =
-      await this.listMcpDeploymentsGroupedBySelectorId(namespaces);
+      await this.listMcpDeploymentsGroupedBySelectorId(clients, namespaces);
 
     // Duplicate deployments for one id are the historical orphan bug itself.
     // Prefer the one matching the legacy recompute (the row's current name
@@ -2943,7 +3280,7 @@ export class McpServerRuntimeManager {
   private async cleanupOrphanedDeployments(
     installedServers: McpServer[],
   ): Promise<void> {
-    if (!this.k8sApi || !this.k8sAppsApi) return;
+    if (!this.platformClusterClients()) return;
 
     const serverById = new Map<string, McpServer>();
     for (const server of installedServers) {
@@ -2964,16 +3301,33 @@ export class McpServerRuntimeManager {
       return catalog;
     };
 
+    // Every place a deployment of this installation can be: the platform
+    // cluster's namespaces, and the namespace of each environment with its own
+    // cluster, whether or not anything resolves there now. A server that moved
+    // away from a place is found by what is still deployed in it.
+    let targets: DeploymentTarget[];
     try {
-      const namespaces = await this.namespacesForInstalledLocalServers(
-        installedServers,
-        getCatalog,
-      );
+      targets = [
+        ...(
+          await this.platformNamespacesForInstalledServers(
+            installedServers,
+            getCatalog,
+          )
+        ).map((namespace) => this.platformTarget(namespace)),
+        ...(await this.environmentClusterTargets()),
+      ];
+    } catch (error) {
+      logger.warn({ err: error }, "Failed to sweep orphaned MCP deployments");
+      return;
+    }
 
-      for (const deploymentNamespace of namespaces) {
-        const deployments = await this.k8sAppsApi.listNamespacedDeployment({
+    for (const sweptTarget of targets) {
+      const { k8sApi, k8sAppsApi } = sweptTarget.clients;
+      const deploymentNamespace = sweptTarget.namespace;
+      try {
+        const deployments = await k8sAppsApi.listNamespacedDeployment({
           namespace: deploymentNamespace,
-          labelSelector: "app=mcp-server",
+          labelSelector: mcpDeploymentSelector(sweptTarget.clients),
         });
 
         for (const deployment of deployments.items) {
@@ -2996,25 +3350,26 @@ export class McpServerRuntimeManager {
           // already (re)created the deployment in the resolved namespace, so
           // this copy is a stale duplicate — tear it down fully (deployment,
           // service, secrets, network policy) in its own namespace.
-          const expectedNamespace =
-            await this.resolveNamespaceForCatalog(catalog);
-          if (deploymentNamespace !== expectedNamespace) {
+          const expectedTarget = await this.resolveTargetForCatalog(catalog);
+          if (
+            deploymentTargetKey(sweptTarget) !==
+            deploymentTargetKey(expectedTarget)
+          ) {
             logger.info(
               {
                 deploymentName,
                 serverId,
-                deploymentNamespace,
-                expectedNamespace,
+                deploymentTarget: deploymentTargetKey(sweptTarget),
+                expectedTarget: deploymentTargetKey(expectedTarget),
               },
               "Removing MCP deployment left behind in a stale namespace",
             );
             try {
               // Full teardown (deployment, service, secrets, network policy)
               // of the row's constructed-name resources in the stale namespace.
-              const staleDeployment = await this.getOrLoadDeployment(
-                server.id,
-                { namespaceOverride: deploymentNamespace },
-              );
+              const staleDeployment = await this.loadDeployment(server.id, {
+                targetOverride: sweptTarget,
+              });
               if (staleDeployment) {
                 await this.removeDeploymentWithTransitionLease(staleDeployment);
               }
@@ -3026,11 +3381,11 @@ export class McpServerRuntimeManager {
                 deploymentName !==
                 K8sDeployment.constructDeploymentName(server, catalog)
               ) {
-                await this.k8sAppsApi.deleteNamespacedDeployment({
+                await k8sAppsApi.deleteNamespacedDeployment({
                   name: deploymentName,
                   namespace: deploymentNamespace,
                 });
-                await this.k8sApi
+                await k8sApi
                   .deleteNamespacedService({
                     name: `${deploymentName}-service`,
                     namespace: deploymentNamespace,
@@ -3065,7 +3420,7 @@ export class McpServerRuntimeManager {
           );
 
           try {
-            await this.k8sAppsApi.deleteNamespacedDeployment({
+            await k8sAppsApi.deleteNamespacedDeployment({
               name: deploymentName,
               namespace: deploymentNamespace,
             });
@@ -3077,7 +3432,7 @@ export class McpServerRuntimeManager {
           }
 
           try {
-            await this.k8sApi.deleteNamespacedService({
+            await k8sApi.deleteNamespacedService({
               name: `${deploymentName}-service`,
               namespace: deploymentNamespace,
             });
@@ -3088,9 +3443,14 @@ export class McpServerRuntimeManager {
             );
           }
         }
+      } catch (error) {
+        // One cluster or namespace that cannot be listed must not stop the
+        // sweep of the others.
+        logger.warn(
+          { err: error, deploymentTarget: deploymentTargetKey(sweptTarget) },
+          "Failed to sweep orphaned MCP deployments",
+        );
       }
-    } catch (error) {
-      logger.warn({ err: error }, "Failed to sweep orphaned MCP deployments");
     }
   }
 
@@ -3255,16 +3615,20 @@ export class McpServerRuntimeManager {
   }
 
   private async reapFailedMcpPods(): Promise<void> {
-    if (!this.k8sApi) return;
+    if (!this.platformClusterClients()) return;
 
-    const namespaces = uniqueStrings([
-      this.namespace,
-      ...config.orchestrator.kubernetes.environmentNamespaces,
-    ]);
+    const targets = [
+      ...uniqueStrings([
+        this.namespace,
+        ...config.orchestrator.kubernetes.environmentNamespaces,
+      ]).map((namespace) => this.platformTarget(namespace)),
+      ...(await this.environmentClusterTargets()),
+    ];
 
-    for (const namespace of namespaces) {
+    for (const { clients, namespace } of targets) {
+      const { k8sApi } = clients;
       try {
-        const pods = await this.k8sApi.listNamespacedPod({
+        const pods = await k8sApi.listNamespacedPod({
           namespace,
           labelSelector: "app=mcp-server",
           fieldSelector: "status.phase=Failed",
@@ -3276,7 +3640,7 @@ export class McpServerRuntimeManager {
           if (!podName) continue;
 
           try {
-            await this.k8sApi.deleteNamespacedPod({
+            await k8sApi.deleteNamespacedPod({
               name: podName,
               namespace,
             });
@@ -3439,6 +3803,7 @@ export class McpServerRuntimeManager {
     );
     await assertLeases();
     const teardown = await this.awaitPodTermination({
+      coreApi: deployment.k8sCoreApi,
       namespace,
       deploymentName,
       podSelectorServerId,
@@ -3765,6 +4130,8 @@ export class McpServerRuntimeManager {
    * `gracePeriodSeconds: 0` is the only escalation Kubernetes offers.
    */
   private async awaitPodTermination(params: {
+    /** The API of the cluster the deployment is in. */
+    coreApi: k8s.CoreV1Api;
     namespace: string;
     deploymentName: string;
     podSelectorServerId: string;
@@ -3773,6 +4140,7 @@ export class McpServerRuntimeManager {
     runFencedMutation: <T>(fn: () => Promise<T>) => Promise<T>;
   }): Promise<McpServerHardResetResult["teardown"]> {
     const {
+      coreApi,
       namespace,
       deploymentName,
       podSelectorServerId,
@@ -3784,6 +4152,7 @@ export class McpServerRuntimeManager {
     let stragglers: Array<{ name: string; uid: string }>;
     try {
       stragglers = await this.awaitPodsGone({
+        coreApi,
         namespace,
         podSelectorServerId,
         assertOwned,
@@ -3824,7 +4193,7 @@ export class McpServerRuntimeManager {
           continue;
         }
         await runFencedMutation(async () => {
-          await this.k8sApi?.deleteNamespacedPod({
+          await coreApi.deleteNamespacedPod({
             name: podName,
             namespace,
             gracePeriodSeconds: 0,
@@ -3858,6 +4227,7 @@ export class McpServerRuntimeManager {
     let remaining: Array<{ name: string; uid: string }>;
     try {
       remaining = await this.awaitPodsGone({
+        coreApi,
         namespace,
         podSelectorServerId,
         assertOwned,
@@ -3884,6 +4254,7 @@ export class McpServerRuntimeManager {
 
   /** Poll until no pods remain for the deployment; returns those still there. */
   private async awaitPodsGone(params: {
+    coreApi: k8s.CoreV1Api;
     namespace: string;
     podSelectorServerId: string;
     assertOwned: () => Promise<void>;
@@ -3903,14 +4274,14 @@ export class McpServerRuntimeManager {
   }
 
   private async listPodsForDeployment(params: {
+    coreApi: k8s.CoreV1Api;
     namespace: string;
     podSelectorServerId: string;
     assertOwned: () => Promise<void>;
   }): Promise<Array<{ name: string; uid: string }>> {
-    if (!this.k8sApi) return [];
-    const { namespace, podSelectorServerId, assertOwned } = params;
+    const { coreApi, namespace, podSelectorServerId, assertOwned } = params;
     await assertOwned();
-    const pods = await this.k8sApi.listNamespacedPod({
+    const pods = await coreApi.listNamespacedPod({
       namespace,
       // The pod selector of exactly one Deployment, and the same selector every
       // other pod lookup in this runtime uses. These names are handed to a
@@ -4222,8 +4593,19 @@ export class McpServerRuntimeManager {
   }
   // SPDX-SnippetEnd
 
+  /**
+   * Identifies one physical Deployment across everything this runtime
+   * coordinates by it: in-process maps and the cross-replica leases.
+   * `namespace/name` in the platform's own cluster (the form existing leases
+   * were written with), and `env:<environmentId>/namespace/name` in an
+   * environment's own cluster, where the same namespace and name can exist
+   * again. Opaque to its consumers.
+   */
   private static physicalDeploymentKey(deployment: K8sDeployment): string {
-    return `${deployment.k8sNamespace}/${deployment.k8sDeploymentName}`;
+    const key = `${deployment.k8sNamespace}/${deployment.k8sDeploymentName}`;
+    return deployment.clusterEnvironmentId === null
+      ? key
+      : `env:${deployment.clusterEnvironmentId}/${key}`;
   }
 
   private async writeLogsUnavailableMessage(
@@ -4274,9 +4656,9 @@ export class McpServerRuntimeManager {
   // SPDX-SnippetEnd
 
   /**
-   * Open watch streams for every namespace the runtime currently deploys
-   * into. Later namespaces (a server installed into a new environment) are
-   * picked up via ensureWatchedNamespace from startServer, and lazy loads
+   * Open watch streams for every cluster and namespace the runtime currently
+   * deploys into. Later ones (a server installed into a new environment) are
+   * picked up via ensureWatchedTarget from startServer, and lazy loads
    * register theirs in getOrLoadDeployment.
    */
   private startDeploymentStateWatchers(): void {
@@ -4284,46 +4666,69 @@ export class McpServerRuntimeManager {
     this.deploymentStateWatchersStarted = true;
     this.deploymentStateWatchersStopped = false;
 
-    const namespaces = new Set<string>([this.namespace]);
+    this.watchTargetForStateChanges(this.namespace, {
+      kubeConfig: this.kubeConfig,
+      namespace: this.namespace,
+    });
     for (const deployment of this.mcpServerIdToDeploymentMap.values()) {
-      namespaces.add(deployment.k8sNamespace);
-    }
-    for (const namespace of namespaces) {
-      this.watchNamespaceForStateChanges(namespace);
+      const kubeConfig =
+        deployment.clusterEnvironmentId === null
+          ? this.kubeConfig
+          : this.kubeConfigByEnvironmentId.get(deployment.clusterEnvironmentId);
+      if (!kubeConfig) continue;
+      const key = deploymentTargetKey({
+        clients: { clusterEnvironmentId: deployment.clusterEnvironmentId },
+        namespace: deployment.k8sNamespace,
+      });
+      if (this.watchedTargets.has(key)) continue;
+      this.watchTargetForStateChanges(key, {
+        kubeConfig,
+        namespace: deployment.k8sNamespace,
+      });
     }
   }
 
-  private ensureWatchedNamespace(namespace: string): void {
+  private ensureWatchedTarget(target: DeploymentTarget): void {
+    const key = deploymentTargetKey(target);
     if (
       !this.deploymentStateWatchersStarted ||
       this.deploymentStateWatchersStopped ||
-      this.watchedNamespaces.has(namespace)
+      this.watchedTargets.has(key) ||
+      !target.clients.kubeConfig
     ) {
       return;
     }
-    this.watchNamespaceForStateChanges(namespace);
+    this.watchTargetForStateChanges(key, {
+      kubeConfig: target.clients.kubeConfig,
+      namespace: target.namespace,
+    });
   }
 
-  private watchNamespaceForStateChanges(namespace: string): void {
-    this.watchedNamespaces.add(namespace);
+  private watchTargetForStateChanges(
+    targetKey: string,
+    target: { kubeConfig: k8s.KubeConfig; namespace: string },
+  ): void {
+    this.watchedTargets.set(targetKey, target);
     for (const kind of ["pods", "deployments"] as const) {
-      this.expectedWatchStreams.add(watchStreamKey(namespace, kind));
-      void this.openWatchStream(namespace, kind);
+      this.expectedWatchStreams.add(watchStreamKey(targetKey, kind));
+      void this.openWatchStream(targetKey, kind);
     }
   }
 
   private async openWatchStream(
-    namespace: string,
+    targetKey: string,
     kind: WatchStreamKind,
   ): Promise<void> {
-    if (!this.kubeConfig || this.deploymentStateWatchersStopped) return;
-    const key = watchStreamKey(namespace, kind);
+    const target = this.watchedTargets.get(targetKey);
+    if (!target || this.deploymentStateWatchersStopped) return;
+    const { namespace } = target;
+    const key = watchStreamKey(targetKey, kind);
     const path =
       kind === "pods"
         ? `/api/v1/namespaces/${namespace}/pods`
         : `/apis/apps/v1/namespaces/${namespace}/deployments`;
     try {
-      const watch = new Watch(this.kubeConfig);
+      const watch = new Watch(target.kubeConfig);
       const controller = await watch.watch(
         path,
         // Only objects this runtime creates — every MCP deployment and pod
@@ -4333,7 +4738,7 @@ export class McpServerRuntimeManager {
           if (phase === "BOOKMARK") return;
           this.scheduleWatchTriggeredRefresh();
         },
-        (err) => this.onWatchStreamClosed(namespace, kind, err),
+        (err) => this.onWatchStreamClosed(targetKey, kind, err),
       );
       if (this.deploymentStateWatchersStopped) {
         controller.abort();
@@ -4345,16 +4750,16 @@ export class McpServerRuntimeManager {
       // The stream may have (re)opened after missing events — resync once.
       this.scheduleWatchTriggeredRefresh();
     } catch (error) {
-      this.onWatchStreamClosed(namespace, kind, error);
+      this.onWatchStreamClosed(targetKey, kind, error);
     }
   }
 
   private onWatchStreamClosed(
-    namespace: string,
+    targetKey: string,
     kind: WatchStreamKind,
     error: unknown,
   ): void {
-    const key = watchStreamKey(namespace, kind);
+    const key = watchStreamKey(targetKey, kind);
     this.liveWatchStreams.delete(key);
     this.watchStreamAborts.delete(key);
     if (this.deploymentStateWatchersStopped) return;
@@ -4366,12 +4771,12 @@ export class McpServerRuntimeManager {
     if (error && !this.watchStreamFailureLogged.has(key)) {
       this.watchStreamFailureLogged.add(key);
       logger.warn(
-        { err: error, namespace, kind },
+        { err: error, deploymentTarget: targetKey, kind },
         "MCP deployment-state watch stream failed; falling back to polling until it reopens",
       );
     } else {
       logger.debug(
-        { namespace, kind },
+        { deploymentTarget: targetKey, kind },
         "MCP deployment-state watch stream closed; reopening",
       );
     }
@@ -4380,7 +4785,7 @@ export class McpServerRuntimeManager {
     const timer = setTimeout(
       () => {
         this.watchStreamRestartTimers.delete(key);
-        void this.openWatchStream(namespace, kind);
+        void this.openWatchStream(targetKey, kind);
       },
       WATCH_STREAM_RECONNECT_DELAY_MS +
         Math.floor(Math.random() * WATCH_STREAM_RECONNECT_JITTER_MS),
@@ -4437,48 +4842,133 @@ export class McpServerRuntimeManager {
     this.watchStreamAborts.clear();
     this.liveWatchStreams.clear();
     this.expectedWatchStreams.clear();
-    this.watchedNamespaces.clear();
+    this.watchedTargets.clear();
     this.watchStreamFailureLogged.clear();
   }
 
-  private async namespacesForLocalCatalogs(
+  /** The platform cluster's namespaces these catalogs deploy into. */
+  private async platformNamespacesForCatalogs(
     localCatalogItems: CatalogItem[],
   ): Promise<string[]> {
     const namespaces = new Set<string>([this.namespace]);
     for (const catalog of localCatalogItems) {
       if (!catalog) continue;
-      namespaces.add(await this.resolveNamespaceForCatalog(catalog));
+      const target = await this.resolveTargetForCatalog(catalog);
+      if (target.clients.clusterEnvironmentId === null) {
+        namespaces.add(target.namespace);
+      }
     }
     return [...namespaces];
   }
 
-  private async namespacesForInstalledLocalServers(
+  /** The platform cluster's namespaces the installed local servers deploy into. */
+  private async platformNamespacesForInstalledServers(
     installedServers: McpServer[],
     getCatalog: (
       catalogId: string | null | undefined,
     ) => Promise<CatalogItem | null>,
   ): Promise<string[]> {
-    const namespaces = new Set<string>([this.namespace]);
+    const catalogs: CatalogItem[] = [];
     for (const server of installedServers) {
       const catalog = await getCatalog(server.catalogId);
-      if (catalog?.serverType !== "local") continue;
-      namespaces.add(await this.resolveNamespaceForCatalog(catalog));
+      if (catalog?.serverType === "local") catalogs.push(catalog);
     }
-    return [...namespaces];
+    return this.platformNamespacesForCatalogs(catalogs);
+  }
+
+  /**
+   * The cluster and namespace of every environment that has its own cluster.
+   * One whose cluster cannot be loaded is left out: nothing can be listed or
+   * removed in a cluster that cannot be reached.
+   */
+  private async environmentClusterTargets(): Promise<DeploymentTarget[]> {
+    const targets: DeploymentTarget[] = [];
+    let environments: Awaited<
+      ReturnType<typeof EnvironmentModel.listBoundToCluster>
+    >;
+    try {
+      environments = await EnvironmentModel.listBoundToCluster();
+    } catch (err) {
+      // The platform cluster's sweeps must not depend on this listing.
+      logger.warn(
+        { err },
+        "Could not list the environments that have their own Kubernetes cluster",
+      );
+      return targets;
+    }
+    for (const environment of environments) {
+      // An environment being deleted is cleaned up by its deletion.
+      if (environment.deletingAt) continue;
+      try {
+        targets.push(await this.environmentTarget(environment));
+      } catch (err) {
+        logger.warn(
+          { err, environmentId: environment.id },
+          "Could not load an environment's Kubernetes cluster",
+        );
+      }
+    }
+    return targets;
+  }
+
+  /**
+   * Bring up the servers of one environment that has its own cluster: freeze
+   * their deployment names against what is live there, deploy them, and
+   * re-assert their egress policies. Never throws: a cluster that cannot be
+   * reached leaves its servers in an error state and nothing else affected.
+   */
+  private async startEnvironmentClusterServers(params: {
+    environment: EnvironmentRow | undefined;
+    servers: McpServer[];
+    catalogs: CatalogItem[];
+    cache: NetworkPolicyResolutionCache;
+  }): Promise<void> {
+    const { environment, servers, catalogs, cache } = params;
+    try {
+      const target = await this.environmentTarget(environment);
+      await this.adoptDeploymentNames({
+        localServers: servers,
+        localCatalogItems: catalogs,
+        environmentTarget: target,
+      });
+      const results = await mapWithConcurrency(
+        servers,
+        K8S_API_FANOUT_CONCURRENCY,
+        (mcpServer) =>
+          this.startServer(mcpServer, undefined, undefined, {
+            networkPolicyResolutionCache: cache,
+          }),
+      );
+      const failures = results.filter((result) => result.status === "rejected");
+      if (failures.length > 0) {
+        logger.warn(
+          { environmentId: environment?.id, failed: failures.length },
+          "MCP server(s) in an environment's own cluster failed to start",
+        );
+      }
+      await this.reconcileEgressPolicies({
+        localServers: servers,
+        localCatalogItems: catalogs,
+        capabilities: await this.networkPolicyCapabilitiesFor(target),
+        cache,
+      });
+    } catch (err) {
+      logger.warn(
+        { err, environmentId: environment?.id, servers: servers.length },
+        "Could not start the MCP servers of an environment's own cluster",
+      );
+    }
   }
 
   private async listMcpDeploymentsGroupedBySelectorId(
+    clients: ClusterClients,
     namespaces: string[],
   ): Promise<Map<string, k8s.V1Deployment[]>> {
-    if (!this.k8sAppsApi) {
-      throw new Error("Kubernetes API client not initialized");
-    }
-
     const deploymentsBySelectorId = new Map<string, k8s.V1Deployment[]>();
     for (const namespace of namespaces) {
-      const deployments = await this.k8sAppsApi.listNamespacedDeployment({
+      const deployments = await clients.k8sAppsApi.listNamespacedDeployment({
         namespace,
-        labelSelector: "app=mcp-server",
+        labelSelector: mcpDeploymentSelector(clients),
       });
       for (const deployment of deployments.items) {
         const selectorId = deployment.metadata?.labels?.["mcp-server-id"];
@@ -4489,19 +4979,6 @@ export class McpServerRuntimeManager {
       }
     }
     return deploymentsBySelectorId;
-  }
-
-  /**
-   * Where the chart's enforcement probe left its verdict. Threading it through
-   * here keeps the policies this runtime applies and the capabilities the UI
-   * reports based on the same answer about the same cluster.
-   */
-  private networkPolicyProbeSource():
-    | { coreApi: k8s.CoreV1Api; namespace: string }
-    | undefined {
-    return this.k8sApi
-      ? { coreApi: this.k8sApi, namespace: this.namespace }
-      : undefined;
   }
 }
 
@@ -4599,8 +5076,22 @@ const HARD_RESET_STATUS_RECOVERY_GRACE_MS = 5 * 60_000;
 
 type WatchStreamKind = "pods" | "deployments";
 
-function watchStreamKey(namespace: string, kind: WatchStreamKind): string {
-  return `${namespace}|${kind}`;
+function watchStreamKey(targetKey: string, kind: WatchStreamKind): string {
+  return `${targetKey}|${kind}`;
+}
+
+/**
+ * Identifies a cluster and namespace in maps and logs: the bare namespace in
+ * the platform's own cluster, `env:<environmentId>/<namespace>` in an
+ * environment's own cluster, where the same namespace name can exist again.
+ */
+function deploymentTargetKey(target: {
+  clients: Pick<ClusterClients, "clusterEnvironmentId">;
+  namespace: string;
+}): string {
+  return target.clients.clusterEnvironmentId === null
+    ? target.namespace
+    : `env:${target.clients.clusterEnvironmentId}/${target.namespace}`;
 }
 
 /** Coalesce watch-event bursts (rollouts emit many events) into one sweep. */
@@ -4610,3 +5101,16 @@ const WATCH_STREAM_RECONNECT_DELAY_MS = 15_000;
 const WATCH_STREAM_RECONNECT_JITTER_MS = 5_000;
 
 export default new McpServerRuntimeManager();
+
+/**
+ * Selects the MCP deployments the platform may list for cleanup or adoption
+ * with these clients. In an environment's own cluster that is only what the
+ * platform created for that environment: the kubeconfig may name a namespace
+ * that also holds MCP servers of the platform's own cluster or of another
+ * installation.
+ */
+function mcpDeploymentSelector(clients: ClusterClients): string {
+  return clients.clusterEnvironmentId === null
+    ? "app=mcp-server"
+    : `app=mcp-server,${ENVIRONMENT_CLUSTER_LABEL}=${clients.clusterEnvironmentId}`;
+}

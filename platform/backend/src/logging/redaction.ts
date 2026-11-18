@@ -33,6 +33,7 @@ export const REDACTED_LOG_PATHS = [
   "client_secret",
   "secret",
   "password",
+  "kubeconfig",
 ]
   .flatMap((key) => [key, `*.${key}`, `*.headers.${key}`])
   .concat([

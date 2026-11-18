@@ -1,0 +1,35 @@
+{{- if .Values.kubeDnsServiceRead }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "archestra-workloads.serviceAccountName" . }}-kube-dns-reader
+  namespace: kube-system
+  labels:
+    {{- include "archestra-workloads.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["services"]
+    resourceNames: ["kube-dns"]
+    verbs: ["get"]
+  # Where the DNS Service has another name, the platform finds it by its
+  # k8s-app=kube-dns label. A list cannot be limited to one name.
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "archestra-workloads.serviceAccountName" . }}-kube-dns-reader
+  namespace: kube-system
+  labels:
+    {{- include "archestra-workloads.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "archestra-workloads.serviceAccountName" . }}-kube-dns-reader
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "archestra-workloads.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

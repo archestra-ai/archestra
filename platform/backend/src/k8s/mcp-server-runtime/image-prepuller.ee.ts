@@ -12,6 +12,7 @@ import {
 } from "@/k8s/shared";
 import logger from "@/logging";
 import {
+  EnvironmentModel,
   InternalMcpCatalogModel,
   McpServerModel,
   OrganizationModel,
@@ -921,6 +922,13 @@ export class McpImagePrepuller {
     if (catalogIds.length === 0) return [];
 
     const catalogs = await InternalMcpCatalogModel.getByIds(catalogIds);
+    // Servers of an environment with its own cluster run on that cluster's
+    // nodes; their images are of no use in this cluster's node caches.
+    const ownClusterEnvironmentIds = new Set(
+      (await EnvironmentModel.listKubeconfigVersions()).map(
+        (environment) => environment.id,
+      ),
+    );
 
     const sources: PrepullSource[] = [];
     let regcredsByServerId: Map<string, string[]> | undefined;
@@ -934,6 +942,11 @@ export class McpImagePrepuller {
         ? catalogs.get(server.catalogId)
         : undefined;
       if (!catalog || catalog.serverType !== "local") continue;
+      if (
+        catalog.environmentId &&
+        ownClusterEnvironmentIds.has(catalog.environmentId)
+      )
+        continue;
 
       const localConfig = catalog.localConfig;
       let image =

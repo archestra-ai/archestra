@@ -137,9 +137,7 @@ async function startAgentRunSession(params: {
   boundContract?: { resolved: boolean; contract?: string };
   abortSignal?: AbortSignal;
 }): Promise<AgentRunRecord> {
-  const backend = await prepareAgentRuntimeBackendDriver(
-    params.runtime.backend,
-  );
+  const backend = await prepareAgentRuntimeBackendDriver(params.runtime);
 
   const environment = params.runtime.environmentId
     ? await EnvironmentModel.findByIdForOrganization(
@@ -151,6 +149,9 @@ async function startAgentRunSession(params: {
   const runtimeScope = backend.resolveRuntimeScope({
     environmentScope: environment?.namespace,
     organizationScope: organization?.defaultEnvironmentNamespace,
+    environmentClusterId: environment?.kubeconfigSecretId
+      ? environment.id
+      : null,
   });
   const effectiveNetworkPolicy = await resolveEffectiveNetworkPolicy({
     organizationId: params.organizationId,
@@ -186,302 +187,317 @@ async function startAgentRunSession(params: {
       "run.resume_refused",
     );
 
-  let task = params.task;
-  if (params.runtimeCrossing && !params.resumeFromTaskId) {
-    if (params.boundContract?.resolved) {
-      task = promptWithContract(task, params.boundContract.contract);
-    } else {
-      const agent = await AgentModel.findById(params.agentId);
-      if (!agent) throw new ApiError(404, "Agent not found");
-      const contract = await bindRuntimeChild({
-        crossing: params.runtimeCrossing,
-        organizationId: params.organizationId,
-        workspaceId: params.taskId,
-        workloadName: constructStableRunName(agent.name, params.taskId),
-        actorKind: params.actor.kind,
-        actorId: params.actor.id,
-      });
-      if (params.boundContract) {
-        params.boundContract.resolved = true;
-        params.boundContract.contract = contract;
-      }
-      task = promptWithContract(task, contract);
-    }
-  }
-
-  // A continuation keeps the first turn's tier and limits; its workspace
-  // already has that size and that expiry.
-  const tiers = await organizationAgentRuntimeTiers(params.organizationId);
-  const chosen =
-    priorRun?.runtimeLimits ??
-    params.limits ??
-    resolveAgentRunLimits({ runtime: params.runtime, tiers });
-  const limits = withWorkspaceSize({
-    limits: chosen,
-    // The volume a run is told about is the one it has: a new run's comes
-    // from the tiers its volume is sized from, read once here; a
-    // continuation's was recorded when its workspace was created, and a
-    // workspace from before sizes were recorded has none.
-    workspaceGiB: priorRun
-      ? priorRun.runtimeLimits?.workspaceGiB
-      : resolveRunWorkspaceGiB(chosen.tier, tiers),
-  });
-  const { spec, virtualApiKeyId, gatewayTokenId } =
-    await buildAgentRunLaunchSpec({
-      runtime: params.runtime,
-      limits,
-      tiers,
-      taskId: params.taskId,
-      runId,
-      agentId: params.agentId,
-      actor: params.actor,
-      organizationId: params.organizationId,
-      runtimeScope,
-      effectiveNetworkPolicy,
-      appName: organization?.appName ?? DEFAULT_APP_NAME,
-      task,
-      runMode: params.runMode,
-      inputFiles,
-      ephemeralCredentials: params.ephemeralCredentials,
-      ...(workspace
-        ? {
-            workspaceId: workspace.id,
-            runtimeSession: runtimeOpenAppaSession({
-              organizationId: params.organizationId,
-              workspaceId: workspace.id,
-              workloadName: workspace.workloadName,
-              actorKind: workspace.actorKind,
-              actorId: workspace.actorId,
-            }),
-          }
-        : {}),
-    });
-
-  if (workspace) {
-    spec.frozenName = workspace.workloadName;
-    // A new turn does not buy another full workspace lifetime. Keep the UI's
-    // run deadline aligned with the original controller shutdown timestamp.
-    spec.activeDeadlineSeconds = Math.max(
-      1,
-      Math.ceil((workspace.expiresAt.getTime() - Date.now()) / 1000),
-    );
-  }
-  // The image sends this value as X-Archestra-Session-Id; it is the key of
-  // the run's LLM session (see agentRunLlmSessionId).
-  spec.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID = spec.frozenName;
-  if (params.replacePriorAttempt) {
-    spec.replacePriorAttempt = true;
-  }
-
-  // The row lands before the workload: it is what teardown reads to find the
-  // objects, so a crash between the two must leave a record, not an orphan.
-  // On a retry or failover (`replacePriorAttempt: true`), `AgentRunModel.create`
-  // deletes the previous attempt's `agent_workspaces` and `agent_runs` rows in
-  // the same transaction that inserts `session`, and `AgentWorkspaceModel.create`
-  // below inserts the next workspace only after that transaction commits.
-  const resumeWithoutPrompt = Boolean(priorRun && !params.task?.trim());
-  const placeholderTitle =
-    params.title ??
-    (resumeWithoutPrompt && priorRun
-      ? priorRun.title
-      : toPlaceholderTitle(params.task ?? "Run"));
-  const session = await AgentRunModel.create({
-    id: runId,
-    organizationId: params.organizationId,
-    taskId: params.taskId,
-    agentId: params.runtime.agentId,
-    actorKind: params.actor.kind,
-    actorId: params.actor.id,
-    actorUserId: params.actor.kind === "user" ? params.actor.id : null,
-    title: placeholderTitle,
-    projectId: params.projectId,
-    workloadName: spec.frozenName,
-    backend: backend.name,
-    runtimeScope,
-    activeDeadlineSeconds: spec.activeDeadlineSeconds,
-    runtimeLimits: limits,
-    virtualApiKeyId,
-    gatewayTokenId,
-    completionTarget: params.completionTarget,
-    replacePriorAttempt: params.replacePriorAttempt,
-  });
-
-  if (params.title === undefined && !resumeWithoutPrompt) {
-    trackBackgroundWork(
-      generateAgentRunTitle({
-        taskId: params.taskId,
-        workloadName: spec.frozenName,
-        prompt: params.task ?? "Run",
-        organizationId: params.organizationId,
-        userId: params.titleUserId,
-        modelId: params.modelId,
-        llmApiKeyId: params.llmApiKeyId,
-      })
-        .then((title) =>
-          AgentRunModel.updateTitleIfCurrent({
-            taskId: params.taskId,
-            expectedTitle: placeholderTitle,
-            title,
-          }),
-        )
-        .catch((error) => {
-          logger.warn(
-            { error, taskId: params.taskId },
-            "Could not generate an Agent run title",
-          );
-        }),
-    );
-  }
-
-  let claimedWorkspace = false;
-  let createdWorkspace:
-    | Awaited<ReturnType<typeof AgentWorkspaceModel.create>>
-    | undefined;
+  // A new workspace is recorded as being placed before anything is recorded or
+  // issued for it, so that the place cannot be given up while it is launched.
+  const endWorkspacePlacement = workspace
+    ? null
+    : await backend.beginWorkspacePlacement(runtimeScope);
   try {
-    if (workspace) {
-      const claimed = await AgentWorkspaceModel.claim({
-        id: workspace.id,
-        organizationId: params.organizationId,
-        actorKind: params.actor.kind,
-        actorId: params.actor.id,
-        agentId: params.agentId,
-        taskId: params.taskId,
-      });
-      if (!claimed)
-        // The route checked retention before starting, so a lost claim is
-        // almost always a concurrent turn; an expired workspace is refused
-        // synchronously on the next attempt.
-        throw tagAgentRunFailure(
-          new ApiError(
-            409,
-            "This Agent is already in use or its saved files have reached their retention deadline",
-          ),
-          "run.workspace_busy",
-        );
-      claimedWorkspace = true;
-      await notifyRuntimeSessionCreated(params, workspace.id);
-      const previous = await AgentRunModel.findByTaskId(workspace.lastTaskId);
-      if (previous?.virtualApiKeyId)
-        await cleanupAgentRun(previous, { requireTranscript: true });
-      if (params.runtimeCrossing) {
-        await admitRuntimeSteer({
+    let task = params.task;
+    if (params.runtimeCrossing && !params.resumeFromTaskId) {
+      if (params.boundContract?.resolved) {
+        task = promptWithContract(task, params.boundContract.contract);
+      } else {
+        const agent = await AgentModel.findById(params.agentId);
+        if (!agent) throw new ApiError(404, "Agent not found");
+        const contract = await bindRuntimeChild({
           crossing: params.runtimeCrossing,
           organizationId: params.organizationId,
-          workspaceId: workspace.id,
+          workspaceId: params.taskId,
+          workloadName: constructStableRunName(agent.name, params.taskId),
+          actorKind: params.actor.kind,
+          actorId: params.actor.id,
         });
+        if (params.boundContract) {
+          params.boundContract.resolved = true;
+          params.boundContract.contract = contract;
+        }
+        task = promptWithContract(task, contract);
       }
-      await stampRuntimeBinding({
-        spec,
-        organizationId: params.organizationId,
-        workspaceId: workspace.id,
+    }
+
+    // A continuation keeps the first turn's tier and limits; its workspace
+    // already has that size and that expiry.
+    const tiers = await organizationAgentRuntimeTiers(params.organizationId);
+    const chosen =
+      priorRun?.runtimeLimits ??
+      params.limits ??
+      resolveAgentRunLimits({ runtime: params.runtime, tiers });
+    const limits = withWorkspaceSize({
+      limits: chosen,
+      // The volume a run is told about is the one it has: a new run's comes
+      // from the tiers its volume is sized from, read once here; a
+      // continuation's was recorded when its workspace was created, and a
+      // workspace from before sizes were recorded has none.
+      workspaceGiB: priorRun
+        ? priorRun.runtimeLimits?.workspaceGiB
+        : resolveRunWorkspaceGiB(chosen.tier, tiers),
+    });
+    const { spec, virtualApiKeyId, gatewayTokenId } =
+      await buildAgentRunLaunchSpec({
+        runtime: params.runtime,
+        limits,
+        tiers,
         taskId: params.taskId,
-      });
-      await backend.continueRun({ session, spec });
-    } else {
-      // Inserted after AgentRunModel.create commits so any prior attempt's
-      // agent_workspaces row (whether from launch failure or post-launch
-      // waitForCompletion failure) was already removed in that transaction.
-      createdWorkspace = await AgentWorkspaceModel.create({
-        // The initial public run URL is the permanent session URL.
-        id: params.taskId,
-        organizationId: params.organizationId,
+        runId,
         agentId: params.agentId,
-        actorKind: params.actor.kind,
-        actorId: params.actor.id,
-        backend: backend.name,
-        runtimeScope,
-        workloadName: spec.frozenName,
-        activeTaskId: params.taskId,
-        lastTaskId: params.taskId,
-        expiresAt: new Date(
-          Date.now() +
-            (spec.activeDeadlineSeconds ??
-              config.agentRuntime.defaultTtlHours * 3600) *
-              1000,
-        ),
-      });
-      await notifyRuntimeSessionCreated(params, createdWorkspace.id);
-      await stampRuntimeBinding({
-        spec,
+        actor: params.actor,
         organizationId: params.organizationId,
-        workspaceId: createdWorkspace.id,
-        taskId: params.taskId,
+        runtimeScope,
+        environmentCluster: environment?.kubeconfigSecretId
+          ? {
+              agentRuntimePlatformBaseUrl:
+                environment.agentRuntimePlatformBaseUrl,
+            }
+          : undefined,
+        effectiveNetworkPolicy,
+        appName: organization?.appName ?? DEFAULT_APP_NAME,
+        task,
+        runMode: params.runMode,
+        inputFiles,
+        ephemeralCredentials: params.ephemeralCredentials,
+        ...(workspace
+          ? {
+              workspaceId: workspace.id,
+              runtimeSession: runtimeOpenAppaSession({
+                organizationId: params.organizationId,
+                workspaceId: workspace.id,
+                workloadName: workspace.workloadName,
+                actorKind: workspace.actorKind,
+                actorId: workspace.actorId,
+              }),
+            }
+          : {}),
       });
-      await backend.launch(spec);
-      await backend.stageInputs({ session, inputs: inputFiles });
-    }
-  } catch (error) {
-    const launchFailure = describeLaunchFailure(error);
-    const shouldSettle = params.shouldSettleLaunchFailure
-      ? await params.shouldSettleLaunchFailure(launchFailure)
-      : params.settleTaskOnFailure !== false && !params.abortSignal?.aborted;
-    // Settle the task before cleanup is visible: the reconciler cancels any
-    // unfinished task whose workspace is being deleted, which would otherwise
-    // replace this launch error with a generic reason.
-    if (shouldSettle) {
-      await recordLaunchFailure({
-        taskId: params.taskId,
-        failure: launchFailure,
-      });
-    }
-    // A publication can succeed before its exec connection fails. Keep the
-    // claim until stopping that possibly-running turn has been acknowledged.
-    try {
-      let suspended = false;
-      if (claimedWorkspace)
-        suspended = (await backend.stopRun(session)) === "suspended";
-      if (workspace) {
-        await backend.releaseRun(session);
-        if (claimedWorkspace)
-          await AgentWorkspaceModel.release({
-            workloadName: session.workloadName,
-            taskId: session.taskId,
-            suspended,
-          });
-        await AgentRunModel.close({ id: session.id });
-      } else if (shouldSettle || params.abortSignal?.aborted) {
-        if (createdWorkspace)
-          await AgentWorkspaceModel.transition({
-            id: createdWorkspace.id,
-            from: "active",
-            to: "deleting",
-          });
-        await backend.teardown(session);
-        if (createdWorkspace)
-          await AgentWorkspaceModel.transition({
-            id: createdWorkspace.id,
-            from: "deleting",
-            to: "deleted",
-          });
-        await AgentRunModel.close({ id: session.id });
-      } else {
-        // A retry or fallback will continue using this taskId. Tear down the
-        // failed attempt and mark its workspace deleted without entering
-        // "deleting" while the task is still working (so the reconciler never
-        // cancels the task), and close the run row rather than deleting it so
-        // the orphan reaper still sees an agent_runs row until the next
-        // attempt's AgentRunModel.create transaction replaces it.
-        await backend.teardown(session);
-        if (createdWorkspace)
-          await AgentWorkspaceModel.transition({
-            id: createdWorkspace.id,
-            from: "active",
-            to: "deleted",
-          });
-        await AgentRunModel.close({ id: session.id });
-      }
-    } catch (cleanupError) {
-      // Leave the session open for terminal reconciliation, including failed
-      // stop/revoke attempts. Never release another task's workspace claim.
-      logger.warn(
-        { error: cleanupError, sessionId: session.id },
-        "Cleanup after a failed Agent Runtime launch will retry",
+
+    if (workspace) {
+      spec.frozenName = workspace.workloadName;
+      // A new turn does not buy another full workspace lifetime. Keep the UI's
+      // run deadline aligned with the original controller shutdown timestamp.
+      spec.activeDeadlineSeconds = Math.max(
+        1,
+        Math.ceil((workspace.expiresAt.getTime() - Date.now()) / 1000),
       );
     }
-    throw launchFailure;
-  }
+    // The image sends this value as X-Archestra-Session-Id; it is the key of
+    // the run's LLM session (see agentRunLlmSessionId).
+    spec.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID = spec.frozenName;
+    if (params.replacePriorAttempt) {
+      spec.replacePriorAttempt = true;
+    }
 
-  return session;
+    // The row lands before the workload: it is what teardown reads to find the
+    // objects, so a crash between the two must leave a record, not an orphan.
+    // On a retry or failover (`replacePriorAttempt: true`), `AgentRunModel.create`
+    // deletes the previous attempt's `agent_workspaces` and `agent_runs` rows in
+    // the same transaction that inserts `session`, and `AgentWorkspaceModel.create`
+    // below inserts the next workspace only after that transaction commits.
+    const resumeWithoutPrompt = Boolean(priorRun && !params.task?.trim());
+    const placeholderTitle =
+      params.title ??
+      (resumeWithoutPrompt && priorRun
+        ? priorRun.title
+        : toPlaceholderTitle(params.task ?? "Run"));
+    const session = await AgentRunModel.create({
+      id: runId,
+      organizationId: params.organizationId,
+      taskId: params.taskId,
+      agentId: params.runtime.agentId,
+      actorKind: params.actor.kind,
+      actorId: params.actor.id,
+      actorUserId: params.actor.kind === "user" ? params.actor.id : null,
+      title: placeholderTitle,
+      projectId: params.projectId,
+      workloadName: spec.frozenName,
+      backend: backend.name,
+      runtimeScope,
+      activeDeadlineSeconds: spec.activeDeadlineSeconds,
+      runtimeLimits: limits,
+      virtualApiKeyId,
+      gatewayTokenId,
+      completionTarget: params.completionTarget,
+      replacePriorAttempt: params.replacePriorAttempt,
+    });
+
+    if (params.title === undefined && !resumeWithoutPrompt) {
+      trackBackgroundWork(
+        generateAgentRunTitle({
+          taskId: params.taskId,
+          workloadName: spec.frozenName,
+          prompt: params.task ?? "Run",
+          organizationId: params.organizationId,
+          userId: params.titleUserId,
+          modelId: params.modelId,
+          llmApiKeyId: params.llmApiKeyId,
+        })
+          .then((title) =>
+            AgentRunModel.updateTitleIfCurrent({
+              taskId: params.taskId,
+              expectedTitle: placeholderTitle,
+              title,
+            }),
+          )
+          .catch((error) => {
+            logger.warn(
+              { error, taskId: params.taskId },
+              "Could not generate an Agent run title",
+            );
+          }),
+      );
+    }
+
+    let claimedWorkspace = false;
+    let createdWorkspace:
+      | Awaited<ReturnType<typeof AgentWorkspaceModel.create>>
+      | undefined;
+    try {
+      if (workspace) {
+        const claimed = await AgentWorkspaceModel.claim({
+          id: workspace.id,
+          organizationId: params.organizationId,
+          actorKind: params.actor.kind,
+          actorId: params.actor.id,
+          agentId: params.agentId,
+          taskId: params.taskId,
+        });
+        if (!claimed)
+          // The route checked retention before starting, so a lost claim is
+          // almost always a concurrent turn; an expired workspace is refused
+          // synchronously on the next attempt.
+          throw tagAgentRunFailure(
+            new ApiError(
+              409,
+              "This Agent is already in use or its saved files have reached their retention deadline",
+            ),
+            "run.workspace_busy",
+          );
+        claimedWorkspace = true;
+        await notifyRuntimeSessionCreated(params, workspace.id);
+        const previous = await AgentRunModel.findByTaskId(workspace.lastTaskId);
+        if (previous?.virtualApiKeyId)
+          await cleanupAgentRun(previous, { requireTranscript: true });
+        if (params.runtimeCrossing) {
+          await admitRuntimeSteer({
+            crossing: params.runtimeCrossing,
+            organizationId: params.organizationId,
+            workspaceId: workspace.id,
+          });
+        }
+        await stampRuntimeBinding({
+          spec,
+          organizationId: params.organizationId,
+          workspaceId: workspace.id,
+          taskId: params.taskId,
+        });
+        await backend.continueRun({ session, spec });
+      } else {
+        // Inserted after AgentRunModel.create commits so any prior attempt's
+        // agent_workspaces row (whether from launch failure or post-launch
+        // waitForCompletion failure) was already removed in that transaction.
+        createdWorkspace = await AgentWorkspaceModel.create({
+          // The initial public run URL is the permanent session URL.
+          id: params.taskId,
+          organizationId: params.organizationId,
+          agentId: params.agentId,
+          actorKind: params.actor.kind,
+          actorId: params.actor.id,
+          backend: backend.name,
+          runtimeScope,
+          workloadName: spec.frozenName,
+          activeTaskId: params.taskId,
+          lastTaskId: params.taskId,
+          expiresAt: new Date(
+            Date.now() +
+              (spec.activeDeadlineSeconds ??
+                config.agentRuntime.defaultTtlHours * 3600) *
+                1000,
+          ),
+        });
+        await notifyRuntimeSessionCreated(params, createdWorkspace.id);
+        await stampRuntimeBinding({
+          spec,
+          organizationId: params.organizationId,
+          workspaceId: createdWorkspace.id,
+          taskId: params.taskId,
+        });
+        await backend.launch(spec);
+        await backend.stageInputs({ session, inputs: inputFiles });
+      }
+    } catch (error) {
+      const launchFailure = describeLaunchFailure(error);
+      const shouldSettle = params.shouldSettleLaunchFailure
+        ? await params.shouldSettleLaunchFailure(launchFailure)
+        : params.settleTaskOnFailure !== false && !params.abortSignal?.aborted;
+      // Settle the task before cleanup is visible: the reconciler cancels any
+      // unfinished task whose workspace is being deleted, which would otherwise
+      // replace this launch error with a generic reason.
+      if (shouldSettle) {
+        await recordLaunchFailure({
+          taskId: params.taskId,
+          failure: launchFailure,
+        });
+      }
+      // A publication can succeed before its exec connection fails. Keep the
+      // claim until stopping that possibly-running turn has been acknowledged.
+      try {
+        let suspended = false;
+        if (claimedWorkspace)
+          suspended = (await backend.stopRun(session)) === "suspended";
+        if (workspace) {
+          await backend.releaseRun(session);
+          if (claimedWorkspace)
+            await AgentWorkspaceModel.release({
+              workloadName: session.workloadName,
+              taskId: session.taskId,
+              suspended,
+            });
+          await AgentRunModel.close({ id: session.id });
+        } else if (shouldSettle || params.abortSignal?.aborted) {
+          if (createdWorkspace)
+            await AgentWorkspaceModel.transition({
+              id: createdWorkspace.id,
+              from: "active",
+              to: "deleting",
+            });
+          await backend.teardown(session);
+          if (createdWorkspace)
+            await AgentWorkspaceModel.transition({
+              id: createdWorkspace.id,
+              from: "deleting",
+              to: "deleted",
+            });
+          await AgentRunModel.close({ id: session.id });
+        } else {
+          // A retry or fallback will continue using this taskId. Tear down the
+          // failed attempt and mark its workspace deleted without entering
+          // "deleting" while the task is still working (so the reconciler never
+          // cancels the task), and close the run row rather than deleting it so
+          // the orphan reaper still sees an agent_runs row until the next
+          // attempt's AgentRunModel.create transaction replaces it.
+          await backend.teardown(session);
+          if (createdWorkspace)
+            await AgentWorkspaceModel.transition({
+              id: createdWorkspace.id,
+              from: "active",
+              to: "deleted",
+            });
+          await AgentRunModel.close({ id: session.id });
+        }
+      } catch (cleanupError) {
+        // Leave the session open for terminal reconciliation, including failed
+        // stop/revoke attempts. Never release another task's workspace claim.
+        logger.warn(
+          { error: cleanupError, sessionId: session.id },
+          "Cleanup after a failed Agent Runtime launch will retry",
+        );
+      }
+      throw launchFailure;
+    }
+
+    return session;
+  } finally {
+    await endWorkspacePlacement?.();
+  }
 }
 
 /** Runtime-ready runtime for an Agent that opted into Agent Runtime. */

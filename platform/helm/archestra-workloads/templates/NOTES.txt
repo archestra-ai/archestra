@@ -1,0 +1,32 @@
+The platform's identity in this cluster is the ServiceAccount
+"{{ include "archestra-workloads.serviceAccountName" . }}" in namespace "{{ .Release.Namespace }}".
+It may deploy into: {{ include "archestra-workloads.namespaces" . | fromJsonArray | join ", " }}.
+
+Print the kubeconfig to paste into an environment of the platform:
+
+SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+CA=$(kubectl -n {{ .Release.Namespace }} get secret {{ include "archestra-workloads.serviceAccountName" . }}-token -o jsonpath='{.data.ca\.crt}')
+TOKEN=$(kubectl -n {{ .Release.Namespace }} get secret {{ include "archestra-workloads.serviceAccountName" . }}-token -o jsonpath='{.data.token}' | base64 -d)
+cat <<KUBECONFIG
+apiVersion: v1
+kind: Config
+current-context: archestra-workloads
+clusters:
+  - name: archestra-workloads
+    cluster:
+      server: ${SERVER}
+      certificate-authority-data: ${CA}
+users:
+  - name: archestra-workloads
+    user:
+      token: ${TOKEN}
+contexts:
+  - name: archestra-workloads
+    context:
+      cluster: archestra-workloads
+      user: archestra-workloads
+KUBECONFIG
+
+SERVER must be an address the platform can reach. If the platform is not on
+the same network as this shell, replace it with the API server's address as
+seen from the platform.

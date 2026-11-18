@@ -1,0 +1,89 @@
+suite: test archestra workloads -- platform identity and its permissions
+templates:
+  - rbac.yaml
+  - serviceaccount.yaml
+  - kube-dns-reader-rbac.yaml
+release:
+  name: archestra
+  namespace: archestra-access
+tests:
+  - it: grants the permissions in the release namespace when no namespace is listed
+    template: rbac.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+      - documentIndex: 0
+        isKind:
+          of: Role
+      - documentIndex: 0
+        equal:
+          path: metadata.namespace
+          value: archestra-access
+      - documentIndex: 1
+        equal:
+          path: subjects
+          value:
+            - kind: ServiceAccount
+              name: archestra
+              namespace: archestra-access
+
+  - it: grants the permissions in each listed namespace to the one ServiceAccount
+    template: rbac.yaml
+    set:
+      namespaces: [team-a, team-b]
+    asserts:
+      - hasDocuments:
+          count: 4
+      - documentIndex: 0
+        equal:
+          path: metadata.namespace
+          value: team-a
+      - documentIndex: 2
+        equal:
+          path: metadata.namespace
+          value: team-b
+      - documentIndex: 3
+        equal:
+          path: subjects[0].namespace
+          value: archestra-access
+
+  - it: lets the platform reach HTTP MCP servers through the API server
+    template: rbac.yaml
+    asserts:
+      - documentIndex: 0
+        contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["pods/portforward"]
+            verbs: ["get", "create"]
+
+  - it: gives the ServiceAccount a token that does not expire
+    template: serviceaccount.yaml
+    asserts:
+      - documentIndex: 1
+        equal:
+          path: type
+          value: kubernetes.io/service-account-token
+      - documentIndex: 1
+        equal:
+          path: metadata.annotations["kubernetes.io/service-account.name"]
+          value: archestra
+
+  - it: does not touch kube-system by default
+    template: kube-dns-reader-rbac.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: lets the platform read the cluster DNS Service only when opted in
+    template: kube-dns-reader-rbac.yaml
+    set:
+      kubeDnsServiceRead: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - documentIndex: 0
+        equal:
+          path: metadata.namespace
+          value: kube-system

@@ -25,10 +25,17 @@ class ClusterDnsResolver {
    * Returns the cluster DNS ClusterIP(s), or an empty array when they cannot
    * be determined. Operator-configured IPs win over discovery; discovered
    * results are cached per API client for a few minutes.
+   *
+   * `platformCluster: false` is for an environment's own cluster: the
+   * configured IPs and the platform pod's resolv.conf both describe the
+   * platform's cluster, so only discovery through that cluster's API counts.
    */
-  async getClusterDnsIps(coreApi: k8s.CoreV1Api): Promise<string[]> {
+  async getClusterDnsIps(
+    coreApi: k8s.CoreV1Api,
+    options: { platformCluster: boolean } = { platformCluster: true },
+  ): Promise<string[]> {
     const configured = config.orchestrator.kubernetes.clusterDnsIps;
-    if (configured.length > 0) {
+    if (options.platformCluster && configured.length > 0) {
       return configured;
     }
 
@@ -37,7 +44,7 @@ class ClusterDnsResolver {
       return cached.value;
     }
 
-    const ips = await this.resolveClusterDnsIps(coreApi);
+    const ips = await this.resolveClusterDnsIps(coreApi, options);
     this.cache.set(coreApi, {
       value: ips,
       expiresAt: Date.now() + CLUSTER_DNS_CACHE_TTL_MS,
@@ -54,6 +61,7 @@ class ClusterDnsResolver {
 
   private async resolveClusterDnsIps(
     coreApi: k8s.CoreV1Api,
+    options: { platformCluster: boolean },
   ): Promise<string[]> {
     const fromNamedService = await this.readDnsServiceByName(coreApi);
     if (fromNamedService.length > 0) {
@@ -63,6 +71,13 @@ class ClusterDnsResolver {
     const fromLabelledServices = await this.listDnsServicesByLabel(coreApi);
     if (fromLabelledServices.length > 0) {
       return fromLabelledServices;
+    }
+
+    if (!options.platformCluster) {
+      logger.debug(
+        "Could not determine the DNS service IP of an environment's cluster; its egress policies allow DNS by pod selector only",
+      );
+      return [];
     }
 
     const fromResolvConf = await this.readResolvConfNameservers();

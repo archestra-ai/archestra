@@ -2,7 +2,7 @@
 title: Environments
 description: Separate staging and production resources and workload networks
 order: 3
-lastUpdated: 2026-10-22
+lastUpdated: 2026-11-16
 ---
 
 Keep a staging agent away from production tools and knowledge, and give its workloads a different network policy. Environments separate resource sets inside one Archestra organization.
@@ -96,3 +96,31 @@ Remote MCP servers run elsewhere. Archestra checks its connection to their URL h
 Your cluster must [support and enforce the selected rules](/docs/admin/deployment/networking#enforce-workload-egress). Start an allowlist with **Common Dependencies** or **Package Managers**, then add your APIs and private registries.
 
 Set [cost limits](/docs/llm-proxy/costs-and-limits) per environment when staging and production need separate budgets.
+
+## Deploy Into Another Cluster
+
+Run an environment's MCP servers, code sandbox, and [coding agent workspaces](/docs/agents/runtime) in a different Kubernetes cluster from the one Archestra runs in. Archestra reaches that cluster's API server with a kubeconfig stored on the environment, so nothing of Archestra itself runs there.
+
+1. In the other cluster, install the `archestra-workloads` Helm chart from a checkout of the Archestra repository. List the existing namespaces Archestra may deploy into:
+
+   ```bash
+   helm install archestra-workloads ./platform/helm/archestra-workloads \
+     --namespace archestra-platform-access --create-namespace \
+     --set 'namespaces={team-a}'
+   ```
+
+2. Run the commands the chart prints after the install. They print a kubeconfig. Its API server address must be one Archestra can reach.
+3. With [`environment:create`](/docs/reference/permissions#environment:create), open **Settings → Environments** and click **Add environment**.
+4. Under **Kubernetes cluster**, select **Another cluster** and paste the kubeconfig.
+5. Under **General**, enter a name and one of the namespaces you listed for the chart.
+6. Back under **Kubernetes cluster**, click **Test connection**, then **Save**. The list shows the cluster under the environment's namespace.
+
+- **The cluster is fixed.** An environment keeps its cluster. **Replace credentials** accepts a new kubeconfig for the same cluster only. For another cluster, create another environment.
+- **Coding agent workspaces call back.** They need the [Agent Sandbox controller](/docs/agents/runtime/setup) in that cluster, and the URL at which its pods reach Archestra, set on the environment. The field starts with Archestra's external API address from `ARCHESTRA_API_BASE_URL`; change it if that cluster reaches Archestra at another address. If the URL's host name resolves to a different address inside that cluster, allow that address under **Additional allowed CIDRs**, or write the URL with the IP address.
+- **Deleting cleans up first.** Archestra removes its workloads from the cluster before it deletes the environment.
+
+| You see | Do this |
+| --- | --- |
+| **Test connection** reports that it could not connect | Check that Archestra can reach the API server address. If the credential was rotated, use **Replace credentials**. |
+| Saving reports missing permissions in the namespace | Add the namespace to the chart's `namespaces` value and upgrade the release. |
+| Deleting reports that the cluster could not be cleaned up | Restore access and click **Try again**, or click **Delete and leave the workloads**. |

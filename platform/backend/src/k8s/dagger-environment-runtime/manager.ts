@@ -2,9 +2,17 @@ import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import type * as k8s from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import config from "@/config";
-import { getK8sCapabilities } from "@/k8s/capabilities";
+import {
+  getK8sCapabilities,
+  getK8sCapabilitiesFromApi,
+} from "@/k8s/capabilities";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
 import { clusterIpFamilyResolver } from "@/k8s/cluster-ip-families";
+import {
+  ENVIRONMENT_CLUSTER_LABEL,
+  type EnvironmentClusterBinding,
+  environmentClusters,
+} from "@/k8s/environment-clusters";
 import {
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
@@ -12,17 +20,16 @@ import {
 import { constructManagedNetworkPolicyName } from "@/k8s/mcp-server-runtime/network-policy";
 import { resolveRuntimeOwnerReferences } from "@/k8s/mcp-server-runtime/runtime-owner";
 import {
-  createK8sClients,
   getK8sNamespace,
   isK8sConfigured,
   isK8sNotFoundError,
-  loadKubeConfig,
+  type K8sCluster,
 } from "@/k8s/shared";
 import logger from "@/logging";
 import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import {
-  type Environment,
+  type EnvironmentRow,
   KubernetesNamespaceSchema,
   type NetworkPolicy,
 } from "@/types";
@@ -52,6 +59,8 @@ const ALL_POLICY_KINDS: PolicyKind[] = [
 interface EngineReconcileTarget {
   engineId: string;
   organizationId: string;
+  /** The cluster the engine runs in: its environment's, or the platform's own. */
+  cluster: K8sCluster;
   namespace: string;
   networkPolicyOverride: NetworkPolicy | null;
   /** Set for an agent's own engine; it wins over every other policy. */
@@ -59,14 +68,22 @@ interface EngineReconcileTarget {
 }
 
 /**
- * An agent with its own egress policy, and the namespace its engine runs in
- * (its bound environment's, or the organization default when unbound).
+ * An agent with its own egress policy, and where its engine runs: its bound
+ * environment's cluster and namespace, or the organization default's when
+ * unbound.
  */
 interface AgentEngineTarget {
   id: string;
   organizationId: string;
+  environmentId: string | null;
   networkPolicy: NetworkPolicy;
   namespace: string | null;
+}
+
+/** A cluster and namespace an engine can be provisioned in. */
+interface EnginePlacement {
+  cluster: K8sCluster;
+  namespace: string;
 }
 
 /**
@@ -89,6 +106,12 @@ const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.11";
 const ENGINE_CONTAINER = "dagger-engine";
 const OWNER_LABEL = "archestra.io/dagger-runtime-owner";
 const ORGANIZATION_LABEL = "archestra.io/dagger-organization";
+/**
+ * On an engine in an environment's own cluster: the environment whose cluster
+ * it is in. It is how the engines of this installation are found there again
+ * (after an agent moved away, before the environment is deleted) without
+ * touching anything another installation put in the same namespace.
+ */
 // Engine resources (cpu/memory requests, memory limit, buildkit cache PVC size)
 // come from config so small/local clusters can override the defaults. No CPU
 // limit (build throughput). The memory limit caps the buildkit daemon; the
@@ -122,13 +145,14 @@ class DaggerEnvironmentRuntimeManager {
    * isn't configured. The Dagger `kube-pod://` address is built in the
    * sandbox-core backend from this; the engine is provisioned by `reconcile*`.
    */
-  environmentTargetForEnvironment(
-    environment: Environment,
-  ): EnvironmentTarget | undefined {
+  async environmentTargetForEnvironment(
+    environment: EnvironmentRow,
+  ): Promise<EnvironmentTarget | undefined> {
     if (!isK8sConfigured()) return undefined;
     return {
       environmentId: environment.id,
       namespace: this.engineNamespace(environment.namespace),
+      kubeconfigPath: await this.kubeconfigPathFor(environment),
     };
   }
 
@@ -155,14 +179,17 @@ class DaggerEnvironmentRuntimeManager {
    * organization's default engine; the engine is provisioned by
    * `reconcileAgent`.
    */
-  agentTarget(agent: {
+  async agentTarget(agent: {
     id: string;
     namespace: string | null | undefined;
-  }): EnvironmentTarget | undefined {
+    /** The environment the agent is bound to; its cluster holds the engine. */
+    environment: EnvironmentClusterBinding | null;
+  }): Promise<EnvironmentTarget | undefined> {
     if (!isK8sConfigured()) return undefined;
     return {
       environmentId: deriveAgentEngineId(agent.id),
       namespace: this.engineNamespace(agent.namespace),
+      kubeconfigPath: await this.kubeconfigPathFor(agent.environment),
     };
   }
 
@@ -174,7 +201,7 @@ class DaggerEnvironmentRuntimeManager {
    */
   async reconcileAll(): Promise<void> {
     if (!this.isEnabled()) return;
-    let environments: Environment[];
+    let environments: EnvironmentRow[];
     try {
       environments = await EnvironmentModel.listAll();
     } catch (error) {
@@ -184,6 +211,13 @@ class DaggerEnvironmentRuntimeManager {
       );
       return;
     }
+    // Environments in the platform's own cluster first: a cluster of another
+    // environment that does not answer must not hold them back.
+    environments.sort(
+      (a, b) =>
+        Number(a.kubeconfigSecretId !== null) -
+        Number(b.kubeconfigSecretId !== null),
+    );
     for (const environment of environments) {
       try {
         await this.reconcileEnvironment(environment);
@@ -217,6 +251,7 @@ class DaggerEnvironmentRuntimeManager {
     }
     await this.reconcileAgentEngines({});
     await this.cleanupOrphanedEngines();
+    await this.cleanupEnvironmentClusterEngines();
   }
 
   /**
@@ -286,10 +321,12 @@ class DaggerEnvironmentRuntimeManager {
 
   /**
    * Converge one agent's own engine on its current row: provision it (with the
-   * agent's egress policy) in the namespace it should run in, and remove it from
-   * every other managed namespace. An agent that was deleted, or whose policy
-   * was cleared to inherit its environment's, ends with no engine at all. Call
-   * after any change to an agent's network policy or environment binding.
+   * agent's egress policy) where it should run, and remove it from every other
+   * place an engine can be: the managed namespaces of the platform's cluster
+   * and the namespace of every environment with a cluster of its own. An agent
+   * that was deleted, or whose policy was cleared to inherit its environment's,
+   * ends with no engine at all. Call after any change to an agent's network
+   * policy or environment binding.
    */
   async reconcileAgent(agentId: string): Promise<void> {
     if (!this.isEnabled()) return;
@@ -297,36 +334,51 @@ class DaggerEnvironmentRuntimeManager {
       agentId,
     });
     const engineId = deriveAgentEngineId(agentId);
-    let desiredNamespace: string | null = null;
+    let desired: EnginePlacement | null = null;
     if (current) {
-      desiredNamespace = this.engineNamespace(current.namespace);
-      try {
-        await this.reconcileEngine({
-          engineId,
-          organizationId: current.organizationId,
-          namespace: desiredNamespace,
-          networkPolicyOverride: null,
-          agentNetworkPolicy: current.networkPolicy,
-        });
-      } finally {
-        // As for environments: a concurrent clear, move or delete wins even
-        // when an in-flight Kubernetes create finishes after its teardown.
-        const [latest] = await AgentModel.listNetworkPolicyEngineTargets({
-          agentId,
-        });
-        desiredNamespace = latest
-          ? this.engineNamespace(latest.namespace)
-          : null;
-      }
+      const reconciled = await this.agentEnginePlacement(current);
+      desired = reconciled;
+      // Recorded as a write to the cluster it goes to: an environment with a
+      // cluster of its own is not deleted while its engines are provisioned.
+      desired = await environmentClusters.withWrite(
+        reconciled.cluster.environmentId,
+        async () => {
+          try {
+            await this.reconcileEngine({
+              engineId,
+              organizationId: current.organizationId,
+              cluster: reconciled.cluster,
+              namespace: reconciled.namespace,
+              networkPolicyOverride: null,
+              agentNetworkPolicy: current.networkPolicy,
+            });
+          } finally {
+            // As for environments: a concurrent clear or move wins even when
+            // an in-flight Kubernetes create finishes after its teardown.
+            const [latest] = await AgentModel.listNetworkPolicyEngineTargets({
+              agentId,
+            });
+            desired = latest ? await this.agentEnginePlacement(latest) : null;
+            // The place just written to is removed by name, with the clients
+            // already in hand.
+            if (!samePlacement(desired, reconciled)) {
+              await this.teardownEngine(engineId, reconciled);
+            }
+          }
+          return desired;
+        },
+      );
     }
-    for (const namespace of this.managedNamespaces()) {
-      if (namespace === desiredNamespace) continue;
-      await this.teardownEngine(engineId, namespace);
+    for (const placement of await this.enginePlacements()) {
+      if (samePlacement(desired, placement)) continue;
+      await this.teardownEngine(engineId, placement);
     }
   }
 
   /** Provision (or update) one environment's engine pod + egress policy. */
-  async reconcileEnvironment(environment: Environment): Promise<void> {
+  async reconcileEnvironment(
+    environment: Pick<EnvironmentRow, "id" | "organizationId">,
+  ): Promise<void> {
     if (!this.isEnabled()) return;
     // A startup/update snapshot may already have been deleted by another pod.
     // Re-read before provisioning AND after its final mutation: deletion wins
@@ -336,23 +388,35 @@ class DaggerEnvironmentRuntimeManager {
       environment.organizationId,
     );
     if (!current) return;
+    // An environment's cluster never changes, so only its namespace can move.
+    const cluster = await environmentClusters.forEnvironment(current);
     const namespace = this.engineNamespace(current.namespace);
-    try {
-      await this.reconcileEngine({
-        engineId: current.id,
-        organizationId: current.organizationId,
-        namespace,
-        networkPolicyOverride: current.networkPolicy,
-      });
-    } finally {
-      const latest = await EnvironmentModel.findByIdForOrganization(
-        current.id,
-        current.organizationId,
-      );
-      if (!latest || this.engineNamespace(latest.namespace) !== namespace) {
-        await this.teardownEngine(current.id, namespace);
+    // Recorded as a write to the environment's cluster: an environment with a
+    // cluster of its own is not deleted while its engine is provisioned, and
+    // refuses the record once its deletion has begun.
+    await environmentClusters.withWrite(cluster.environmentId, async () => {
+      try {
+        await this.reconcileEngine({
+          engineId: current.id,
+          organizationId: current.organizationId,
+          cluster,
+          namespace,
+          networkPolicyOverride: current.networkPolicy,
+        });
+      } finally {
+        const latest = await EnvironmentModel.findByIdForOrganization(
+          current.id,
+          current.organizationId,
+        );
+        if (
+          !latest ||
+          latest.deletingAt ||
+          this.engineNamespace(latest.namespace) !== namespace
+        ) {
+          await this.teardownEngine(current.id, { cluster, namespace });
+        }
       }
-    }
+    });
   }
 
   /**
@@ -360,12 +424,15 @@ class DaggerEnvironmentRuntimeManager {
    * names alone are insufficient in a namespace shared by multiple releases.
    * Legacy resources require a successful environment audit snapshot in THIS
    * database. Without that evidence they are left for operator review.
+   *
+   * Covers the platform's own cluster only. In an environment's own cluster
+   * engines are removed when their environment is deleted or their agent
+   * moves, and nothing there carries this installation's owner label.
    */
   private async cleanupOrphanedEngines(): Promise<void> {
     for (const namespace of this.managedNamespaces()) {
       try {
-        const { kubeConfig } = loadKubeConfig();
-        const clients = createK8sClients(kubeConfig, namespace);
+        const clients = environmentClusters.local();
         const owner = (
           await resolveRuntimeOwnerReferences(clients.rbacApi, namespace)
         )?.[0]?.uid;
@@ -452,11 +519,24 @@ class DaggerEnvironmentRuntimeManager {
         // Likewise read after enumeration: an agent engine is kept only in the
         // namespace its agent currently runs in. One whose agent was deleted,
         // cleared its policy, or moved is an orphan like any other.
+        const boundEnvironmentIds = new Set(
+          (await EnvironmentModel.listKubeconfigVersions()).map(
+            (environment) => environment.id,
+          ),
+        );
         const agentEngineNamespaces = new Map(
-          (await AgentModel.listNetworkPolicyEngineTargets()).map((agent) => [
-            deriveAgentEngineId(agent.id),
-            this.engineNamespace(agent.namespace),
-          ]),
+          (await AgentModel.listNetworkPolicyEngineTargets())
+            // An agent in an environment with its own cluster has its engine
+            // there; one found in this cluster is left over.
+            .filter(
+              (agent) =>
+                !agent.environmentId ||
+                !boundEnvironmentIds.has(agent.environmentId),
+            )
+            .map((agent) => [
+              deriveAgentEngineId(agent.id),
+              this.engineNamespace(agent.namespace),
+            ]),
         );
         for (const [id, candidate] of candidates) {
           if (candidate.foreign || defaultIds.has(id)) continue;
@@ -479,9 +559,13 @@ class DaggerEnvironmentRuntimeManager {
             candidate.organizationIds.size > 0 && (!owner || candidate.owned);
           if (!owned && !historicalOwner) continue;
           const current = await EnvironmentModel.findById(id);
-          if (current && this.engineNamespace(current.namespace) === namespace)
+          if (
+            current &&
+            !current.kubeconfigSecretId &&
+            this.engineNamespace(current.namespace) === namespace
+          )
             continue;
-          await this.teardownEngine(id, namespace);
+          await this.teardownEngine(id, { cluster: clients, namespace });
         }
       } catch (err) {
         // Failed list/DB/ownership reads never become an empty desired set.
@@ -512,6 +596,7 @@ class DaggerEnvironmentRuntimeManager {
     await this.reconcileEngine({
       engineId: deriveOrgEngineId(organization.id),
       organizationId: organization.id,
+      cluster: environmentClusters.local(),
       namespace: this.engineNamespace(organization.defaultEnvironmentNamespace),
       networkPolicyOverride: null,
     });
@@ -537,7 +622,10 @@ class DaggerEnvironmentRuntimeManager {
     // fell back to the release namespace, same as the new), so the engine never
     // moved — tearing `from` down would delete the engine just reconciled.
     if (from === to) return;
-    await this.teardownEngine(deriveOrgEngineId(organization.id), from);
+    await this.teardownEngine(deriveOrgEngineId(organization.id), {
+      cluster: environmentClusters.local(),
+      namespace: from,
+    });
   }
 
   /**
@@ -547,25 +635,66 @@ class DaggerEnvironmentRuntimeManager {
    * guard — a per-environment engine exists even behind a BYO runner host, so
    * this does not early-return on one. Best-effort and idempotent.
    */
-  async teardownEnvironmentEngine(environment: Environment): Promise<void> {
+  async teardownEnvironmentEngine(environment: EnvironmentRow): Promise<void> {
     if (!this.isEnabled()) return;
-    await this.teardownEngine(
+    await this.teardownEngine(environment.id, {
+      cluster: await environmentClusters.forEnvironment(environment),
+      namespace: this.engineNamespace(environment.namespace),
+    });
+  }
+
+  /**
+   * Remove every engine that lives in an environment's own cluster: the
+   * environment's, and those of the agents bound to it that have their own
+   * network policy. Must run while the environment's kubeconfig still exists;
+   * afterwards nothing can reach that cluster. Throws if an engine could not
+   * be removed, so the caller can keep the environment and its credential.
+   */
+  async teardownEnginesInEnvironmentCluster(
+    environment: EnvironmentRow,
+  ): Promise<void> {
+    if (!this.isEnabled()) return;
+    const placement: EnginePlacement = {
+      cluster: await environmentClusters.forEnvironment(environment, {
+        forCleanup: true,
+      }),
+      namespace: this.engineNamespace(environment.namespace),
+    };
+    const agents = await AgentModel.listNetworkPolicyEngineTargets({
+      organizationId: environment.organizationId,
+      environmentId: environment.id,
+    });
+    // What the database says belongs here, and what is actually there under
+    // this environment's label: an agent that moved away may have left its
+    // engine behind.
+    const engineIds = new Set([
       environment.id,
-      this.engineNamespace(environment.namespace),
-    );
+      ...agents.map((agent) => deriveAgentEngineId(agent.id)),
+      ...(await this.listEnvironmentClusterEngineIds(
+        environment.id,
+        placement,
+      )),
+    ]);
+    for (const engineId of engineIds) {
+      if (!(await this.teardownEngine(engineId, placement))) {
+        throw new Error(
+          `Could not remove the code sandbox engine ${daggerEngineDeploymentName(engineId)} from namespace ${placement.namespace}`,
+        );
+      }
+    }
   }
 
   // Remove one engine's StatefulSet, its cache PVC (the volumeClaimTemplate is
   // Retain, so deleting the StatefulSet alone would strand it — safe to drop
   // here since the build cache is rebuildable and the engine has left this
   // namespace), ConfigMap, and every managed egress policy kind. Each delete is
-  // idempotent: an already-absent object is not an error.
+  // idempotent: an already-absent object is not an error. Resolves to whether
+  // everything is gone; false leaves the rest for a later attempt.
   private async teardownEngine(
     engineId: string,
-    namespace: string,
-  ): Promise<void> {
-    const { kubeConfig } = loadKubeConfig();
-    const clients = createK8sClients(kubeConfig, namespace);
+    placement: EnginePlacement,
+  ): Promise<boolean> {
+    const { cluster: clients, namespace } = placement;
     const name = daggerEngineDeploymentName(engineId);
 
     const workloadRemoved = await this.deleteIfPresent(
@@ -581,7 +710,7 @@ class DaggerEnvironmentRuntimeManager {
     );
     // Keep storage, config and egress protection intact if the workload could
     // not be removed. A later reconciliation retries from the remaining objects.
-    if (!workloadRemoved) return;
+    if (!workloadRemoved) return false;
     // DELETE acknowledges termination, not pod exit. Foreground deletion keeps
     // the StatefulSet until its pods exit. Preserve protection until then.
     const terminationDeadline = Date.now() + 35_000;
@@ -597,7 +726,7 @@ class DaggerEnvironmentRuntimeManager {
           { engineId, namespace },
           "[DaggerEnvRuntime] engine termination still pending; retaining resources for next startup",
         );
-        return;
+        return false;
       }
       // A bounded wait for this deletion, not a recurring orphan-sweep job.
       await new Promise((resolve) => setTimeout(resolve, 250));
@@ -612,17 +741,17 @@ class DaggerEnvironmentRuntimeManager {
           namespace,
         }),
     );
-    if (!cacheRemoved) return;
+    if (!cacheRemoved) return false;
     const policiesRemoved = await this.pruneStalePolicies(
       clients,
       namespace,
       constructManagedNetworkPolicyName(name),
       new Set(),
     );
-    if (!policiesRemoved) return;
+    if (!policiesRemoved) return false;
     // Keep the owned ConfigMap as a durable retry marker until everything else
     // is gone, including an old cache PVC that has no ownership labels.
-    await this.deleteIfPresent(
+    return this.deleteIfPresent(
       "ConfigMap",
       namespace,
       engineConfigMapName(engineId),
@@ -658,15 +787,20 @@ class DaggerEnvironmentRuntimeManager {
   }
 
   private async reconcileEngine(target: EngineReconcileTarget): Promise<void> {
-    const { engineId, namespace } = target;
-    const { kubeConfig } = loadKubeConfig();
-    const clients = createK8sClients(kubeConfig, namespace);
-    const owner = (
-      await resolveRuntimeOwnerReferences(clients.rbacApi, namespace)
-    )?.[0]?.uid;
+    const { engineId, namespace, cluster: clients } = target;
+    // The platform's own cluster is the only one that has its runtime-owner
+    // Role, its pod to copy scheduling from, and its DNS settings.
+    const platformCluster = clients.environmentId === null;
+    const owner = platformCluster
+      ? (await resolveRuntimeOwnerReferences(clients.rbacApi, namespace))?.[0]
+          ?.uid
+      : undefined;
     const ownershipLabels: Record<string, string> = {
       [ORGANIZATION_LABEL]: deriveOrgEngineId(target.organizationId),
       ...(owner ? { [OWNER_LABEL]: owner } : {}),
+      ...(clients.environmentId
+        ? { [ENVIRONMENT_CLUSTER_LABEL]: clients.environmentId }
+        : {}),
     };
 
     // Must precede the StatefulSet: a new engine pod mounts this ConfigMap and
@@ -681,14 +815,24 @@ class DaggerEnvironmentRuntimeManager {
       clients.appsApi,
       engineId,
       namespace,
-      await this.resolveEngineScheduling(),
+      platformCluster
+        ? await this.resolveEngineScheduling()
+        : { nodeSelector: null, tolerations: null },
       ownershipLabels,
     );
 
     const effectivePolicy = await this.resolveEngineEffectivePolicy(target);
-    const capabilities = (await getK8sCapabilities()).networkPolicy;
+    const capabilities = (
+      platformCluster
+        ? await getK8sCapabilities()
+        : await getK8sCapabilitiesFromApi(clients.customObjectsApi, {
+            coreApi: clients.coreApi,
+            namespace,
+          })
+    ).networkPolicy;
     const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
       clients.coreApi,
+      { platformCluster },
     );
     const policies = buildDaggerEgressPolicies({
       environmentId: engineId,
@@ -700,6 +844,7 @@ class DaggerEnvironmentRuntimeManager {
         coreApi: clients.coreApi,
         namespace,
         clusterDnsIps,
+        clusterEnvironmentId: clients.environmentId,
       }),
     });
     const policyName = constructManagedNetworkPolicyName(
@@ -716,6 +861,7 @@ class DaggerEnvironmentRuntimeManager {
       {
         engineId,
         organizationId: target.organizationId,
+        clusterEnvironmentId: clients.environmentId,
         namespace,
         egressMode: effectivePolicy.policy?.egressMode ?? "none",
         policies: policies.map((p) => p.kind),
@@ -735,6 +881,140 @@ class DaggerEnvironmentRuntimeManager {
       getK8sNamespace(),
       ...config.orchestrator.kubernetes.environmentNamespaces,
     ]);
+  }
+
+  /**
+   * In each environment's own cluster, remove the engines this installation
+   * left there that no longer belong: those of agents that moved away or were
+   * deleted while the removal at the time failed. The label finds them; what
+   * belongs is the environment's own engine and the engines of the agents
+   * bound to it now. Best-effort; never throws.
+   */
+  private async cleanupEnvironmentClusterEngines(): Promise<void> {
+    let environments: EnvironmentRow[];
+    try {
+      environments = await EnvironmentModel.listBoundToCluster();
+    } catch (err) {
+      logger.warn(
+        { err },
+        "[DaggerEnvRuntime] could not list environments with their own cluster",
+      );
+      return;
+    }
+    for (const environment of environments) {
+      // An environment being deleted is cleaned up by its deletion.
+      if (environment.deletingAt) continue;
+      try {
+        const placement: EnginePlacement = {
+          cluster: await environmentClusters.forEnvironment(environment),
+          namespace: this.engineNamespace(environment.namespace),
+        };
+        const present = await this.listEnvironmentClusterEngineIds(
+          environment.id,
+          placement,
+        );
+        // Read after the listing, so an engine created for an agent bound
+        // meanwhile is not mistaken for a leftover.
+        const expected = new Set([
+          environment.id,
+          ...(
+            await AgentModel.listNetworkPolicyEngineTargets({
+              organizationId: environment.organizationId,
+              environmentId: environment.id,
+            })
+          ).map((agent) => deriveAgentEngineId(agent.id)),
+        ]);
+        for (const engineId of present) {
+          if (expected.has(engineId)) continue;
+          await this.teardownEngine(engineId, placement);
+        }
+      } catch (err) {
+        logger.warn(
+          { err, environmentId: environment.id },
+          "[DaggerEnvRuntime] engine cleanup in an environment's cluster failed; will retry on next startup",
+        );
+      }
+    }
+  }
+
+  /** The ids of the engines carrying an environment's label in its cluster. */
+  private async listEnvironmentClusterEngineIds(
+    environmentId: string,
+    placement: EnginePlacement,
+  ): Promise<string[]> {
+    const engineIds: string[] = [];
+    let continuation: string | undefined;
+    do {
+      const page = await placement.cluster.appsApi.listNamespacedStatefulSet({
+        namespace: placement.namespace,
+        labelSelector: `${ENVIRONMENT_CLUSTER_LABEL}=${environmentId}`,
+        limit: 200,
+        _continue: continuation,
+      });
+      for (const statefulSet of page.items) {
+        const engineId = statefulSet.metadata?.name?.match(
+          /^dagger-engine-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/,
+        )?.[1];
+        if (engineId) engineIds.push(engineId);
+      }
+      continuation = page.metadata?._continue;
+    } while (continuation);
+    return engineIds;
+  }
+
+  /**
+   * Every place an engine may be: the managed namespaces of the platform's own
+   * cluster, and the namespace of each environment bound to its own cluster.
+   * An environment whose cluster cannot be loaded is skipped: nothing can be
+   * removed from a cluster that cannot be reached.
+   */
+  private async enginePlacements(): Promise<EnginePlacement[]> {
+    const local = environmentClusters.local();
+    const placements: EnginePlacement[] = [...this.managedNamespaces()].map(
+      (namespace) => ({ cluster: local, namespace }),
+    );
+    for (const environment of await EnvironmentModel.listBoundToCluster()) {
+      // An environment being deleted is cleaned up by its deletion.
+      if (environment.deletingAt) continue;
+      try {
+        placements.push({
+          cluster: await environmentClusters.forEnvironment(environment),
+          namespace: this.engineNamespace(environment.namespace),
+        });
+      } catch (error) {
+        logger.warn(
+          { err: error, environmentId: environment.id },
+          "[DaggerEnvRuntime] could not load an environment's cluster",
+        );
+      }
+    }
+    return placements;
+  }
+
+  /** Where an agent's own engine runs: its bound environment's cluster and namespace. */
+  private async agentEnginePlacement(
+    agent: AgentEngineTarget,
+  ): Promise<EnginePlacement> {
+    const environment = agent.environmentId
+      ? await EnvironmentModel.findById(agent.environmentId)
+      : null;
+    return {
+      cluster: await environmentClusters.forEnvironment(environment),
+      namespace: this.engineNamespace(agent.namespace),
+    };
+  }
+
+  /**
+   * The kubeconfig a sandbox session reaches an engine with, when the engine
+   * is in an environment's own cluster. Undefined for the platform's cluster.
+   */
+  private async kubeconfigPathFor(
+    environment: EnvironmentClusterBinding | null,
+  ): Promise<string | undefined> {
+    if (!environment?.kubeconfigSecretId) return undefined;
+    return environmentClusters.kubeconfigPath(
+      await environmentClusters.forEnvironment(environment),
+    );
   }
 
   // Mirrors the MCP runtime's resolution (the configured namespace, else the
@@ -797,8 +1077,7 @@ class DaggerEnvironmentRuntimeManager {
       };
     }
     const platformNamespace = process.env.POD_NAMESPACE || getK8sNamespace();
-    const { kubeConfig } = loadKubeConfig();
-    const { coreApi } = createK8sClients(kubeConfig, platformNamespace);
+    const { coreApi } = environmentClusters.local();
     return {
       nodeSelector: await fetchPlatformPodNodeSelector(
         coreApi,
@@ -1016,7 +1295,7 @@ class DaggerEnvironmentRuntimeManager {
   }
 
   private async applyEgressPolicies(
-    clients: ReturnType<typeof createK8sClients>,
+    clients: K8sCluster,
     namespace: string,
     policies: DaggerEgressPolicyObject[],
   ): Promise<void> {
@@ -1038,7 +1317,7 @@ class DaggerEnvironmentRuntimeManager {
   }
 
   private async pruneStalePolicies(
-    clients: ReturnType<typeof createK8sClients>,
+    clients: K8sCluster,
     namespace: string,
     policyName: string,
     desiredKinds: Set<PolicyKind>,
@@ -1223,6 +1502,19 @@ function sandboxCgroupPath(engineId: string): string {
 // Fixed namespace for deriving an organization's default-engine id. Arbitrary
 // but constant, so the derived id is stable across restarts and processes.
 const ORG_DEFAULT_ENGINE_NAMESPACE = "a7c3e0d2-6b1f-4e8a-9c5d-2f0b8e4a1d63";
+
+/** Whether two engine placements are the same cluster and namespace. */
+function samePlacement(
+  a: EnginePlacement | null,
+  b: EnginePlacement | null,
+): boolean {
+  return (
+    a !== null &&
+    b !== null &&
+    a.cluster === b.cluster &&
+    a.namespace === b.namespace
+  );
+}
 
 /**
  * Stable engine id for an organization's default Dagger engine. Organization

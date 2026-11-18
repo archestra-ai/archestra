@@ -1,0 +1,23 @@
+# Install this chart in a cluster that an Archestra platform running elsewhere
+# deploys workloads into: MCP servers, code sandbox engines and Agent Runtime
+# sandboxes of an environment bound to this cluster.
+#
+# It creates an identity for the platform (a ServiceAccount with a long-lived
+# token) and grants it, in each namespace listed below, exactly the
+# permissions the platform uses. Nothing of the platform itself runs here.
+
+# Namespaces the platform may deploy into. Each must already exist. An
+# environment names one of them. Empty means the release namespace only.
+namespaces: []
+
+serviceAccount:
+  # Name of the ServiceAccount the platform authenticates as. Defaults to the
+  # release name.
+  name: ""
+
+# Let the platform read the cluster DNS Service (kube-system/kube-dns), so
+# egress policies can allow DNS by address as well as by pod selector. Needed
+# on clusters whose resolver is not selected by the standard kube-dns labels
+# (NodeLocal DNSCache, custom DNS) and for provider policy kinds that cannot
+# select pods. Creates a Role and RoleBinding in kube-system.
+kubeDnsServiceRead: false

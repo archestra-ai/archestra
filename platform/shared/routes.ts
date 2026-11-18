@@ -780,6 +780,8 @@ export const RouteId = {
   BulkDeleteEnvironments: "bulkDeleteEnvironments",
   UpdateDefaultEnvironment: "updateDefaultEnvironment",
   UpdateEnvironmentResourceDefaults: "updateEnvironmentResourceDefaults",
+  TestEnvironmentKubeconfig: "testEnvironmentKubeconfig",
+  TestEnvironmentCluster: "testEnvironmentCluster",
   GetK8sCapabilities: "getK8sCapabilities",
 
   // GitHub App Configuration Routes

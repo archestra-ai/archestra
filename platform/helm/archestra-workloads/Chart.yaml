@@ -1,0 +1,6 @@
+apiVersion: v2
+name: archestra-workloads
+description: Access for an Archestra platform to deploy its workloads into this cluster
+type: application
+version: 0.0.1
+appVersion: "0.0.1"

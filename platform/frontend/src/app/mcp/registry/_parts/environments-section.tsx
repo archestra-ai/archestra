@@ -2,7 +2,7 @@
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Layers, Pencil, Plus, Trash2, X } from "lucide-react";
+import { AlertTriangle, Layers, Pencil, Plus, Trash2, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -44,6 +44,11 @@ import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { FieldDescription } from "@/components/ui/field-description";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -71,12 +76,23 @@ import {
   useK8sCapabilities,
   useUpdateEnvironment,
 } from "@/lib/environment.query";
+import {
+  clusterServerLabel,
+  EMPTY_ENVIRONMENT_CLUSTER_DRAFT,
+  type EnvironmentClusterDraft,
+  type EnvironmentDeleteBlock,
+  environmentClusterCreateError,
+  environmentClusterCreateFields,
+  environmentClusterDraftFor,
+  environmentClusterUpdateFields,
+} from "@/lib/environment-cluster";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
   useDefaultEnvironment,
   useOrganization,
   useUpdateDefaultEnvironment,
 } from "@/lib/organization.query";
+import { EnvironmentClusterSection } from "./environment-cluster-section";
 import {
   clearEnvironmentDialogParams,
   ENVIRONMENT_CREATE_PARAM,
@@ -309,13 +325,27 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
                   Default
                 </Badge>
               )}
+            {row.original.kind === "environment" && row.original.deletingAt && (
+              <Badge variant="outline" className="text-destructive">
+                Being deleted
+              </Badge>
+            )}
           </span>
         ),
       },
       {
         accessorKey: "namespace",
         header: "Namespace",
-        cell: ({ row }) => <NamespaceCell namespace={row.original.namespace} />,
+        cell: ({ row }) => (
+          <NamespaceCell
+            namespace={row.original.namespace}
+            clusterServer={
+              row.original.kind === "environment"
+                ? row.original.kubeconfigServer
+                : null
+            }
+          />
+        ),
       },
       {
         accessorKey: "networkPolicy",
@@ -509,9 +539,32 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
  * orchestrator's default namespace, so we surface that as a muted hint (only
  * when the K8s runtime is enabled — otherwise namespaces aren't applied).
  */
-function NamespaceCell({ namespace }: { namespace: string | null }) {
+function NamespaceCell({
+  namespace,
+  clusterServer,
+}: {
+  namespace: string | null;
+  /** The API server of the environment's own cluster, when it has one. */
+  clusterServer: string | null;
+}) {
   const runtimeEnabled = useFeature("orchestratorK8sRuntime");
   const orchestratorNamespace = useFeature("orchestratorK8sNamespace");
+
+  if (clusterServer) {
+    return (
+      <div className="flex flex-col">
+        <span className="font-mono text-xs text-muted-foreground">
+          {namespace}
+        </span>
+        <span
+          className="text-xs text-muted-foreground/70"
+          title={`Deploys into the cluster at ${clusterServer}`}
+        >
+          Cluster {clusterServerLabel(clusterServer)}
+        </span>
+      </div>
+    );
+  }
 
   if (namespace) {
     return (
@@ -611,6 +664,9 @@ function EnvironmentEditorDialog({
   const [registryError, setRegistryError] = useState<string | null>(null);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  const [clusterDraft, setClusterDraft] = useState<EnvironmentClusterDraft>(
+    EMPTY_ENVIRONMENT_CLUSTER_DRAFT,
+  );
   const [showConfirm, setShowConfirm] = useState(false);
   const [activeSection, setActiveSection] =
     useState<EnvironmentDialogSection>("general");
@@ -645,6 +701,9 @@ function EnvironmentEditorDialog({
       // The org default a null-policy env falls through to. Only trustworthy once
       // the org query has resolved (orgLoaded), so the seed gates on it.
       const orgDefaultPolicy = defaultEnvironment?.networkPolicy ?? null;
+      setClusterDraft(
+        environmentClusterDraftFor(mode === "edit" ? environment : null),
+      );
       if (mode === "default") {
         setLabels([]);
         setName(defaultEnvironment?.name ?? "");
@@ -728,13 +787,32 @@ function EnvironmentEditorDialog({
     compileValidationRegex(validationRegexValue) === null
       ? "Not a valid regular expression"
       : null;
-  const canSave = trimmedName.length > 0 && validationRegexError === null;
-  const supportsFqdn = capabilities?.networkPolicy.supportsFqdn === true;
+  const clusterError =
+    mode === "create"
+      ? environmentClusterCreateError({
+          draft: clusterDraft,
+          namespace: trimmedNamespace,
+        })
+      : null;
+  const canSave =
+    trimmedName.length > 0 &&
+    validationRegexError === null &&
+    clusterError === null;
+  // The capabilities are measured in the platform's own cluster. They say
+  // nothing about another cluster, so for an environment that deploys into
+  // one, no egress control is locked or hidden on their account.
+  const clusterCapabilities = clusterDraft.ownCluster
+    ? undefined
+    : capabilities;
+  const supportsFqdn =
+    clusterDraft.ownCluster ||
+    clusterCapabilities?.networkPolicy.supportsFqdn === true;
   // Only a measured "nothing enforces" freezes the policy. A cluster we merely
   // failed to measure keeps its editor: locking it there breaks every cluster
   // that enforces without advertising a CRD.
   const enforcementUnavailable =
-    capabilities?.networkPolicy.enforcementStatus === "verified-not-enforced";
+    clusterCapabilities?.networkPolicy.enforcementStatus ===
+    "verified-not-enforced";
   const originalNetworkPolicy =
     mode === "default"
       ? (defaultEnvironment?.networkPolicy ?? null)
@@ -797,6 +875,7 @@ function EnvironmentEditorDialog({
           validationRegex: validationRegexValue,
           trustedImageRegistries: trustedImageRegistriesValue,
           labels: finalLabels,
+          ...environmentClusterCreateFields(clusterDraft),
         },
         { onSuccess: (created) => created && onOpenChange(false) },
       );
@@ -824,6 +903,10 @@ function EnvironmentEditorDialog({
             validationRegex: validationRegexValue,
             trustedImageRegistries: trustedImageRegistriesValue,
             labels: finalLabels,
+            ...environmentClusterUpdateFields({
+              draft: clusterDraft,
+              environment,
+            }),
           },
         },
         { onSuccess: (updated) => updated && onOpenChange(false) },
@@ -852,8 +935,12 @@ function EnvironmentEditorDialog({
         ? "Update the default environment."
         : "Update this environment.";
 
+  // The default environment always deploys into the platform's own cluster.
   const navItems: Array<{ id: EnvironmentDialogSection; label: string }> = [
     { id: "general", label: "General" },
+    ...(mode === "default"
+      ? []
+      : [{ id: "cluster" as const, label: "Kubernetes cluster" }]),
     { id: "egress", label: "Network Egress Policy" },
   ];
 
@@ -937,35 +1024,61 @@ function EnvironmentEditorDialog({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="environment-namespace">Namespace</Label>
-          <Select
-            value={
-              trimmedNamespace === ""
-                ? NAMESPACE_DEFAULT_VALUE
-                : trimmedNamespace
-            }
-            onValueChange={(value) => {
-              setNamespace(value === NAMESPACE_DEFAULT_VALUE ? "" : value);
-              setShowConfirm(false);
-            }}
-            disabled={isPending}
-          >
-            <SelectTrigger id="environment-namespace" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NAMESPACE_DEFAULT_VALUE}>
-                {runtimeEnabled && orchestratorNamespace
-                  ? `Use default (${orchestratorNamespace})`
-                  : "Use default"}
-              </SelectItem>
-              {namespaceOptions.map((ns) => (
-                <SelectItem key={ns} value={ns}>
-                  {ns}
+          <Label htmlFor="environment-namespace">
+            Namespace
+            {clusterDraft.ownCluster && mode === "create" && (
+              <span className="text-destructive"> *</span>
+            )}
+          </Label>
+          {clusterDraft.ownCluster ? (
+            // The platform's list of namespaces is for its own cluster.
+            <>
+              <Input
+                id="environment-namespace"
+                value={namespace}
+                onChange={(e) => {
+                  setNamespace(e.target.value);
+                  setShowConfirm(false);
+                }}
+                placeholder="e.g. archestra-workloads"
+                className="font-mono"
+                disabled={isPending}
+              />
+              <FieldDescription>
+                A namespace of this environment's own cluster that the
+                kubeconfig may deploy into.
+              </FieldDescription>
+            </>
+          ) : (
+            <Select
+              value={
+                trimmedNamespace === ""
+                  ? NAMESPACE_DEFAULT_VALUE
+                  : trimmedNamespace
+              }
+              onValueChange={(value) => {
+                setNamespace(value === NAMESPACE_DEFAULT_VALUE ? "" : value);
+                setShowConfirm(false);
+              }}
+              disabled={isPending}
+            >
+              <SelectTrigger id="environment-namespace" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NAMESPACE_DEFAULT_VALUE}>
+                  {runtimeEnabled && orchestratorNamespace
+                    ? `Use default (${orchestratorNamespace})`
+                    : "Use default"}
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                {namespaceOptions.map((ns) => (
+                  <SelectItem key={ns} value={ns}>
+                    {ns}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
         <Accordion type="single" collapsible className="border-t">
           <AccordionItem value="advanced">
@@ -1088,6 +1201,21 @@ function EnvironmentEditorDialog({
           />
         )}
       </div>
+      {mode !== "default" && (
+        <div hidden={activeSection !== "cluster"} className="space-y-4">
+          <EnvironmentClusterSection
+            mode={mode}
+            environment={environment}
+            draft={clusterDraft}
+            onDraftChange={setClusterDraft}
+            namespace={namespace}
+            disabled={isPending}
+          />
+          {clusterError && (
+            <p className="text-xs text-destructive">{clusterError}</p>
+          )}
+        </div>
+      )}
       <div hidden={activeSection !== "egress"} className="space-y-4">
         <p className="text-sm text-muted-foreground">
           Configure outbound network access for workloads in this environment.
@@ -1115,7 +1243,7 @@ function EnvironmentEditorDialog({
           }}
           supportsFqdn={supportsFqdn}
           enforcementStatus={
-            capabilities?.networkPolicy.enforcementStatus ?? null
+            clusterCapabilities?.networkPolicy.enforcementStatus ?? null
           }
           baselineLoaded={egressBaselineLoaded}
           disabled={isPending || !egressBaselineLoaded}
@@ -1125,7 +1253,7 @@ function EnvironmentEditorDialog({
   );
 }
 
-type EnvironmentDialogSection = "general" | "egress";
+type EnvironmentDialogSection = "general" | "cluster" | "egress";
 
 function formatEgressMode(mode: EgressMode) {
   return EGRESS_MODE_LABELS[mode];
@@ -1163,13 +1291,30 @@ function DeleteEnvironmentDialog({
   onClose: () => void;
 }) {
   const deleteMutation = useDeleteEnvironment();
+  // Why the last attempt was refused, when the person can act on it here.
+  const [block, setBlock] = useState<EnvironmentDeleteBlock | null>(null);
 
   if (!target) return null;
+
+  const close = () => {
+    setBlock(null);
+    onClose();
+  };
+  const runDelete = (skipClusterCleanup: boolean) =>
+    deleteMutation.mutate(
+      { id: target.id, skipClusterCleanup },
+      {
+        onSuccess: (result) => {
+          if (result.block) setBlock(result.block);
+          else close();
+        },
+      },
+    );
 
   return (
     <DeleteConfirmDialog
       open
-      onOpenChange={(open) => !open && onClose()}
+      onOpenChange={(open) => !open && close()}
       title={`Delete ${target.name}?`}
       description={
         <div className="space-y-2 text-sm">
@@ -1177,15 +1322,51 @@ function DeleteEnvironmentDialog({
             This removes the <span className="font-medium">{target.name}</span>{" "}
             environment. This cannot be undone.
           </p>
+          {target.kubeconfigServer && (
+            <p>
+              Its workloads are first removed from its cluster at{" "}
+              <span className="font-mono text-xs">
+                {clusterServerLabel(target.kubeconfigServer)}
+              </span>
+              .
+            </p>
+          )}
+          {block && (
+            <InlineNotice variant="error">
+              <AlertTriangle />
+              <InlineNoticeBody>
+                <span className="font-medium">
+                  {block.kind === "busy"
+                    ? "The cluster is still in use"
+                    : "The cluster could not be cleaned up"}
+                </span>
+                <InlineNoticeText className="break-words">
+                  {block.message}
+                </InlineNoticeText>
+                {/* Under the message: beside it, the dialog leaves the
+                    message a column a few words wide. */}
+                {block.kind === "cleanup-failed" && (
+                  <div className="pt-1">
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => runDelete(true)}
+                    >
+                      Delete and leave the workloads
+                    </Button>
+                  </div>
+                )}
+              </InlineNoticeBody>
+            </InlineNotice>
+          )}
         </div>
       }
       isPending={deleteMutation.isPending}
       pendingLabel="Deleting…"
-      onConfirm={() =>
-        deleteMutation.mutate(target.id, {
-          onSuccess: () => onClose(),
-        })
-      }
+      confirmLabel={block ? "Try again" : undefined}
+      onConfirm={() => runDelete(false)}
     />
   );
 }

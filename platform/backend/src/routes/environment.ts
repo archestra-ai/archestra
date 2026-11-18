@@ -17,12 +17,18 @@ import {
   updateEnvironmentResourceDefaults,
 } from "@/services/environments/environment";
 import {
+  assertNamespaceDeployableInEnvironmentCluster,
+  testEnvironmentCluster,
+} from "@/services/environments/environment-cluster";
+import {
   ApiError,
   CreateEnvironmentSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  EnvironmentClusterTestResultSchema,
   EnvironmentListSchema,
   EnvironmentResourceDefaultsSchema,
+  KubernetesNamespaceSchema,
   type NetworkPolicy,
   ReadEnvironmentSchema,
   SelectEnvironmentSchema,
@@ -135,7 +141,13 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body, user }, reply) => {
-      if (body.namespace != null && mcpServerRuntimeManager.isEnabled) {
+      // With a kubeconfig the namespace is one of that cluster, and the
+      // service checks it there.
+      if (
+        body.namespace != null &&
+        !body.kubeconfig &&
+        mcpServerRuntimeManager.isEnabled
+      ) {
         try {
           await mcpServerRuntimeManager.validateNamespace(body.namespace);
         } catch (err) {
@@ -172,25 +184,6 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const namespaceChanging = body.namespace !== undefined;
       const networkPolicyChanging = body.networkPolicy !== undefined;
 
-      // Validate that the new namespace actually exists in the cluster before
-      // touching the DB — avoids a state where DB says "staging" but no such
-      // namespace exists and pods can never start.
-      if (
-        namespaceChanging &&
-        body.namespace !== null &&
-        body.namespace !== undefined &&
-        mcpServerRuntimeManager.isEnabled
-      ) {
-        try {
-          await mcpServerRuntimeManager.validateNamespace(body.namespace);
-        } catch (err) {
-          throw new ApiError(
-            400,
-            err instanceof Error ? err.message : "Namespace validation failed",
-          );
-        }
-      }
-
       // Capture old namespace before the update.
       const currentEnv =
         namespaceChanging || networkPolicyChanging
@@ -199,6 +192,54 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               organizationId,
             )
           : null;
+
+      // Validate that the new namespace actually exists in the cluster before
+      // touching the DB — avoids a state where DB says "staging" but no such
+      // namespace exists and pods can never start. The cluster is the
+      // environment's own when it has one.
+      if (
+        namespaceChanging &&
+        body.namespace !== null &&
+        body.namespace !== undefined &&
+        mcpServerRuntimeManager.isEnabled
+      ) {
+        if (currentEnv?.kubeconfigSecretId) {
+          // A replacement kubeconfig sent with the namespace is checked
+          // against it by the update itself, with the new credential: the
+          // stored one may be the reason it is being replaced. A namespace
+          // that stays the same was checked when it was set.
+          if (
+            body.kubeconfig === undefined &&
+            body.namespace !== currentEnv.namespace
+          ) {
+            await assertNamespaceDeployableInEnvironmentCluster({
+              environment: currentEnv,
+              namespace: body.namespace,
+            });
+          }
+        } else {
+          try {
+            await mcpServerRuntimeManager.validateNamespace(body.namespace);
+          } catch (err) {
+            throw new ApiError(
+              400,
+              err instanceof Error
+                ? err.message
+                : "Namespace validation failed",
+            );
+          }
+        }
+      }
+      if (
+        namespaceChanging &&
+        body.namespace === null &&
+        currentEnv?.kubeconfigSecretId
+      ) {
+        throw new ApiError(
+          400,
+          "An environment with its own cluster needs a Kubernetes namespace in that cluster.",
+        );
+      }
 
       const namespaceActuallyChanging =
         namespaceChanging &&
@@ -324,15 +365,78 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.DeleteEnvironment,
         description:
-          "Delete an org-level environment. Fails with 409 if any catalog items are still assigned to it.",
+          "Delete an org-level environment. Fails with 409 if any catalog items are still assigned to it. An environment with its own cluster has its workloads removed from that cluster first; if that fails the delete fails with 409, unless `skipClusterCleanup` is set.",
         tags: ["Organization"],
         params: z.object({ id: UuidIdSchema }),
+        querystring: z.object({
+          skipClusterCleanup: z
+            .enum(["true", "false"])
+            .optional()
+            .describe(
+              "Delete the environment even when its workloads could not be removed from its own cluster; they are left there.",
+            ),
+        }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ organizationId, params }, reply) => {
-      await deleteEnvironment({ id: params.id, organizationId });
+    async ({ organizationId, params, query }, reply) => {
+      await deleteEnvironment({
+        id: params.id,
+        organizationId,
+        skipClusterCleanup: query.skipClusterCleanup === "true",
+      });
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/environments/kubeconfig/test",
+    {
+      schema: {
+        operationId: RouteId.TestEnvironmentKubeconfig,
+        description:
+          "Test a kubeconfig before creating an environment with it: reports, per feature, what its cluster lets the platform do in the given namespace. Nothing is stored or deployed.",
+        tags: ["Organization"],
+        body: z.object({
+          kubeconfig: z.string().min(1),
+          namespace: KubernetesNamespaceSchema,
+          agentRuntimePlatformBaseUrl: z.string().nullable().optional(),
+        }),
+        response: constructResponseSchema(EnvironmentClusterTestResultSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      return reply.send(
+        await testEnvironmentCluster({ organizationId, ...body }),
+      );
+    },
+  );
+
+  fastify.post(
+    "/api/environments/:id/cluster/test",
+    {
+      schema: {
+        operationId: RouteId.TestEnvironmentCluster,
+        description:
+          "Test the cluster of an environment that has its own: reports, per feature, what the cluster lets the platform do. With `kubeconfig`, tests that credential instead of the stored one. Nothing is stored or deployed.",
+        tags: ["Organization"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({
+          kubeconfig: z.string().min(1).optional(),
+          namespace: KubernetesNamespaceSchema.optional(),
+          agentRuntimePlatformBaseUrl: z.string().nullable().optional(),
+        }),
+        response: constructResponseSchema(EnvironmentClusterTestResultSchema),
+      },
+    },
+    async ({ organizationId, params, body }, reply) => {
+      return reply.send(
+        await testEnvironmentCluster({
+          organizationId,
+          environmentId: params.id,
+          ...body,
+        }),
+      );
     },
   );
 };

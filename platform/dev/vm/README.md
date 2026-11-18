@@ -68,7 +68,42 @@ Use one VM for every checkout. `dev-vm.sh worktree <name> [base]` adds
 and Rust build folder, so only the VM's first `tilt up` is slow. One Tilt at a
 time: stop the running one, then `dev-vm.sh shell -w <name>` and `tilt up`.
 
-## Editing
+## Editing on the Mac (one-way sync)
+
+Edit a normal checkout or worktree on the Mac, with your own editor and
+agent, and let the VM run a copy of it. [Mutagen](https://mutagen.io) keeps
+the copy up to date in one direction, Mac to VM, in well under a second.
+
+```sh
+brew install mutagen-io/mutagen/mutagen
+cd <checkout on the Mac>/platform                # after dev-vm.sh create and ssh-config
+scripts/dev-vm-sync.py start                     # copy to ~/sync/<folder name> in the VM
+scripts/dev-vm-sync.py run                       # a shell in the copy: pnpm install, tilt up
+scripts/dev-vm-sync.py run 'pnpm test'           # one command, in the folder you are in
+scripts/dev-vm-sync.py pull 'pnpm db:generate'   # a command that writes source files
+```
+
+- The VM gets what git tracks plus `platform/.env`. `start` writes that file
+  with the VM's settings when there is none; whatever you put in it is copied
+  into the VM. A `.env` that is a link is not copied.
+- `node_modules` and build output exist only in the VM. Nothing the VM writes
+  comes back, and a change it makes to a copied file is undone at once.
+- So a command that writes source files (`pnpm db:generate`, `pnpm add`,
+  `pnpm codegen`, `pnpm lint:fix`) goes through `pull`: it runs in the VM and
+  the files it changed are copied to the Mac, for you to review with
+  `git diff`. Files the Mac runs by itself are never copied: git hooks
+  (`.husky`), agent and editor settings (`.claude`, `.agents`, `.vscode`,
+  `AGENTS.md` and others), `.envrc`, `.github`. Don't edit on the Mac while a
+  `pull` runs.
+- Git stays on the Mac; the copy has no `.git`. Tilt's `husky-hooks` resource
+  is red there, and the repo's commit check can't run on either side: run
+  `pnpm lint` and `pnpm type-check` with `run`, then `HUSKY=0 git commit`.
+- Don't run `pnpm` on the Mac. Create worktrees with
+  `HUSKY=0 git worktree add ...`, or the repo's hook installs dependencies
+  there.
+- One Tilt at a time in the VM: stop the one in `~/archestra` first.
+
+## Editing in the VM
 
 With the lines from `dev-vm.sh ssh-config`, Remote-SSH in VS Code or Cursor
 reaches the VM as `lima-archestra-dev`, folder `~/archestra/platform`. Note
@@ -88,6 +123,10 @@ VM. Its `check.sh` checks the setup from the Mac: the VM's isolation settings,
 ssh, the `vm` remote, and that the VM holds no credentials and no git remotes.
 
 ## Not tried in this prototype
+
+- With the one-way sync: `pnpm add`, `pnpm codegen` and `pnpm lint:fix`
+  through `pull` (`pnpm db:generate` works), a VM restart or Mac sleep while
+  syncing, and a checkout that already has `node_modules` on the Mac.
 
 - A full Agent Runtime turn with a real model (the VM has no LLM key). The run
   pod starts and reaches the backend.

@@ -41,7 +41,8 @@ show them the lines from `platform/scripts/dev-vm.sh ssh-config`.
 - Run `pnpm`, `cargo`, `tilt`, `kubectl` and tests in the VM with
   `platform/scripts/dev-vm.sh shell '<command>'`: it runs in a login shell in
   `~/archestra/platform` (`-w <name>` for a worktree), with the same PATH and
-  Rust build folder as Tilt.
+  Rust build folder as Tilt. For a synced checkout use
+  `platform/scripts/dev-vm-sync.py run '<command>'` instead (see below).
 - `kubectl` in the VM talks to the kind cluster `kind-archestra`, not the
   Mac's contexts.
 - The Mac's localhost is not reachable from the VM. If the VM needs a Mac
@@ -49,11 +50,38 @@ show them the lines from `platform/scripts/dev-vm.sh ssh-config`.
 
 ## Changing code
 
-All development happens in the VM: code is edited, run and committed there.
-Don't edit the Mac checkout; it only passes commits between GitHub and the VM.
+First find out how the code you work on reaches the VM. Run
+`mutagen sync list` on the Mac: a session named like the checkout's folder
+means a synced checkout. If the user asks for the sync and there is no session
+yet, create it: `platform/scripts/dev-vm-sync.py start` in that checkout, then
+`dev-vm-sync.py run 'pnpm install'` from `platform/`. Start Tilt in the copy
+only after stopping a Tilt that runs elsewhere in the VM.
 
-Your Read, Edit and search tools can't see the VM's files. Work on them
-through `dev-vm.sh shell` (paths are relative to `platform/`):
+### Synced checkout (edit on the Mac)
+
+The user ran `platform/scripts/dev-vm-sync.py start` in a Mac checkout. The VM
+runs a one-way copy of it in `~/sync/<folder name>`.
+
+- Edit the Mac files with your normal Read, Edit and search tools. The copy
+  follows in under a second; the VM never changes the Mac's files.
+- Run `pnpm`, `cargo`, `tilt`, `kubectl` and tests with
+  `dev-vm-sync.py run '<command>'`, from the same subfolder you would run them
+  in. Never run them on the Mac: there are no `node_modules` there, on purpose.
+- A command that writes source files (`pnpm db:generate`, `pnpm add`,
+  `pnpm codegen`, `pnpm lint:fix`) must go through
+  `dev-vm-sync.py pull '<command>'`, or its changes are undone. Don't edit
+  while it runs. Then review `git diff` on the Mac: what came from the VM is
+  untrusted. `pull` never copies git hooks, agent or editor settings or
+  `.github`; if it lists one as left out, tell the user.
+- Git runs on the Mac. The commit check can't run there, so run `pnpm lint`
+  and `pnpm type-check` through `run`, then `HUSKY=0 git commit`. Create
+  worktrees with `HUSKY=0 git worktree add ...` and start a sync in each.
+
+### VM-only checkout (`~/archestra`, `~/worktrees/<name>`)
+
+Code is edited, run and committed in the VM. Your Read, Edit and search tools
+can't see those files. Work on them through `dev-vm.sh shell` (paths are
+relative to `platform/`):
 
 - Read and search: `dev-vm.sh shell 'sed -n 1,80p backend/src/x.ts'`,
   `dev-vm.sh shell 'git grep -n "name" -- backend/src'`.

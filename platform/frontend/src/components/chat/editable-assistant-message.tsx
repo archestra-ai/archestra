@@ -85,13 +85,11 @@ export const EditableAssistantMessage = memo(function EditableAssistantMessage({
     () => (citationParts ? foldCitationSources(visibleText) : null),
     [citationParts, visibleText],
   );
+  const foldedText =
+    folded && folded.entries.length > 0 ? folded.displayText : visibleText;
   const displayText = useMemo(
-    () =>
-      omitRepeatedPolicyDiffs(
-        folded && folded.entries.length > 0 ? folded.displayText : visibleText,
-        policyDiffReferences,
-      ),
-    [folded, visibleText, policyDiffReferences],
+    () => omitRepeatedPolicyDiffs(foldedText, policyDiffReferences),
+    [foldedText, policyDiffReferences],
   );
 
   const handleStartEdit = () => {
@@ -121,7 +119,8 @@ export const EditableAssistantMessage = memo(function EditableAssistantMessage({
     );
   }
 
-  if (!displayText.trim()) return null;
+  if (displayText !== foldedText && !displayText.trim() && !citationParts)
+    return null;
 
   return (
     <Message from="assistant" className="group/message">

@@ -20,7 +20,6 @@ Open an issue on [GitHub](https://github.com/archestra-ai/archestra/issues/new/c
 - **Create an issue:** report a bug or propose a change. Include reproduction steps, your Archestra version, and whether you run Docker or Helm.
 - **Add an LLM provider:** request support for a new model provider.
 - **Add a knowledge connector:** request a new data source for knowledge bases.
-- **Add an MCP server to the catalog:** request a new entry in the MCP Catalog. Maintainers add it.
 
 Provider and connector requests need a link to the service's API documentation.
 

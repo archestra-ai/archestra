@@ -63,13 +63,14 @@ crate-type = ["cdylib"]
 # names left idle instead of refused (#909), opencode background subagents
 # (#731), the archestra battery ruling `list_openappa_operations` and
 # `propose_tuner_suggestion` (#926), and stops held while a call they did not
-# answer still runs (#936); then shell annotations inspecting every pipeline
-# stage, chained command and substitution, with separate result and send labels
-# (#940).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d52bd26930a3bb948556af7055fabc45a74c864d", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d52bd26930a3bb948556af7055fabc45a74c864d" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d52bd26930a3bb948556af7055fabc45a74c864d", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d52bd26930a3bb948556af7055fabc45a74c864d" }
+# answer still runs (#936); then v0.44.0, shared policy publication (#938),
+# reused SQLite snapshots (#939), and shell annotations inspecting every
+# pipeline stage, chained command and substitution, with separate result and
+# send labels (#940).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2578af6b25f9bd54e015067f9cec0d204b683d2e", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2578af6b25f9bd54e015067f9cec0d204b683d2e" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2578af6b25f9bd54e015067f9cec0d204b683d2e", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2578af6b25f9bd54e015067f9cec0d204b683d2e" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

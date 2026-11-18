@@ -220,8 +220,8 @@ describe("trimMessagesToTokenLimit", () => {
       maxTokens: 20,
       systemPrompt: "s".repeat(200),
     });
-    expect(result[0].role).toBe("system");
-    expect(result[0].content).toContain("trimmed");
+    // Nothing of the request fits, so the trim notice is the only (user) turn.
+    expect(result.map((m) => m.role)).toEqual(["user"]);
   });
 
   test("drops (never corrupts) a structured last message over budget", () => {
@@ -343,6 +343,64 @@ describe("trimMessagesToTokenLimit", () => {
     expect(result[result.length - 1].content).toBe("z".repeat(100));
   });
 
+  test("drops an exchange whole and opens the kept history with a user turn", () => {
+    // An agent run: the task, two tool round trips, the newest results last.
+    const messages = [
+      msg("user", "task"),
+      toolCall("call_1", "x".repeat(400)),
+      toolResultMessage("call_1", "r1"),
+      toolCall("call_2", "y"),
+      toolResultMessage("call_2", "r2"),
+    ];
+    const result = trimMessagesToTokenLimit({ messages, maxTokens: 60 });
+
+    expect(result.map((m) => m.role)).toEqual(["user", "assistant", "tool"]);
+    expect(toolCallIds(result)).toEqual(["call_2", "call_2"]);
+  });
+
+  test("shrinks the newest tool results instead of orphaning their call", () => {
+    const messages = [
+      msg("user", "task"),
+      toolCall("call_1", "look"),
+      toolResultMessage("call_1", "r".repeat(4000)),
+    ];
+    const result = trimMessagesToTokenLimit({ messages, maxTokens: 300 });
+
+    expect(toolCallIds(result)).toEqual(["call_1", "call_1"]);
+    expect(
+      result.reduce((sum, m) => sum + JSON.stringify(m.content).length, 0),
+    ).toBeLessThanOrEqual(300 * 4);
+  });
+
+  test("keeps a call that had no result before trimming", () => {
+    // A call awaiting approval has no result yet; trimming must not drop it.
+    const pending = toolCall("call_pending", "approve me");
+    const messages = [msg("user", "x".repeat(400)), msg("user", "go"), pending];
+    const result = trimMessagesToTokenLimit({ messages, maxTokens: 60 });
+
+    expect(result.at(-1)).toBe(pending);
+  });
+
+  test("counts an inline image at its token estimate, not its base64 size", () => {
+    const messages = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "what is this?" },
+          {
+            type: "image",
+            image: "A".repeat(400_000),
+            mediaType: "image/png",
+          },
+        ],
+      } as ModelMessage,
+    ];
+    // ~1.6k tokens for the image fits a 10k-token budget untouched.
+    expect(trimMessagesToTokenLimit({ messages, maxTokens: 10_000 })).toBe(
+      messages,
+    );
+  });
+
   test("never returns undefined entries when only system messages exist", () => {
     const messages = [
       msg("system", "x".repeat(200)),
@@ -352,3 +410,39 @@ describe("trimMessagesToTokenLimit", () => {
     expect(result.every((m) => m !== undefined)).toBe(true);
   });
 });
+
+function toolCall(toolCallId: string, text: string): ModelMessage {
+  return {
+    role: "assistant",
+    content: [
+      { type: "text", text },
+      { type: "tool-call", toolCallId, toolName: "search", input: {} },
+    ],
+  };
+}
+
+function toolResultMessage(toolCallId: string, value: string): ModelMessage {
+  return {
+    role: "tool",
+    content: [
+      {
+        type: "tool-result",
+        toolCallId,
+        toolName: "search",
+        output: { type: "text", value },
+      },
+    ],
+  };
+}
+
+function toolCallIds(messages: ModelMessage[]): string[] {
+  return messages.flatMap((m) =>
+    Array.isArray(m.content)
+      ? m.content.flatMap((part) =>
+          part.type === "tool-call" || part.type === "tool-result"
+            ? [part.toolCallId]
+            : [],
+        )
+      : [],
+  );
+}

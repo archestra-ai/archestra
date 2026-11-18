@@ -6,10 +6,7 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import ModelModel from "@/models/model";
-import {
-  createCompactionSummarizer,
-  summarizeCompactionTranscript,
-} from "@/services/context-compaction";
+import { createCompactionSummarizer } from "@/services/context-compaction";
 import { afterEach, expect, test } from "@/test";
 import bedrockProxyRoutes from "./bedrock";
 
@@ -98,17 +95,13 @@ for (const source of ["chat:compaction", "a2a:compaction"] as const) {
       baseUrl: `http://127.0.0.1:${upstreamAddress.port}`,
       source,
     });
-    const summaryPromise =
-      source === "chat:compaction"
-        ? summarizeCompactionTranscript({
-            model,
-            prompt: "Summarize the migration plan.",
-          })
-        : createCompactionSummarizer({ model, salvageUntagged: true })({
-            transcript: "[user]: Keep the migration plan.",
-            previousSummary: null,
-          });
-    const summary = await summaryPromise;
+    const summary = await createCompactionSummarizer({
+      model,
+      salvageUntagged: source !== "chat:compaction",
+    })({
+      transcript: "[user]: Keep the migration plan.",
+      previousSummary: null,
+    });
     expect(summary).toBe("Keep the migration plan.");
     expect(requests).toHaveLength(2);
     expect(requests[0].inferenceConfig).toMatchObject({ temperature: 0 });

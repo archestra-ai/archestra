@@ -9,7 +9,7 @@ import {
   isApiKeyRequired,
   type LLMModel,
 } from "@/clients/llm-client";
-import { AgentModel } from "@/models";
+import { AgentModel, ModelModel } from "@/models";
 import { renderSystemPrompt } from "@/templating";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
 
@@ -34,6 +34,8 @@ export async function resolveCompactionLlm(params: {
   provider: SupportedProvider;
   modelName: string;
   systemPrompt: string;
+  /** The summarizer model's effective window; null when unknown. */
+  contextLength: number | null;
 } | null> {
   const compactionAgent = await AgentModel.getBuiltInAgent(
     BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
@@ -49,6 +51,10 @@ export async function resolveCompactionLlm(params: {
   if (isApiKeyRequired(llm.provider, llm.apiKey)) {
     return null;
   }
+  const modelRow = await ModelModel.findByProviderAndModelId(
+    llm.provider,
+    llm.modelName,
+  ).catch(() => null);
 
   return {
     model: createLLMModel({
@@ -68,5 +74,8 @@ export async function resolveCompactionLlm(params: {
       renderSystemPrompt(
         compactionAgent?.systemPrompt ?? CONTEXT_COMPACTION_SYSTEM_PROMPT,
       ) ?? CONTEXT_COMPACTION_SYSTEM_PROMPT,
+    contextLength: modelRow
+      ? ModelModel.resolveEffectiveContextLength(modelRow)
+      : null,
   };
 }

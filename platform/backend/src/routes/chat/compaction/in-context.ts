@@ -3,15 +3,13 @@ import {
   getModelReadableMimeTypes,
   type SupportedProvider,
 } from "@archestra/shared";
-import {
-  convertToModelMessages,
-  generateText,
-  type ModelMessage,
-  type ToolSet,
-  type UIMessage,
-} from "ai";
+import { generateText, type ModelMessage, type ToolSet } from "ai";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
-import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
+import {
+  createLLMModel,
+  isApiKeyRequired,
+  type LLMModel,
+} from "@/clients/llm-client";
 import { orderToolResultsByCall } from "@/clients/tool-result-order";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
@@ -31,12 +29,13 @@ import { estimateChatMessagesTokens } from "./message-text";
 
 /**
  * Summarize on the conversation's own model, with the chat system prompt and
- * the native (attachment-materialized) history plus a compaction instruction
- * turn, so the model sees exactly what it has been working with. Returns
- * null on any failure; the caller then falls back to the transcript path.
- *
- * Keeps its own correction retry (instead of generateTaggedText's) because the
- * retry must be gated on context headroom.
+ * tools and the native (attachment-materialized) history plus a compaction
+ * instruction turn, so the model sees exactly what it has been working with.
+ * The history is the one the turn would send, with the same cache
+ * breakpoints, so the provider reads it from the prompt cache; only when it
+ * leaves no room for the summary does the request drop the recent tail.
+ * Returns null on any failure; the caller then falls back to the transcript
+ * path.
  */
 export async function summarizeInContext(params: {
   conversationId: string;
@@ -48,22 +47,19 @@ export async function summarizeInContext(params: {
   agentLlmApiKeyId?: string | null;
   previousSummary: string | null;
   compactableMessages: ChatMessage[];
+  /** Kept verbatim after the summary; sent so the request matches the turn's cached prefix. */
+  recentMessages: ChatMessage[];
   systemPrompt?: string;
   /** The same definitions used by the conversation, without executing tools. */
   tools?: ToolSet;
   abortSignal?: AbortSignal;
 }): Promise<string | null> {
+  const logFields = {
+    conversationId: params.conversationId,
+    provider: params.provider,
+    model: params.selectedModel,
+  };
   try {
-    // Provider-executed tools cannot be made read-only by removing local
-    // callbacks. Keep the transcript fallback for those definitions.
-    if (
-      params.provider === "bedrock" &&
-      Object.values(params.tools ?? {}).some((tool) => tool.type === "provider")
-    ) {
-      throw new Error(
-        "In-context compaction cannot safely expose provider-executed tools",
-      );
-    }
     const resolvedKey = await resolveProviderApiKey({
       organizationId: params.organizationId,
       userId: params.userId,
@@ -104,6 +100,9 @@ export async function summarizeInContext(params: {
       params.provider,
       params.selectedModel,
     ).catch(() => null);
+    const contextLength = compactionModelRow
+      ? ModelModel.resolveEffectiveContextLength(compactionModelRow)
+      : null;
     // Gate the sandbox pointers on the chat agent's availability, not the
     // compaction model's tools: the summary feeds the main turn, whose agent
     // can run the sandbox, so a faithful summary must reflect that the file is
@@ -114,164 +113,67 @@ export async function summarizeInContext(params: {
       organizationId: params.organizationId,
       agentId: params.agentId ?? undefined,
     });
-    const history: ChatMessage[] = [
+    const compactable: ChatMessage[] = [
       ...(params.previousSummary
         ? [buildSummaryMessage(params.previousSummary)]
         : []),
       ...params.compactableMessages,
     ];
-    // Share the ordinary turn's attachment and tool normalization: rewriting
-    // even an unchanged part differently would invalidate the cached prefix.
-    const { modelMessages, preparedMessages } =
-      await buildModelMessagesForProvider({
-        messages: history,
-        conversationId: params.conversationId,
-        provider: params.provider,
-        ingestibleMimeTypes: getModelReadableMimeTypes(
-          compactionModelRow?.inputModalities ?? null,
-          params.provider,
-        ),
-        anthropicNativeEndpoint,
-        sandboxAvailable,
-      });
-    const orderedHistory = orderToolResultsByCall(modelMessages);
-    const cachedHistory =
-      params.provider === "bedrock"
-        ? applyPromptCacheBreakpoints({
-            provider: params.provider,
-            model: params.selectedModel,
-            messages: orderedHistory,
-          })
-        : orderedHistory;
-    // Place the instruction AFTER the reusable history and its checkpoints,
-    // rather than marking a new prefix that includes the summary instruction.
-    const instruction = params.previousSummary
-      ? `${IN_CONTEXT_PROMPT}\n\n${CONTEXT_COMPACTION_CARRY_FORWARD_RULES}`
-      : IN_CONTEXT_PROMPT;
-    const compactionMessages: ChatMessage[] = [
-      ...preparedMessages,
-      { role: "user", parts: [{ type: "text", text: instruction }] },
-    ];
-    const providerPrepared: ModelMessage[] = [
-      ...cachedHistory,
-      { role: "user", content: instruction },
-    ];
-    // Bedrock's SDK drops tool history without active definitions, including
-    // when toolChoice is "none". Keep the original wire definitions, but no
-    // execution/approval/input callbacks. A tool-call response fails closed.
-    const tools =
-      params.provider === "bedrock" && params.tools
-        ? Object.fromEntries(
-            Object.entries(params.tools).map(([name, tool]) => {
-              const definition = { ...tool };
-              delete definition.execute;
-              delete definition.needsApproval;
-              delete definition.onInputStart;
-              delete definition.onInputDelta;
-              delete definition.onInputAvailable;
-              return [name, definition];
-            }),
-          )
-        : undefined;
-    const generate = async (messages: ModelMessage[]) => {
-      const result = await generateText({
-        model,
-        ...(params.systemPrompt ? { system: params.systemPrompt } : {}),
-        messages,
-        ...(tools ? { tools } : {}),
-        temperature: 0,
-        maxOutputTokens: CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
-        abortSignal: params.abortSignal,
-      });
-      if (
-        params.provider === "bedrock" &&
-        (result.toolCalls?.length ||
-          result.warnings?.some(
-            (warning) =>
-              warning.type === "unsupported" &&
-              warning.feature === "toolContent",
-          ))
-      ) {
-        throw new Error(
-          "In-context compaction did not preserve read-only tool history",
-        );
-      }
-      return result;
-    };
-
-    const first = await generate(providerPrepared);
-    let summary = extractTaggedText(first.text, CONTEXT_COMPACTION_SUMMARY_TAG);
-
-    if (!summary) {
-      const retryTurns: ChatMessage[] = [
-        { role: "assistant", parts: [{ type: "text", text: first.text }] },
-        { role: "user", parts: [{ type: "text", text: CORRECTION_PROMPT }] },
-      ];
-      // the retry resends the prompt plus the reply and a correction turn;
-      // when that no longer fits, the transcript fallback summarizes instead
-      const contextLength = compactionModelRow
-        ? ModelModel.resolveEffectiveContextLength(compactionModelRow)
-        : null;
-      const canRetry =
-        contextLength === null ||
-        estimateChatMessagesTokens({
-          provider: params.provider,
-          model: params.selectedModel,
-          systemPrompt: params.systemPrompt,
-          tools,
-          messages: [...compactionMessages, ...retryTurns],
-        }) +
-          CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS <=
-          contextLength;
-      const logFields = {
-        conversationId: params.conversationId,
+    const turnHistory = [...compactable, ...params.recentMessages];
+    const history =
+      contextLength === null ||
+      estimateChatMessagesTokens({
         provider: params.provider,
         model: params.selectedModel,
-      };
-      if (!canRetry) {
-        logger.info(
-          logFields,
-          "[ContextCompaction] in-context compaction missed summary tag; skipping retry due to insufficient context headroom",
-        );
-        return null;
-      }
-      logger.info(
-        logFields,
-        "[ContextCompaction] in-context compaction missed summary tag; retrying with correction prompt",
-      );
-      const corrected = await generate([
-        ...providerPrepared,
-        ...(await convertToModelMessages(
-          retryTurns as Omit<UIMessage, "id">[],
-        )),
-      ]);
-      summary = extractTaggedText(
-        corrected.text,
-        CONTEXT_COMPACTION_SUMMARY_TAG,
-      );
-    }
-
+        systemPrompt: params.systemPrompt,
+        tools: params.tools,
+        messages: turnHistory,
+      }) +
+        INSTRUCTION_TOKENS +
+        CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS <=
+        contextLength
+        ? turnHistory
+        : compactable;
+    // Share the ordinary turn's attachment and tool normalization: rewriting
+    // even an unchanged part differently would invalidate the cached prefix.
+    const { modelMessages } = await buildModelMessagesForProvider({
+      messages: history,
+      conversationId: params.conversationId,
+      provider: params.provider,
+      ingestibleMimeTypes: getModelReadableMimeTypes(
+        compactionModelRow?.inputModalities ?? null,
+        params.provider,
+      ),
+      anthropicNativeEndpoint,
+      sandboxAvailable,
+    });
+    const summary = await generateInContextSummary({
+      model,
+      systemPrompt: params.systemPrompt,
+      messages: applyPromptCacheBreakpoints({
+        provider: params.provider,
+        model: params.selectedModel,
+        anthropicNativeEndpoint,
+        messages: orderToolResultsByCall(modelMessages),
+      }),
+      tools: params.tools,
+      hasPreviousSummary: params.previousSummary !== null,
+      contextLength,
+      abortSignal: params.abortSignal,
+      logFields,
+    });
     if (!summary) {
       throw new Error("In-context compaction response missing summary tag");
     }
     logger.info(
-      {
-        conversationId: params.conversationId,
-        provider: params.provider,
-        model: params.selectedModel,
-      },
+      logFields,
       "[ContextCompaction] in-context compaction succeeded",
     );
     return summary;
   } catch (error) {
     if (!params.abortSignal?.aborted) {
       logger.warn(
-        {
-          error,
-          conversationId: params.conversationId,
-          provider: params.provider,
-          model: params.selectedModel,
-        },
+        { error, ...logFields },
         "[ContextCompaction] in-context compaction failed; falling back to rendered transcript",
       );
     }
@@ -279,9 +181,117 @@ export async function summarizeInContext(params: {
   }
 }
 
+/**
+ * Ask the model to summarize `messages` (provider-prepared, cache breakpoints
+ * already placed) with a compaction instruction appended after them, so the
+ * history stays a cached prefix. The tools are sent read-only: their
+ * definitions keep the tool history valid and the request identical to the
+ * conversation's, and a tool call in the reply fails closed. Returns null when
+ * no `<summary>` came back; keeps its own correction retry (instead of
+ * generateTaggedText's) because the retry must be gated on context headroom.
+ */
+export async function generateInContextSummary(params: {
+  model: LLMModel;
+  systemPrompt?: string;
+  messages: ModelMessage[];
+  tools?: ToolSet;
+  hasPreviousSummary: boolean;
+  contextLength: number | null;
+  abortSignal?: AbortSignal;
+  logFields?: Record<string, unknown>;
+}): Promise<string | null> {
+  // Provider-executed tools cannot be made read-only by removing local
+  // callbacks.
+  if (Object.values(params.tools ?? {}).some((t) => t.type === "provider")) {
+    throw new Error(
+      "In-context compaction cannot safely expose provider-executed tools",
+    );
+  }
+  const tools = params.tools && readOnlyTools(params.tools);
+  const instruction = params.hasPreviousSummary
+    ? `${IN_CONTEXT_PROMPT}\n\n${CONTEXT_COMPACTION_CARRY_FORWARD_RULES}`
+    : IN_CONTEXT_PROMPT;
+  const prompt: ModelMessage[] = [
+    ...params.messages,
+    { role: "user", content: instruction },
+  ];
+  const generate = async (messages: ModelMessage[]) => {
+    const result = await generateText({
+      model: params.model,
+      ...(params.systemPrompt ? { system: params.systemPrompt } : {}),
+      messages,
+      ...(tools ? { tools } : {}),
+      temperature: 0,
+      maxOutputTokens: CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
+      abortSignal: params.abortSignal,
+    });
+    // Bedrock's SDK drops tool history it cannot send (a toolContent warning).
+    if (
+      result.toolCalls?.length ||
+      result.warnings?.some(
+        (warning) =>
+          warning.type === "unsupported" && warning.feature === "toolContent",
+      )
+    ) {
+      throw new Error(
+        "In-context compaction did not preserve read-only tool history",
+      );
+    }
+    return result;
+  };
+
+  const first = await generate(prompt);
+  const summary = extractTaggedText(first.text, CONTEXT_COMPACTION_SUMMARY_TAG);
+  if (summary) return summary;
+
+  // The retry resends the prompt plus the reply and a correction turn; when
+  // that no longer fits, the caller's fallback summarizes instead.
+  const { inputTokens, outputTokens } = first.usage;
+  const canRetry =
+    params.contextLength === null ||
+    (inputTokens !== undefined &&
+      inputTokens +
+        (outputTokens ?? CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS) +
+        INSTRUCTION_TOKENS +
+        CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS <=
+        params.contextLength);
+  if (!canRetry) {
+    logger.info(
+      params.logFields ?? {},
+      "[ContextCompaction] in-context compaction missed summary tag; skipping retry due to insufficient context headroom",
+    );
+    return null;
+  }
+  logger.info(
+    params.logFields ?? {},
+    "[ContextCompaction] in-context compaction missed summary tag; retrying with correction prompt",
+  );
+  const corrected = await generate([
+    ...prompt,
+    { role: "assistant", content: first.text },
+    { role: "user", content: CORRECTION_PROMPT },
+  ]);
+  return extractTaggedText(corrected.text, CONTEXT_COMPACTION_SUMMARY_TAG);
+}
+
 // =============================================================================
 // Internal Helpers
 // =============================================================================
+
+/** The definitions as sent, without execution, approval or input callbacks. */
+function readOnlyTools(tools: ToolSet): ToolSet {
+  return Object.fromEntries(
+    Object.entries(tools).map(([name, tool]) => {
+      const definition = { ...tool };
+      delete definition.execute;
+      delete definition.needsApproval;
+      delete definition.onInputStart;
+      delete definition.onInputDelta;
+      delete definition.onInputAvailable;
+      return [name, definition];
+    }),
+  );
+}
 
 const CORRECTION_PROMPT =
   "Your previous response did not follow the required format. Reply with EXACTLY ONE <summary>...</summary> block and no text outside the tags.";
@@ -296,3 +306,6 @@ Use these canonical compaction instructions:
 ${CONTEXT_COMPACTION_SYSTEM_PROMPT}
 
 Output contract: return EXACTLY ONE tagged block starting with <summary> and ending with </summary>. Put the structured summary inside the tags. Do not include text outside the tags.`;
+
+// The instruction turn (or the correction turn) and its framing.
+const INSTRUCTION_TOKENS = 2_000;

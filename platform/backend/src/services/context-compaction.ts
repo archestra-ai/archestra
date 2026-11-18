@@ -22,6 +22,8 @@ import {
 } from "@archestra/shared";
 import { generateText } from "ai";
 import type { LLMModel } from "@/clients/llm-client";
+import logger from "@/logging";
+import { TOKEN_ESTIMATE } from "@/routes/chat/normalization/estimate-message-tokens";
 import {
   extractTaggedText,
   generateTaggedText,
@@ -40,9 +42,12 @@ export type TranscriptEntry =
   | { kind: "tool_result"; toolName: string; output: unknown }
   | { kind: "attachment"; role: string; attachment: "file" | "image" };
 
+/** Summarizes one transcript chunk, carrying `previousSummary` forward. */
 export type CompactionSummarizer = (params: {
   transcript: string;
   previousSummary: string | null;
+  /** Flow-specific block placed before the transcript (e.g. chat's recent-user reference). */
+  preamble?: string;
 }) => Promise<string | null>;
 
 /**
@@ -63,64 +68,6 @@ export const CONTEXT_COMPACTION_CARRY_FORWARD_RULES = `An existing summary is pr
 - keep the user's original request even when later turns narrow or extend it
 - when the transcript contradicts the summary, the transcript wins`;
 
-/** Compose the summarizer's user prompt from a serialized transcript. */
-export function composeCompactionPrompt(params: {
-  previousSummary: string | null;
-  transcript: string;
-  /** Optional flow-specific block placed before the transcript (e.g. chat's recent-user reference). */
-  preamble?: string;
-}): string {
-  const previous = params.previousSummary
-    ? `${CONTEXT_COMPACTION_CARRY_FORWARD_RULES}\n\nExisting summary to update:\n${params.previousSummary}\n\n`
-    : "";
-  return `${previous}${params.preamble ?? ""}Transcript to compact:\n${params.transcript}`;
-}
-
-/**
- * Ask the model for a `<summary>`-tagged compaction of the composed prompt.
- * Returns null when no usable summary was produced.
- *
- * Default mode is clean-or-nothing with one correction retry (via
- * generateTaggedText). `salvageUntagged` is for last-resort flows that would
- * rather take untagged output verbatim than fail: a single call whose raw
- * text is used when the tag is missing.
- */
-export async function summarizeCompactionTranscript(params: {
-  model: LLMModel;
-  prompt: string;
-  /** Defaults to the shared compaction system prompt. */
-  systemPrompt?: string;
-  abortSignal?: AbortSignal;
-  salvageUntagged?: boolean;
-}): Promise<string | null> {
-  const system = params.systemPrompt ?? CONTEXT_COMPACTION_SYSTEM_PROMPT;
-
-  if (params.salvageUntagged) {
-    const result = await generateText({
-      model: params.model,
-      system,
-      prompt: params.prompt,
-      temperature: 0,
-      maxOutputTokens: CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
-      abortSignal: params.abortSignal,
-    });
-    const summary =
-      extractTaggedText(result.text, CONTEXT_COMPACTION_SUMMARY_TAG) ??
-      result.text.trim();
-    return summary.length > 0 ? summary : null;
-  }
-
-  return generateTaggedText({
-    model: params.model,
-    tag: CONTEXT_COMPACTION_SUMMARY_TAG,
-    system,
-    prompt: params.prompt,
-    maxOutputTokens: CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
-    temperature: 0,
-    abortSignal: params.abortSignal,
-  });
-}
-
 /** Bind a model to the transcript summarizer contract shared by the flows. */
 export function createCompactionSummarizer(params: {
   model: LLMModel;
@@ -128,10 +75,14 @@ export function createCompactionSummarizer(params: {
   abortSignal?: AbortSignal;
   salvageUntagged?: boolean;
 }): CompactionSummarizer {
-  return ({ transcript, previousSummary }) =>
+  return ({ transcript, previousSummary, preamble }) =>
     summarizeCompactionTranscript({
       model: params.model,
-      prompt: composeCompactionPrompt({ previousSummary, transcript }),
+      prompt: composeCompactionPrompt({
+        previousSummary,
+        transcript,
+        preamble,
+      }),
       systemPrompt: params.systemPrompt,
       abortSignal: params.abortSignal,
       salvageUntagged: params.salvageUntagged,
@@ -139,49 +90,45 @@ export function createCompactionSummarizer(params: {
 }
 
 /**
- * Render transcript entries as the plain-text transcript handed to the
- * summarizer. Tool payloads are capped per entry, keeping their start and end.
- * Over the ceiling, whole entries are dropped from the middle: the first user
- * entry (usually the task) and the newest entries that fit are kept.
+ * Summarize transcript entries in order, a chunk at a time, each call carrying
+ * the summary so far forward. Nothing is dropped: a transcript too large for
+ * the chunk limit, or any chunk without a summary, yields null, so the caller
+ * keeps its previous coverage instead of advancing past unsummarized entries.
  */
-export function renderCompactionTranscript(entries: TranscriptEntry[]): string {
-  const lines = entries.map(renderEntry);
-  const full = lines.join("\n");
-  if (full.length <= CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS) {
-    return full;
-  }
-
-  const headIndex = entries.findIndex(
-    (entry) => entry.kind === "text" && entry.role === "user",
+export async function summarizeTranscriptEntries(params: {
+  summarize: CompactionSummarizer;
+  entries: TranscriptEntry[];
+  previousSummary: string | null;
+  /** Window of the model that writes the summary; null when unknown. */
+  contextLength: number | null;
+  /** Sent with the last chunk only. */
+  preamble?: string;
+  abortSignal?: AbortSignal;
+}): Promise<string | null> {
+  const chunks = renderTranscriptChunks(
+    params.entries,
+    transcriptChunkChars(params.contextLength),
   );
-  const head =
-    headIndex >= 0
-      ? truncateMiddle(
-          lines[headIndex],
-          CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS / 4,
-        )
-      : null;
-  let budget =
-    CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS -
-    OMITTED_MARKER_RESERVE_CHARS -
-    (head?.length ?? 0);
-  const tail: string[] = [];
-  for (let index = lines.length - 1; index > headIndex; index--) {
-    const line = lines[index];
-    if (line.length + 1 > budget) {
-      if (tail.length === 0) tail.push(truncateMiddle(line, budget - 1));
-      break;
-    }
-    tail.unshift(line);
-    budget -= line.length + 1;
+  if (chunks.length === 0 || chunks.length > TRANSCRIPT_MAX_CHUNKS) {
+    logger.warn(
+      { chunks: chunks.length, contextLength: params.contextLength },
+      "[ContextCompaction] transcript does not fit the summarizer; not compacting",
+    );
+    return null;
   }
-
-  const omitted = lines.length - tail.length - (head === null ? 0 : 1);
-  return [
-    ...(head === null ? [] : [head]),
-    `[… ${omitted} earlier transcript entries omitted …]`,
-    ...tail,
-  ].join("\n");
+  let summary = params.previousSummary;
+  for (const [index, transcript] of chunks.entries()) {
+    params.abortSignal?.throwIfAborted();
+    const next = await params.summarize({
+      transcript,
+      previousSummary: summary,
+      preamble: index === chunks.length - 1 ? params.preamble : undefined,
+    });
+    if (!next) return null;
+    summary = next;
+  }
+  params.abortSignal?.throwIfAborted();
+  return summary;
 }
 
 /**
@@ -264,6 +211,115 @@ export function chooseRecentSuffixStart(params: {
 // Internal Helpers
 // =============================================================================
 
+/**
+ * Ask the model for a `<summary>`-tagged compaction of the composed prompt.
+ * Returns null when no usable summary was produced.
+ *
+ * Default mode is clean-or-nothing with one correction retry (via
+ * generateTaggedText). `salvageUntagged` is for last-resort flows that would
+ * rather take untagged output verbatim than fail: a single call whose raw
+ * text is used when the tag is missing.
+ */
+async function summarizeCompactionTranscript(params: {
+  model: LLMModel;
+  prompt: string;
+  /** Defaults to the shared compaction system prompt. */
+  systemPrompt?: string;
+  abortSignal?: AbortSignal;
+  salvageUntagged?: boolean;
+}): Promise<string | null> {
+  const system = params.systemPrompt ?? CONTEXT_COMPACTION_SYSTEM_PROMPT;
+
+  if (params.salvageUntagged) {
+    const result = await generateText({
+      model: params.model,
+      system,
+      prompt: params.prompt,
+      temperature: 0,
+      maxOutputTokens: CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
+      abortSignal: params.abortSignal,
+    });
+    const summary =
+      extractTaggedText(result.text, CONTEXT_COMPACTION_SUMMARY_TAG) ??
+      result.text.trim();
+    return summary.length > 0 ? summary : null;
+  }
+
+  return generateTaggedText({
+    model: params.model,
+    tag: CONTEXT_COMPACTION_SUMMARY_TAG,
+    system,
+    prompt: params.prompt,
+    maxOutputTokens: CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
+    temperature: 0,
+    abortSignal: params.abortSignal,
+  });
+}
+
+/** Compose the summarizer's user prompt from a serialized transcript. */
+function composeCompactionPrompt(params: {
+  previousSummary: string | null;
+  transcript: string;
+  /** Optional flow-specific block placed before the transcript (e.g. chat's recent-user reference). */
+  preamble?: string;
+}): string {
+  const previous = params.previousSummary
+    ? `${CONTEXT_COMPACTION_CARRY_FORWARD_RULES}\n\nExisting summary to update:\n${params.previousSummary}\n\n`
+    : "";
+  return `${previous}${params.preamble ?? ""}Transcript to compact:\n${params.transcript}`;
+}
+
+/**
+ * Render entries one per line and pack the lines in order into chunks of at
+ * most `maxChars`. A line longer than a chunk is split into continuation
+ * pieces rather than truncated. No chunks when `maxChars` leaves no room.
+ */
+function renderTranscriptChunks(
+  entries: TranscriptEntry[],
+  maxChars: number,
+): string[] {
+  const pieces = entries.map(renderEntry).flatMap((line) => {
+    if (line.length <= maxChars) return [line];
+    const room = maxChars - CONTINUATION_PREFIX.length;
+    return Array.from({ length: Math.ceil(line.length / room) }, (_, index) =>
+      index === 0
+        ? line.slice(0, room)
+        : `${CONTINUATION_PREFIX}${line.slice(index * room, (index + 1) * room)}`,
+    );
+  });
+  const chunks: string[] = [];
+  let current: string[] = [];
+  let currentChars = 0;
+  for (const piece of pieces) {
+    if (current.length > 0 && currentChars + 1 + piece.length > maxChars) {
+      chunks.push(current.join("\n"));
+      current = [];
+      currentChars = 0;
+    }
+    currentChars += (current.length > 0 ? 1 : 0) + piece.length;
+    current.push(piece);
+  }
+  if (current.length > 0) chunks.push(current.join("\n"));
+  return chunks;
+}
+
+/**
+ * Transcript chars per summarizer call: what the summarizer's window leaves
+ * after its system prompt and preamble, the carried summary, the reply and
+ * one correction retry (each up to the output cap), within fixed bounds.
+ */
+function transcriptChunkChars(contextLength: number | null): number {
+  if (contextLength === null) return TRANSCRIPT_MAX_CHUNK_CHARS;
+  const tokens =
+    contextLength -
+    3 * CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS -
+    TRANSCRIPT_PROMPT_OVERHEAD_TOKENS;
+  return Math.min(
+    TRANSCRIPT_MAX_CHUNK_CHARS,
+    Math.max(tokens * TOKEN_ESTIMATE.charsPerToken, TRANSCRIPT_MIN_CHUNK_CHARS),
+  );
+}
+
 function renderEntry(entry: TranscriptEntry): string {
   switch (entry.kind) {
     case "text":
@@ -333,10 +389,16 @@ function safeJson(value: unknown): string {
   }
 }
 
-// Ceiling for the serialized transcript handed to the summarizer.
-const CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS = 120_000;
+// Ceiling for the transcript handed to one summarizer call.
+const TRANSCRIPT_MAX_CHUNK_CHARS = 120_000;
+// Floor for windows too small to budget; such a call may still overflow.
+const TRANSCRIPT_MIN_CHUNK_CHARS = 16_000;
+// Sequential calls per compaction; a larger transcript is not compacted.
+const TRANSCRIPT_MAX_CHUNKS = 8;
+// The summarizer's system prompt and the flow's preamble.
+const TRANSCRIPT_PROMPT_OVERHEAD_TOKENS = 4_000;
+const CONTINUATION_PREFIX = "[… continued] ";
 const TRANSCRIPT_TOOL_INPUT_MAX_CHARS = 2_000;
-const OMITTED_MARKER_RESERVE_CHARS = 64;
 const TRANSCRIPT_TOOL_RESULT_MAX_CHARS = 8_000;
 
 const PROXY_WRITTEN_MEMBERS: ReadonlyArray<

@@ -30,7 +30,7 @@ import {
   chooseRecentSuffixStart,
   compactionSummaryText,
   createCompactionSummarizer,
-  renderCompactionTranscript,
+  summarizeTranscriptEntries,
   type TranscriptEntry,
   uiMessageTranscriptEntries,
 } from "@/services/context-compaction";
@@ -125,24 +125,27 @@ export async function applyA2AContextCompaction(params: {
       return { messages: applied.view, created: null };
     }
 
-    const summarize =
-      params.summarizeTranscript ??
-      (await buildSummarizer({
-        agent,
-        userId,
-        sessionId,
-        abortSignal,
-        oauthExecution: params.oauthExecution,
-      }));
-    if (!summarize) {
+    const summarizer = params.summarizeTranscript
+      ? {
+          summarize: params.summarizeTranscript,
+          contextLength: effectiveContextLength,
+        }
+      : await buildSummarizer({
+          agent,
+          userId,
+          sessionId,
+          abortSignal,
+          oauthExecution: params.oauthExecution,
+        });
+    if (!summarizer) {
       return { messages: applied.view, created: null };
     }
 
-    const summary = await summarize({
-      transcript: renderCompactionTranscript(
-        split.compactable.flatMap(transcriptEntries),
-      ),
+    const summary = await summarizeTranscriptEntries({
+      ...summarizer,
+      entries: split.compactable.flatMap(transcriptEntries),
       previousSummary: applied.summary,
+      abortSignal,
     });
     if (!summary) {
       logger.warn(
@@ -320,7 +323,10 @@ async function buildSummarizer(params: {
   sessionId?: string;
   abortSignal?: AbortSignal;
   oauthExecution?: A2AOAuthExecution;
-}): Promise<CompactionSummarizer | null> {
+}): Promise<{
+  summarize: CompactionSummarizer;
+  contextLength: number | null;
+} | null> {
   const compactionLlm = await resolveCompactionLlm({
     organizationId: params.agent.organizationId,
     userId: params.userId ?? undefined,
@@ -344,15 +350,18 @@ async function buildSummarizer(params: {
 
   // Last-resort flow (no interactive retry affordance): salvage untagged
   // output rather than fail the compaction, like chat's fallback path.
-  return createCompactionSummarizer({
-    model: authorizeA2AModel({
-      model: compactionLlm.model,
-      agentId: params.agent.id,
-      organizationId: params.agent.organizationId,
-      execution: params.oauthExecution,
+  return {
+    summarize: createCompactionSummarizer({
+      model: authorizeA2AModel({
+        model: compactionLlm.model,
+        agentId: params.agent.id,
+        organizationId: params.agent.organizationId,
+        execution: params.oauthExecution,
+      }),
+      systemPrompt: compactionLlm.systemPrompt,
+      abortSignal: params.abortSignal,
+      salvageUntagged: true,
     }),
-    systemPrompt: compactionLlm.systemPrompt,
-    abortSignal: params.abortSignal,
-    salvageUntagged: true,
-  });
+    contextLength: compactionLlm.contextLength,
+  };
 }

@@ -370,6 +370,135 @@ describe("createStepContextGuard — prompt cache breakpoint", () => {
   });
 });
 
+describe("createStepContextGuard — in-context summaries", () => {
+  type InContextParams = {
+    messages: ModelMessage[];
+    hasPreviousSummary: boolean;
+  };
+
+  test("sends the whole step view, the cached prefix, when it leaves room", async () => {
+    const summarizeMessages = vi.fn(
+      async (_p: InContextParams): Promise<string | null> => "in context",
+    );
+    // budget 960 chars, window 1200: the 1200-char view is over the budget
+    // but still fits the window with the instruction appended.
+    const messages: ModelMessage[] = [
+      { role: "user", content: "a".repeat(400) },
+      { role: "assistant", content: "b".repeat(400) },
+      { role: "user", content: "c".repeat(400) },
+    ];
+    const guard = createStepContextGuard({
+      contextLength: 300,
+      summarizeMessages,
+    });
+    const { messages: result } = await guard({ messages });
+
+    expect(summarizeMessages).toHaveBeenCalledWith({
+      messages,
+      hasPreviousSummary: false,
+    });
+    expect(result.map((m) => m.content)).toEqual([
+      expect.stringContaining("in context"),
+      "c".repeat(400),
+    ]);
+  });
+
+  test("sends only the summarized prefix when the whole view would not fit", async () => {
+    const summarizeMessages = vi.fn(
+      async (_p: InContextParams): Promise<string | null> => "in context",
+    );
+    const messages = overBudgetMessages();
+    const guard = createStepContextGuard({
+      contextLength: 200,
+      summarizeMessages,
+    });
+    await guard({ messages });
+
+    expect(summarizeMessages.mock.calls[0][0].messages).toEqual(
+      messages.slice(0, 2),
+    );
+  });
+
+  test("trims when the in-context summary fails", async () => {
+    const summarizeMessages = vi.fn(
+      async (_p: InContextParams): Promise<string | null> => null,
+    );
+    const guard = createStepContextGuard({
+      contextLength: 200,
+      summarizeMessages,
+    });
+    const { messages: result } = await guard({
+      messages: overBudgetMessages(),
+    });
+
+    expect(result.some((m) => m.content === "a".repeat(300))).toBe(false);
+    expect(result.at(-1)?.content).toBe("c".repeat(300));
+  });
+
+  test("a cancelled run ends instead of trimming", async () => {
+    const abort = new AbortController();
+    const guard = createStepContextGuard({
+      contextLength: 200,
+      abortSignal: abort.signal,
+      summarizeMessages: async () => {
+        abort.abort();
+        throw new Error("aborted");
+      },
+    });
+
+    await expect(guard({ messages: overBudgetMessages() })).rejects.toThrow(
+      "aborted",
+    );
+  });
+});
+
+describe("createStepContextGuard — budget", () => {
+  test("counts an inline image at its token estimate, not its base64 size", async () => {
+    const messages: ModelMessage[] = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "what is in this picture?" },
+          { type: "image", image: "A".repeat(400_000), mediaType: "image/png" },
+        ],
+      },
+      assistantToolCall(),
+      toolResultMessage("a cat"),
+    ];
+    const summarize = vi.fn(
+      async (_p: SummarizeParams): Promise<string | null> => "summary",
+    );
+    const guard = createStepContextGuard({
+      contextLength: 10_000,
+      summarizeTranscript: summarize,
+    });
+
+    expect((await guard({ messages })).messages).toBe(messages);
+    expect(summarize).not.toHaveBeenCalled();
+  });
+
+  test("reserves room for tool definitions and the reply", async () => {
+    const summarize = vi.fn(
+      async (_p: SummarizeParams): Promise<string | null> => "summary",
+    );
+    const messages = overBudgetMessages();
+    // 900 chars fit 800 tokens, but not the 100 left after the reservation.
+    const unreserved = createStepContextGuard({
+      contextLength: 1_000,
+      summarizeTranscript: summarize,
+    });
+    expect((await unreserved({ messages })).messages).toBe(messages);
+
+    const reserved = createStepContextGuard({
+      contextLength: 1_000,
+      reservedTokens: 700,
+      summarizeTranscript: summarize,
+    });
+    await reserved({ messages });
+    expect(summarize).toHaveBeenCalledOnce();
+  });
+});
+
 describe("createStepContextGuard — parallel tool results", () => {
   test("results finished out of order reach the model in call order, the breakpoint on the last", async () => {
     const guard = createStepContextGuard({

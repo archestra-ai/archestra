@@ -21,7 +21,11 @@ import type { ModelMessage } from "ai";
 import type { LLMModel } from "@/clients/llm-client";
 import { orderToolResultsByCall } from "@/clients/tool-result-order";
 import logger from "@/logging";
-import { trimMessagesToTokenLimit } from "@/routes/chat/context-trimming";
+import {
+  capToolResultOutputs,
+  estimateModelMessageChars,
+  trimMessagesToTokenLimit,
+} from "@/routes/chat/context-trimming";
 import { applyStepPromptCacheBreakpoint } from "@/routes/chat/normalization/apply-prompt-cache";
 import { TOKEN_ESTIMATE } from "@/routes/chat/normalization/estimate-message-tokens";
 import {
@@ -30,29 +34,38 @@ import {
   chooseRecentSuffixStart,
   compactionSummaryText,
   createCompactionSummarizer,
-  renderCompactionTranscript,
+  summarizeTranscriptEntries,
   type TranscriptEntry,
 } from "@/services/context-compaction";
-import {
-  MAX_TOOL_RESULT_CONTEXT_BYTES,
-  sliceUtf8,
-  utf8Length,
-} from "@/utils/tool-result-cap";
+import { MAX_TOOL_RESULT_CONTEXT_BYTES } from "@/utils/tool-result-cap";
+
+/**
+ * Summarizes a step's own messages in context: the same model, system prompt
+ * and tools as the step, with the messages sent as they are so the provider
+ * reads them from the prompt cache and the proxy governs their tool results.
+ */
+export type StepMessagesSummarizer = (params: {
+  messages: ModelMessage[];
+  hasPreviousSummary: boolean;
+}) => Promise<string | null>;
 
 /**
  * Create a `prepareStep` guard bound to one agent run. State (the memoized
  * summary and its boundary) lives for the run only.
  *
- * `summarizeTranscript` is the LLM boundary — injectable for tests. When
- * neither it nor `model` is provided, summarization is disabled and the guard
- * degrades to cap + trim.
+ * Summaries come from `summarizeMessages` when given, else from a transcript
+ * summarizer (`summarizeTranscript`, or one bound to `model`). With none of
+ * them, summarization is disabled and the guard degrades to cap + trim.
  */
 export function createStepContextGuard(params: {
   model?: LLMModel;
   contextLength: number | null;
   systemPrompt?: string;
+  /** Tokens the request spends outside its messages: tool definitions, the reply. */
+  reservedTokens?: number;
   abortSignal?: AbortSignal;
   logContext?: Record<string, unknown>;
+  summarizeMessages?: StepMessagesSummarizer;
   summarizeTranscript?: CompactionSummarizer;
   /** The provider and model whose cache breakpoint moves with each step. */
   promptCache?: {
@@ -66,7 +79,7 @@ export function createStepContextGuard(params: {
   const { model, contextLength, systemPrompt, abortSignal, promptCache } =
     params;
   const logContext = params.logContext ?? {};
-  const summarize =
+  const summarizeTranscript =
     params.summarizeTranscript ??
     (model ? createCompactionSummarizer({ model, abortSignal }) : null);
 
@@ -74,7 +87,8 @@ export function createStepContextGuard(params: {
   // responses), so messages[0..throughIndex) stays covered by `summary` on
   // every later step.
   let state: { summary: string; throughIndex: number } | null = null;
-  let summarizationDisabled = summarize === null;
+  let summarizationDisabled =
+    !params.summarizeMessages && summarizeTranscript === null;
 
   // For a view that the next step extends: mark its newest message, so the
   // next step reads this whole view from the cache.
@@ -84,12 +98,50 @@ export function createStepContextGuard(params: {
       : messages,
   });
 
+  // Summarize capped[minIndex..boundary) on top of the current summary.
+  const summarize = async (input: {
+    capped: ModelMessage[];
+    view: ModelMessage[];
+    minIndex: number;
+    boundary: number;
+    windowChars: number;
+  }): Promise<string | null> => {
+    if (params.summarizeMessages) {
+      // The whole view extends the previous step's request, so it is read
+      // from the cache; the prefix through the boundary is the fallback when
+      // the view leaves no room for the instruction and the summary.
+      const prefix = applySummary(input.capped.slice(0, input.boundary), state);
+      const messages =
+        charSize(input.view) <= input.windowChars ? input.view : prefix;
+      return params.summarizeMessages({
+        messages: withStepBreakpoint(messages).messages,
+        hasPreviousSummary: state !== null,
+      });
+    }
+    if (!summarizeTranscript) return null;
+    return summarizeTranscriptEntries({
+      summarize: summarizeTranscript,
+      entries: input.capped
+        .slice(input.minIndex, input.boundary)
+        .flatMap(transcriptEntries),
+      previousSummary: state?.summary ?? null,
+      contextLength,
+      abortSignal,
+    });
+  };
+
   return async ({ messages }) => {
-    const capped = capOversizedToolResults(orderToolResultsByCall(messages));
+    const capped = capToolResultOutputs(
+      orderToolResultsByCall(messages),
+      MAX_TOOL_RESULT_CONTEXT_BYTES,
+    );
     if (!contextLength) return withStepBreakpoint(capped);
 
-    const budgetTokens = Math.floor(
-      contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD,
+    const reservedTokens = params.reservedTokens ?? 0;
+    const budgetTokens = Math.max(
+      Math.floor(contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD) -
+        reservedTokens,
+      0,
     );
     // Rough char accounting on both sides: message sizes are JSON content
     // length while the system prompt is raw chars. The mismatch slightly
@@ -103,7 +155,7 @@ export function createStepContextGuard(params: {
     let view = applySummary(capped, state);
     if (charSize(view) <= budgetChars) return withStepBreakpoint(view);
 
-    if (!summarizationDisabled && summarize) {
+    if (!summarizationDisabled) {
       const minIndex = state?.throughIndex ?? 0;
       const boundary = chooseCompactionBoundary({
         messages: capped,
@@ -113,10 +165,15 @@ export function createStepContextGuard(params: {
       if (boundary > minIndex) {
         try {
           const summary = await summarize({
-            transcript: renderCompactionTranscript(
-              capped.slice(minIndex, boundary).flatMap(transcriptEntries),
+            capped,
+            view,
+            minIndex,
+            boundary,
+            windowChars: Math.max(
+              (contextLength - reservedTokens) * TOKEN_ESTIMATE.charsPerToken -
+                (systemPrompt?.length ?? 0),
+              0,
             ),
-            previousSummary: state?.summary ?? null,
           });
           if (summary) {
             state = { summary, throughIndex: boundary };
@@ -138,6 +195,8 @@ export function createStepContextGuard(params: {
             );
           }
         } catch (error) {
+          // A cancelled run ends here, not with a trimmed step.
+          if (abortSignal?.aborted) throw error;
           summarizationDisabled = true;
           logger.warn(
             { ...logContext, error },
@@ -239,45 +298,6 @@ function transcriptEntries(message: ModelMessage): TranscriptEntry[] {
   });
 }
 
-/**
- * Replace tool-result outputs whose serialized size exceeds the cap with a
- * truncated text rendering plus a notice. The replacement happens in place on
- * the tool message (same toolCallId), so tool-call/tool-result pairing stays
- * intact for provider validation.
- */
-function capOversizedToolResults(messages: ModelMessage[]): ModelMessage[] {
-  let changed = false;
-  const result = messages.map((message) => {
-    if (message.role !== "tool" || !Array.isArray(message.content)) {
-      return message;
-    }
-    let messageChanged = false;
-    const content = message.content.map((part) => {
-      if (part.type !== "tool-result") return part;
-      // Budget text by its own length: JSON escaping would push a result the
-      // chat tools already capped back over the limit and cut its tail.
-      const serialized =
-        part.output.type === "text"
-          ? part.output.value
-          : JSON.stringify(part.output);
-      const size = utf8Length(serialized);
-      if (size <= MAX_TOOL_RESULT_CONTEXT_BYTES) return part;
-      messageChanged = true;
-      return {
-        ...part,
-        output: {
-          type: "text" as const,
-          value: `${sliceUtf8(serialized, MAX_TOOL_RESULT_CONTEXT_BYTES)}\n[tool result truncated: ${size} bytes exceeded the ${MAX_TOOL_RESULT_CONTEXT_BYTES}-byte limit for model context]`,
-        },
-      };
-    });
-    if (!messageChanged) return message;
-    changed = true;
-    return { ...message, content } as ModelMessage;
-  });
-  return changed ? result : messages;
-}
-
 function charSize(messages: ModelMessage[]): number {
-  return messages.reduce((sum, m) => sum + JSON.stringify(m.content).length, 0);
+  return messages.reduce((sum, m) => sum + estimateModelMessageChars(m), 0);
 }

@@ -268,9 +268,10 @@ export const TOOL_PERMISSIONS: Record<
   update_skill: { resource: "skill", action: "update" },
   edit_skill: { resource: "skill", action: "update" },
   // Plugins — executable opaque bytes, so only the metadata catalog is
-  // readable without managing every plugin; byte reads and every mutation
-  // also require `update` on every plugin (a grant at `*`), which each handler
-  // checks, matching the REST routes (plugin.routes.ts).
+  // readable without managing every plugin; byte reads and every change to an
+  // existing plugin also require `update` on every plugin (a grant at `*`),
+  // which each handler checks, matching the REST routes (plugin.routes.ts).
+  // Creating a plugin takes `plugin:create` alone.
   list_plugins: { resource: "plugin", action: "read" },
   get_plugin: { resource: "plugin", action: "read" },
   create_plugin: { resource: "plugin", action: "create" },

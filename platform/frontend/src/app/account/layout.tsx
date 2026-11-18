@@ -7,7 +7,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AccountPageActionSlotContext } from "@/app/account/_parts/account-page-action";
 import { accountSections } from "@/app/account/_parts/account-sections";
 import { useAccountCredentialsAccess } from "@/app/account/_parts/use-account-credentials-access";
-import { AlphaBadge } from "@/components/alpha-badge";
+import { BetaBadge } from "@/components/beta-badge";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { WithPermissions } from "@/components/roles/with-permissions";
@@ -90,7 +90,7 @@ function AccountShell({ children }: { children: React.ReactNode }) {
             label: (
               <span className="inline-flex items-center gap-1.5">
                 <span>{section.label}</span>
-                <AlphaBadge />
+                <BetaBadge />
               </span>
             ),
           }

@@ -118,10 +118,40 @@ test("saves a renamed account and returns to its page", async () => {
 
   await waitFor(() =>
     expect(updates).toEqual([
-      { name: "Automation runner", icon: null, role: "member", labels: [] },
+      {
+        name: "Automation runner",
+        description: null,
+        icon: null,
+        role: "member",
+        labels: [],
+      },
     ]),
   );
   expect(push).toHaveBeenCalledWith(`/settings/service-accounts/${account.id}`);
+});
+
+test("edits the description, and saves a blank one as cleared", async () => {
+  server.use(
+    http.get(`${origin}/api/service-accounts/:id`, () =>
+      HttpResponse.json({
+        ...account,
+        description: "Posts deploy notes",
+        tokens: [],
+      }),
+    ),
+  );
+  const user = userEvent.setup();
+  renderWithClient(<ServiceAccountEditPage serviceAccountId={account.id} />);
+
+  const description = await screen.findByLabelText(/Description/);
+  await waitFor(() => expect(description).toHaveValue("Posts deploy notes"));
+  await user.clear(description);
+  await user.type(description, "   ");
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+  await waitFor(() =>
+    expect(updates).toEqual([expect.objectContaining({ description: null })]),
+  );
 });
 
 test("links a service account to a team", async () => {
@@ -136,6 +166,7 @@ test("links a service account to a team", async () => {
     expect(updates).toEqual([
       {
         name: "Automation worker",
+        description: null,
         icon: null,
         role: "member",
         teamId: "team-platform",
@@ -160,6 +191,7 @@ test("saves added labels with the account", async () => {
     expect(updates).toEqual([
       {
         name: account.name,
+        description: null,
         icon: null,
         role: "member",
         labels: [{ key: "environment", value: "preview" }],

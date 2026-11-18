@@ -8,6 +8,7 @@ import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { LabelTags } from "@/components/label-tags";
 import { PersonalResourceOwner } from "@/components/personal-resource-owner";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { cn } from "@/lib/utils/tailwind";
 
 type AgentLabels = archestraApiTypes.GetAgentResponses["200"]["labels"];
 
@@ -22,6 +23,7 @@ export function AgentNameCell({
   nameIndicator,
   icon,
   owner,
+  underlineOnHover = true,
 }: {
   name: string;
   /**
@@ -43,6 +45,12 @@ export function AgentNameCell({
    * spending a fixed slot of horizontal space on it.
    */
   icon?: ReactNode;
+  /**
+   * Underline the name on hover, the cue that it is a link. Off for tables
+   * whose whole row opens the record, where the underline singles out the
+   * name as if it did something the rest of the row does not.
+   */
+  underlineOnHover?: boolean;
   owner?: {
     resource: {
       scope: "personal" | "team" | "org";
@@ -53,6 +61,10 @@ export function AgentNameCell({
   };
 }) {
   const hasMetadata = !!extraBadges || !!labels?.length || builtIn;
+  const nameClass = cn(
+    "max-w-full shrink-0 truncate leading-tight",
+    underlineOnHover && "hover:underline",
+  );
 
   // Two short lines whatever the row holds — name and badges, then owner and
   // description — so rows keep one height and a long description cannot make
@@ -73,7 +85,7 @@ export function AgentNameCell({
           // prefetches on hover or focus, not for every row in view.
           <IntentPrefetchLink
             href={href}
-            className="max-w-full shrink-0 truncate leading-tight hover:underline"
+            className={nameClass}
             title={name}
             onClick={(e) => e.stopPropagation()}
           >
@@ -82,7 +94,7 @@ export function AgentNameCell({
         ) : onClick ? (
           <UnstyledButton
             type="button"
-            className="max-w-full shrink-0 truncate leading-tight hover:underline"
+            className={nameClass}
             title={name}
             onClick={(event) => {
               event.stopPropagation();

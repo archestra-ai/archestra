@@ -98,6 +98,34 @@ test("opens an account's page from its row and its editor from the pencil", asyn
   );
 });
 
+test("marks an account that has a description and reveals it on hover", async () => {
+  server.use(
+    http.get(`${origin}/api/service-accounts`, () =>
+      HttpResponse.json([
+        { ...account, description: "Posts release notes to the team channel" },
+        { ...account, id: "account-2", name: "Plain account" },
+      ]),
+    ),
+  );
+  const user = userEvent.setup();
+  renderPage();
+
+  const note = await screen.findByRole("button", {
+    name: "Description: Posts release notes to the team channel",
+  });
+  // Only the account that has one is marked.
+  expect(screen.getAllByRole("button", { name: /^Description:/ })).toHaveLength(
+    1,
+  );
+  await user.hover(note);
+  expect(await screen.findByRole("tooltip")).toHaveTextContent(
+    "Posts release notes to the team channel",
+  );
+  // Hovering or clicking the note does not open the account.
+  await user.click(note);
+  expect(push).not.toHaveBeenCalled();
+});
+
 test("summarizes multiple roles and reveals the full assignment in a tooltip", async () => {
   server.use(
     http.get(`${origin}/api/service-accounts`, () =>
@@ -116,14 +144,16 @@ test("summarizes multiple roles and reveals the full assignment in a tooltip", a
       <ServiceAccountsSettingsPage />
     </QueryClientProvider>,
   );
-  const roles = await screen.findByRole("button", {
-    name: "View assigned roles: Member, Admin, Platform Admin, Editor",
-  });
-  expect(roles).toHaveTextContent("Member+3");
-  await user.hover(roles);
-  const tooltip = await screen.findByRole("tooltip");
+  const roles = await screen.findByRole("list", { name: "Roles" });
+  expect(roles).toHaveTextContent("MemberAdmin+2");
+  expect(within(roles).queryByText("Editor")).toBeNull();
+  // The rest unfold in the cell: nothing floats over the table.
+  await user.click(
+    within(roles).getByRole("button", { name: "Show 2 more roles" }),
+  );
   for (const name of ["Member", "Admin", "Platform Admin", "Editor"])
-    expect(within(tooltip).getByText(name)).toBeVisible();
+    expect(within(roles).getByText(name)).toBeVisible();
+  expect(screen.queryByRole("tooltip")).toBeNull();
 });
 
 test("offers row edits only on accounts the user holds an update grant for", async () => {

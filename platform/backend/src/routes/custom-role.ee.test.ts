@@ -758,6 +758,34 @@ describe("custom role routes", () => {
     expect(error.error.message).toContain("Cannot update predefined roles");
   });
 
+  test("a fixed role reads like a predefined one and cannot be edited or deleted", async () => {
+    const url = `/api/roles/${encodeURIComponent("fixed:users:writer")}`;
+    const read = await app.inject({ method: "GET", url });
+    expect(read.statusCode).toBe(200);
+    expect(read.json()).toMatchObject({
+      id: "fixed:users:writer",
+      name: "User Writer",
+      predefined: true,
+    });
+    // Inviting is part of adding members, so the derived invitation actions
+    // come with member:create — Better Auth checks them on invite.
+    expect(read.json().permission.invitation).toEqual(
+      expect.arrayContaining(["create"]),
+    );
+
+    const updated = await app.inject({
+      method: "PUT",
+      url,
+      payload: { name: "Renamed" },
+    });
+    expect(updated.statusCode).toBe(403);
+    const deleted = await app.inject({ method: "DELETE", url });
+    expect(deleted.statusCode).toBeGreaterThanOrEqual(400);
+    expect((await app.inject({ method: "GET", url })).json().name).toBe(
+      "User Writer",
+    );
+  });
+
   // === DELETE /api/roles/:roleId ===
 
   for (const mode of ["single", "bulk"] as const) {

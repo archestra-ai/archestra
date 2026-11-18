@@ -128413,6 +128413,10 @@ export type GetRolesData = {
         limit?: number;
         offset?: number;
         name?: string;
+        /**
+         * Limit the list to one kind of role. `custom` leaves out the built-in roles, which cannot be edited.
+         */
+        kind?: 'custom';
     };
     url: '/api/roles';
 };
@@ -141611,6 +141615,7 @@ export type GetServiceAccountsResponses = {
         } | null;
         organizationId: string;
         name: string;
+        description: string | null;
         icon: string | null;
         role: string;
         teamId: string | null;
@@ -141636,6 +141641,7 @@ export type GetServiceAccountsResponse = GetServiceAccountsResponses[keyof GetSe
 export type CreateServiceAccountData = {
     body: {
         name: string;
+        description?: string | null;
         icon?: string | null;
         role: string;
         teamId?: string | null;
@@ -141755,6 +141761,7 @@ export type CreateServiceAccountResponses = {
         } | null;
         organizationId: string;
         name: string;
+        description: string | null;
         icon: string | null;
         role: string;
         teamId: string | null;
@@ -141965,6 +141972,7 @@ export type GetServiceAccountResponses = {
         } | null;
         organizationId: string;
         name: string;
+        description: string | null;
         icon: string | null;
         role: string;
         teamId: string | null;
@@ -141999,6 +142007,7 @@ export type GetServiceAccountResponse = GetServiceAccountResponses[keyof GetServ
 export type UpdateServiceAccountData = {
     body: {
         name?: string;
+        description?: string | null;
         icon?: string | null;
         role?: string;
         teamId?: string | null;
@@ -142099,6 +142108,7 @@ export type UpdateServiceAccountResponses = {
         } | null;
         organizationId: string;
         name: string;
+        description: string | null;
         icon: string | null;
         role: string;
         teamId: string | null;

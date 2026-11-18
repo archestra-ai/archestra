@@ -21,6 +21,7 @@ import {
   isNoiseRoute,
   isNoisyMcpGatewayGetRoute,
   isNoisyTransactionName,
+  isPolledLogListRoute,
 } from "./utils";
 
 const {
@@ -37,6 +38,12 @@ const {
     },
   },
 } = config;
+
+/**
+ * Share of the normal trace sample rate kept for the polled log list routes
+ * (see {@link isPolledLogListRoute}).
+ */
+const POLLED_LOG_LIST_TRACES_SAMPLE_FACTOR = 0.01;
 
 /**
  * Build the Error object reported for a raw upstream-provider failure.
@@ -263,6 +270,11 @@ const initSentry = async (): Promise<void> => {
       // Sample remaining MCP gateway traffic much more conservatively than normal app routes.
       if (url.startsWith("/v1/mcp")) {
         return mcpGatewayTracesSampleRate;
+      }
+
+      // Clients page through the LLM proxy log lists one request at a time.
+      if (method && isPolledLogListRoute({ method, url })) {
+        return tracesSampleRate * POLLED_LOG_LIST_TRACES_SAMPLE_FACTOR;
       }
 
       return tracesSampleRate;

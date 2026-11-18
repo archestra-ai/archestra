@@ -5,6 +5,7 @@ import {
   isNoisyMcpGatewayGetRoute,
   isNoisyMcpGatewayTransactionName,
   isNoisyTransactionName,
+  isPolledLogListRoute,
 } from "./utils";
 
 describe("isNoiseRoute", () => {
@@ -143,5 +144,33 @@ describe("isLongLivedMcpStream", () => {
   test("does not match a span without a recorded method", () => {
     expect(isLongLivedMcpStream(undefined)).toBe(false);
     expect(isLongLivedMcpStream(42)).toBe(false);
+  });
+});
+
+describe("isPolledLogListRoute", () => {
+  test("matches GET on the log and session lists under both paths", () => {
+    for (const url of [
+      "/api/llm-proxy-logs",
+      "/api/llm-proxy-logs/sessions",
+      "/api/interactions",
+      "/api/interactions/sessions?limit=1&cursor=abc",
+    ]) {
+      expect(isPolledLogListRoute({ method: "GET", url })).toBe(true);
+    }
+  });
+
+  test("does not match single-log views or other methods", () => {
+    expect(
+      isPolledLogListRoute({ method: "GET", url: "/api/interactions/abc" }),
+    ).toBe(false);
+    expect(
+      isPolledLogListRoute({
+        method: "GET",
+        url: "/api/llm-proxy-logs/sessions/abc/lineage",
+      }),
+    ).toBe(false);
+    expect(
+      isPolledLogListRoute({ method: "POST", url: "/api/interactions" }),
+    ).toBe(false);
   });
 });

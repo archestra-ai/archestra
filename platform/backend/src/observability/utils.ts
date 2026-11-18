@@ -28,6 +28,20 @@ export function isNoisyMcpGatewayGetRoute(params: {
   );
 }
 
+/**
+ * The LLM proxy log list endpoints (under both their current and legacy
+ * paths). Automated clients page through these one request at a time, so they
+ * produce far more traces than any one of them is worth.
+ */
+export function isPolledLogListRoute(params: {
+  method: string;
+  url: string;
+}): boolean {
+  if (params.method !== "GET") return false;
+  const path = params.url.split("?", 1)[0];
+  return POLLED_LOG_LIST_PATHS.has(path);
+}
+
 export function isNoisyTransactionName(transactionName: string): boolean {
   return (
     transactionName.startsWith(`GET ${HEALTH_PATH}`) ||
@@ -60,3 +74,10 @@ export function isNoisyMcpGatewayTransactionName(
 ): boolean {
   return transactionName.startsWith(`GET ${MCP_GATEWAY_PREFIX}/`);
 }
+
+const POLLED_LOG_LIST_PATHS: ReadonlySet<string> = new Set([
+  "/api/llm-proxy-logs",
+  "/api/llm-proxy-logs/sessions",
+  "/api/interactions",
+  "/api/interactions/sessions",
+]);

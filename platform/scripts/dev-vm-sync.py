@@ -12,7 +12,7 @@ Usage, from inside the checkout:
       with ports of its own, so its stack runs next to the other checkouts'.
   dev-vm-sync.py run [<command>]
       Run a command in the VM copy, in the same subfolder you are in; without
-      a command, open a shell there (pnpm install, tilt up).
+      a command, open a shell there.
   dev-vm-sync.py pull '<command>'
       Like run, for a command that writes source files (pnpm db:generate,
       pnpm add, pnpm codegen, pnpm lint:fix): copies the files it changed back
@@ -20,6 +20,21 @@ Usage, from inside the checkout:
       Only code, migrations and dependency files in platform/ and the files
       codegen writes come back, never from platform/scripts/, platform/dev/ or
       a folder starting with a dot: change anything else on the Mac.
+  dev-vm-sync.py tilt
+      Start this checkout's Tilt in the VM, in a tmux session of its own
+      (tilt-<folder name>); does nothing if it already runs. Prints the URLs.
+  dev-vm-sync.py tilt stop
+      Stop it. Its pods and database stay, as after Ctrl+C.
+
+Usage, from anywhere:
+  dev-vm-sync.py status
+      Every synced checkout: its URLs, whether its Tilt runs, whether the
+      checkout still exists. Also what is left over without a sync.
+  dev-vm-sync.py prune
+      Remove the stacks of checkouts that no longer exist: their Tilt, sync,
+      VM copy and Kubernetes namespace (their database too). Also removes
+      VM copies, tilt-* tmux sessions and archestra-dev-* namespaces that
+      belong to no sync. Never the first stack's namespace, archestra-dev.
 
 Env: ARCHESTRA_DEV_VM (VM name, default archestra-dev).
 """
@@ -32,6 +47,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 
 VM = os.environ.get("ARCHESTRA_DEV_VM", "archestra-dev")
 HOST = "lima-" + VM
@@ -158,28 +174,73 @@ def stack_of(top):
     return int(port) - 20350 if port.isdigit() and 20351 <= int(port) < 20350 + STACKS else 0
 
 
+def syncs():
+    """The Mutagen sessions into this VM: {name: Mac checkout}. Dies when
+    Mutagen can't list them: an empty list would make every stack look
+    unused."""
+    listed = subprocess.run(["mutagen", "sync", "list", "--template",
+                             '{{range .}}{{.Name}}\t{{.Beta.Host}}\t{{.Alpha.Path}}{{"\\n"}}{{end}}'],
+                            stdout=subprocess.PIPE, text=True)
+    if listed.returncode != 0:
+        die("mutagen sync list failed; is the Mutagen daemon running? (mutagen daemon start)")
+    out = listed.stdout
+    found = {}
+    for line in out.splitlines():
+        name, host, top = (line.split("\t") + ["", ""])[:3]
+        if host == HOST and re.fullmatch(r"[A-Za-z0-9._-]+", name):
+            found[name] = top
+    return found
+
+
 def free_stack():
     """The first stack no other synced checkout uses. Read from the Mac side:
     the Mutagen sessions into this VM and their checkouts' .env."""
-    out = subprocess.run(["mutagen", "sync", "list", "--template",
-                          '{{range .}}{{.Beta.Host}}\t{{.Alpha.Path}}{{"\\n"}}{{end}}'],
-                         stdout=subprocess.PIPE, text=True).stdout
-    taken = set()
-    for line in out.splitlines():
-        host, _, top = line.partition("\t")
-        if host == HOST and top and os.path.realpath(top) != os.path.realpath(TOP):
-            taken.add(stack_of(top))
+    taken = {stack_of(top) for top in syncs().values()
+             if os.path.realpath(top) != os.path.realpath(TOP)}
     free = [n for n in range(STACKS) if n not in taken]
     if not free:
         die("all %d stacks are taken by other synced checkouts (mutagen sync list)" % STACKS)
     return free[0]
 
 
-def namespace():
-    """This checkout's Kubernetes namespace, from its folder name, as
-    scripts/dev-stack.sh makes one from the branch name."""
-    part = re.sub(r"[^a-z0-9-]", "", NAME.lower().replace("_", "-"))[:49].rstrip("-")
+def namespace(name):
+    """A checkout's Kubernetes namespace, from its folder name, as
+    scripts/dev-stack.sh makes one from the branch name. The first stack
+    uses the default one, archestra-dev, which is never removed."""
+    part = re.sub(r"[^a-z0-9-]", "", name.lower().replace("_", "-"))[:49].rstrip("-")
     return "archestra-dev-" + (part or "auto")
+
+
+def session(name):
+    """The tmux session that runs a checkout's Tilt (tmux turns dots into _)."""
+    return "tilt-" + name.replace(".", "_")
+
+
+def vm_state():
+    """What is in the VM, in one round trip: tmux sessions, listening ports,
+    copies in ~/sync, namespaces not already being deleted, and the folder
+    each Tilt runs in. Checked
+    here, since the VM is not trusted."""
+    out = ssh("tmux ls -F '#S' 2>/dev/null; echo ---; ss -Hltn | awk '{print $4}'; echo ---; "
+              "ls ~/sync 2>/dev/null; echo ---; kubectl get ns --no-headers 2>/dev/null | awk '$2 == \"Active\" {print \"namespace/\" $1}'; echo ---; "
+              "for p in $(pgrep -x tilt); do echo \"$p $(readlink /proc/$p/cwd)\"; done").decode()
+    parts = (out.split("---\n") + [""] * 5)[:5]
+    lines = [[x for x in part.splitlines() if x.strip()] for part in parts]
+    plain = r"[A-Za-z0-9._-]+"
+    tilts = {}
+    for line in lines[4]:
+        pid, _, cwd = line.partition(" ")
+        m = re.fullmatch(r"/home/[^/]+/sync/(%s)(/.*)?" % plain, cwd)
+        if pid.isdigit() and m:
+            tilts.setdefault(m.group(1), []).append(pid)
+    return {
+        "sessions": {s for s in lines[0] if re.fullmatch(plain, s)},
+        "ports": {x.rsplit(":", 1)[-1] for x in lines[1]},
+        "copies": {c for c in lines[2] if re.fullmatch(plain, c)},
+        "namespaces": {n[len("namespace/"):] for n in lines[3]
+                       if re.fullmatch(r"namespace/archestra-dev-[a-z0-9-]+", n)},
+        "tilts": tilts,  # copy name -> pids of Tilts running in it
+    }
 
 
 def vm_settings(stack):
@@ -193,7 +254,7 @@ def vm_settings(stack):
         # The keys scripts/dev-stack.sh writes for a stack next to another:
         # its own ports, Kubernetes namespace (database, MCP servers, Agent
         # Runtime pods) and login cookies.
-        ns = namespace()
+        ns = namespace(NAME)
         settings = {
             "ARCHESTRA_DATABASE_URL": "postgresql://archestra:archestra_dev_password@localhost:%d/archestra_dev?schema=public" % p["postgres"],
             "ARCHESTRA_INTERNAL_API_BASE_URL": "http://localhost:%d" % p["api"],
@@ -263,8 +324,110 @@ def start():
         # Mutagen uses your own ssh: `dev-vm.sh create` adds the VM to ~/.ssh/config.
         run(["mutagen", "sync", "create", "--name", NAME, "-c", f.name, TOP, "%s:%s" % (HOST, VM_DIR)])
     mutagen("flush", NAME)
-    print("Syncing %s -> %s:~/%s. Next, from platform/: dev-vm-sync.py run, then pnpm install and tilt up." % (TOP, VM, VM_DIR))
+    print("Syncing %s -> %s:~/%s. Next: dev-vm-sync.py tilt starts its stack." % (TOP, VM, VM_DIR))
     print_urls()
+
+
+def tilt_up():
+    state = vm_state()
+    p = ports(stack_of(TOP))
+    if session(NAME) in state["sessions"] or NAME in state["tilts"]:
+        print("This checkout's Tilt already runs.")
+        print_urls()
+        return
+    if str(p["tilt_vm"]) in state["ports"]:
+        die("another Tilt listens on this checkout's port %d: dev-vm-sync.py status" % p["tilt_vm"])
+    ssh("tmux new-session -d -s %s -e TILT_PORT=%d -c \"$HOME/%s/platform\" \"bash -lc 'tilt up'\""
+        % (session(NAME), p["tilt_vm"], VM_DIR))
+    print("Started Tilt in the VM's tmux session %s. Logs: dev-vm-sync.py run 'tilt logs <resource>'." % session(NAME))
+    print_urls()
+
+
+def tilt_stop():
+    state = vm_state()
+    if session(NAME) not in state["sessions"]:
+        if NAME in state["tilts"]:
+            die("this checkout's Tilt runs in a terminal, not in tmux: stop it there (Ctrl+C)")
+        print("This checkout's Tilt doesn't run.")
+        return
+    ssh("tmux kill-session -t =%s" % session(NAME))
+    port = str(ports(stack_of(TOP))["tilt_vm"])
+    for _ in range(30):  # so a `tilt` right after finds the port free
+        if port not in vm_state()["ports"]:
+            break
+        time.sleep(1)
+    print("Stopped this checkout's Tilt. Its pods and database stay.")
+
+
+def status():
+    state = vm_state()
+    found = syncs()
+    for name, top in sorted(found.items()):
+        if not os.path.isdir(top):
+            print("%-24s checkout gone (%s): dev-vm-sync.py prune" % (name, top))
+            continue
+        p = ports(stack_of(top))
+        running = session(name) in state["sessions"] or name in state["tilts"]
+        print("%-24s app http://localhost:%d  Tilt http://localhost:%d  %s  %s"
+              % (name, p["app_mac"], p["tilt_mac"], "running" if running else "stopped", top))
+    if not found:
+        print("No checkout is synced into the VM.")
+    left = leftovers(state, found)
+    if left:
+        print("\nLeft over without a sync (dev-vm-sync.py prune removes them):")
+        for line in left:
+            print("  " + line)
+
+
+def used_namespaces(found):
+    """Namespaces synced checkouts use: the one from the folder name, and the
+    one their .env names."""
+    used = set()
+    for name, top in found.items():
+        used.add(namespace(name))
+        ns = read_env(os.path.join(top, "platform", ".env"), "ARCHESTRA_K8S_NAMESPACE")
+        if ns:
+            used.add(ns)
+    return used
+
+
+def leftovers(state, found):
+    known = set(found)
+    return (["copy ~/sync/%s" % c for c in sorted(state["copies"] - known)]
+            + ["tmux session %s" % s for s in sorted(state["sessions"])
+               if s.startswith("tilt-") and s not in {session(n) for n in known}]
+            + ["namespace %s" % n for n in sorted(state["namespaces"] - used_namespaces(found))])
+
+
+def prune():
+    state = vm_state()
+    found = syncs()
+    gone = sorted(name for name, top in found.items() if not os.path.isdir(top))
+    live = set(found) - set(gone)
+    removed = []
+    for name in gone:
+        mutagen("terminate", name)
+        removed.append("sync %s" % name)
+    names = sorted(set(gone) | (state["copies"] - live))
+    for name in names:
+        if session(name) in state["sessions"]:
+            ssh("tmux kill-session -t =%s" % session(name))
+            removed.append("Tilt (tmux session %s)" % session(name))
+        for pid in state["tilts"].get(name, []):
+            # Gone already when it ran in the tmux session just stopped.
+            if ssh("kill %s 2>/dev/null && echo stopped || true" % pid).strip():
+                removed.append("Tilt (process %s in ~/sync/%s)" % (pid, name))
+        if name in state["copies"]:
+            ssh("rm -rf ~/sync/%s" % name)
+            removed.append("copy ~/sync/%s" % name)
+    for s in sorted(state["sessions"]):
+        if s.startswith("tilt-") and s not in {session(n) for n in live | set(names)}:
+            ssh("tmux kill-session -t =%s" % s)
+            removed.append("tmux session %s" % s)
+    for ns in sorted(state["namespaces"] - used_namespaces({n: found[n] for n in live})):
+        ssh("kubectl delete namespace %s --wait=false >/dev/null" % ns)
+        removed.append("namespace %s (with its database)" % ns)
+    print("Removed:\n  " + "\n  ".join(removed) if removed else "Nothing to remove.")
 
 
 def print_urls():
@@ -380,11 +543,16 @@ def copy_from_vm(paths):
 
 if __name__ == "__main__":
     args = sys.argv[1:]
-    if not args or args[0] not in ("start", "run", "pull"):
+    if not args or args[0] not in ("start", "run", "pull", "tilt", "status", "prune"):
         print(__doc__.strip())
         sys.exit(1 if args else 0)
     if not shutil.which("mutagen"):
         die("install Mutagen first: brew install mutagen-io/mutagen/mutagen")
+    if args[0] in ("status", "prune"):
+        if len(args) != 1:
+            die("%s takes no arguments" % args[0])
+        status() if args[0] == "status" else prune()
+        sys.exit(0)
     top = subprocess.run(["git", "rev-parse", "--show-toplevel"], stdout=subprocess.PIPE, text=True)
     if top.returncode != 0:
         die("run this inside the checkout you want in the VM")
@@ -395,6 +563,12 @@ if __name__ == "__main__":
     VM_DIR = "sync/" + NAME
     if args[0] == "start":
         start()
+    elif args[0] == "tilt":
+        if args[1:] not in ([], ["stop"]):
+            die("usage: dev-vm-sync.py tilt [stop]")
+        if mutagen("list", NAME) != 0:
+            die("no sync for this checkout yet: dev-vm-sync.py start")
+        tilt_stop() if args[1:] else tilt_up()
     elif len(args) > 2 or (args[0] == "pull" and len(args) != 2):
         die("give the command as one quoted string")
     elif mutagen("list", NAME) != 0:

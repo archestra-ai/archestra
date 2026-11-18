@@ -29,11 +29,11 @@ echo 'export ARCHESTRA_DEV_MODE=2' >> ~/.zshenv   # tells git hooks and agents y
 cd platform
 echo 'I work in the dev VM with the one-way Mutagen sync. Use the archestra-dev-vm skill.' >> CLAUDE_LOCAL.md
 scripts/dev-vm-sync.py start            # sync this checkout into the VM
-scripts/dev-vm-sync.py run              # a shell there: pnpm install, then tilt up
+scripts/dev-vm-sync.py tilt             # start the stack (Tilt installs dependencies); prints its URLs
 ```
 
-Open http://localhost:13000 (admin@example.com / password). The first
-`tilt up` takes about 8 minutes: the pnpm store is empty, and prebuilt napi
+Open http://localhost:13000 (admin@example.com / password). The first start
+takes about 8 minutes: the pnpm store is empty, and prebuilt napi
 addons exist only for linux x64, so on Apple Silicon every Rust addon compiles
 from source.
 
@@ -60,8 +60,10 @@ dev-vm-sync.py start                       # sync this checkout into the VM; pri
 dev-vm-sync.py run                         # a shell in the VM copy, in the folder you are in
 dev-vm-sync.py run 'pnpm test'             # one command there
 dev-vm-sync.py pull 'pnpm db:generate'     # a command that writes source files: bring them back
-mutagen sync list                          # the synced checkouts
-mutagen sync terminate <folder name>       # stop syncing one, e.g. before removing its worktree
+dev-vm-sync.py tilt                        # start this checkout's Tilt in the VM; prints its URLs
+dev-vm-sync.py tilt stop                   # stop it; its pods and database stay
+dev-vm-sync.py status                      # every synced checkout: URLs, Tilt running or not
+dev-vm-sync.py prune                       # remove the stacks of checkouts that no longer exist
 ```
 
 Checks:
@@ -154,8 +156,14 @@ the Mac. Up to 5 at once. Two idle stacks use about 5 GiB of the VM's 24.
 - `run` points `tilt` at the checkout's own Tilt (`TILT_PORT`).
 - An existing `.env` is never changed. Don't copy one between checkouts:
   their stacks would share ports.
-- When you remove a worktree, also delete its namespace:
-  `ssh lima-archestra-dev 'kubectl delete namespace <ARCHESTRA_K8S_NAMESPACE from its .env>'`.
+- Each checkout's Tilt runs in a tmux session in the VM (`tilt-<folder>`),
+  started and stopped by `dev-vm-sync.py tilt` and `tilt stop`. Starting it
+  twice does nothing.
+- A stack stays until you stop it, as a Tilt on the Mac does. After you
+  remove a worktree, `dev-vm-sync.py prune` removes its stack: Tilt, sync,
+  VM copy and namespace, its database included. It also removes VM copies,
+  `tilt-*` tmux sessions and `archestra-dev-*` namespaces that belong to no
+  sync, never the first stack's `archestra-dev`. `status` lists them first.
 
 ### Bringing files back (`pull`)
 

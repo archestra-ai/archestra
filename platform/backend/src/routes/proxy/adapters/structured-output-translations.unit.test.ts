@@ -1,7 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { ChatCompletionRequestSchema } from "@/types/llm-providers/openai/api";
 import { openaiToAnthropic } from "./anthropic-openai-translator";
-import { openaiToConverse } from "./bedrock-openai-translator";
 import { openaiToCohere } from "./cohere-openai-translator";
 import { openaiToGemini } from "./gemini-openai-translator";
 
@@ -24,7 +23,6 @@ const formats = [
 
 for (const [provider, translate] of [
   ["anthropic", openaiToAnthropic],
-  ["bedrock", openaiToConverse],
   ["cohere", openaiToCohere],
   ["gemini", openaiToGemini],
 ] as const) {

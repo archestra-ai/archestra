@@ -34756,6 +34756,18 @@ export type BedrockConverseWithDefaultAgentData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -35118,6 +35130,18 @@ export type BedrockConverseWithAgentData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -35482,6 +35506,18 @@ export type BedrockConverseStreamWithDefaultAgentData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -35699,6 +35735,18 @@ export type BedrockConverseStreamWithAgentData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -35918,6 +35966,18 @@ export type BedrockConverseWithAgentAndModelData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -36283,6 +36343,18 @@ export type BedrockConverseStreamWithAgentAndModelData = {
             [key: string]: unknown;
         };
         additionalModelResponseFieldPaths?: Array<string>;
+        outputConfig?: {
+            textFormat?: {
+                type: string;
+                structure: {
+                    jsonSchema: {
+                        schema: string;
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+        };
         promptVariables?: {
             [key: string]: {
                 text: string;
@@ -56311,6 +56383,18 @@ export type GetInteractionsResponses = {
                     [key: string]: unknown;
                 };
                 additionalModelResponseFieldPaths?: Array<string>;
+                outputConfig?: {
+                    textFormat?: {
+                        type: string;
+                        structure: {
+                            jsonSchema: {
+                                schema: string;
+                                name?: string;
+                                description?: string;
+                            };
+                        };
+                    };
+                };
                 promptVariables?: {
                     [key: string]: {
                         text: string;
@@ -56504,6 +56588,18 @@ export type GetInteractionsResponses = {
                     [key: string]: unknown;
                 };
                 additionalModelResponseFieldPaths?: Array<string>;
+                outputConfig?: {
+                    textFormat?: {
+                        type: string;
+                        structure: {
+                            jsonSchema: {
+                                schema: string;
+                                name?: string;
+                                description?: string;
+                            };
+                        };
+                    };
+                };
                 promptVariables?: {
                     [key: string]: {
                         text: string;
@@ -64136,6 +64232,18 @@ export type GetInteractionResponses = {
                 [key: string]: unknown;
             };
             additionalModelResponseFieldPaths?: Array<string>;
+            outputConfig?: {
+                textFormat?: {
+                    type: string;
+                    structure: {
+                        jsonSchema: {
+                            schema: string;
+                            name?: string;
+                            description?: string;
+                        };
+                    };
+                };
+            };
             promptVariables?: {
                 [key: string]: {
                     text: string;
@@ -64329,6 +64437,18 @@ export type GetInteractionResponses = {
                 [key: string]: unknown;
             };
             additionalModelResponseFieldPaths?: Array<string>;
+            outputConfig?: {
+                textFormat?: {
+                    type: string;
+                    structure: {
+                        jsonSchema: {
+                            schema: string;
+                            name?: string;
+                            description?: string;
+                        };
+                    };
+                };
+            };
             promptVariables?: {
                 [key: string]: {
                     text: string;

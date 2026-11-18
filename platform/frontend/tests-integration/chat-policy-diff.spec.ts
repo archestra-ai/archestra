@@ -137,8 +137,10 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   await expect(
     dialog.getByText("tool_13259", { exact: false }).first(),
   ).toBeVisible();
-  const split = dialog.getByRole("switch", { name: "Side by side" });
-  const unchanged = dialog.getByRole("switch", { name: "Show unchanged" });
+  const split = dialog.getByRole("switch", { name: "Side by side view" });
+  const unchanged = dialog.getByRole("switch", {
+    name: "Show unchanged lines",
+  });
   await expect(split).not.toBeChecked();
   await expect(unchanged).not.toBeChecked();
   // Both view options are independent switches, usable from the keyboard.

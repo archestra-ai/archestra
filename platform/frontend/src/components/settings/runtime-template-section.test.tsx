@@ -311,10 +311,8 @@ describe("RuntimeTemplateSection", () => {
     );
     expect(await screen.findByText("Enter a name")).toBeInTheDocument();
     expect(screen.getByText("Enter a container image")).toBeInTheDocument();
-    await user.type(
-      screen.getByRole("textbox", { name: "Name" }),
-      "Canceled workspace",
-    );
+    await user.click(screen.getByRole("textbox", { name: "Name" }));
+    await user.paste("Canceled workspace");
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
         name: "Cancel",
@@ -329,19 +327,13 @@ describe("RuntimeTemplateSection", () => {
       screen.getByRole("menuitem", { name: "Create custom runtime…" }),
     );
     expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("");
-    await user.type(
-      screen.getByRole("textbox", { name: "Name" }),
-      "Engineering workspace",
-    );
-    await user.type(
-      screen.getByRole("textbox", { name: "Description" }),
-      "Standard development tools",
-    );
+    await user.click(screen.getByRole("textbox", { name: "Name" }));
+    await user.paste("Engineering workspace");
+    await user.click(screen.getByRole("textbox", { name: "Description" }));
+    await user.paste("Standard development tools");
     await user.click(screen.getByRole("button", { name: "Runtime settings" }));
-    await user.type(
-      screen.getByRole("textbox", { name: "Container image" }),
-      "registry.example.com/engineering:v1",
-    );
+    await user.click(screen.getByRole("textbox", { name: "Container image" }));
+    await user.paste("registry.example.com/engineering:v1");
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
         name: "Add runtime",

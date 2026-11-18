@@ -24,6 +24,16 @@ platform/scripts/dev-vm.sh create   # VM, toolchain, code, kind cluster, .env
 platform/scripts/dev-vm.sh shell    # a shell in the VM's platform/; then: tilt up
 ```
 
+Tell the repo's git hooks that you use the VM, once, in `~/.zshenv`:
+
+```sh
+export ARCHESTRA_DEV_MODE=2   # 1: edit in the VM, 2: edit on the Mac (one-way sync); unset or 0: the Mac setup
+```
+
+With 1 or 2, creating a worktree no longer installs dependencies on the Mac,
+and the pre-commit check, which needs them, is skipped with a note. A git
+client that doesn't read your shell's variables still behaves as unset.
+
 Open http://localhost:13000 (admin@example.com / password). The first
 `tilt up` takes about 8 minutes: the pnpm store is empty, and prebuilt napi
 addons exist only for linux x64, so on Apple Silicon every Rust addon compiles
@@ -97,10 +107,10 @@ scripts/dev-vm-sync.py pull 'pnpm db:generate'   # a command that writes source 
   `pull` runs.
 - Git stays on the Mac; the copy has no `.git`. Tilt's `husky-hooks` resource
   is red there, and the repo's commit check can't run on either side: run
-  `pnpm lint` and `pnpm type-check` with `run`, then `HUSKY=0 git commit`.
-- Don't run `pnpm` on the Mac. Create worktrees with
-  `HUSKY=0 git worktree add ...`, or the repo's hook installs dependencies
-  there.
+  `pnpm lint` and `pnpm type-check` with `run` before you commit. With
+  `ARCHESTRA_DEV_MODE=2` the pre-commit hook lets the commit through.
+- Don't run `pnpm` on the Mac. Without `ARCHESTRA_DEV_MODE`, the repo's hook
+  installs dependencies there when you create a worktree.
 - One Tilt at a time in the VM: stop the one in `~/archestra` first.
 
 ## Editing in the VM

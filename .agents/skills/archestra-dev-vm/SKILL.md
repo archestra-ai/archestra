@@ -74,8 +74,11 @@ runs a one-way copy of it in `~/sync/<folder name>`.
   untrusted. `pull` never copies git hooks, agent or editor settings or
   `.github`; if it lists one as left out, tell the user.
 - Git runs on the Mac. The commit check can't run there, so run `pnpm lint`
-  and `pnpm type-check` through `run`, then `HUSKY=0 git commit`. Create
-  worktrees with `HUSKY=0 git worktree add ...` and start a sync in each.
+  and `pnpm type-check` through `run` before committing. The user sets
+  `ARCHESTRA_DEV_MODE=2` (1 for a VM-only checkout) in their shell: the git
+  hooks then skip the commit check and the dependency install for new
+  worktrees. If it is unset, tell the user; don't work around the hooks.
+  Start a sync in each new worktree.
 
 ### VM-only checkout (`~/archestra`, `~/worktrees/<name>`)
 

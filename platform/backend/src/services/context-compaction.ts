@@ -23,6 +23,7 @@ import {
 import { generateText, type ModelMessage, type ToolSet } from "ai";
 import type { LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
+import { stripRuntimeToolProofs } from "@/openappa/runtime-tool-proof";
 import { TOKEN_ESTIMATE } from "@/routes/chat/normalization/estimate-message-tokens";
 import {
   extractTaggedText,
@@ -462,10 +463,13 @@ function renderEntry(
 /**
  * A tool call's input without what only the OpenAPPA proxy writes: a notice's
  * record and signed offers, a remedy call's receipt and JWS, ask_user's
- * offers. The summary goes to a provider as plain text, where the proxy can no
+ * offers, a runtime call's signed proof. The summary goes to a provider as plain text, where the proxy can no
  * longer take them out. A tool matches by its short name under any label.
  */
-function modelWrittenInput(toolName: string, input: unknown): unknown {
+function modelWrittenInput(toolName: string, rawInput: unknown): unknown {
+  // A released runtime call carries its signed proof in its arguments.
+  const input = structuredClone(rawInput);
+  stripRuntimeToolProofs(input);
   const hidden = PROXY_WRITTEN_MEMBERS.find(
     ([shortName]) =>
       toolName === shortName || toolName.endsWith(`__${shortName}`),

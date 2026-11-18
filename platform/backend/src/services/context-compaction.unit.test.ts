@@ -95,6 +95,29 @@ describe("summarizeTranscriptEntries", () => {
     expect(calls[0].transcript).not.toContain("receipt-signature");
   });
 
+  test("strips runtime proofs from any tool input, including run_tool's string arguments", async () => {
+    const input = {
+      tool_name: "spawn_agent",
+      tool_args: JSON.stringify({ task: "go", runtime_proof: "proof-nested" }),
+    };
+    const { calls } = await summarizeRecorded({
+      entries: [
+        {
+          kind: "tool_call",
+          toolName: "spawn_agent",
+          input: { task: "go", runtime_proof: "proof-direct" },
+        },
+        { kind: "tool_call", toolName: "run_tool", input },
+      ],
+    });
+
+    expect(calls[0].transcript).not.toContain("proof-direct");
+    expect(calls[0].transcript).not.toContain("proof-nested");
+    expect(calls[0].transcript).toContain('\\"task\\":\\"go\\"');
+    // The history the run keeps is not modified.
+    expect(JSON.parse(input.tool_args).runtime_proof).toBe("proof-nested");
+  });
+
   test("over the chunk ceiling, folds every entry in order instead of dropping the middle", async () => {
     const entries = [
       { kind: "text" as const, role: "user", text: "TASK" },

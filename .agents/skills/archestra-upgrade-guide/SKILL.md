@@ -58,11 +58,11 @@ Settle disagreements in the code yourself. Reviewers are often confidently wrong
 Keep these sections, in this order:
 
 1. **Intro**, two or three sentences: the downtime, what is deleted for good, and that the backup is the only way back.
-2. **What Changes for Your Deployment:** one table, `In vX.Y | What you do`, most damaging first. Mark what must happen before the upgrade.
+2. **What Changes for Your Deployment:** grouped lists under `###` headings: **Deleted in vX.Y** (record before, recreate after), **Clients That Stop Working**, and **Behavior Changes**. Each item opens with a short bold label, then the change and the action. Most damaging first.
 3. **Before You Upgrade:** numbered steps while the old version still runs.
 4. **Upgrade With Helm** and **Upgrade With Docker:** numbered, copyable commands, including the stop, the backup, the upgrade, the start, and how to tell it worked.
 5. **After You Upgrade:** what to rebuild.
-6. **Helm Values** and **Environment Variables:** tables of only the keys that need a change.
+6. **Helm Values** and **Environment Variables:** lists of only the keys that need a change: `` `key`: what to do ``.
 7. **Roll Back:** stop the new version first, restore the backup, then the old release.
 
 Rules:
@@ -70,6 +70,7 @@ Rules:
 - Pin versions with `# x-release-please-version` on the line, and add the page to `extra-files` in `.github/release-please/release-please-config.json` on `release/X.Y`, so patches keep the version current.
 - Link every environment variable, permission, API route, and MCP tool as `archestra-docs-writer` requires.
 - Link from **Release Channels And Upgrades** in `docs/pages/admin/deployment.md`.
+- No tables of prose. A two-column table with sentences in each cell renders as a cramped wall; use a list. Tables are only for short, same-shaped values.
 - No history, no internals, no "we", no hedging, no praise.
 
 ## Finish

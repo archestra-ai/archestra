@@ -98,10 +98,6 @@
         {
           "type": "generic",
           "path": "/docs/pages/admin/deployment.md"
-        },
-        {
-          "type": "generic",
-          "path": "/docs/pages/admin/upgrade-v1-3-to-v1-4.md"
         }
       ]
     }

@@ -17,7 +17,7 @@ export function PolicyOutline({ workspace }: { workspace: PolicyWorkspace }) {
       aria-label="Rule outline"
       className="hidden w-52 shrink-0 flex-col border-l bg-muted/20 lg:flex"
     >
-      {active.kind === "root" ? (
+      {workspace.isPending || !active.key ? null : active.kind === "root" ? (
         <RootOutline workspace={workspace} />
       ) : (
         <IncludeOutline
@@ -48,7 +48,9 @@ function IncludeOutline({
   entry: string;
   workspace: PolicyWorkspace;
 }) {
-  const source = useBatteryPolicySource(entry);
+  const source = useBatteryPolicySource(entry, {
+    serverRules: workspace.scoped,
+  });
   return (
     <OutlineList
       workspace={workspace}

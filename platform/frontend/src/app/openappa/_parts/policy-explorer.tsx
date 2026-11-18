@@ -1,6 +1,12 @@
 "use client";
 
-import { ChevronRight, Folder, FolderOpen, TriangleAlert } from "lucide-react";
+import {
+  ChevronRight,
+  Folder,
+  FolderOpen,
+  LockKeyhole,
+  TriangleAlert,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -17,7 +23,11 @@ import {
   PolicyStatusDot,
   policyFileIcon,
 } from "./policy-file-kind";
-import { buildPolicyTree, type PolicyTreeNode } from "./policy-files";
+import {
+  buildPolicyTree,
+  type PolicyFile,
+  type PolicyTreeNode,
+} from "./policy-files";
 import type { PolicyWorkspace } from "./use-policy-workspace";
 
 /**
@@ -72,7 +82,9 @@ export function PolicyExplorer({ workspace }: { workspace: PolicyWorkspace }) {
                   aria-hidden
                 />
                 <span className="truncate">
-                  {POLICY_FILE_KIND[section.kind].section}
+                  {workspace.scoped
+                    ? "MCP server rules"
+                    : POLICY_FILE_KIND[section.kind].section}
                 </span>
                 {section.kind !== "root" && (
                   <span className="ml-auto font-mono font-normal tabular-nums">
@@ -213,6 +225,15 @@ function TreeNodes({
                 <span className="sr-only">{file.statusLabel}</span>
               </>
             )}
+            {file.canEdit === false && (
+              <>
+                <LockKeyhole
+                  className="ml-auto size-3 shrink-0 text-muted-foreground/70"
+                  aria-hidden
+                />
+                <span className="sr-only">Read-only</span>
+              </>
+            )}
           </UnstyledButton>
         );
         // Every row has a tooltip, so a row keeps its element when the
@@ -229,9 +250,7 @@ function TreeNodes({
                   <span>{file.statusLabel}</span>
                 </span>
               ) : (
-                <span>
-                  {file.mcpServerRules ? "MCP server rules" : "Repository file"}
-                </span>
+                <span>{repositoryFileTip(file)}</span>
               )}
             </TooltipContent>
           </Tooltip>
@@ -243,3 +262,11 @@ function TreeNodes({
 
 const ROW_CLASS =
   "flex h-[26px] w-full items-center gap-1 pr-2 text-left text-[12.5px] text-foreground/80 outline-none hover:bg-accent/60 focus-visible:bg-accent/60";
+
+function repositoryFileTip(file: PolicyFile): string {
+  if (!file.mcpServerRules) return "Repository file";
+  const servers = (file.servers ?? []).map((server) => server.name).join(", ");
+  return `MCP server rules${servers ? `: ${servers}` : ""}${
+    file.canEdit === false ? " · read-only" : ""
+  }`;
+}

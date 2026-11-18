@@ -31,8 +31,11 @@ export function PolicySourcePane({
   files,
   focusLine,
   onOpenEntry,
+  serverRules,
   className,
 }: {
+  /** Read the file as an MCP server's rules, with no Guardrails permission. */
+  serverRules?: boolean;
   file: PolicyFile;
   /** Every file of the policy: the include paths that can be opened. */
   files: PolicyFile[];
@@ -53,6 +56,7 @@ export function PolicySourcePane({
       // One query per entry: a new file starts from its own loading state.
       key={file.key}
       entry={file.entry ?? file.path}
+      serverRules={serverRules}
       focusLine={focusLine}
       className={className}
     />
@@ -232,14 +236,16 @@ function RootSource({
 /** One include: the exact battery a tool rule links to, or a repository file. */
 function IncludeSource({
   entry,
+  serverRules,
   focusLine,
   className,
 }: {
   entry: string;
+  serverRules?: boolean;
   focusLine?: number;
   className?: string;
 }) {
-  const source = useBatteryPolicySource(entry);
+  const source = useBatteryPolicySource(entry, { serverRules });
   if (source.isPending) return <PolicyPaneSkeleton className={className} />;
   if (source.isError || !source.data)
     return (

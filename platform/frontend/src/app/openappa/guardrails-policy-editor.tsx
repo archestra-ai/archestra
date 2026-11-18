@@ -12,6 +12,10 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
+import {
+  SERVER_RULES_LABEL,
+  ServerRulesButton,
+} from "@/app/mcp/registry/_parts/server-rules-launch";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,7 +42,10 @@ import {
 } from "./_parts/policy-file-kind";
 import { PolicyOutline } from "./_parts/policy-outline";
 import { PolicyQuickOpen } from "./_parts/policy-quick-open";
-import { PolicySourcePane } from "./_parts/policy-source-pane";
+import {
+  PolicyPaneSkeleton,
+  PolicySourcePane,
+} from "./_parts/policy-source-pane";
 import {
   type PolicyWorkspace,
   usePolicyWorkspace,
@@ -121,13 +128,19 @@ export function GuardrailsPolicyEditor() {
         )}
         <TabsContent value="source" className="flex min-h-0">
           {explorerOpen && <PolicyExplorer workspace={workspace} />}
-          <PolicySourcePane
-            className="min-w-0 flex-1"
-            file={workspace.active}
-            files={workspace.files}
-            focusLine={workspace.focusLine}
-            onOpenEntry={workspace.open}
-          />
+          {workspace.isPending || !workspace.active.key ? (
+            // Whose files these are is not known yet: nothing to read.
+            <PolicyPaneSkeleton className="min-w-0 flex-1" />
+          ) : (
+            <PolicySourcePane
+              className="min-w-0 flex-1"
+              file={workspace.active}
+              files={workspace.files}
+              focusLine={workspace.focusLine}
+              onOpenEntry={workspace.open}
+              serverRules={workspace.scoped}
+            />
+          )}
           {outlineOpen && <PolicyOutline workspace={workspace} />}
         </TabsContent>
         <TabsContent value="effective" className="flex min-h-0 flex-col">
@@ -165,13 +178,23 @@ function TopBar({
   const kind = POLICY_FILE_KIND[active.kind];
   const KindIcon = policyFileIcon(active);
   const slash = active.path.lastIndexOf("/");
-  const readOnly = workspace.managed
-    ? active.kind === "repository"
-      ? "Read-only. Change this file in its connected repository."
-      : "Read-only. Change this policy in its connected repository."
-    : workspace.canChangeInChat
-      ? "Read-only. Change this policy with the configuration agent in chat."
-      : "Read-only. Ask an administrator to change this policy.";
+  // A reader of MCP servers' rules changes a file from the server it governs.
+  const editServer =
+    workspace.scoped && active.canEdit ? active.servers?.[0] : undefined;
+  const serverNames = (active.servers ?? [])
+    .map((server) => server.name)
+    .join(", ");
+  const readOnly = workspace.scoped
+    ? active.canEdit
+      ? `Read-only here. ${SERVER_RULES_LABEL} proposes a change as a pull request.`
+      : `Read-only. Changing these rules takes edit access to ${serverNames || "the server"} in the MCP registry.`
+    : workspace.managed
+      ? active.kind === "repository"
+        ? "Read-only. Change this file in its connected repository."
+        : "Read-only. Change this policy in its connected repository."
+      : workspace.canChangeInChat
+        ? "Read-only. Change this policy with the configuration agent in chat."
+        : "Read-only. Ask an administrator to change this policy.";
   const managedIn = `Managed in ${workspace.gitLabel}`;
 
   return (
@@ -298,6 +321,17 @@ function TopBar({
         <IconLink href={workspace.guideUrl} label="Policy guide">
           <BookOpen className="size-3.5" />
         </IconLink>
+        {editServer && isSource && (
+          <ServerRulesButton
+            catalog={editServer}
+            size="xs"
+            variant="ghost"
+            className="h-6 px-1.5 text-xs"
+          >
+            <SquarePen className="size-3.5" aria-hidden />
+            <span className="sr-only xl:not-sr-only">{SERVER_RULES_LABEL}</span>
+          </ServerRulesButton>
+        )}
         {workspace.canChangeInChat && (
           <OpenAppaChatButton
             size="xs"
@@ -308,14 +342,17 @@ function TopBar({
             <span className="sr-only xl:not-sr-only">Change in chat</span>
           </OpenAppaChatButton>
         )}
-        <TabsList size="sm" aria-label="Policy view" className="mx-1 h-6">
-          <TabsTrigger value="source" className="h-5 text-[11px]">
-            Source
-          </TabsTrigger>
-          <TabsTrigger value="effective" className="h-5 text-[11px]">
-            Effective
-          </TabsTrigger>
-        </TabsList>
+        {/* The composed policy is the organization's: not a server reader's. */}
+        {!workspace.scoped && (
+          <TabsList size="sm" aria-label="Policy view" className="mx-1 h-6">
+            <TabsTrigger value="source" className="h-5 text-[11px]">
+              Source
+            </TabsTrigger>
+            <TabsTrigger value="effective" className="h-5 text-[11px]">
+              Effective
+            </TabsTrigger>
+          </TabsList>
+        )}
         {isSource && (
           <IconAction
             label={outlineOpen ? "Hide rule outline" : "Show rule outline"}

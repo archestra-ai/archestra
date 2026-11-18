@@ -30,6 +30,17 @@ vi.mock("@/components/editor");
 vi.mock("next/navigation");
 vi.mock("sonner");
 vi.mock("@/lib/clients/auth/auth-client");
+// The registry's own launch link, which needs the Keeper agent and the config.
+vi.mock("@/app/mcp/registry/_parts/server-rules-launch", () => ({
+  SERVER_RULES_LABEL: "Edit Guardrails",
+  ServerRulesButton: ({
+    catalog,
+    children,
+  }: {
+    catalog: { id: string };
+    children: React.ReactNode;
+  }) => <a href={`/chat?server=${catalog.id}`}>{children}</a>,
+}));
 const origin = "http://localhost:9000";
 const url = `${origin}/api/guardrails-policy`;
 const content = "[policy]\nversion = 2\n";
@@ -720,4 +731,102 @@ test("the files and the rule outline show only in the Source view", async () => 
   expect(
     screen.getByText("What the runtime enforces, batteries included."),
   ).toBeVisible();
+});
+
+test("a member with no Guardrails permission sees only their MCP servers' rules files, and which they may change", async () => {
+  const payments = "mcp/payments_api.toml";
+  const helpdesk = "mcp/helpdesk.toml";
+  const text = "[policy]\nversion = 2\n";
+  let organizationReads = 0;
+  const refuse = () => {
+    organizationReads += 1;
+    return HttpResponse.json(
+      { error: { message: "Forbidden" } },
+      { status: 403 },
+    );
+  };
+  server.use(
+    http.get(`${origin}/api/user/permissions`, () =>
+      HttpResponse.json(
+        makeUserPermissions({
+          guardrailsPolicy: [],
+          organizationSettings: [],
+          log: [],
+        }),
+      ),
+    ),
+    http.get(declarationsUrl, refuse),
+    http.get(effectiveUrl, refuse),
+    http.get(url, refuse),
+    http.get(`${origin}/api/openappa/battery-policy-source`, refuse),
+    http.get(`${origin}/api/openappa/server-rules/files`, () =>
+      HttpResponse.json({
+        files: [
+          {
+            path: payments,
+            servers: [{ id: "payments", name: "payments_api" }],
+            canEdit: true,
+          },
+          {
+            path: helpdesk,
+            servers: [{ id: "helpdesk", name: "helpdesk" }],
+            canEdit: false,
+          },
+        ],
+      }),
+    ),
+    http.get(`${origin}/api/openappa/server-rules/source`, ({ request }) => {
+      const entry = new URL(request.url).searchParams.get("entry") ?? "";
+      return HttpResponse.json({
+        entry,
+        name: entry,
+        kind: "repository",
+        content: `# ${entry}\n${text}`,
+      });
+    }),
+  );
+  mount();
+
+  // The first file opens: there is no organization policy to land on.
+  expect(
+    await screen.findByRole("textbox", { name: `${payments} TOML` }),
+  ).toHaveValue(`# ${payments}\n${text}`);
+  const explorer = screen.getByRole("navigation", { name: "Policy files" });
+  expect(within(explorer).getByText("MCP server rules")).toBeVisible();
+  expect(
+    within(explorer).queryByText("Organization policy"),
+  ).not.toBeInTheDocument();
+  expect(within(explorer).queryByText("Batteries")).not.toBeInTheDocument();
+  expect(
+    within(explorer).getByRole("button", { name: "payments_api.toml" }),
+  ).toBeVisible();
+  // The composed policy is the organization's.
+  expect(
+    screen.queryByRole("tab", { name: "Effective" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Edit Guardrails" })).toHaveAttribute(
+    "href",
+    "/chat?server=payments",
+  );
+  await userEvent.click(
+    within(explorer).getByRole("button", { name: /^helpdesk\.toml/ }),
+  );
+  expect(lastUrl()).toBe(`/openappa/policy?${entryQuery(helpdesk)}`);
+  cleanup();
+
+  // A file they may read and not change says what changing it takes; a
+  // link to the composed view stays on the source.
+  mount(`${entryQuery(helpdesk)}&view=effective`);
+  expect(
+    await screen.findByRole("textbox", { name: `${helpdesk} TOML` }),
+  ).toBeVisible();
+  expect(
+    await screen.findByRole("img", {
+      name: "Read-only. Changing these rules takes edit access to helpdesk in the MCP registry.",
+    }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("link", { name: "Edit Guardrails" }),
+  ).not.toBeInTheDocument();
+  expect(organizationReads).toBe(0);
 });

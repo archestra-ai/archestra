@@ -19,6 +19,12 @@ export type PolicyFile = {
   severity?: "ok" | "warning" | "critical";
   /** A repository file in the self-service folder holds an MCP server's rules. */
   mcpServerRules?: boolean;
+  /**
+   * For a reader of MCP servers' rules alone: the servers this file governs
+   * that they may open, and whether they may change it from the registry.
+   */
+  servers?: { id: string; name: string }[];
+  canEdit?: boolean;
   /** A battery whose package is missing has no source to open. */
   disabled: boolean;
 };

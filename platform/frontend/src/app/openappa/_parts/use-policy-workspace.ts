@@ -5,7 +5,10 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useMemo } from "react";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { usePolicyDeclarations } from "@/lib/openappa-batteries.query";
-import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import {
+  useAppaGithubSync,
+  useServerRulesAccess,
+} from "@/lib/openappa-github-sync.query";
 import { appaGitHost } from "./appa-git-host";
 import { batteryDisplayName } from "./battery-display-name";
 import { BATTERY_STATUS } from "./battery-status";
@@ -25,7 +28,6 @@ export type PolicyWorkspace = ReturnType<typeof usePolicyWorkspace>;
  * the files visited.
  */
 export function usePolicyWorkspace() {
-  const declarations = usePolicyDeclarations();
   const sync = useAppaGithubSync();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -33,12 +35,21 @@ export function usePolicyWorkspace() {
     guardrailsPolicy: ["update"],
   });
 
+  // A reader with no Guardrails permission sees their MCP servers' rules
+  // files and nothing else of the policy.
+  const serverRules = useServerRulesAccess();
+  const scoped = serverRules.scoped === true;
+  const declarations = usePolicyDeclarations(serverRules.scoped === false);
+
   const activeEntry = searchParams.get("entry");
   const lineParam = Number(searchParams.get("line"));
   const focusLine =
     Number.isSafeInteger(lineParam) && lineParam > 0 ? lineParam : undefined;
   const view: PolicyView =
-    searchParams.get("view") === "effective" ? "effective" : "source";
+    // Only once the reader is known to hold the Guardrails permission.
+    searchParams.get("view") === "effective" && serverRules.scoped === false
+      ? "effective"
+      : "source";
 
   const rootPath = sync.data?.source?.path || "policy.toml";
   // The self-service folder's files are MCP servers' rules; any other file
@@ -50,6 +61,21 @@ export function usePolicyWorkspace() {
       : null;
 
   const files = useMemo<PolicyFile[]>(() => {
+    if (scoped)
+      return serverRules.files.map(
+        (file): PolicyFile => ({
+          key: file.path,
+          entry: file.path,
+          path: file.path,
+          name: baseName(file.path),
+          kind: "repository",
+          label: file.path,
+          mcpServerRules: true,
+          servers: file.servers,
+          canEdit: file.canEdit,
+          disabled: false,
+        }),
+      );
     const data = declarations.data;
     const root: PolicyFile = {
       key: "root",
@@ -94,7 +120,7 @@ export function usePolicyWorkspace() {
         }),
       ),
     ];
-  }, [declarations.data, rootPath, serversFolder]);
+  }, [declarations.data, rootPath, serversFolder, scoped, serverRules.files]);
 
   // A linked entry opens before the declarations name it, and when they fail.
   const active: PolicyFile =
@@ -109,7 +135,7 @@ export function usePolicyWorkspace() {
           label: activeEntry,
           disabled: false,
         }
-      : files[0]);
+      : (files[0] ?? NO_FILE));
 
   const navigate = useCallback(
     (next: { entry: string | null; line?: number; view: PolicyView }) => {
@@ -138,6 +164,10 @@ export function usePolicyWorkspace() {
 
   const managed = declarations.data?.managedInGithub === true;
   return {
+    /** Only the reader's MCP servers' rules files are theirs to see. */
+    scoped,
+    /** Whether the reader's access is known yet. */
+    isPending: serverRules.scoped === null,
     files,
     active,
     focusLine,
@@ -175,6 +205,17 @@ export function usePolicyWorkspace() {
 }
 
 type PolicyView = "source" | "effective";
+
+/** What is open before a reader's files are known: nothing to load. */
+const NO_FILE: PolicyFile = {
+  key: "",
+  entry: null,
+  path: "",
+  name: "",
+  kind: "repository",
+  label: "",
+  disabled: true,
+};
 
 function baseName(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1);

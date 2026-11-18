@@ -137,15 +137,28 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   await expect(
     dialog.getByText("tool_13259", { exact: false }).first(),
   ).toBeVisible();
-  await dialog.getByRole("button", { name: "Side by side" }).click();
-  await expect(
-    dialog.getByRole("button", { name: "Side by side" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await dialog.getByRole("button", { name: "Wrap lines" }).click();
-  await dialog.getByRole("button", { name: "Show unchanged" }).click();
-  await expect(
-    dialog.getByRole("button", { name: "Show unchanged" }),
-  ).toHaveAttribute("aria-pressed", "true");
+  const layout = dialog.getByRole("radiogroup", { name: "Layout" });
+  const unified = layout.getByRole("radio", { name: "Unified", exact: true });
+  const split = layout.getByRole("radio", { name: "Side by side" });
+  const wrap = dialog.getByRole("switch", { name: "Wrap lines" });
+  const unchanged = dialog.getByRole("switch", { name: "Show unchanged" });
+  await expect(unified).toBeChecked();
+  await expect(split).not.toBeChecked();
+  await expect(wrap).not.toBeChecked();
+  await expect(unchanged).not.toBeChecked();
+  // Layout is a single choice with radio keyboard behavior; the switches
+  // stay independent of both the selected layout and one another.
+  await unified.focus();
+  await page.keyboard.down("ArrowRight");
+  await expect(split).toBeChecked();
+  await page.keyboard.up("ArrowRight");
+  await expect(unified).not.toBeChecked();
+  await expect(unchanged).not.toBeChecked();
+  await wrap.check();
+  await expect(unchanged).not.toBeChecked();
+  await unchanged.check();
+  await expect(wrap).toBeChecked();
+  await expect(split).toBeChecked();
   await expect(
     dialog.getByText("tool_13259", { exact: false }).first(),
   ).toBeVisible();
@@ -162,10 +175,16 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   ).toBeVisible();
   await find.press("Escape");
   await expect(find).toBeHidden();
-  await expect(dialog.getByRole("button", { name: "Unified" })).toBeVisible();
+  await expect(layout).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 720 });
-  await dialog.getByRole("button", { name: "Unified" }).click();
+  await layout.getByText("Unified", { exact: true }).click();
+  await expect(unified).toBeChecked();
+  await expect(split).not.toBeChecked();
+  await expect(wrap).toBeChecked();
+  await expect(unchanged).toBeChecked();
+  await expect(wrap).toBeInViewport();
+  await expect(unchanged).toBeInViewport();
   await expect(
     dialog.getByRole("button", { name: "Next change" }),
   ).toBeInViewport();

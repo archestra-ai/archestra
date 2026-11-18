@@ -1892,7 +1892,12 @@ async function withOutputConfigFallback<TResult>(
   }
 }
 
-/** Bedrock: "This model doesn't support the outputConfig field." */
+/**
+ * True only for Bedrock's refusal of the field itself: "This model doesn't
+ * support the outputConfig field." An error about the schema inside the field,
+ * such as an unsupported keyword, comes from a model that enforces schemas and
+ * must reach the caller.
+ */
 function isUnsupportedOutputConfigError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const { statusCode, message, responseBody } = error as {
@@ -1901,12 +1906,13 @@ function isUnsupportedOutputConfigError(error: unknown): boolean {
     responseBody?: string;
   };
   if (statusCode !== 400) return false;
-  const text = `${message ?? ""} ${responseBody ?? ""}`;
-  return (
-    /outputConfig/i.test(text) &&
-    /doesn't support|does not support|not supported|unsupported/i.test(text)
+  return UNSUPPORTED_OUTPUT_CONFIG_PATTERN.test(
+    `${message ?? ""} ${responseBody ?? ""}`,
   );
 }
+
+const UNSUPPORTED_OUTPUT_CONFIG_PATTERN =
+  /model (?:doesn['’]t|does not) support the outputConfig field/i;
 
 // =============================================================================
 // ADAPTER FACTORY

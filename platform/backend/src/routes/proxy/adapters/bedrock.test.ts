@@ -1318,18 +1318,40 @@ describe("Bedrock structured-output fallback", () => {
     expect(converseStream.mock.calls[1][1].outputConfig).toBeUndefined();
   });
 
-  test("a schema the model refuses is returned to the caller, not retried", async () => {
-    const invalid =
-      "The json schema definition at outputConfig.textFormat.structure.jsonSchema is invalid. Fix the schema definition and try again.";
-    const converse = vi.fn().mockRejectedValue(makeBedrockError(invalid));
+  // Each of these comes from a model that enforces schemas. Dropping the
+  // constraint would answer with unconstrained text instead of the error.
+  const schemaErrors = [
+    "The json schema definition at outputConfig.textFormat.structure.jsonSchema is invalid. Fix the schema definition and try again.",
+    "Unsupported JSON Schema keyword at outputConfig.textFormat.structure.jsonSchema: pattern",
+    "The outputConfig field is not supported together with citations.",
+  ];
+
+  test.each(
+    schemaErrors,
+  )("returns a refused schema to the caller without a retry: %s", async (message) => {
+    const converse = vi.fn().mockRejectedValue(makeBedrockError(message));
 
     await expect(
       bedrockAdapterFactory.execute(
         { converse },
         createConverseRequest({ outputConfig }),
       ),
-    ).rejects.toThrow(invalid);
+    ).rejects.toThrow(message);
     expect(converse).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(
+    schemaErrors,
+  )("streaming returns a refused schema to the caller without a retry: %s", async (message) => {
+    const converseStream = vi.fn().mockRejectedValue(makeBedrockError(message));
+
+    await expect(
+      bedrockAdapterFactory.executeStream(
+        { converseStream },
+        createConverseRequest({ outputConfig }),
+      ),
+    ).rejects.toThrow(message);
+    expect(converseStream).toHaveBeenCalledTimes(1);
   });
 });
 

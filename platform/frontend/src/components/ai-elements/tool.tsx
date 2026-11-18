@@ -250,21 +250,27 @@ const ToolInputBody = ({ input }: { input: ToolUIPart["input"] }) => {
   }
 
   return (
-    <div className="space-y-1.5">
+    <dl className="space-y-3">
       {entries.map(([key, value]) => {
         const isString = typeof value === "string";
         const code = isString ? value : JSON.stringify(value, null, 2);
         return (
-          <TruncatedCodeBlock
-            key={key}
-            code={code}
-            language={isString ? "text" : "json"}
-            copyText={code}
-            wrapLongLines
-          />
+          <div key={key} className="space-y-1">
+            <dt className="font-mono text-xs text-muted-foreground [overflow-wrap:anywhere]">
+              {key}
+            </dt>
+            <dd>
+              <TruncatedCodeBlock
+                code={code}
+                language={isString ? "text" : "json"}
+                copyText={code}
+                wrapLongLines
+              />
+            </dd>
+          </div>
         );
       })}
-    </div>
+    </dl>
   );
 };
 

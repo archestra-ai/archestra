@@ -78,6 +78,7 @@ let pgliteClient: PGlite | null = null;
 // Tests that never issue SQL leave the database unchanged, so the next test
 // can skip truncating hundreds of tables.
 let databaseTouched = false;
+let databaseResetsSinceCheckpoint = 0;
 // The filename opts a suite into rollback; ordinary database suites retain
 // table resets, including tests of commit and schema-change behavior.
 let completedRollbackTests = 0;
@@ -567,6 +568,13 @@ async function resetDatabase(client: PGlite): Promise<void> {
         .map(({ sequence }) => `ALTER SEQUENCE ${sequence} RESTART;`)
         .join("\n"),
     );
+  }
+  // Repeated truncations leave relation files for PostgreSQL to reclaim at a
+  // checkpoint. In large suites, deferring that work until PGlite closes can
+  // exceed the teardown timeout. Reclaim them in small batches between tests.
+  if (withRows.rows.length > 0 && ++databaseResetsSinceCheckpoint >= 25) {
+    await client.exec("CHECKPOINT");
+    databaseResetsSinceCheckpoint = 0;
   }
 }
 

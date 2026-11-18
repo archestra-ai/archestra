@@ -923,6 +923,7 @@ const layerTable = [
           "src/server/error-handler.ts",
           "src/server/llm-proxy-drain.ts",
           "src/server/llm-proxy-timing.ts",
+          "src/server/request-logging.ts",
           "src/server/source-maps.ts",
           "src/websocket.ts",
         ],

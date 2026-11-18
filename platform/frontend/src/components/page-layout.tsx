@@ -597,6 +597,8 @@ export function PageLayout({
               maxWidth,
               "px-4 py-4 sm:px-6",
               !denseContent && "sm:py-6",
+              // A filled page reaches down to the viewport's bottom edge.
+              fillContent && "pb-2 sm:pb-2",
             )}
           >
             {children}

@@ -19,6 +19,7 @@ import type {
 } from "@/types";
 import agentsTable from "./agent";
 import appsTable from "./app";
+import serviceAccountsTable from "./service-account";
 import usersTable from "./user";
 
 // Note: Additional pg_trgm GIN indexes for search are created in migration 0116_pg_trgm_indexes.sql:
@@ -76,6 +77,10 @@ const mcpToolCallsTable = pgTable(
     userId: text("user_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    serviceAccountId: uuid("service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     /** Agent run or external run that issued this gateway call. */
     runId: varchar("run_id"),
     /**
@@ -131,6 +136,9 @@ const mcpToolCallsTable = pgTable(
     // The own-logs (log:read without log:admin) view filters every listing by
     // attributed user; without this each such query seq-scans the table.
     userIdIdx: index("mcp_tool_calls_user_id_idx").on(table.userId),
+    serviceAccountIdIdx: index("mcp_tool_calls_service_account_id_idx")
+      .on(table.serviceAccountId)
+      .where(sql`${table.serviceAccountId} IS NOT NULL`),
     appIdIdx: index("mcp_tool_calls_app_id_idx").on(table.appId),
     createdAtIdx: index("mcp_tool_calls_created_at_idx").on(table.createdAt),
     // A session's calls in time order (the session view's keyset walk).

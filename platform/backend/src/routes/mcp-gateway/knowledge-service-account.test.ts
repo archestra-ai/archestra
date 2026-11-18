@@ -9,9 +9,11 @@ import type {
   CallToolResult,
   ListToolsResult,
 } from "@modelcontextprotocol/sdk/types.js";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import config from "@/config";
+import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
 import { queryService } from "@/knowledge-base";
 import {
@@ -89,6 +91,22 @@ describe("knowledge search for a service-account OAuth client", () => {
       const { result, connectorIds } = await gateway.queryKnowledge();
       expect(result.isError).toBeFalsy();
       expect(connectorIds).toEqual([shared.connectorId]);
+      const logs = await db
+        .select()
+        .from(schema.mcpToolCallsTable)
+        .where(eq(schema.mcpToolCallsTable.agentId, agent.id));
+      expect(logs.map((row) => row.method).sort()).toEqual([
+        "tools/call",
+        "tools/list",
+      ]);
+      for (const row of logs) {
+        expect(row).toMatchObject({
+          serviceAccountId: account.id,
+          userId: null,
+          oauthClientId: "service-client",
+          authMethod: "oauth",
+        });
+      }
     });
   }
 

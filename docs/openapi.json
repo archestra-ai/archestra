@@ -437483,6 +437483,12 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "serviceAccountId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "runId": {
                             "nullable": true,
                             "type": "string"
@@ -437567,6 +437573,7 @@
                           "toolCall",
                           "toolResult",
                           "userId",
+                          "serviceAccountId",
                           "runId",
                           "sessionId",
                           "llmToolCallId",
@@ -437993,6 +438000,12 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "serviceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "runId": {
                       "nullable": true,
                       "type": "string"
@@ -438077,6 +438090,7 @@
                     "toolCall",
                     "toolResult",
                     "userId",
+                    "serviceAccountId",
                     "runId",
                     "sessionId",
                     "llmToolCallId",
@@ -553927,6 +553941,9 @@
                     },
                     "isActive": {
                       "type": "boolean"
+                    },
+                    "dismissible": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -553934,7 +553951,8 @@
                     "content",
                     "expiresAt",
                     "createdAt",
-                    "isActive"
+                    "isActive",
+                    "dismissible"
                   ],
                   "additionalProperties": false
                 }
@@ -554204,6 +554222,9 @@
                   },
                   "isActive": {
                     "type": "boolean"
+                  },
+                  "dismissible": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -554236,6 +554257,9 @@
                     },
                     "isActive": {
                       "type": "boolean"
+                    },
+                    "dismissible": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -554243,7 +554267,8 @@
                     "content",
                     "expiresAt",
                     "createdAt",
-                    "isActive"
+                    "isActive",
+                    "dismissible"
                   ],
                   "additionalProperties": false
                 }
@@ -554522,6 +554547,9 @@
                     },
                     "isActive": {
                       "type": "boolean"
+                    },
+                    "dismissible": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -554529,7 +554557,8 @@
                     "content",
                     "expiresAt",
                     "createdAt",
-                    "isActive"
+                    "isActive",
+                    "dismissible"
                   ],
                   "additionalProperties": false
                 }
@@ -554803,6 +554832,9 @@
                   },
                   "isActive": {
                     "type": "boolean"
+                  },
+                  "dismissible": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -554842,6 +554874,9 @@
                     },
                     "isActive": {
                       "type": "boolean"
+                    },
+                    "dismissible": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -554849,7 +554884,8 @@
                     "content",
                     "expiresAt",
                     "createdAt",
-                    "isActive"
+                    "isActive",
+                    "dismissible"
                   ],
                   "additionalProperties": false
                 }

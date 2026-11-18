@@ -182,7 +182,13 @@ describe("PluginDetailPage", () => {
     expect(screen.getByLabelText("Description")).toHaveValue(
       "Blocks risky commands.",
     );
-    expect(screen.getByText("hooks/hooks.json")).toBeVisible();
+    // The payload's one file is open in the workspace's explorer.
+    expect(
+      within(screen.getByRole("navigation", { name: "Files" })).getByRole(
+        "button",
+        { name: "hooks.json" },
+      ),
+    ).toHaveAttribute("aria-current", "page");
     const file = screen.getByRole("textbox", { name: "File contents" });
     expect(file).toHaveValue("{}");
     expect(file).not.toHaveAttribute("readonly");

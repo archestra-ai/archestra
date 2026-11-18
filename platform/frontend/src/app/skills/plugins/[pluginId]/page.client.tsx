@@ -52,16 +52,14 @@ export function PluginSkillPage({ pluginId }: { pluginId: string }) {
           </span>
         </InlineNoticeText>
       </InlineNotice>
-      <div className="rounded-lg border p-6">
-        <SkillContentEditor
-          manifest={skill.manifest}
-          files={skill.files}
-          onManifestChange={() => undefined}
-          onFilesChange={() => undefined}
-          readOnly
-          className="h-[calc(100vh-20rem)] min-h-[32rem]"
-        />
-      </div>
+      <SkillContentEditor
+        manifest={skill.manifest}
+        files={skill.files}
+        onManifestChange={() => undefined}
+        onFilesChange={() => undefined}
+        readOnly
+        className="h-[calc(100vh-20rem)] min-h-[32rem]"
+      />
     </PageLayout>
   );
 }

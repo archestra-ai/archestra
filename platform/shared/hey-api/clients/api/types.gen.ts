@@ -142987,6 +142987,7 @@ export type GetSiteNotificationResponses = {
         expiresAt: string | null;
         createdAt: string;
         isActive: boolean;
+        dismissible: boolean;
     } | null;
 };
 
@@ -142997,6 +142998,7 @@ export type CreateSiteNotificationData = {
         content: string;
         expiresAt?: string;
         isActive?: boolean;
+        dismissible?: boolean;
     };
     path?: never;
     query?: never;
@@ -143081,6 +143083,7 @@ export type CreateSiteNotificationResponses = {
         expiresAt: string | null;
         createdAt: string;
         isActive: boolean;
+        dismissible: boolean;
     };
 };
 
@@ -143171,6 +143174,7 @@ export type GetSiteNotificationSettingsResponses = {
         expiresAt: string | null;
         createdAt: string;
         isActive: boolean;
+        dismissible: boolean;
     } | null;
 };
 
@@ -143269,6 +143273,7 @@ export type UpdateSiteNotificationData = {
         content?: string;
         expiresAt?: string | null;
         isActive?: boolean;
+        dismissible?: boolean;
     };
     path: {
         id: string;
@@ -143355,6 +143360,7 @@ export type UpdateSiteNotificationResponses = {
         expiresAt: string | null;
         createdAt: string;
         isActive: boolean;
+        dismissible: boolean;
     };
 };
 

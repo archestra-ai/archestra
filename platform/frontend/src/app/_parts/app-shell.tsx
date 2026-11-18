@@ -228,6 +228,7 @@ export function AppShell({
                 <SiteNotificationBar
                   content={notification.content}
                   notificationId={notification.id}
+                  dismissible={notification.dismissible}
                 />
               )}
               <ImpersonationBanner />

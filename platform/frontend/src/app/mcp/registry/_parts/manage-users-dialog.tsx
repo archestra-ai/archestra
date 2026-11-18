@@ -719,10 +719,7 @@ function ConnectionsTable({
     .filter(({ rows }) => !narrowed || rows.length > 0);
   const matching = visibleGroups.flatMap(({ rows }) => rows);
 
-  // A desktop MCP server is disconnected from one person's device at a time,
-  // each with its own confirmation, so its rows are not selectable.
-  const canSelect = (server: ServerEntry) =>
-    !rowProps.desktop && rowProps.canRevoke(server);
+  const canSelect = (server: ServerEntry) => rowProps.canRevoke(server);
   const showSelection =
     allRows.filter((row) => canSelect(row.server)).length > 1;
   const selectable = matching.filter((row) => canSelect(row.server));

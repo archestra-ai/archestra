@@ -674,6 +674,11 @@ describe("reconcileOrganizationDefault", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks retains implementations; do not inherit a prior test's
+    // partial policy when Vitest shuffles the tests.
+    vi.mocked(OrganizationModel.getDefaultNetworkPolicy).mockResolvedValue(
+      null,
+    );
     clients = makeFakeClients();
     mockIsK8sConfigured.mockReturnValue(true);
     mockGetK8sNamespace.mockReturnValue("release-ns");

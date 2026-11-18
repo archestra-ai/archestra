@@ -12,7 +12,7 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
 import ConversationEnabledToolModel from "@/models/conversation-enabled-tool";
@@ -1697,7 +1697,7 @@ function organization(context: ArchestraContext): string {
 }
 
 const UNRESOLVED_TOOL_INSTRUCTION =
-  "`warnings` says a tool rule names a tool that does not exist, so that rule governs nothing. Before anything else, tell the user plainly and kindly which rule names a missing tool and that it will not protect anything as written, offer the suggested existing names, and ask whether they meant one of them or are preparing for a server that is not installed yet. Do not present the change as covering that tool.";
+  "`warnings` says a tool rule names no known tool in the MCP registry or observed LLM proxy traffic. First tell the user which rule has no known tool and offer any suggested names. Ask whether they meant one of those names or want a rule ahead of time for an unseen server or client tool. The rule can match server or client calls through the LLM proxy, even before Archestra observes them. Do not describe it as covering a known live server tool.";
 
 const PREVIEW_APPROVAL_INSTRUCTION =
   "Nothing is saved yet. In this same turn, summarize in 2-4 short bullets what the change does to agents and tools (not the TOML), and name any saved validation in `validations` that failed or could not run, then ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
@@ -2199,11 +2199,18 @@ async function touchedToolsMetadata(params: {
     params.userId,
     params.organizationId,
   );
-  const described = await ToolModel.findDescribedByNames({
-    catalogIds: visibleCatalogIds,
-    names,
-  });
-  const byName = new Map(described.map((tool) => [tool.name, tool]));
+  const isAgentAdmin = await hasAnyAgentTypeAdminPermission(params);
+  const [described, proxyTools] = await Promise.all([
+    ToolModel.findDescribedByNames({ catalogIds: visibleCatalogIds, names }),
+    ToolModel.findDescribedProxyToolsByNames({
+      userId: params.userId,
+      isAgentAdmin,
+      names,
+    }),
+  ]);
+  const byName = new Map(
+    [...proxyTools, ...described].map((tool) => [tool.name, tool]),
+  );
   return touchedToolMetadata(
     names.flatMap((name) => {
       const tool = byName.get(name);

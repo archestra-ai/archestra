@@ -2749,6 +2749,39 @@ class ToolModel {
       );
   }
 
+  static async findProxyToolNames(params: {
+    userId: string;
+    isAgentAdmin: boolean;
+  }): Promise<Array<{ name: string }>> {
+    return db
+      .select({ name: schema.toolsTable.name })
+      .from(schema.toolsTable)
+      .where(visibleProxyToolsCondition(params));
+  }
+
+  static async findDescribedProxyToolsByNames(params: {
+    userId: string;
+    isAgentAdmin: boolean;
+    names: string[];
+  }): Promise<
+    Array<{ name: string; description: string | null; parameters: unknown }>
+  > {
+    if (params.names.length === 0) return [];
+    return db
+      .select({
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        parameters: schema.toolsTable.parameters,
+      })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          visibleProxyToolsCondition(params),
+          inArray(schema.toolsTable.name, params.names),
+        ),
+      );
+  }
+
   /**
    * Get basic tool info (name and catalogId) for multiple catalogs in a single query.
    * Used for batch loading tools across multiple catalogs.
@@ -4343,5 +4376,32 @@ function coverageCatalogCondition(params: {
     params.catalogIds ? inArray(table.id, params.catalogIds) : undefined,
     isNull(table.parentCatalogItemId),
     notDeleted(table),
+  );
+}
+
+function visibleProxyToolsCondition(params: {
+  userId: string;
+  isAgentAdmin: boolean;
+}) {
+  return and(
+    isNull(schema.toolsTable.catalogId),
+    isNull(schema.toolsTable.agentId),
+    isNull(schema.toolsTable.delegateToAgentId),
+    isNull(schema.toolsTable.delegateToA2aConnectionId),
+    eq(schema.toolsTable.clonedPendingDiscovery, false),
+    notDeleted(schema.toolsTable),
+    params.isAgentAdmin
+      ? undefined
+      : exists(
+          db
+            .select({ id: schema.toolObservationsTable.id })
+            .from(schema.toolObservationsTable)
+            .where(
+              and(
+                eq(schema.toolObservationsTable.toolId, schema.toolsTable.id),
+                eq(schema.toolObservationsTable.userId, params.userId),
+              ),
+            ),
+        ),
   );
 }

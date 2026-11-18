@@ -787,21 +787,8 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       // request encrypted reasoning under store:false, so the next tool step
       // resends reasoning by id alone and OpenAI rejects it. It would also
       // drop reasoningSummary and keep sampling parameters.
-      return wrapLanguageModel({
-        model: client.responses(modelName),
-        middleware: {
-          specificationVersion: "v3",
-          transformParams: async ({ params }) => ({
-            ...params,
-            providerOptions: {
-              ...params.providerOptions,
-              openai: {
-                forceReasoning: true,
-                ...params.providerOptions?.openai,
-              },
-            },
-          }),
-        },
+      return withResponsesDefaults(client.responses(modelName), {
+        forceReasoning: true,
       });
     },
     defaultBaseUrl: config.llm.openai.baseUrl,
@@ -854,12 +841,15 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     // `/responses` / `/chat/completions` suffix is the whole path.
     createModel: ({ apiKey, modelName, baseURL, headers, fetch, direct }) =>
       requiresPerplexityAgentApi(modelName)
-        ? createOpenAI({
-            apiKey,
-            baseURL: direct ? perplexityAgentApiBaseUrl(baseURL) : baseURL,
-            headers,
-            fetch,
-          }).responses(modelName)
+        ? withResponsesDefaults(
+            createOpenAI({
+              apiKey,
+              baseURL: direct ? perplexityAgentApiBaseUrl(baseURL) : baseURL,
+              headers,
+              fetch,
+            }).responses(modelName),
+            {},
+          )
         : // Perplexity reasoning models (sonar-reasoning-pro, sonar-deep-research)
           // stream their chain of thought as inline <think>…</think> text in
           // `content` — there is no reasoning_content field — so no provider
@@ -1465,6 +1455,37 @@ function createOllamaNativeFetch(
  * ids on older SDKs, 128k on newer ones, which older models reject), so it
  * gets the safe fallback. Explicit per-call values still win.
  */
+/**
+ * Defaults for a Responses-transport model; explicit per-call values win.
+ * `store: false` because every caller resends the whole history: with the
+ * SDK's default the request names earlier items by id, which the provider
+ * never stored (Perplexity's Agent API stores nothing, and turns run
+ * stateless), so it fails. That holds for one-off requests such as
+ * compaction summaries too, not only for turns that set it.
+ */
+function withResponsesDefaults(
+  model: Parameters<typeof wrapLanguageModel>[0]["model"],
+  defaults: { forceReasoning?: boolean },
+) {
+  return wrapLanguageModel({
+    model,
+    middleware: {
+      specificationVersion: "v3",
+      transformParams: async ({ params }) => ({
+        ...params,
+        providerOptions: {
+          ...params.providerOptions,
+          openai: {
+            store: false,
+            ...defaults,
+            ...params.providerOptions?.openai,
+          },
+        },
+      }),
+    },
+  });
+}
+
 function withCatalogOutputBudget(
   model: LLMModel,
   target: {

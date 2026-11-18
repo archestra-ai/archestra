@@ -2757,16 +2757,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
-    // Before the soft-block waiver, which would release the call and exempt
-    // the session, and before an observer records it as the session's. Not
-    // retryable: the same summary request would only be paid for again.
-    const trusted = getTrustedContext(context.resources);
-    if (trusted && isSummaryRequest(trusted) && context.toolCalls.length > 0) {
-      throw new ApiError(
-        422,
-        "OpenAPPA rejected tool calls from a compaction response",
-      );
-    }
+    rejectSummaryToolCalls(context.resources, context.toolCalls.length);
     const adapter = this.bindings.get(context.resources)?.adapter;
     if (
       context.toolCalls.some((call) => isChildContinuationCall(adapter, call))
@@ -2804,6 +2795,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onHostedToolCalls(
     context: LlmProxyHostedToolCallsContext,
   ): Promise<LlmProxyHostedToolCallsOutcome | undefined> {
+    rejectSummaryToolCalls(context.resources, context.hostedToolCalls.length);
     return this.withSoftBlockWaiver(
       context,
       "onHostedToolCalls",
@@ -2842,6 +2834,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onPrepareToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    // Preparation runs before the finalizer, so the summary check runs here
+    // first, outside the waiver.
+    rejectSummaryToolCalls(context.resources, context.toolCalls.length);
     const adapter = this.bindings.get(context.resources)?.adapter;
     if (
       context.toolCalls.some((call) => isChildContinuationCall(adapter, call))
@@ -6100,6 +6095,23 @@ function isCompactionOnlyResponse(value: unknown): boolean {
 /** The platform's own summary request: its tools are read-only context. */
 function isSummaryRequest(trusted: AppaTrustedContext): boolean {
   return trusted.summaryRequest === true;
+}
+
+/**
+ * Refuses a summary's calls before any hook can waive them as a soft block
+ * (which would release them and exempt the session) or an observer can
+ * record them. Not retryable: the same summary would only be paid for again.
+ */
+function rejectSummaryToolCalls(
+  resources: ReadonlyMap<PropertyKey, unknown>,
+  callCount: number,
+): void {
+  const trusted = getTrustedContext(resources);
+  if (trusted && isSummaryRequest(trusted) && callCount > 0)
+    throw new ApiError(
+      422,
+      "OpenAPPA rejected tool calls from a compaction response",
+    );
 }
 
 function getTrustedContext(

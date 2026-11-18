@@ -640,11 +640,6 @@ export async function executeA2AMessage(
           hasPreviousSummary,
           contextLength,
           abortSignal,
-          // As the turn sends it: stored item references break otherwise.
-          ...(provider === "openai" &&
-            requiresOpenAiResponsesApi(selectedModel) && {
-              providerOptions: { openai: { store: false } },
-            }),
           logFields: { agentId: agent.id, sessionId, provider },
         }),
       summarizeTranscript: async (transcript) =>

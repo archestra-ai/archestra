@@ -1812,10 +1812,6 @@ describe("AgentForm delegation state", () => {
     // a skill entirely: the count said one, no chip appeared, and there was no
     // way to unpublish it. The assignment endpoint returns the row for exactly
     // this reason.
-    vi.mocked(useFeature).mockImplementation(
-      ((flag: string) =>
-        flag === "mcpGatewaySkillsEnabled") as unknown as typeof useFeature,
-    );
     useAgentSkillsMock.mockReturnValue({
       data: {
         accessAllSkills: false,
@@ -1850,10 +1846,6 @@ describe("AgentForm delegation state", () => {
     // id outlives the scope it was made under. Filtering the picker to org
     // scope alone stranded it: the count said one, no chip appeared, and the id
     // was re-submitted verbatim on every save with no way to drop it.
-    vi.mocked(useFeature).mockImplementation(
-      ((flag: string) =>
-        flag === "mcpGatewaySkillsEnabled") as unknown as typeof useFeature,
-    );
     useAgentSkillsMock.mockReturnValue({
       data: { accessAllSkills: true, skillIds: [], skills: [] },
       isSuccess: true,
@@ -2509,10 +2501,6 @@ describe("AgentForm published skills", () => {
       () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
     );
     // Only this flag: the section does not exist without it.
-    vi.mocked(useFeature).mockImplementation(
-      ((flag: string) =>
-        flag === "mcpGatewaySkillsEnabled") as unknown as typeof useFeature,
-    );
     useProfileMock.mockReturnValue({ data: null, refetch: vi.fn() });
     useDelegationTargetAgentsMock.mockReturnValue({ data: [] });
     useAgentDelegationsMock.mockReturnValue({ data: [], isSuccess: true });

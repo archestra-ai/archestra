@@ -44884,7 +44884,6 @@ export type GetBootstrapResponses = {
                 communicate: boolean;
             };
             features: {
-                betaEnabled: boolean;
                 orchestratorK8sRuntime: boolean;
                 agentIdentitySpiffe: {
                     trustDomain: string;
@@ -44940,7 +44939,6 @@ export type GetBootstrapResponses = {
                 agentHooksEnabled: boolean;
                 chatopsTelegramEnabled: boolean;
                 kbMfilesConnectorEnabled: boolean;
-                llmModelPoolsEnabled: boolean;
                 kbMfilesOauthEnabled: boolean;
                 kbBm25DefaultK1: number;
                 kbBm25DefaultB: number;
@@ -44949,9 +44947,7 @@ export type GetBootstrapResponses = {
                     configured: boolean;
                     redirectUri: string;
                 };
-                mcpGatewaySkillsEnabled: boolean;
                 devFeedbackEnabled: boolean;
-                autoRoutingEnabled: boolean;
             };
             providerBaseUrls: {
                 [key: string]: string | null;
@@ -54724,7 +54720,6 @@ export type GetConfigResponses = {
             communicate: boolean;
         };
         features: {
-            betaEnabled: boolean;
             orchestratorK8sRuntime: boolean;
             agentIdentitySpiffe: {
                 trustDomain: string;
@@ -54780,7 +54775,6 @@ export type GetConfigResponses = {
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
             kbMfilesConnectorEnabled: boolean;
-            llmModelPoolsEnabled: boolean;
             kbMfilesOauthEnabled: boolean;
             kbBm25DefaultK1: number;
             kbBm25DefaultB: number;
@@ -54789,9 +54783,7 @@ export type GetConfigResponses = {
                 configured: boolean;
                 redirectUri: string;
             };
-            mcpGatewaySkillsEnabled: boolean;
             devFeedbackEnabled: boolean;
-            autoRoutingEnabled: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -125424,6 +125416,190 @@ export type GetAppaSelfServiceResponses = {
 
 export type GetAppaSelfServiceResponse = GetAppaSelfServiceResponses[keyof GetAppaSelfServiceResponses];
 
+export type GetOpenappaServerRulesFilesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/server-rules/files';
+};
+
+export type GetOpenappaServerRulesFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaServerRulesFilesError = GetOpenappaServerRulesFilesErrors[keyof GetOpenappaServerRulesFilesErrors];
+
+export type GetOpenappaServerRulesFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        files: Array<{
+            path: string;
+            servers: Array<{
+                id: string;
+                name: string;
+            }>;
+            canEdit: boolean;
+        }>;
+    };
+};
+
+export type GetOpenappaServerRulesFilesResponse = GetOpenappaServerRulesFilesResponses[keyof GetOpenappaServerRulesFilesResponses];
+
+export type GetOpenappaServerRulesSourceData = {
+    body?: never;
+    path?: never;
+    query: {
+        entry: string;
+    };
+    url: '/api/openappa/server-rules/source';
+};
+
+export type GetOpenappaServerRulesSourceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaServerRulesSourceError = GetOpenappaServerRulesSourceErrors[keyof GetOpenappaServerRulesSourceErrors];
+
+export type GetOpenappaServerRulesSourceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        entry: string;
+        name: string;
+        kind: 'battery' | 'repository';
+        content: string;
+    };
+};
+
+export type GetOpenappaServerRulesSourceResponse = GetOpenappaServerRulesSourceResponses[keyof GetOpenappaServerRulesSourceResponses];
+
 export type CreateAppaGithubRepositoryData = {
     body: {
         owner: string;
@@ -128229,6 +128405,10 @@ export type GetRolesData = {
         limit?: number;
         offset?: number;
         name?: string;
+        /**
+         * Limit the list to one kind of role. `custom` leaves out the built-in roles, which cannot be edited.
+         */
+        kind?: 'custom';
     };
     url: '/api/roles';
 };
@@ -141427,6 +141607,7 @@ export type GetServiceAccountsResponses = {
         } | null;
         organizationId: string;
         name: string;
+        description: string | null;
         icon: string | null;
         role: string;
         teamId: string | null;
@@ -141452,6 +141633,7 @@ export type GetServiceAccountsResponse = GetServiceAccountsResponses[keyof GetSe
 export type CreateServiceAccountData = {
     body: {
         name: string;
+        description?: string | null;
         icon?: string | null;
         role: string;
         teamId?: string | null;
@@ -141571,6 +141753,7 @@ export type CreateServiceAccountResponses = {
         } | null;
         organizationId: string;
         name: string;
+        description: string | null;
         icon: string | null;
         role: string;
         teamId: string | null;
@@ -141781,6 +141964,7 @@ export type GetServiceAccountResponses = {
         } | null;
         organizationId: string;
         name: string;
+        description: string | null;
         icon: string | null;
         role: string;
         teamId: string | null;
@@ -141815,6 +141999,7 @@ export type GetServiceAccountResponse = GetServiceAccountResponses[keyof GetServ
 export type UpdateServiceAccountData = {
     body: {
         name?: string;
+        description?: string | null;
         icon?: string | null;
         role?: string;
         teamId?: string | null;
@@ -141915,6 +142100,7 @@ export type UpdateServiceAccountResponses = {
         } | null;
         organizationId: string;
         name: string;
+        description: string | null;
         icon: string | null;
         role: string;
         teamId: string | null;

@@ -72,6 +72,9 @@ vi.mock("@/lib/auth/use-is-authenticated", () => ({
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/limits-access");
+vi.mock("@/lib/openappa-github-sync.query", () => ({
+  useServerRulesAccess: () => ({ scoped: false, files: [] }),
+}));
 // Read only when a grant on one credential might open Settings.
 vi.mock("@/lib/runtime-credentials.query", () => ({
   useRuntimeCredentials: () => ({ data: [], isPending: false }),
@@ -926,13 +929,7 @@ describe("ConversationSearchPalette", () => {
     }
   });
 
-  it.each([
-    true,
-    false,
-  ])("offers Auto Routing only while the alpha is enabled: %s", (enabled) => {
-    vi.mocked(useFeature).mockImplementation(
-      (feature) => feature === "autoRoutingEnabled" && enabled,
-    );
+  it("offers Auto Routing", () => {
     mockUseConversations.mockReturnValue({
       data: [],
       isLoading: false,
@@ -942,12 +939,8 @@ describe("ConversationSearchPalette", () => {
     fireEvent.change(screen.getByTestId("command-input"), {
       target: { value: "auto routing" },
     });
-    if (enabled) {
-      fireEvent.click(screen.getByText("Auto Routing"));
-      expect(mockRouterPush).toHaveBeenCalledWith("/llm/auto-routing");
-    } else {
-      expect(screen.queryByText("Auto Routing")).not.toBeInTheDocument();
-    }
+    fireEvent.click(screen.getByText("Auto Routing"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/llm/auto-routing");
   });
 
   it("searches pages by their visible labels and navigates to a match", () => {

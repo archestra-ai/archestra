@@ -8,7 +8,7 @@ import {
 import { allAvailableActions } from "@archestra/shared/access-control";
 import type { HookEndpointContext } from "@better-auth/core";
 import { APIError } from "better-auth";
-import { makeSignature } from "better-auth/crypto";
+import { hashPassword, makeSignature } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
@@ -132,6 +132,20 @@ function createMockContext(overrides: {
       (overrides.requestUrl ? new Request(overrides.requestUrl) : undefined),
     context: overrides.context,
   } as HookEndpointContext;
+}
+
+/** The cookie header a browser sends after storing `response`'s cookies. */
+function cookieHeaderFrom(response: Response): string {
+  const jar = new Map<string, string>();
+  for (const setCookie of response.headers.getSetCookie()) {
+    const [pair] = setCookie.split(";");
+    const separator = pair.indexOf("=");
+    const name = pair.slice(0, separator);
+    const value = pair.slice(separator + 1);
+    if (value === "" || /max-age=0/i.test(setCookie)) jar.delete(name);
+    else jar.set(name, value);
+  }
+  return [...jar].map(([name, value]) => `${name}=${value}`).join("; ");
 }
 
 /** Calls a better-auth endpoint over HTTP as the holder of `session`. */
@@ -1184,6 +1198,29 @@ describe("handleBeforeHook", () => {
       expect(await handleBeforeHook(unknownRole)).toBe(unknownRole);
     });
 
+    test("measures a fixed role by its permissions, for a caller composed of fixed roles", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const caller = await makeUser();
+      await makeMember(caller.id, org.id, {
+        role: "fixed:users:writer,fixed:logs:reader",
+      });
+
+      const allowed = updateMemberCtx(caller, "fixed:logs:reader");
+      expect(await handleBeforeHook(allowed)).toBe(allowed);
+      // Log Admin carries log:admin, which neither of the caller's roles has.
+      const escalate = updateMemberCtx(
+        caller,
+        "fixed:logs:reader,fixed:logs:admin",
+      );
+      await expect(handleBeforeHook(escalate)).rejects.toMatchObject({
+        body: { message: expect.stringContaining("log:admin") },
+      });
+    });
+
     test("a platform_admin cannot grant the full admin role", async ({
       makeOrganization,
       makeUser,
@@ -1720,6 +1757,128 @@ describe("handleAfterHook", () => {
       expect(await storedHostMembers(organizationId)).toEqual({
         "github:1002": "bob@corp.example",
       });
+    });
+  });
+
+  describe("session cookie cache after the hook sets the active organization", () => {
+    // The browser keeps the response's cookies, and getSession answers from
+    // the cached session cookie before it asks the database. If the cache
+    // still holds the organization-less session better-auth wrote before the
+    // hook made the user a member, every org-scoped screen is empty until it
+    // expires.
+    test("sign-up through an invitation hands back a session that names the organization", async ({
+      makeAdmin,
+      makeOrganization,
+      makeInvitation,
+    }) => {
+      const inviter = await makeAdmin();
+      const org = await makeOrganization();
+      const email = `invited-${crypto.randomUUID()}@example.com`;
+      const invitation = await makeInvitation(org.id, inviter.id, {
+        email,
+        role: "member",
+      });
+
+      const signUp = await auth.handler(
+        new Request("http://localhost:3000/api/auth/sign-up/email", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: "http://localhost:3000",
+          },
+          body: JSON.stringify({
+            email,
+            password: "a-long-enough-password",
+            name: "Invited User",
+            invitationId: invitation.id,
+          }),
+        }),
+      );
+      expect(signUp.status).toBe(200);
+
+      const session = await auth.api.getSession({
+        headers: new Headers({ cookie: cookieHeaderFrom(signUp) }),
+      });
+
+      expect(session?.session.activeOrganizationId).toBe(org.id);
+    });
+
+    test("sign-in that accepts a pending invitation hands back a session that names the organization", async ({
+      makeAdmin,
+      makeUser,
+      makeOrganization,
+      makeInvitation,
+    }) => {
+      const inviter = await makeAdmin();
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const password = "a-long-enough-password";
+      await AccountModel.createCredentialAccount({
+        userId: user.id,
+        passwordHash: await hashPassword(password),
+      });
+      await makeInvitation(org.id, inviter.id, {
+        email: user.email,
+        role: "member",
+      });
+
+      const signIn = await auth.handler(
+        new Request("http://localhost:3000/api/auth/sign-in/email", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: "http://localhost:3000",
+          },
+          body: JSON.stringify({ email: user.email, password }),
+        }),
+      );
+      expect(signIn.status).toBe(200);
+
+      const session = await auth.api.getSession({
+        headers: new Headers({ cookie: cookieHeaderFrom(signIn) }),
+      });
+
+      expect(session?.session.activeOrganizationId).toBe(org.id);
+    });
+
+    test("sign-in still waiting on a second factor hands back no session", async ({
+      makeAdmin,
+      makeUser,
+      makeOrganization,
+      makeInvitation,
+    }) => {
+      const inviter = await makeAdmin();
+      const org = await makeOrganization();
+      const user = await makeUser({ twoFactorEnabled: true });
+      const password = "a-long-enough-password";
+      await AccountModel.createCredentialAccount({
+        userId: user.id,
+        passwordHash: await hashPassword(password),
+      });
+      await makeInvitation(org.id, inviter.id, {
+        email: user.email,
+        role: "member",
+      });
+
+      const signIn = await auth.handler(
+        new Request("http://localhost:3000/api/auth/sign-in/email", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: "http://localhost:3000",
+          },
+          body: JSON.stringify({ email: user.email, password }),
+        }),
+      );
+      expect(await signIn.clone().json()).toMatchObject({
+        twoFactorRedirect: true,
+      });
+
+      const session = await auth.api.getSession({
+        headers: new Headers({ cookie: cookieHeaderFrom(signIn) }),
+      });
+
+      expect(session).toBeNull();
     });
   });
 

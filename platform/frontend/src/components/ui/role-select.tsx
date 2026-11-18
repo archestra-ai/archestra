@@ -6,11 +6,11 @@ import { ShieldAlert } from "lucide-react";
 import type * as React from "react";
 import { filterControlClass } from "@/components/filter-bar";
 import { RoleOptionLabel } from "@/components/role-type-icon";
-import { SearchableMultiSelect } from "@/components/searchable-multi-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useAllPermissions } from "@/lib/auth/auth.query";
 import { useRoles } from "@/lib/role.query";
 import { formatRoleName } from "@/lib/utils/role";
+import { RolePicker } from "./role-picker";
 
 interface RoleSelectProps {
   mode?: "assignment" | "filter";
@@ -127,26 +127,24 @@ export function RoleSelect({
     };
   });
 
+  // Assignments that may hold several roles get the grouped picker, which
+  // also offers the fixed roles.
   if (multiple && mode === "assignment") {
-    const selected = (value ?? "").split(",").filter(Boolean);
     return (
-      <SearchableMultiSelect
-        value={selected}
-        onValueChange={(roles) => onValueChange?.(roles.join(","))}
-        items={items}
+      <RolePicker
+        placeholder={placeholder}
+        value={value}
+        onValueChange={onValueChange}
         minSelected={allowEmpty ? 0 : 1}
         maxBadgeDisplay={maxBadgeDisplay}
+        restrictToGrantable={restrictToGrantable}
         id={id}
         ariaLabel={ariaLabel ?? "Roles"}
         data-testid={testId}
         className={className}
         aria-describedby={ariaDescribedBy}
         aria-invalid={ariaInvalid}
-        disabled={disabled || isPending}
-        placeholder={isPending ? "Loading roles…" : "Select roles"}
-        searchPlaceholder="Search roles..."
-        contentClassName="min-w-[min(28rem,calc(100vw-2rem))]"
-        emptyMessage="No matching roles found."
+        disabled={disabled}
       />
     );
   }

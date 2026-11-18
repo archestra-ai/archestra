@@ -7,7 +7,6 @@ import {
   TimeInMs,
 } from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
-import config from "@/config";
 import logger from "@/logging";
 import AgentModel from "@/models/agent";
 import AgentExcludedSkillModel from "@/models/agent-excluded-skill";
@@ -77,20 +76,6 @@ type SkillGatewayAgent = Pick<Agent, "environmentId">;
  * team and personal skills would leak to every holder of that token. Resolving
  * org scope directly is deterministic and independent of the principal.
  */
-
-/**
- * Whether this pod publishes skills over MCP at all.
- *
- * Both consumers — the `initialize` capability declaration and the method
- * dispatch — read this one predicate so they can never disagree: a client is
- * never shown a capability whose methods are absent.
- *
- * It lives here rather than beside the gateway handlers because the capability
- * builder and those handlers would otherwise import each other.
- */
-export function skillsSurfaceEnabled(): boolean {
-  return config.mcpGateway.skillsEnabled;
-}
 
 /**
  * Whether skill publication applies to an agent type at all.

@@ -76,6 +76,10 @@ export default defineConfig({
         __dirname,
         "../shared/error-reporting.ts",
       ),
+      "@archestra/shared/fixed-roles": path.resolve(
+        __dirname,
+        "../shared/fixed-roles.ts",
+      ),
       "@archestra/shared/interactions/client": path.resolve(
         __dirname,
         "../shared/interactions/client.ts",

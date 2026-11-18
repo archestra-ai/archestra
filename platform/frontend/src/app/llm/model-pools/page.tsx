@@ -7,7 +7,6 @@ import {
 } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { Layers, Pencil, Plus, Server, Trash2 } from "lucide-react";
-import { notFound } from "next/navigation";
 import { useCallback, useState } from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -37,7 +36,6 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useBulkRangeSelectionController } from "@/lib/bulk-range-selection-context";
-import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -73,15 +71,6 @@ const EMPTY_MESSAGE =
   "No model pools yet. Create one to serve a model from several provider keys.";
 
 export default function ModelPoolsPage() {
-  // Model pools are a beta feature: while this deployment has them off, the
-  // page is not there, as their API is not.
-  const enabled = useFeature("llmModelPoolsEnabled");
-  if (enabled === false) notFound();
-  if (enabled !== true) return null;
-  return <ModelPools />;
-}
-
-function ModelPools() {
   // Benched members come back within a minute, so the list stays fresh.
   const query = useModelPools({ refetchInterval: 5_000, toastOnError: false });
   const pools = query.data ?? [];

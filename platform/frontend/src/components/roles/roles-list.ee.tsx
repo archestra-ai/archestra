@@ -7,7 +7,7 @@ import {
 } from "@archestra/shared";
 
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { Download, Pencil, Plus, Trash2 } from "lucide-react";
+import { Download, Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -24,7 +24,6 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
-import { RoleTypeIcon } from "@/components/role-type-icon";
 import { SearchInput } from "@/components/search-input";
 import {
   type TableRowAction,
@@ -34,6 +33,14 @@ import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
@@ -42,19 +49,83 @@ import {
   useAllMatchingRoles,
   useBulkDeleteRoles,
   useDeleteRole,
+  useRoles,
   useRolesPaginated,
 } from "@/lib/role.query";
+import { BuiltInRolesDialog } from "./built-in-roles-dialog.ee";
 import { downloadRoleAsJson } from "./role-export";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];
 
 /**
- * Enterprise Edition roles list. Every role opens on its own page; custom
- * roles are created, edited and deleted there, predefined ones are read-only.
+ * Enterprise Edition roles page: the custom roles an organization authored,
+ * which are the only ones it manages. Built-in roles (the presets and the
+ * granular roles access is composed from) cannot be edited, so they stay out
+ * of the table and are read in a dialog the page header links to.
  */
 export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
   const router = useRouter();
   const setActionButton = useSetSettingsAction();
+  const { data: roles, isPending } = useRoles();
+  const hasCustomRoles = (roles ?? []).some((role) => !role.predefined);
+
+  useEffect(() => {
+    setActionButton(
+      <PermissionButton
+        permissions={{ ac: ["create"] }}
+        size="sm"
+        onClick={() => router.push("/settings/roles/new")}
+      >
+        <Plus className="h-4 w-4" />
+        Create Custom Role
+      </PermissionButton>,
+    );
+
+    return () => setActionButton(null);
+  }, [setActionButton, router]);
+
+  return (
+    <>
+      {!isPending && !hasCustomRoles ? (
+        <Empty className="border">
+          <EmptyHeader className="max-w-md">
+            <EmptyMedia variant="icon">
+              <Layers />
+            </EmptyMedia>
+            <EmptyTitle>No custom roles yet</EmptyTitle>
+            <EmptyDescription>
+              Most access can be composed from the built-in roles. Create a
+              custom role for a set of permissions none of them matches.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent className="max-w-md flex-col gap-2 sm:flex-row sm:justify-center">
+            <PermissionButton
+              permissions={{ ac: ["create"] }}
+              size="sm"
+              className="w-full sm:w-auto"
+              onClick={() => router.push("/settings/roles/new")}
+            >
+              <Plus className="size-4" />
+              <span>Create Custom Role</span>
+            </PermissionButton>
+            {headerAction && <div className="contents">{headerAction}</div>}
+          </EmptyContent>
+        </Empty>
+      ) : (
+        <RolesTable headerAction={headerAction} />
+      )}
+      <BuiltInRolesDialog />
+    </>
+  );
+}
+
+/**
+ * The organization's custom roles. Each opens on its own page, and is
+ * edited, exported and deleted from here. Built-in roles are not listed:
+ * the API is asked for custom roles only, so paging counts just them.
+ */
+export function RolesTable({ headerAction }: { headerAction?: ReactNode }) {
+  const router = useRouter();
   const {
     pageIndex,
     pageSize,
@@ -73,6 +144,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
     limit: pageSize,
     offset,
     name: nameFilter,
+    kind: "custom",
   });
   const deleteMutation = useDeleteRole();
   const bulkDelete = useBulkDeleteRoles();
@@ -93,21 +165,6 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
     );
 
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
-
-  useEffect(() => {
-    setActionButton(
-      <PermissionButton
-        permissions={{ ac: ["create"] }}
-        size="sm"
-        onClick={() => router.push("/settings/roles/new")}
-      >
-        <Plus className="h-4 w-4" />
-        Create Custom Role
-      </PermissionButton>,
-    );
-
-    return () => setActionButton(null);
-  }, [setActionButton, router]);
 
   // Sort: predefined first, then custom
   const allRoles = [...(rolesResponse?.data ?? [])].sort((a, b) => {
@@ -150,17 +207,6 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
       canSelect: (role) => !role.predefined,
       disabledReason: () => "Predefined roles cannot be deleted",
     }),
-    {
-      id: "icon",
-      size: 24,
-      enableSorting: false,
-      header: "",
-      cell: ({ row }) => (
-        <div className="flex items-center justify-center">
-          <RoleTypeIcon predefined={row.original.predefined} withTooltip />
-        </div>
-      ),
-    },
     {
       id: "name",
       accessorKey: "name",
@@ -210,7 +256,8 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
                 icon: <Pencil className="h-4 w-4" />,
                 label: "Edit role",
                 permissions: { ac: ["update"] },
-                onClick: () => router.push(`/settings/roles/${role.id}/edit`),
+                onClick: () =>
+                  router.push(`/settings/roles/${role.id}/edit?from=list`),
               },
               exportRole,
               {

@@ -567,7 +567,6 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       setAutoRoutingTiers,
     } = await import("@/test/auto-routing");
     const { default: AutoRouterModel } = await import("@/models/auto-router");
-    config.autoRouting.enabled = true;
     const tiers = await configureAutoRouting(organizationId);
     const routerId = await autoRouterId(organizationId);
     const old = await AutoRouterModel.find(routerId);

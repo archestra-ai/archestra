@@ -32,9 +32,8 @@ vi.mock("next/image", () => ({
   ),
 }));
 
-import { notFound, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import {
   useAppearanceSettings,
   useOrganization,
@@ -113,9 +112,6 @@ describe("ModelPoolsPage", () => {
       { id: "key-0", name: "Z.ai", provider: "zhipuai", userId: null },
     ];
     pools = [];
-    vi.mocked(useFeature).mockImplementation(
-      ((name: string) => name === "llmModelPoolsEnabled") as typeof useFeature,
-    );
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
       replace: vi.fn(),
@@ -130,13 +126,6 @@ describe("ModelPoolsPage", () => {
     vi.mocked(useAppearanceSettings).mockReturnValue({
       data: null,
     } as unknown as ReturnType<typeof useAppearanceSettings>);
-  });
-
-  it("is not there while model pools are off", () => {
-    vi.mocked(useFeature).mockReturnValue(false);
-    renderPage();
-    expect(notFound).toHaveBeenCalled();
-    expect(screen.queryByText("Model Pools")).not.toBeInTheDocument();
   });
 
   it("asks for a provider a pool can serve when the only shared key is on another", async () => {

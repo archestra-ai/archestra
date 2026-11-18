@@ -1024,6 +1024,8 @@ export const RouteId = {
   GetAppaRepositoryProtection: "getAppaRepositoryProtection",
   GetAppaGithubAppGrants: "getAppaGithubAppGrants",
   GetAppaSelfService: "getAppaSelfService",
+  GetOpenappaServerRulesFiles: "getOpenappaServerRulesFiles",
+  GetOpenappaServerRulesSource: "getOpenappaServerRulesSource",
   ConfigureAppaGithubSync: "configureAppaGithubSync",
   CreateAppaGithubRepository: "createAppaGithubRepository",
   StartAppaGithubApp: "startAppaGithubApp",

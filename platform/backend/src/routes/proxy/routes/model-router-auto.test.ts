@@ -93,7 +93,6 @@ describe("Model Router auto model", () => {
   let jevCalls: number;
 
   beforeEach(() => {
-    config.autoRouting.enabled = true;
     upstreamModels = [];
     jevCalls = 0;
     server.use(
@@ -833,7 +832,6 @@ describe("Model Router auto model", () => {
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    config.llmProxy.modelPoolsEnabled = true;
     const org = await setupOrganization({
       makeOrganization,
       makeSecret,
@@ -1390,29 +1388,6 @@ describe("Model Router auto model", () => {
       expect(refused.statusCode).toBe(400);
       expect(refused.json().error.message).toContain("not enabled");
     });
-  });
-
-  test("with the feature off, auto is neither listed nor routed", async ({
-    makeOrganization,
-    makeSecret,
-    makeLlmProviderApiKey,
-  }) => {
-    const org = await setupOrganization({
-      makeOrganization,
-      makeSecret,
-      makeLlmProviderApiKey,
-    });
-    config.autoRouting.enabled = false;
-
-    const response = await send(org, {
-      ingress: "chat",
-      path: "chat/completions",
-      session: "s-1",
-    });
-
-    expect(response.statusCode).toBe(404);
-    expect(await listsAuto(org)).toBe(false);
-    expect(await decisions(org.organizationId)).toEqual([]);
   });
 
   test("native provider routes refuse auto", async ({

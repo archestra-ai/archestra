@@ -21,7 +21,6 @@ import autoRoutingRoutes from "./auto-routing.routes";
 describe("POST and PUT /api/auto-routing/routers", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
   beforeEach(() => {
-    config.autoRouting.enabled = true;
     config.autoRouting.minSessions = 30;
   });
 

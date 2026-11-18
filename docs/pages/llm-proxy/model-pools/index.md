@@ -2,8 +2,8 @@
 title: Model Pools
 description: Serve one model name from several provider keys, with load balancing and failover
 order: 5
-lastUpdated: 2026-11-10
-beta: "Set [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) to turn it on."
+lastUpdated: 2026-11-16
+beta: "Model Pools are in Beta."
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

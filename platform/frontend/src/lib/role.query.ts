@@ -15,7 +15,10 @@ const {
 } = archestraApiSdk;
 
 type RolesQuery = NonNullable<archestraApiTypes.GetRolesData["query"]>;
-type RolesPaginatedParams = Pick<RolesQuery, "limit" | "offset" | "name">;
+type RolesPaginatedParams = Pick<
+  RolesQuery,
+  "limit" | "offset" | "name" | "kind"
+>;
 type Role = archestraApiTypes.GetRolesResponses["200"]["data"][number];
 
 /**
@@ -192,7 +195,10 @@ export function useAllMatchingRoles(
     queryKey: [...roleKeys.lists(), "all-matching", params],
     enabled: options?.enabled,
     fetchPage: async ({ limit, offset }) => {
-      const response = await getRoles({ query: { ...params, limit, offset } });
+      // Bulk actions only ever apply to custom roles.
+      const response = await getRoles({
+        query: { name: params.search, kind: "custom", limit, offset },
+      });
       throwOnApiError(response.error, { toastOnError: false });
       return response.data?.data ?? [];
     },

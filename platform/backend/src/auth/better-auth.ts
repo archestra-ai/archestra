@@ -17,18 +17,29 @@ import {
   editorPermissions,
   memberPermissions,
   platformAdminPermissions,
+  withDerivedPermissions,
 } from "@archestra/shared/access-control";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { fixedRoles } from "@archestra/shared/fixed-roles";
+// SPDX-SnippetEnd
 import { apiKey } from "@better-auth/api-key";
-import type { HookEndpointContext } from "@better-auth/core";
+import type {
+  GenericEndpointContext,
+  HookEndpointContext,
+} from "@better-auth/core";
 import { getCurrentAdapter } from "@better-auth/core/context";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { sso } from "@better-auth/sso";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
+import { setCookieCache } from "better-auth/cookies";
 import { admin, jwt, organization, twoFactor } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import type { Jwk } from "better-auth/plugins/jwt";
+import type { User } from "better-auth/types";
 import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import { withInheritedRoleAuthorization } from "@/auth/role-composition";
@@ -142,6 +153,20 @@ const adminRole = ac.newRole(allAvailableActions);
 const platformAdminRole = ac.newRole(platformAdminPermissions);
 const editorRole = ac.newRole(editorPermissions);
 const memberRole = ac.newRole(memberPermissions);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// Fixed roles live in code, not in `organization_role`, so Better Auth only
+// knows them from this map: without it, its own endpoints (invitations,
+// member role changes) would reject a fixed role as unknown and authorize a
+// holder as if they lacked it.
+const fixedAcRoles = Object.fromEntries(
+  fixedRoles.map((fixed) => [
+    fixed.role,
+    ac.newRole(withDerivedPermissions(fixed.permission)),
+  ]),
+);
+// SPDX-SnippetEnd
 
 export const auth = betterAuth({
   appName: APP_NAME,
@@ -219,6 +244,7 @@ export const auth = betterAuth({
         platform_admin: platformAdminRole,
         editor: editorRole,
         member: memberRole,
+        ...fixedAcRoles,
       },
       schema: {
         organizationRole: {
@@ -243,6 +269,7 @@ export const auth = betterAuth({
             platform_admin: platformAdminRole,
             editor: editorRole,
             member: memberRole,
+            ...fixedAcRoles,
           },
         },
       },
@@ -2311,6 +2338,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         // Accept first so the membership row exists when writeAuthAuditLog
         // falls back to MemberModel.getFirstMembershipForUser for the org.
         await InvitationModel.accept(session, user, invitationId);
+        await refreshSessionCookieCache(ctx, newSession);
       } else {
         logger.debug(
           { userId: user.id },
@@ -2392,6 +2420,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
             `🔗 Auto-accepting pending invitation ${pendingInvitation.id} for user ${user.email}`,
           );
           await InvitationModel.accept(session, user, pendingInvitation.id);
+          await refreshSessionCookieCache(ctx, newSession);
           await openappaBatteriesService.recompileOrganizations([
             pendingInvitation.organizationId,
           ]);
@@ -2422,6 +2451,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
             await SessionModel.patch(sessionId, {
               activeOrganizationId: userMembership.organizationId,
             });
+            await refreshSessionCookieCache(ctx, newSession);
 
             logger.info(
               `✅ Active organization set for user ${newSession.user.email}`,
@@ -2485,6 +2515,39 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
       }
       // SPDX-SnippetEnd
     }
+  }
+}
+
+/**
+ * Re-issue the session cookie cache from the stored session.
+ *
+ * Better Auth writes the cache when it creates the session, before the
+ * after-hook accepts an invitation or picks the first membership and stores
+ * the active organization. Without this the browser holds a session without
+ * an organization until the cache expires, and every organization-scoped
+ * screen reads as empty for that window. When two-factor sign-in is still
+ * pending, the two-factor plugin's after-hook runs later and expires this
+ * cookie again, so this never hands out a session that 2FA withholds.
+ */
+async function refreshSessionCookieCache(
+  ctx: HookEndpointContext,
+  newSession: { session: { id: string }; user: User },
+): Promise<void> {
+  try {
+    const [session] = await SessionModel.getById(newSession.session.id);
+    if (!session) return;
+    // The hook receives the endpoint's own context; HookEndpointContext only
+    // marks `method` optional (the two-factor plugin sets cookies on it too).
+    await setCookieCache(
+      ctx as GenericEndpointContext,
+      { session, user: newSession.user },
+      false,
+    );
+  } catch (err) {
+    logger.error(
+      { err, sessionId: newSession.session.id },
+      "[auth:afterHook] Failed to refresh the session cookie cache",
+    );
   }
 }
 

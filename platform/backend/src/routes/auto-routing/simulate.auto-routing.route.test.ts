@@ -22,7 +22,6 @@ type Summary = {
 describe("POST /api/auto-routing/routers/:id/simulate", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
   beforeEach(() => {
-    config.autoRouting.enabled = true;
     config.autoRouting.minSessions = 30;
   });
 

@@ -104,7 +104,6 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-seed";
-import { desktopHostingOffered } from "@/lib/mcp/desktop-mcp";
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useMcpDeploymentPermission } from "@/lib/mcp/use-mcp-deployment-permission";
@@ -254,7 +253,6 @@ export function McpCatalogForm({
   const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
 
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
-  const desktopMcpEnabled = useFeature("betaEnabled") === true;
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
   const appName = useAppName();
   const mcpAuthDocsUrl = getFrontendDocsUrl(
@@ -1096,7 +1094,6 @@ export function McpCatalogForm({
                   <HostingChoice
                     value={currentServerType}
                     localEnabled={isLocalMcpEnabled === true}
-                    desktopEnabled={desktopMcpEnabled}
                     onChange={(value) => form.setValue("serverType", value)}
                   />
                 )}
@@ -2969,13 +2966,10 @@ const EMPTY_DESKTOP_CONFIG: NonNullable<McpCatalogFormValues["desktopConfig"]> =
 function HostingChoice({
   value,
   localEnabled,
-  desktopEnabled,
   onChange,
 }: {
   value: McpCatalogFormValues["serverType"];
   localEnabled: boolean;
-  /** Desktop MCP is offered: the deployment's beta flag is on. */
-  desktopEnabled: boolean;
   onChange: (value: McpCatalogFormValues["serverType"]) => void;
 }) {
   const options = [
@@ -3005,13 +2999,7 @@ function HostingChoice({
       disabled: false,
       alpha: true,
     },
-  ].filter(
-    // Desktop MCP is in alpha, offered only with the beta flag; an item that
-    // already is one keeps its choice.
-    (option) =>
-      option.value !== "desktop_mcp" ||
-      desktopHostingOffered({ betaEnabled: desktopEnabled, current: value }),
-  );
+  ];
   return (
     <div className="space-y-2">
       <Label id="server-hosting-label">Hosting</Label>

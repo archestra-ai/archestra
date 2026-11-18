@@ -232,13 +232,13 @@ for (const width of [320, 375]) {
       }
     });
 
-    test("the Policy source picker takes its own full-width row", async ({
+    test("the Policy file button takes its own full-width row", async ({
       page,
     }) => {
       await page.goto("/openappa/policy");
       const viewToggle = page.getByRole("tablist", { name: "Policy view" });
-      const picker = page.getByRole("combobox", {
-        name: "Policy source file",
+      const picker = page.getByRole("button", {
+        name: "Open a policy file",
       });
       const guide = page.getByRole("link", { name: "Policy guide" });
       await expect(guide).toBeVisible();
@@ -250,7 +250,7 @@ for (const width of [320, 375]) {
         throw new Error("Missing toolbar parts");
       // The guide link shares the toggle's row...
       expect(guideBox.y).toBeLessThan(toggle.y + toggle.height);
-      // ...and the picker spans the card below them.
+      // ...and the file button spans the card below them.
       expect(select.y).toBeGreaterThanOrEqual(toggle.y + toggle.height);
       expect(select.width).toBeGreaterThan(width - 100);
       expect(select.x + select.width).toBeLessThanOrEqual(width);

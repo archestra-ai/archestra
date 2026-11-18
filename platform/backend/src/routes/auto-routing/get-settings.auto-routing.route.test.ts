@@ -4,11 +4,10 @@ import {
   activeSourceVersion,
   DEFAULT_SCORER_MODEL,
 } from "@/auto-routing/signals";
-import config from "@/config";
 import db, { schema } from "@/database";
 import RoutingDecisionModel from "@/models/routing-decision";
 import RoutingPlanModel from "@/models/routing-plan";
-import { beforeEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 import {
   activeFit,
   autoRouterId,
@@ -24,10 +23,6 @@ import autoRoutingRoutes from "./auto-routing.routes";
 
 describe("GET /api/auto-routing/routers and /state", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
-  beforeEach(() => {
-    config.autoRouting.enabled = true;
-  });
-
   const getRouters = () =>
     ctx.app.inject({ method: "GET", url: "/api/auto-routing/routers" });
   const getState = () =>

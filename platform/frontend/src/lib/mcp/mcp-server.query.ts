@@ -1,6 +1,7 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  MAX_BULK_IDS,
   type McpDeploymentStatusEntry,
   type McpDeploymentStatusesMessage,
   type McpInstallationStatusMessage,
@@ -24,7 +25,11 @@ import {
 import { toast } from "sonner";
 import { clipErrorMessage, trackEvent } from "@/lib/analytics";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { toBulkOutcome } from "@/lib/bulk-action";
+import {
+  type BulkOutcome,
+  reportBulkOutcome,
+  toBulkOutcome,
+} from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import { isInstallInProgress } from "@/lib/mcp/install-status";
 import {
@@ -450,6 +455,87 @@ export function useBulkUninstallMcpServers() {
         queryClient,
         serverIds: outcome.succeededIds,
       });
+    },
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["mcp-servers"] }),
+        queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey }),
+        invalidateExternalMcpSkillQueries(queryClient),
+      ]);
+      invalidateToolAssignmentQueries(queryClient);
+    },
+  });
+}
+
+/** The words a bulk removal of connections reports itself in. */
+export interface BulkRemoveConnectionsCopy {
+  /** Past tense, e.g. "Revoked". */
+  verb: string;
+  /** Bare infinitive, e.g. "revoke". */
+  failureVerb: string;
+  /** "could not be …" when adding "d" to the infinitive is wrong. */
+  failureParticiple?: string;
+  noun: string;
+}
+
+/**
+ * Removes a selection of one server's connections — credentials or
+ * installations — and reports the whole selection as one outcome.
+ *
+ * The bulk route takes at most `MAX_BULK_IDS` ids, so a larger selection goes
+ * in consecutive requests. Every connection of a server carries the server's
+ * name, so each one is reported under the label the caller gives it (its
+ * owner), which is what tells them apart in a failure toast.
+ */
+export function useBulkRemoveMcpConnections() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      connections: readonly { id: string; label: string }[];
+      copy: BulkRemoveConnectionsCopy;
+    }) => {
+      const { connections } = params;
+      const labelById = new Map(
+        connections.map((connection) => [connection.id, connection.label]),
+      );
+      const outcome: BulkOutcome & { succeededIds: string[] } = {
+        succeeded: [],
+        failed: [],
+        succeededIds: [],
+      };
+      for (let start = 0; start < connections.length; start += MAX_BULK_IDS) {
+        const batch = connections.slice(start, start + MAX_BULK_IDS);
+        const { data, error } = await bulkDeleteMcpServers({
+          body: { ids: batch.map((connection) => connection.id) },
+        });
+        if (error || !data) {
+          // The request itself was refused: nothing in it applied, and the
+          // batches after it would meet the same refusal.
+          const message = getApiErrorMessage(error);
+          for (const connection of connections.slice(start)) {
+            outcome.failed.push({ label: connection.label, error: message });
+          }
+          break;
+        }
+        for (const entry of data.succeeded) {
+          outcome.succeeded.push(labelById.get(entry.id) ?? entry.name);
+          outcome.succeededIds.push(entry.id);
+        }
+        for (const entry of data.failed) {
+          outcome.failed.push({
+            label: labelById.get(entry.id) ?? entry.name ?? "Unknown",
+            error: entry.error,
+          });
+        }
+      }
+      return outcome;
+    },
+    onSuccess: (outcome, { copy }) => {
+      removeExternalMcpSkillCachesForSources({
+        queryClient,
+        serverIds: outcome.succeededIds,
+      });
+      reportBulkOutcome({ outcome, ...copy });
     },
     onSettled: async () => {
       await Promise.all([

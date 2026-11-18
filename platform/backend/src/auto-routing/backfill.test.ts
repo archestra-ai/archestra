@@ -87,7 +87,6 @@ describe("auto routing backfill", () => {
       makeLlmProviderApiKey,
       makeInteraction: fixture,
     }) => {
-      config.autoRouting.enabled = true;
       organizationId = (await makeOrganization()).id;
       userId = (await makeUser()).id;
       await configureAutoRouting(organizationId);

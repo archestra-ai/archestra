@@ -133,6 +133,7 @@ vi.mock("@/lib/mcp/mcp-server.query", () =>
       "useMcpServersGroupedByCatalog",
       "useInstallMcpServer",
       "useDeleteMcpServer",
+      "useBulkRemoveMcpConnections",
       "useReloadMcpServerTools",
       "useMcpServerTools",
       "useMcpServerInstallationStatus",

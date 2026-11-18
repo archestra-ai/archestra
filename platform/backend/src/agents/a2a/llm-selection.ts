@@ -1,6 +1,5 @@
 import type { ModelSelection, SubagentModelTier } from "@archestra/shared";
 import { resolveSubagentTierSelection } from "@/agents/subagent-tiers";
-import config from "@/config";
 import { resolveAgentModelPool } from "@/services/chat-model-pools";
 import {
   resolveConversationModel,
@@ -27,11 +26,7 @@ export async function resolveRunLlmSelection(params: {
   tier?: SubagentModelTier;
 }) {
   const { agent } = params;
-  if (
-    config.llmProxy.modelPoolsEnabled &&
-    !params.selfFork &&
-    agent.modelPoolId
-  ) {
+  if (!params.selfFork && agent.modelPoolId) {
     const pooled = await resolveAgentModelPool({
       organizationId: params.organizationId,
       userId: params.userId,

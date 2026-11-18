@@ -1,7 +1,7 @@
 "use client";
 
 import type { DiffOnMount } from "@monaco-editor/react";
-import { ArrowDown, ArrowUp, Columns2, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, Columns2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { DiffEditor } from "@/components/diff-editor";
 import { Button } from "@/components/ui/button";
@@ -66,19 +66,6 @@ export function PolicyDiffReview({
           }
         />
         <div className="ml-auto flex items-center gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={!ready}
-            onClick={() => {
-              const editor = editorRef.current?.getModifiedEditor();
-              editor?.focus();
-              void editor?.getAction("actions.find")?.run();
-            }}
-          >
-            <Search />
-            <span>Find</span>
-          </Button>
           <Button
             size="icon-sm"
             variant="outline"

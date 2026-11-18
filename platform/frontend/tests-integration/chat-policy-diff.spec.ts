@@ -193,7 +193,9 @@ test("reviews a large policy without expanding the chat, and keeps the review us
     path: testInfo.outputPath("policy-diff-review.png"),
   });
 
-  await dialog.getByRole("button", { name: "Find", exact: true }).click();
+  await dialog
+    .getByRole("textbox", { name: /Proposed policy/ })
+    .press("ControlOrMeta+f");
   const find = dialog.getByRole("textbox", { name: "Find", exact: true });
   await find.fill("final_review");
   await find.press("Enter");

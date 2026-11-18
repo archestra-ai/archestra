@@ -56,6 +56,7 @@ export function toolCall(
     runId: null,
     authMethod: "session",
     oauthClientId: null,
+    serviceAccountId: null,
     credentialClientId: null,
     credentialClientType: "identity_provider",
     credentialActorClientId: null,

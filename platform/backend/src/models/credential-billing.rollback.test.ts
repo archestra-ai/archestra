@@ -305,6 +305,7 @@ describe("LLM OAuth client spend cap", () => {
     await createInteraction({
       agentId: agent.id,
       authenticatedAppId: oauthClient.id,
+      authMethod: "oauth_client_credentials",
     });
     await drainBackgroundWork();
     expect(await tokensIn(cap.limitId)).toBe(100);
@@ -433,12 +434,14 @@ async function createInteraction(params: {
   userId?: string;
   billingTeamId?: string;
   authenticatedAppId?: string;
+  authMethod?: Parameters<typeof InteractionModel.create>[0]["authMethod"];
 }) {
   await InteractionModel.create({
     profileId: params.agentId,
     userId: params.userId,
     billingTeamId: params.billingTeamId,
     authenticatedAppId: params.authenticatedAppId,
+    authMethod: params.authMethod,
     model: "gpt-4o",
     inputTokens: 100,
     outputTokens: 0,

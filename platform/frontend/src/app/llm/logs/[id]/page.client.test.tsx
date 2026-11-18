@@ -723,6 +723,7 @@ function sessionToolCall(
     runId: null,
     authMethod: "session",
     oauthClientId: null,
+    serviceAccountId: null,
     credentialClientId: null,
     credentialClientType: "identity_provider",
     credentialActorClientId: null,

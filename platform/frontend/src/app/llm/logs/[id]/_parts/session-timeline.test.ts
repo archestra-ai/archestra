@@ -295,6 +295,7 @@ function toolCall(overrides: Partial<SessionToolCall> = {}): SessionToolCall {
     runId: null,
     authMethod: "session",
     oauthClientId: null,
+    serviceAccountId: null,
     credentialClientId: null,
     credentialClientType: "identity_provider",
     credentialActorClientId: null,

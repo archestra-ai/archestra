@@ -1620,7 +1620,13 @@ class InteractionModel {
         { entityType: "virtual_key", entityId: interaction.virtualKeyId },
         {
           entityType: "llm_oauth_client",
-          entityId: interaction.authenticatedAppId,
+          // Audit app identity can accompany non-OAuth credentials. Only
+          // actual OAuth authentication accrues application-limit usage.
+          entityId:
+            interaction.authMethod === "oauth_client_credentials" ||
+            interaction.authMethod === "oauth_user"
+              ? interaction.authenticatedAppId
+              : undefined,
         },
         {
           entityType: "virtual_key",

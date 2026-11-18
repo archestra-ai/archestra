@@ -4254,6 +4254,57 @@ describe("InteractionModel", () => {
   });
 
   describe("updateUsageAfterInteraction", () => {
+    test("only OAuth credentials accrue application limits", async ({
+      makeAgent,
+      makeUser,
+    }) => {
+      const agent = await makeAgent();
+      const user = await makeUser();
+      const appId = crypto.randomUUID();
+      const limit = await LimitModel.create({
+        entityType: "llm_oauth_client",
+        entityId: appId,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+      const write = (
+        authMethod:
+          | "internal"
+          | "virtual_key"
+          | "oauth_client_credentials"
+          | "oauth_user",
+      ) =>
+        InteractionModel.create({
+          profileId: agent.id,
+          authenticatedAppId: appId,
+          authenticatedAppName: "Synthetic application",
+          userId: authMethod === "oauth_user" ? user.id : undefined,
+          authMethod,
+          model: "gpt-4o",
+          inputTokens: 100,
+          inputTokensEstimated: true,
+          outputTokens: 0,
+          request: { model: "gpt-4o", messages: [] },
+          response: { error: "Synthetic pool member timeout" },
+          type: "openai:chatCompletions",
+        });
+      const usage = async () =>
+        (await LimitModel.getModelUsageBreakdowns([limit.id])).get(limit.id);
+      for (const authMethod of ["internal", "virtual_key"] as const) {
+        const audit = await write(authMethod);
+        await drainBackgroundWork();
+        expect(audit.authenticatedAppId).toBe(appId);
+        expect(await usage()).toMatchObject([{ tokensIn: 0, tokensOut: 0 }]);
+      }
+      await write("oauth_client_credentials");
+      await drainBackgroundWork();
+      expect(await usage()).toMatchObject([{ tokensIn: 100, tokensOut: 0 }]);
+      await write("oauth_user");
+      await drainBackgroundWork();
+      expect(await usage()).toMatchObject([{ tokensIn: 200, tokensOut: 0 }]);
+    });
+
     test("updates user limit usage when interaction has userId", async ({
       makeAgent,
       makeUser,

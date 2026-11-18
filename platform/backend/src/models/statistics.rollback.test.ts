@@ -4,6 +4,82 @@ import AgentModel from "./agent";
 import StatisticsModel from "./statistics";
 
 describe("StatisticsModel", () => {
+  test("audit-only application names do not relabel internal credential totals", async ({
+    makeOrganization,
+    makeAgent,
+    makeInteraction,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    await makeInteraction(agent.id, {
+      model: "gpt-4o",
+      authMethod: "internal",
+      authenticatedAppId: "synthetic-audit-app",
+      authenticatedAppName: "z-synthetic-application",
+      inputTokens: 10,
+      outputTokens: 1,
+    });
+    await makeInteraction(agent.id, {
+      model: "gpt-4o",
+      authMethod: "internal",
+      inputTokens: 20,
+      outputTokens: 2,
+    });
+    const oauthAppId = crypto.randomUUID();
+    await makeInteraction(agent.id, {
+      model: "gpt-4o",
+      authMethod: "oauth_client_credentials",
+      authenticatedAppId: oauthAppId,
+      authenticatedAppName: "Actual OAuth application",
+      inputTokens: 2,
+      outputTokens: 1,
+    });
+    const userAppId = crypto.randomUUID();
+    const user = await makeUser();
+    await makeInteraction(agent.id, {
+      model: "gpt-4o",
+      userId: user.id,
+      authMethod: "oauth_user",
+      authenticatedAppId: userAppId,
+      authenticatedAppName: "User OAuth application",
+      inputTokens: 3,
+      outputTokens: 1,
+    });
+    const stats = await StatisticsModel.getModelUsage({
+      model: "gpt-4o",
+      groupBy: "key",
+      timeframe: "24h",
+      organizationId: org.id,
+      limit: 50,
+      offset: 0,
+    });
+    expect(stats.data).toHaveLength(3);
+    expect(
+      stats.data.find((row) => row.id === "internal:unattributed"),
+    ).toMatchObject({
+      name: "internal",
+      requests: 2,
+      totalTokens: 33,
+    });
+    expect(
+      stats.data.find(
+        (row) => row.id === `oauth_client_credentials:${oauthAppId}`,
+      ),
+    ).toMatchObject({
+      name: "Actual OAuth application",
+      requests: 1,
+      totalTokens: 3,
+    });
+    expect(
+      stats.data.find((row) => row.id === "oauth_user:unattributed"),
+    ).toMatchObject({
+      name: "User OAuth application",
+      requests: 1,
+      totalTokens: 4,
+    });
+  });
+
   test("service-account spend combines credentials and excludes other principals and organizations", async ({
     makeOrganization,
     makeServiceAccount,

@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import type { Duplex } from "node:stream";
 import * as k8s from "@kubernetes/client-node";
 import config from "@/config";
 import logger from "@/logging";
@@ -39,6 +40,16 @@ export interface K8sClients {
  */
 export interface K8sCluster extends K8sClients {
   environmentId: string | null;
+  /**
+   * Opens a byte stream to a pod port from inside the cluster, for a cluster
+   * reached through its cluster agent. Absent elsewhere: the pod is reached
+   * through the API server (port-forward) or the platform's own network.
+   */
+  openPodStream?: (target: {
+    namespace: string;
+    pod: string;
+    port: number;
+  }) => Promise<Duplex>;
 }
 
 // SPDX-SnippetBegin

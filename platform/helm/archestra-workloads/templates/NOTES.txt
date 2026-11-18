@@ -1,3 +1,23 @@
+{{- if .Values.agent.enabled }}
+The cluster agent runs as Deployment "archestra-cluster-agent" in namespace
+"{{ .Release.Namespace }}". It acts as ServiceAccount "{{ include "archestra-workloads.serviceAccountName" . }}" and may deploy into:
+{{ include "archestra-workloads.namespaces" . | fromJsonArray | join ", " }}.
+
+In the platform, add an environment with "Another cluster, through the
+cluster agent", and enter:
+
+  Agent address: the https:// address of Service "archestra-cluster-agent-api"
+    (port {{ .Values.agent.service.port }}) as the platform reaches it:
+    kubectl -n {{ .Release.Namespace }} get service archestra-cluster-agent-api
+{{- if not .Values.agent.tlsSecretName }}
+    The agent serves plain HTTP: the platform connects over HTTPS only, so
+    end TLS at a load balancer or ingress in front of it, or set
+    agent.tlsSecretName.
+{{- end }}
+  CA certificate: only when the agent's certificate is signed by a private CA.
+  Agent token:
+    kubectl -n {{ .Release.Namespace }} get secret archestra-cluster-agent -o jsonpath='{.data.token}' | base64 -d
+{{- else }}
 The platform's identity in this cluster is the ServiceAccount
 "{{ include "archestra-workloads.serviceAccountName" . }}" in namespace "{{ .Release.Namespace }}".
 It may deploy into: {{ include "archestra-workloads.namespaces" . | fromJsonArray | join ", " }}.
@@ -30,3 +50,4 @@ KUBECONFIG
 SERVER must be an address the platform can reach. If the platform is not on
 the same network as this shell, replace it with the API server's address as
 seen from the platform.
+{{- end }}

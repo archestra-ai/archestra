@@ -1,5 +1,6 @@
 packages:
   - "backend"
+  - "cluster-agent"
   - "tools/drizzle-migration-linter"
   - "frontend"
   - "shared"

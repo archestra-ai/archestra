@@ -17,16 +17,29 @@ import {
 
 const KUBECONFIG = "apiVersion: v1\nkind: Config\n";
 const ownCluster = {
+  ...EMPTY_ENVIRONMENT_CLUSTER_DRAFT,
   ownCluster: true,
+  connection: "kubeconfig" as const,
   kubeconfig: KUBECONFIG,
-  agentRuntimePlatformBaseUrl: "",
+};
+const agentCluster = {
+  ...EMPTY_ENVIRONMENT_CLUSTER_DRAFT,
+  ownCluster: true,
+  connection: "agent" as const,
 };
 const boundEnvironment = {
   kubeconfigServer: "https://cluster.example:6443",
+  clusterAgent: false,
   agentRuntimePlatformBaseUrl: "https://platform.example",
+};
+const agentEnvironment = {
+  kubeconfigServer: "https://agent.example:8443",
+  clusterAgent: true,
+  agentRuntimePlatformBaseUrl: "http://archestra-cluster-agent:8080",
 };
 const platformEnvironment = {
   kubeconfigServer: null,
+  clusterAgent: false,
   agentRuntimePlatformBaseUrl: null,
 };
 
@@ -78,8 +91,21 @@ describe("environmentClusterDraftFor", () => {
   it("never prefills the stored kubeconfig", () => {
     expect(environmentClusterDraftFor(boundEnvironment)).toEqual({
       ownCluster: true,
+      connection: "kubeconfig",
       kubeconfig: "",
+      agentUrl: "",
+      agentToken: "",
+      agentCa: "",
       agentRuntimePlatformBaseUrl: "https://platform.example",
+    });
+  });
+
+  it("shows the agent's address, never its token", () => {
+    expect(environmentClusterDraftFor(agentEnvironment)).toMatchObject({
+      ownCluster: true,
+      connection: "agent",
+      agentUrl: "https://agent.example:8443",
+      agentToken: "",
     });
   });
 
@@ -120,18 +146,29 @@ describe("suggestedAgentRuntimePlatformUrl", () => {
 describe("chooseEnvironmentCluster", () => {
   const suggested = "https://api.example.com";
 
-  it("fills an empty platform URL when another cluster is chosen", () => {
+  it("fills an empty platform URL when a kubeconfig is chosen", () => {
     expect(
       chooseEnvironmentCluster(
         EMPTY_ENVIRONMENT_CLUSTER_DRAFT,
-        true,
+        "kubeconfig",
         suggested,
       ),
     ).toEqual({
       ...EMPTY_ENVIRONMENT_CLUSTER_DRAFT,
       ownCluster: true,
+      connection: "kubeconfig",
       agentRuntimePlatformBaseUrl: suggested,
     });
+  });
+
+  it("leaves the platform URL to Archestra when the cluster agent is chosen", () => {
+    expect(
+      chooseEnvironmentCluster(
+        EMPTY_ENVIRONMENT_CLUSTER_DRAFT,
+        "agent",
+        suggested,
+      ),
+    ).toEqual(agentCluster);
   });
 
   it("keeps a platform URL the admin entered", () => {
@@ -140,7 +177,7 @@ describe("chooseEnvironmentCluster", () => {
       agentRuntimePlatformBaseUrl: "https://archestra.internal",
     };
     expect(
-      chooseEnvironmentCluster(draft, true, suggested)
+      chooseEnvironmentCluster(draft, "kubeconfig", suggested)
         .agentRuntimePlatformBaseUrl,
     ).toBe("https://archestra.internal");
   });
@@ -149,7 +186,7 @@ describe("chooseEnvironmentCluster", () => {
     expect(
       chooseEnvironmentCluster(
         EMPTY_ENVIRONMENT_CLUSTER_DRAFT,
-        false,
+        "platform",
         suggested,
       ),
     ).toEqual(EMPTY_ENVIRONMENT_CLUSTER_DRAFT);
@@ -181,6 +218,26 @@ describe("environmentClusterCreateError", () => {
     ).toMatch(/namespace/i);
   });
 
+  it("asks for the agent's address and token, and the namespace", () => {
+    expect(
+      environmentClusterCreateError({
+        draft: { ...agentCluster, agentUrl: "https://agent.example" },
+        namespace: "workloads",
+      }),
+    ).toMatch(/address and token/);
+    const ready = {
+      ...agentCluster,
+      agentUrl: "https://agent.example",
+      agentToken: "secret",
+    };
+    expect(
+      environmentClusterCreateError({ draft: ready, namespace: " " }),
+    ).toMatch(/namespace/i);
+    expect(
+      environmentClusterCreateError({ draft: ready, namespace: "workloads" }),
+    ).toBeNull();
+  });
+
   it("accepts a kubeconfig with a namespace", () => {
     expect(
       environmentClusterCreateError({
@@ -200,6 +257,19 @@ describe("environmentClusterCreateFields", () => {
         kubeconfig: KUBECONFIG,
       }),
     ).toEqual({});
+  });
+
+  it("sends the agent's address and token, and no kubeconfig", () => {
+    expect(
+      environmentClusterCreateFields({
+        ...agentCluster,
+        kubeconfig: KUBECONFIG,
+        agentUrl: " https://agent.example ",
+        agentToken: " secret ",
+      }),
+    ).toEqual({
+      clusterAgent: { url: "https://agent.example", token: "secret" },
+    });
   });
 
   it("sends the kubeconfig, and the platform URL only when given", () => {
@@ -238,6 +308,18 @@ describe("environmentClusterUpdateFields", () => {
         environment: boundEnvironment,
       }),
     ).toEqual({ kubeconfig: KUBECONFIG });
+  });
+
+  it("sends a replacement agent token", () => {
+    expect(
+      environmentClusterUpdateFields({
+        draft: {
+          ...environmentClusterDraftFor(agentEnvironment),
+          agentToken: "new-secret",
+        },
+        environment: agentEnvironment,
+      }),
+    ).toEqual({ clusterAgentToken: "new-secret" });
   });
 
   it("clears the platform URL when it is emptied", () => {

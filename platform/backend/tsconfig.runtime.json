@@ -40,6 +40,7 @@
     "src/k8s/cluster-ip-families.ts",
     "src/k8s/environment-cluster-check.ts",
     "src/k8s/environment-cluster-permissions.ts",
+    "src/k8s/cluster-agent.ts",
     "src/k8s/environment-clusters.ts",
     "src/k8s/environment-kubeconfig.ts",
     "src/k8s/dagger-environment-runtime/manager.ts",

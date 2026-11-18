@@ -149,9 +149,7 @@ async function startAgentRunSession(params: {
   const runtimeScope = backend.resolveRuntimeScope({
     environmentScope: environment?.namespace,
     organizationScope: organization?.defaultEnvironmentNamespace,
-    environmentClusterId: environment?.kubeconfigSecretId
-      ? environment.id
-      : null,
+    environmentClusterId: environment?.kubeconfigServer ? environment.id : null,
   });
   const effectiveNetworkPolicy = await resolveEffectiveNetworkPolicy({
     organizationId: params.organizationId,
@@ -244,7 +242,7 @@ async function startAgentRunSession(params: {
         actor: params.actor,
         organizationId: params.organizationId,
         runtimeScope,
-        environmentCluster: environment?.kubeconfigSecretId
+        environmentCluster: environment?.kubeconfigServer
           ? {
               agentRuntimePlatformBaseUrl:
                 environment.agentRuntimePlatformBaseUrl,

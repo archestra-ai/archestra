@@ -21,3 +21,35 @@ serviceAccount:
 # (NodeLocal DNSCache, custom DNS) and for provider policy kinds that cannot
 # select pods. Creates a Role and RoleBinding in kube-system.
 kubeDnsServiceRead: false
+
+# The cluster agent: instead of giving the platform a kubeconfig, run a small
+# agent here that the platform calls. The agent acts with the ServiceAccount
+# above and its permissions, so the platform stores no credential for this
+# cluster, only the agent's address and token.
+agent:
+  enabled: false
+  image: archestra/cluster-agent:latest
+  imagePullPolicy: IfNotPresent
+  # The token the platform presents. Empty: one is generated on install and
+  # kept on upgrades.
+  token: ""
+  # Where the platform reaches the agent. Expose it to the platform's network
+  # only: LoadBalancer (with the provider's internal annotation) or ingress.
+  service:
+    type: ClusterIP
+    port: 8443
+    annotations: {}
+  # A Secret with tls.crt and tls.key for the agent to serve HTTPS itself.
+  # Empty: plain HTTP, for a load balancer or ingress that terminates TLS.
+  tlsSecretName: ""
+  # The platform's URL as this cluster reaches it. When set, pods here reach
+  # the platform through the agent's "archestra-cluster-agent" Service; Agent
+  # Runtime sessions need it.
+  archestraUrl: ""
+  platformPort: 8080
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi

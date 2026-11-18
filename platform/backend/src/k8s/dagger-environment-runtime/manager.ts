@@ -215,8 +215,8 @@ class DaggerEnvironmentRuntimeManager {
     // environment that does not answer must not hold them back.
     environments.sort(
       (a, b) =>
-        Number(a.kubeconfigSecretId !== null) -
-        Number(b.kubeconfigSecretId !== null),
+        Number(a.kubeconfigServer !== null) -
+        Number(b.kubeconfigServer !== null),
     );
     for (const environment of environments) {
       try {
@@ -561,7 +561,7 @@ class DaggerEnvironmentRuntimeManager {
           const current = await EnvironmentModel.findById(id);
           if (
             current &&
-            !current.kubeconfigSecretId &&
+            !current.kubeconfigServer &&
             this.engineNamespace(current.namespace) === namespace
           )
             continue;
@@ -1011,7 +1011,7 @@ class DaggerEnvironmentRuntimeManager {
   private async kubeconfigPathFor(
     environment: EnvironmentClusterBinding | null,
   ): Promise<string | undefined> {
-    if (!environment?.kubeconfigSecretId) return undefined;
+    if (!environment?.kubeconfigServer) return undefined;
     return environmentClusters.kubeconfigPath(
       await environmentClusters.forEnvironment(environment),
     );

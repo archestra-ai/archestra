@@ -4,10 +4,12 @@ import {
   type EnvironmentDefaultableResource,
   hasScopedPermission,
 } from "@archestra/shared";
+import { clusterAgentSecretValue } from "@/k8s/cluster-agent";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import {
   environmentClusters,
   kubeconfigSecretValue,
+  readStoredClusterAgentCredential,
 } from "@/k8s/environment-clusters";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import { describeK8sApiError } from "@/k8s/shared";
@@ -38,6 +40,7 @@ import { trackBackgroundWork } from "@/utils/background-work";
 import { validateValuesAgainstRegex } from "@/utils/validate-values-against-regex";
 import {
   removeEnvironmentClusterWorkloads,
+  validateClusterAgent,
   validateEnvironmentKubeconfig,
   validateEnvironmentKubeconfigRotation,
 } from "./environment-cluster";
@@ -242,6 +245,9 @@ export async function createEnvironment(params: {
   if (existing.some((e) => e.name === data.name)) {
     throw new ApiError(409, "An environment with this name already exists.");
   }
+  if (data.clusterAgent) {
+    return createClusterAgentEnvironment({ organizationId, userId, data });
+  }
   if (!data.kubeconfig && data.agentRuntimePlatformBaseUrl) {
     throw new ApiError(400, PLATFORM_URL_NEEDS_OWN_CLUSTER_MESSAGE);
   }
@@ -296,6 +302,69 @@ export async function createEnvironment(params: {
   return created;
 }
 
+/**
+ * Create an environment whose cluster runs the cluster agent: the platform
+ * calls the agent at its address with its token, and the agent acts in the
+ * cluster with its own ServiceAccount. Checked like a kubeconfig before it is
+ * stored: the agent must answer and be allowed to deploy into the namespace.
+ */
+async function createClusterAgentEnvironment(params: {
+  organizationId: string;
+  userId?: string;
+  data: CreateEnvironment;
+}): Promise<EnvironmentRow> {
+  const { organizationId, userId, data } = params;
+  if (!data.clusterAgent) throw new Error("No cluster agent to create with");
+  if (data.kubeconfig) {
+    throw new ApiError(
+      400,
+      "An environment reaches its cluster through a kubeconfig or through the cluster agent, not both.",
+    );
+  }
+  const endpoint = await validateClusterAgent({
+    ...data.clusterAgent,
+    namespace: data.namespace,
+  });
+  if (data.namespace) {
+    await assertClusterNamespaceIsFree({
+      server: endpoint.url,
+      namespace: data.namespace,
+    });
+  }
+  // The token is stored before the row that points at it. A failed insert
+  // takes the secret back out.
+  const secret = await secretManager().createSecret(
+    clusterAgentSecretValue(endpoint),
+    `environment-cluster-agent-${data.name}`,
+  );
+  let created: EnvironmentRow;
+  try {
+    created = await EnvironmentModel.create({
+      organizationId,
+      name: data.name,
+      description: data.description ?? null,
+      namespace: data.namespace ?? null,
+      networkPolicy: data.networkPolicy ?? null,
+      validationRegex: data.validationRegex ?? null,
+      trustedImageRegistries: data.trustedImageRegistries ?? null,
+      clusterAgent: { secretId: secret.id, server: endpoint.url },
+      // The agent serves the platform to the pods of its cluster.
+      agentRuntimePlatformBaseUrl:
+        data.agentRuntimePlatformBaseUrl ?? CLUSTER_AGENT_PLATFORM_URL,
+      authorId: userId ?? null,
+    });
+  } catch (error) {
+    await removeKubeconfigSecret(secret.id);
+    throw error;
+  }
+  if (data.labels?.length) {
+    await EnvironmentLabelModel.syncLabels(created.id, data.labels);
+  }
+  reconcileEnvironmentEngine(created);
+  await reconcilePlaywrightRuntime(created);
+  return created;
+}
+
 export async function updateEnvironment(params: {
   id: string;
   organizationId: string;
@@ -334,11 +403,46 @@ export async function updateEnvironment(params: {
   // A rotated credential goes into a new secret; the row is pointed at it and
   // its version bumped in one write, and only then is the old secret removed.
   let rotation: { newSecretId: string; oldSecretId: string } | null = null;
+  if (data.kubeconfig !== undefined && current.clusterAgent) {
+    throw new ApiError(
+      400,
+      "This environment reaches its cluster through the cluster agent. Replace the agent's token instead.",
+    );
+  }
+  if (data.clusterAgentToken !== undefined) {
+    if (!current.clusterAgent || !current.kubeconfigServer) {
+      throw new ApiError(
+        400,
+        "This environment does not reach its cluster through the cluster agent.",
+      );
+    }
+    // The agent stays the same: its CA carries over to the new token.
+    const stored = current.kubeconfigSecretId
+      ? await readStoredClusterAgentCredential(current.kubeconfigSecretId)
+      : undefined;
+    const endpoint = await validateClusterAgent({
+      url: current.kubeconfigServer,
+      token: data.clusterAgentToken,
+      caCertificate: stored?.ca,
+      namespace:
+        data.namespace !== undefined ? data.namespace : current.namespace,
+    });
+    if (current.kubeconfigSecretId) {
+      const secret = await secretManager().createSecret(
+        clusterAgentSecretValue(endpoint),
+        `environment-cluster-agent-${data.name ?? current.name}`,
+      );
+      rotation = {
+        newSecretId: secret.id,
+        oldSecretId: current.kubeconfigSecretId,
+      };
+    }
+  }
   if (
     data.kubeconfig !== undefined ||
     data.agentRuntimePlatformBaseUrl !== undefined
   ) {
-    if (data.agentRuntimePlatformBaseUrl && !current.kubeconfigSecretId) {
+    if (data.agentRuntimePlatformBaseUrl && !current.kubeconfigServer) {
       throw new ApiError(400, PLATFORM_URL_NEEDS_OWN_CLUSTER_MESSAGE);
     }
     if (data.kubeconfig !== undefined) {
@@ -569,7 +673,7 @@ export async function deleteEnvironment(params: {
 
   // An environment of the platform's own cluster is deleted unless catalog
   // items are assigned to it; its agents move to the default environment.
-  if (!environment.kubeconfigSecretId) {
+  if (!environment.kubeconfigServer) {
     const outcome = await EnvironmentModel.deleteUnused({
       id,
       organizationId,
@@ -594,7 +698,7 @@ export async function deleteEnvironment(params: {
     await InternalMcpCatalogModel.delete(playwrightCatalog.id);
   }
 
-  if (!environment.kubeconfigSecretId) teardownEnvironmentEngine(environment);
+  if (!environment.kubeconfigServer) teardownEnvironmentEngine(environment);
   // Its agents are now unbound, so their own engines move to the
   // organization's default namespace.
   reconcileAgentEngines({ organizationId });
@@ -753,6 +857,14 @@ function assertUnused(
     "This environment changed while it was being deleted. Try again.",
   );
 }
+
+/**
+ * Where Agent Runtime pods reach the platform in a cluster that runs the
+ * cluster agent: the agent's Service, which forwards to the platform over
+ * the connection the agent opened. The Service is in the environment's
+ * namespace, where the agent's chart is installed.
+ */
+const CLUSTER_AGENT_PLATFORM_URL = "http://archestra-cluster-agent:8080";
 
 const PLATFORM_URL_NEEDS_OWN_CLUSTER_MESSAGE =
   "The Agent Runtime platform URL applies only to an environment with its own cluster.";

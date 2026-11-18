@@ -262,6 +262,14 @@ const AgentRuntimePlatformBaseUrlSchema = z
     { message: "Must be an http:// or https:// URL" },
   );
 
+/** The cluster agent an environment reaches its cluster through. */
+export const ClusterAgentInputSchema = z.object({
+  url: z.string().min(1),
+  token: z.string().min(1),
+  /** PEM CA certificate that signs the agent's certificate, when not public. */
+  caCertificate: z.string().min(1).optional(),
+});
+
 export const CreateEnvironmentSchema = z.object({
   name: z.string().trim().min(1).max(50),
   description: z.string().trim().max(500).nullable().optional(),
@@ -272,6 +280,12 @@ export const CreateEnvironmentSchema = z.object({
    * created. Omitted, the environment deploys into the platform's own cluster.
    */
   kubeconfig: z.string().min(1).optional(),
+  /**
+   * Reach the cluster through the cluster agent installed in it, instead of
+   * a kubeconfig: the agent's address and the token it was installed with.
+   * Write-only, and accepted only here, like the kubeconfig.
+   */
+  clusterAgent: ClusterAgentInputSchema.optional(),
   agentRuntimePlatformBaseUrl:
     AgentRuntimePlatformBaseUrlSchema.nullable().optional(),
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
@@ -294,6 +308,11 @@ export const UpdateEnvironmentSchema = z.object({
    * Write-only. A kubeconfig for a different cluster is rejected.
    */
   kubeconfig: z.string().min(1).optional(),
+  /**
+   * A new token for the cluster agent the environment already reaches its
+   * cluster through. Write-only.
+   */
+  clusterAgentToken: z.string().min(1).optional(),
   agentRuntimePlatformBaseUrl:
     AgentRuntimePlatformBaseUrlSchema.nullable().optional(),
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),

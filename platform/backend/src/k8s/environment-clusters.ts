@@ -8,6 +8,12 @@ import logger from "@/logging";
 import EnvironmentModel from "@/models/environment";
 import { secretManager } from "@/secrets-manager";
 import {
+  type ClusterAgentEndpoint,
+  clusterAgentKubeconfig,
+  openClusterAgentPodStream,
+  readClusterAgentCredential,
+} from "./cluster-agent";
+import {
   type EnvironmentKubeconfig,
   parseEnvironmentKubeconfig,
 } from "./environment-kubeconfig";
@@ -27,6 +33,7 @@ export type EnvironmentClusterBinding = Pick<
   | "kubeconfigSecretId"
   | "kubeconfigServer"
   | "kubeconfigVersion"
+  | "clusterAgent"
   | "deletingAt"
 >;
 
@@ -77,6 +84,14 @@ export function clientsForKubeconfig(normalizedKubeconfig: string): K8sClients {
 }
 
 /** The stored kubeconfig of a bound environment, validated again on the way out. */
+/** The stored token and CA of an environment's cluster agent. */
+export async function readStoredClusterAgentCredential(
+  secretId: string,
+): Promise<{ token: string; ca?: string } | undefined> {
+  const secret = await secretManager().getSecret(secretId, { skipCache: true });
+  return readClusterAgentCredential(secret?.secret);
+}
+
 export async function readEnvironmentKubeconfig(
   environment: EnvironmentClusterBinding,
 ): Promise<EnvironmentKubeconfig> {
@@ -134,17 +149,9 @@ class EnvironmentClusters {
   ): Promise<K8sCluster> {
     if (!environment) return this.local();
     assertNotBeingDeleted(environment, purpose);
-    if (!environment.kubeconfigSecretId) {
-      // An environment bound to its own cluster never becomes one of the
-      // platform's cluster, whatever happened to its kubeconfig.
-      if (environment.kubeconfigServer) {
-        throw new EnvironmentClusterUnavailableError(
-          environment.id,
-          "its kubeconfig is missing",
-        );
-      }
-      return this.local();
-    }
+    // An environment bound to its own cluster never becomes one of the
+    // platform's cluster, whatever happened to its kubeconfig or agent.
+    if (!environment.kubeconfigServer) return this.local();
     return (await this.boundCluster(environment)).cluster;
   }
 
@@ -166,10 +173,10 @@ class EnvironmentClusters {
       );
     }
     assertNotBeingDeleted(environment, purpose);
-    if (!environment.kubeconfigSecretId) {
+    if (!environment.kubeconfigServer) {
       throw new EnvironmentClusterUnavailableError(
         environmentId,
-        "the environment has no kubeconfig",
+        "the environment has no cluster of its own",
       );
     }
     return (await this.boundCluster(environment)).cluster;
@@ -352,11 +359,13 @@ class EnvironmentClusters {
   private async load(
     environment: EnvironmentClusterBinding,
   ): Promise<BoundCluster> {
-    const kubeconfig = (await readStoredKubeconfig(environment)).normalized;
+    const stored = await readStoredCredential(environment);
+    const kubeconfig = stored.kubeconfig;
     const kubeconfigPath = this.writeKubeconfigFile(environment.id, kubeconfig);
 
     const existing = this.bound.get(environment.id);
     if (existing) {
+      existing.agentEndpoint = stored.agentEndpoint;
       // Rotation: same cluster, new credential. Loading it into the existing
       // KubeConfig updates every client built from it.
       existing.cluster.kubeConfig.loadFromString(kubeconfig);
@@ -388,7 +397,21 @@ class EnvironmentClusters {
       },
       version: environment.kubeconfigVersion,
       kubeconfigPath,
+      agentEndpoint: stored.agentEndpoint,
     };
+    if (stored.agentEndpoint) {
+      // Reads the entry's endpoint per stream: a rotated token applies to the
+      // next stream without rebuilding anything that holds these clients.
+      entry.cluster.openPodStream = (target) => {
+        if (!entry.agentEndpoint) {
+          throw new EnvironmentClusterUnavailableError(
+            environment.id,
+            "its cluster agent is no longer configured",
+          );
+        }
+        return openClusterAgentPodStream(entry.agentEndpoint, target);
+      };
+    }
     this.bound.set(environment.id, entry);
     this.startRefreshing();
     return entry;
@@ -456,6 +479,8 @@ interface BoundCluster {
   /** The environment's `kubeconfigVersion` the credential was loaded at. */
   version: number;
   kubeconfigPath: string;
+  /** For a cluster reached through its cluster agent: the agent and its token. */
+  agentEndpoint?: ClusterAgentEndpoint;
 }
 
 const REFRESH_INTERVAL_MS = 30_000;
@@ -518,6 +543,40 @@ function isProcessAlive(pid: number): boolean {
     // EPERM: the process exists but belongs to someone else.
     return (error as NodeJS.ErrnoException).code === "EPERM";
   }
+}
+
+/**
+ * The credential an environment's clients load: its kubeconfig, or for a
+ * cluster reached through its cluster agent, a kubeconfig whose server is the
+ * agent, with the agent's token.
+ */
+async function readStoredCredential(
+  environment: EnvironmentClusterBinding,
+): Promise<{ kubeconfig: string; agentEndpoint?: ClusterAgentEndpoint }> {
+  if (!environment.clusterAgent) {
+    return { kubeconfig: (await readStoredKubeconfig(environment)).normalized };
+  }
+  if (!environment.kubeconfigSecretId || !environment.kubeconfigServer) {
+    throw new EnvironmentClusterUnavailableError(
+      environment.id,
+      "its cluster agent is not configured",
+    );
+  }
+  // The secrets cache is per process: after a rotation handled by another
+  // replica it would still hold the old token.
+  const secret = await secretManager().getSecret(
+    environment.kubeconfigSecretId,
+    { skipCache: true },
+  );
+  const credential = readClusterAgentCredential(secret?.secret);
+  if (!credential) {
+    throw new EnvironmentClusterUnavailableError(
+      environment.id,
+      "its cluster agent token is missing",
+    );
+  }
+  const agentEndpoint = { url: environment.kubeconfigServer, ...credential };
+  return { kubeconfig: clusterAgentKubeconfig(agentEndpoint), agentEndpoint };
 }
 
 async function readStoredKubeconfig(

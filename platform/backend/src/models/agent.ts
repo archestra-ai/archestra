@@ -1523,7 +1523,7 @@ class AgentModel {
         and(
           isNotNull(schema.agentsTable.runtime),
           notDeleted(schema.agentsTable),
-          isNull(schema.environmentsTable.kubeconfigSecretId),
+          isNull(schema.environmentsTable.kubeconfigServer),
         ),
       )
       .orderBy(desc(recentRuns.lastRunAt), schema.agentsTable.id);

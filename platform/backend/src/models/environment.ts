@@ -51,6 +51,7 @@ interface EnvironmentWithAssignedCount {
   validationRegex: string | null;
   trustedImageRegistries: TrustedImageRegistries | null;
   kubeconfigServer: string | null;
+  clusterAgent: boolean;
   agentRuntimePlatformBaseUrl: string | null;
   deletingAt: Date | null;
   sortOrder: number;
@@ -108,6 +109,7 @@ class EnvironmentModel {
       | "kubeconfigSecretId"
       | "kubeconfigServer"
       | "kubeconfigVersion"
+      | "clusterAgent"
       | "deletingAt"
     >[]
   > {
@@ -116,11 +118,12 @@ class EnvironmentModel {
         id: schema.environmentsTable.id,
         kubeconfigSecretId: schema.environmentsTable.kubeconfigSecretId,
         kubeconfigServer: schema.environmentsTable.kubeconfigServer,
+        clusterAgent: schema.environmentsTable.clusterAgent,
         kubeconfigVersion: schema.environmentsTable.kubeconfigVersion,
         deletingAt: schema.environmentsTable.deletingAt,
       })
       .from(schema.environmentsTable)
-      .where(isNotNull(schema.environmentsTable.kubeconfigSecretId));
+      .where(isNotNull(schema.environmentsTable.kubeconfigServer));
   }
 
   /**
@@ -150,7 +153,7 @@ class EnvironmentModel {
     return db
       .select()
       .from(schema.environmentsTable)
-      .where(isNotNull(schema.environmentsTable.kubeconfigSecretId));
+      .where(isNotNull(schema.environmentsTable.kubeconfigServer));
   }
 
   static async listForOrganization(
@@ -175,6 +178,7 @@ class EnvironmentModel {
         validationRegex: schema.environmentsTable.validationRegex,
         trustedImageRegistries: schema.environmentsTable.trustedImageRegistries,
         kubeconfigServer: schema.environmentsTable.kubeconfigServer,
+        clusterAgent: schema.environmentsTable.clusterAgent,
         agentRuntimePlatformBaseUrl:
           schema.environmentsTable.agentRuntimePlatformBaseUrl,
         deletingAt: schema.environmentsTable.deletingAt,
@@ -281,6 +285,8 @@ class EnvironmentModel {
     trustedImageRegistries?: TrustedImageRegistries | null;
     /** The stored kubeconfig of the cluster to deploy into, and its API server. */
     kubeconfig?: { secretId: string; server: string } | null;
+    /** For a cluster reached through its cluster agent: the agent and its stored token. */
+    clusterAgent?: { secretId: string; server: string } | null;
     agentRuntimePlatformBaseUrl?: string | null;
     /** The creator, who gets full access. */
     authorId?: string | null;
@@ -309,8 +315,13 @@ class EnvironmentModel {
           networkPolicy: networkPolicy ?? null,
           validationRegex: validationRegex ?? null,
           trustedImageRegistries: trustedImageRegistries ?? null,
-          kubeconfigSecretId: params.kubeconfig?.secretId ?? null,
-          kubeconfigServer: params.kubeconfig?.server ?? null,
+          kubeconfigSecretId:
+            params.kubeconfig?.secretId ??
+            params.clusterAgent?.secretId ??
+            null,
+          kubeconfigServer:
+            params.kubeconfig?.server ?? params.clusterAgent?.server ?? null,
+          clusterAgent: Boolean(params.clusterAgent),
           agentRuntimePlatformBaseUrl:
             params.agentRuntimePlatformBaseUrl ?? null,
           sortOrder,

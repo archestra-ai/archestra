@@ -1,0 +1,1 @@
+ALTER TABLE "environments" ADD COLUMN "cluster_agent" boolean DEFAULT false NOT NULL;

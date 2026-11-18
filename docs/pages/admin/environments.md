@@ -2,7 +2,7 @@
 title: Environments
 description: Separate staging and production resources and workload networks
 order: 3
-lastUpdated: 2026-11-16
+lastUpdated: 2026-11-17
 ---
 
 Keep a staging agent away from production tools and knowledge, and give its workloads a different network policy. Environments separate resource sets inside one Archestra organization.
@@ -99,7 +99,31 @@ Set [cost limits](/docs/llm-proxy/costs-and-limits) per environment when staging
 
 ## Deploy Into Another Cluster
 
-Run an environment's MCP servers, code sandbox, and [coding agent workspaces](/docs/agents/runtime) in a different Kubernetes cluster from the one Archestra runs in. Archestra reaches that cluster's API server with a kubeconfig stored on the environment, so nothing of Archestra itself runs there.
+Run an environment's MCP servers, code sandbox, and [coding agent workspaces](/docs/agents/runtime) in a different Kubernetes cluster from the one Archestra runs in. Archestra reaches that cluster in one of two ways:
+
+- **Through the cluster agent.** A small agent runs in that cluster and acts there with its own identity. Archestra calls the agent and stores only the agent's address and token, no credential for the cluster.
+- **Through a kubeconfig.** Archestra stores a kubeconfig and calls that cluster's API server. Nothing of Archestra runs there.
+
+### Through the Cluster Agent
+
+1. In the other cluster, install the `archestra-workloads` Helm chart with the agent, in the namespace Archestra deploys into. Set `agent.archestraUrl` to the address at which that cluster reaches Archestra, for Agent Runtime sessions:
+
+   ```bash
+   helm install archestra-workloads ./platform/helm/archestra-workloads \
+     --namespace team-a \
+     --set agent.enabled=true \
+     --set agent.archestraUrl=https://archestra.example.com
+   ```
+
+2. Make the agent's Service `archestra-cluster-agent-api` reachable from Archestra over HTTPS, for example with `agent.service.type=LoadBalancer` and your provider's internal load balancer annotation. Expose it to Archestra's network only. Archestra refuses a plain `http://` address. Either set `agent.tlsSecretName` to a TLS Secret for the agent, or end TLS at the load balancer or ingress.
+3. Run the commands the chart prints. They print the agent's address and its token.
+4. With [`environment:create`](/docs/reference/permissions#environment:create), open **Settings → Environments** and click **Add environment**.
+5. Under **Kubernetes cluster**, select **Another cluster, through the cluster agent** and enter the agent's address and token. If a private CA signs the agent's certificate, paste it under **CA certificate**.
+6. Under **General**, enter a name and the namespace, then click **Test connection** and **Save**.
+
+**Replace token** accepts a new token for the same agent.
+
+### Through a Kubeconfig
 
 1. In the other cluster, install the `archestra-workloads` Helm chart from a checkout of the Archestra repository. List the existing namespaces Archestra may deploy into:
 
@@ -111,7 +135,7 @@ Run an environment's MCP servers, code sandbox, and [coding agent workspaces](/d
 
 2. Run the commands the chart prints after the install. They print a kubeconfig. Its API server address must be one Archestra can reach.
 3. With [`environment:create`](/docs/reference/permissions#environment:create), open **Settings → Environments** and click **Add environment**.
-4. Under **Kubernetes cluster**, select **Another cluster** and paste the kubeconfig.
+4. Under **Kubernetes cluster**, select **Another cluster, through a kubeconfig** and paste the kubeconfig.
 5. Under **General**, enter a name and one of the namespaces you listed for the chart.
 6. Back under **Kubernetes cluster**, click **Test connection**, then **Save**. The list shows the cluster under the environment's namespace.
 

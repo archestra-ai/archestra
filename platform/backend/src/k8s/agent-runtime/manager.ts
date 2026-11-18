@@ -118,6 +118,7 @@ import {
   buildAgentRuntimeEnvironmentEgressPolicies,
 } from "./network-policy";
 import {
+  type PlatformServiceDestination,
   resolveExternalPlatformDestination,
   resolvePlatformServiceDestination,
   resolvePlatformUrlForEnvironmentCluster,
@@ -194,7 +195,7 @@ class AgentRuntimeManager {
     const environment = environmentId
       ? await EnvironmentModel.findById(environmentId)
       : null;
-    if (!environment?.kubeconfigSecretId) {
+    if (!environment?.kubeconfigServer) {
       return this.assertSandboxApiInstalled();
     }
     return this.assertSandboxApiInstalledIn(
@@ -2046,15 +2047,23 @@ class AgentRuntimeManager {
       (platformCluster
         ? undefined
         : await resolveExternalPlatformDestination(platformBaseUrl));
+    // In an environment's cluster the platform URL can name a Service of
+    // that cluster, such as the cluster agent's, whose pods forward to the
+    // platform: allow those pods as the platform's own are allowed here.
+    const servicePods: PlatformServiceDestination["pods"] =
+      !platformCluster && platformService && "pods" in platformService
+        ? (platformService as PlatformServiceDestination).pods
+        : undefined;
     await this.applyNetworkPolicy(
       clients,
       buildAgentRuntimePlatformEgressPolicy({
         spec,
         clusterDnsIps,
-        platformNamespace,
-        platformPodLabels: config.agentRuntime.platformPodSelector,
-        platformPorts: [config.api.port],
-        platformPodsInCluster: platformCluster,
+        platformNamespace: servicePods?.namespace ?? platformNamespace,
+        platformPodLabels:
+          servicePods?.labels ?? config.agentRuntime.platformPodSelector,
+        platformPorts: [servicePods?.port ?? config.api.port],
+        platformPodsInCluster: platformCluster || servicePods !== undefined,
         platformService,
       }),
     );

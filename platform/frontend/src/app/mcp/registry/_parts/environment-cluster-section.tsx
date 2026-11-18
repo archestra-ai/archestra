@@ -21,7 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { SecretTextarea } from "@/components/ui/secret-input";
+import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import { getConfiguredApiBaseUrls } from "@/lib/config/config";
 import {
   type EnvironmentWithAssignedCount,
@@ -31,7 +31,9 @@ import {
   chooseEnvironmentCluster,
   ENVIRONMENT_CLUSTER_CHECK_LABELS,
   type EnvironmentClusterCheck,
+  type EnvironmentClusterChoice,
   type EnvironmentClusterDraft,
+  environmentClusterChoice,
   suggestedAgentRuntimePlatformUrl,
 } from "@/lib/environment-cluster";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -40,9 +42,6 @@ const CLUSTER_DOCS_URL = getDocsUrl(
   DocsPage.PlatformEnvironments,
   "deploy-into-another-cluster",
 );
-
-const PLATFORM_CLUSTER = "platform";
-const OWN_CLUSTER = "own";
 
 /**
  * The "Kubernetes cluster" section of the environment editor: which cluster
@@ -96,17 +95,37 @@ export function EnvironmentClusterSection({
     );
   }
 
+  const throughAgent = draft.ownCluster && draft.connection === "agent";
   const trimmedNamespace = namespace.trim();
   const hasKubeconfig = draft.kubeconfig.trim() !== "";
+  const hasAgentToken = draft.agentToken.trim() !== "";
+  const hasAgent = draft.agentUrl.trim() !== "" && hasAgentToken;
   const canTest =
-    trimmedNamespace !== "" && (mode === "edit" || hasKubeconfig) && !disabled;
+    trimmedNamespace !== "" &&
+    !disabled &&
+    (mode === "edit" || (throughAgent ? hasAgent : hasKubeconfig));
   const runTest = () =>
     testCluster.mutate({
       environmentId: mode === "edit" ? environment?.id : undefined,
-      kubeconfig: hasKubeconfig ? draft.kubeconfig : undefined,
+      kubeconfig: !throughAgent && hasKubeconfig ? draft.kubeconfig : undefined,
+      clusterAgent:
+        mode === "create" && throughAgent
+          ? {
+              url: draft.agentUrl.trim(),
+              token: draft.agentToken.trim(),
+              ...(draft.agentCa.trim()
+                ? { caCertificate: draft.agentCa.trim() }
+                : {}),
+            }
+          : undefined,
+      clusterAgentToken:
+        mode === "edit" && throughAgent && hasAgentToken
+          ? draft.agentToken.trim()
+          : undefined,
       namespace: trimmedNamespace,
-      agentRuntimePlatformBaseUrl:
-        draft.agentRuntimePlatformBaseUrl.trim() || null,
+      agentRuntimePlatformBaseUrl: throughAgent
+        ? null
+        : draft.agentRuntimePlatformBaseUrl.trim() || null,
     });
 
   return (
@@ -125,12 +144,12 @@ export function EnvironmentClusterSection({
 
       {mode === "create" && (
         <RadioGroup
-          value={draft.ownCluster ? OWN_CLUSTER : PLATFORM_CLUSTER}
+          value={environmentClusterChoice(draft)}
           onValueChange={(value) => {
             onDraftChange(
               chooseEnvironmentCluster(
                 draft,
-                value === OWN_CLUSTER,
+                value as EnvironmentClusterChoice,
                 suggestedAgentRuntimePlatformUrl(getConfiguredApiBaseUrls()),
               ),
             );
@@ -140,21 +159,28 @@ export function EnvironmentClusterSection({
           className="gap-2.5"
         >
           <ClusterChoice
-            value={PLATFORM_CLUSTER}
+            value="platform"
             label={`The cluster ${appName} runs in`}
             description="The default. Nothing else to set up."
           />
           <ClusterChoice
-            value={OWN_CLUSTER}
-            label="Another cluster"
-            description="Deploy through a kubeconfig. It cannot be changed to a different cluster later."
+            value="agent"
+            label="Another cluster, through the cluster agent"
+            description={`A small agent in that cluster acts there with its own identity. ${appName} calls the agent and stores no credential for the cluster. The cluster cannot be changed later.`}
+          />
+          <ClusterChoice
+            value="kubeconfig"
+            label="Another cluster, through a kubeconfig"
+            description={`${appName} stores the kubeconfig and calls that cluster's API server. The cluster cannot be changed later.`}
           />
         </RadioGroup>
       )}
 
       {mode === "edit" && server !== null && (
         <div className="space-y-2">
-          <Label htmlFor="environment-cluster-server">API server</Label>
+          <Label htmlFor="environment-cluster-server">
+            {throughAgent ? "Cluster agent address" : "API server"}
+          </Label>
           <Input
             id="environment-cluster-server"
             value={server}
@@ -168,111 +194,208 @@ export function EnvironmentClusterSection({
         </div>
       )}
 
-      {draft.ownCluster && (
+      {mode === "create" && throughAgent && (
         <>
-          {mode === "create" || replacingCredential ? (
-            <div className="space-y-2">
-              <Label htmlFor="environment-kubeconfig">
-                {mode === "create" ? (
-                  <>
-                    Kubeconfig <span className="text-destructive">*</span>
-                  </>
-                ) : (
-                  <span>New kubeconfig for the same cluster</span>
-                )}
-              </Label>
-              <SecretTextarea
-                id="environment-kubeconfig"
-                value={draft.kubeconfig}
-                onChange={(event) => set({ kubeconfig: event.target.value })}
-                rows={6}
-                className="max-h-48 font-mono text-xs"
-                placeholder={"apiVersion: v1\nkind: Config\nclusters: …"}
-                disabled={disabled}
-              />
-              <FieldDescription>
-                Paste the kubeconfig that the workloads Helm chart prints after
-                you install it in that cluster. It must hold a token or a client
-                certificate; credential plugins and file paths are not accepted.
-                It is stored as a secret and never shown again.
-              </FieldDescription>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Label>Credential</Label>
-              <div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setReplacingCredential(true)}
-                  disabled={disabled}
-                >
-                  Replace credentials
-                </Button>
-              </div>
-              <FieldDescription>
-                Use this when the token or certificate was rotated. Running
-                workloads are not redeployed.
-              </FieldDescription>
-            </div>
-          )}
-
           <div className="space-y-2">
-            <Label htmlFor="environment-platform-url">
-              {appName} URL for Agent Runtime
+            <Label htmlFor="environment-agent-url">
+              Cluster agent address <span className="text-destructive">*</span>
             </Label>
             <Input
-              id="environment-platform-url"
-              value={draft.agentRuntimePlatformBaseUrl}
-              onChange={(event) =>
-                set({ agentRuntimePlatformBaseUrl: event.target.value })
-              }
-              placeholder="https://platform.example.com"
+              id="environment-agent-url"
+              value={draft.agentUrl}
+              onChange={(event) => set({ agentUrl: event.target.value })}
+              placeholder="https://archestra-agent.example.com:8443"
               className="font-mono"
               disabled={disabled}
             />
             <FieldDescription>
-              The address at which pods in that cluster reach {appName}. Agent
-              Runtime sessions call it. It starts as {appName}&apos;s external
-              API address; change it if that cluster reaches {appName} at
-              another address. Leave empty when no agents run in this
-              environment.
+              Where {appName} reaches the agent: its Service
+              &quot;archestra-cluster-agent-api&quot;, behind a load balancer or
+              ingress. The workloads Helm chart installs the agent and prints
+              how to find this.
             </FieldDescription>
           </div>
-
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={runTest}
-                disabled={!canTest || testCluster.isPending}
-              >
-                {testCluster.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <PlugZap className="h-4 w-4" />
-                )}
-                <span>Test connection</span>
-              </Button>
-              {trimmedNamespace === "" && (
-                <span className="text-xs text-muted-foreground">
-                  Enter the namespace in General first.
-                </span>
-              )}
-            </div>
-            {testCluster.data && (
-              <ClusterCheckList
-                server={testCluster.data.server}
-                namespace={trimmedNamespace}
-                checks={testCluster.data.checks}
-              />
-            )}
+            <Label htmlFor="environment-agent-token">
+              Cluster agent token <span className="text-destructive">*</span>
+            </Label>
+            <SecretInput
+              id="environment-agent-token"
+              value={draft.agentToken}
+              onChange={(event) => set({ agentToken: event.target.value })}
+              className="font-mono"
+              disabled={disabled}
+            />
+            <FieldDescription>
+              The token the chart generated for the agent. It is stored as a
+              secret and never shown again.
+            </FieldDescription>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="environment-agent-ca">CA certificate</Label>
+            <SecretTextarea
+              id="environment-agent-ca"
+              value={draft.agentCa}
+              onChange={(event) => set({ agentCa: event.target.value })}
+              rows={3}
+              className="max-h-32 font-mono text-xs"
+              placeholder="-----BEGIN CERTIFICATE-----"
+              disabled={disabled}
+            />
+            <FieldDescription>
+              Only when the agent&apos;s certificate is signed by a private CA,
+              such as an internal load balancer&apos;s.
+            </FieldDescription>
           </div>
         </>
       )}
+
+      {mode === "create" && draft.ownCluster && !throughAgent && (
+        <KubeconfigField
+          label={
+            <>
+              Kubeconfig <span className="text-destructive">*</span>
+            </>
+          }
+          value={draft.kubeconfig}
+          onChange={(kubeconfig) => set({ kubeconfig })}
+          disabled={disabled}
+        />
+      )}
+
+      {mode === "edit" && draft.ownCluster && !replacingCredential && (
+        <div className="space-y-2">
+          <Label>{throughAgent ? "Agent token" : "Credential"}</Label>
+          <div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setReplacingCredential(true)}
+              disabled={disabled}
+            >
+              {throughAgent ? "Replace token" : "Replace credentials"}
+            </Button>
+          </div>
+          <FieldDescription>
+            Use this when the{" "}
+            {throughAgent ? "agent's token" : "token or certificate"} was
+            rotated. Running workloads are not redeployed.
+          </FieldDescription>
+        </div>
+      )}
+
+      {mode === "edit" && replacingCredential && throughAgent && (
+        <div className="space-y-2">
+          <Label htmlFor="environment-agent-token">New agent token</Label>
+          <SecretInput
+            id="environment-agent-token"
+            value={draft.agentToken}
+            onChange={(event) => set({ agentToken: event.target.value })}
+            className="font-mono"
+            disabled={disabled}
+          />
+        </div>
+      )}
+
+      {mode === "edit" && replacingCredential && !throughAgent && (
+        <KubeconfigField
+          label={<span>New kubeconfig for the same cluster</span>}
+          value={draft.kubeconfig}
+          onChange={(kubeconfig) => set({ kubeconfig })}
+          disabled={disabled}
+        />
+      )}
+
+      {draft.ownCluster && !throughAgent && (
+        <div className="space-y-2">
+          <Label htmlFor="environment-platform-url">
+            {appName} URL for Agent Runtime
+          </Label>
+          <Input
+            id="environment-platform-url"
+            value={draft.agentRuntimePlatformBaseUrl}
+            onChange={(event) =>
+              set({ agentRuntimePlatformBaseUrl: event.target.value })
+            }
+            placeholder="https://platform.example.com"
+            className="font-mono"
+            disabled={disabled}
+          />
+          <FieldDescription>
+            The address at which pods in that cluster reach {appName}. Agent
+            Runtime sessions call it. It starts as {appName}&apos;s external API
+            address; change it if that cluster reaches {appName} at another
+            address. Leave empty when no agents run in this environment.
+          </FieldDescription>
+        </div>
+      )}
+
+      {draft.ownCluster && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={runTest}
+              disabled={!canTest || testCluster.isPending}
+            >
+              {testCluster.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <PlugZap className="h-4 w-4" />
+              )}
+              <span>Test connection</span>
+            </Button>
+            {trimmedNamespace === "" && (
+              <span className="text-xs text-muted-foreground">
+                Enter the namespace in General first.
+              </span>
+            )}
+          </div>
+          {testCluster.data && (
+            <ClusterCheckList
+              server={testCluster.data.server}
+              namespace={trimmedNamespace}
+              checks={testCluster.data.checks}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KubeconfigField({
+  label,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: React.ReactNode;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="environment-kubeconfig">{label}</Label>
+      <SecretTextarea
+        id="environment-kubeconfig"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        rows={6}
+        className="max-h-48 font-mono text-xs"
+        placeholder={"apiVersion: v1\nkind: Config\nclusters: …"}
+        disabled={disabled}
+      />
+      <FieldDescription>
+        Paste the kubeconfig that the workloads Helm chart prints after you
+        install it in that cluster. It must hold a token or a client
+        certificate; credential plugins and file paths are not accepted. It is
+        stored as a secret and never shown again.
+      </FieldDescription>
     </div>
   );
 }

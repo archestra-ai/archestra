@@ -22,6 +22,7 @@ import {
 } from "@/services/environments/environment-cluster";
 import {
   ApiError,
+  ClusterAgentInputSchema,
   CreateEnvironmentSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
@@ -141,11 +142,12 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body, user }, reply) => {
-      // With a kubeconfig the namespace is one of that cluster, and the
-      // service checks it there.
+      // With a kubeconfig or a cluster agent the namespace is one of that
+      // cluster, and the service checks it there.
       if (
         body.namespace != null &&
         !body.kubeconfig &&
+        !body.clusterAgent &&
         mcpServerRuntimeManager.isEnabled
       ) {
         try {
@@ -203,7 +205,7 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body.namespace !== undefined &&
         mcpServerRuntimeManager.isEnabled
       ) {
-        if (currentEnv?.kubeconfigSecretId) {
+        if (currentEnv?.kubeconfigServer) {
           // A replacement kubeconfig sent with the namespace is checked
           // against it by the update itself, with the new credential: the
           // stored one may be the reason it is being replaced. A namespace
@@ -233,7 +235,7 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (
         namespaceChanging &&
         body.namespace === null &&
-        currentEnv?.kubeconfigSecretId
+        currentEnv?.kubeconfigServer
       ) {
         throw new ApiError(
           400,
@@ -395,10 +397,11 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.TestEnvironmentKubeconfig,
         description:
-          "Test a kubeconfig before creating an environment with it: reports, per feature, what its cluster lets the platform do in the given namespace. Nothing is stored or deployed.",
+          "Test a kubeconfig or a cluster agent before creating an environment with it: reports, per feature, what its cluster lets the platform do in the given namespace. Nothing is stored or deployed.",
         tags: ["Organization"],
         body: z.object({
-          kubeconfig: z.string().min(1),
+          kubeconfig: z.string().min(1).optional(),
+          clusterAgent: ClusterAgentInputSchema.optional(),
           namespace: KubernetesNamespaceSchema,
           agentRuntimePlatformBaseUrl: z.string().nullable().optional(),
         }),
@@ -418,11 +421,12 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.TestEnvironmentCluster,
         description:
-          "Test the cluster of an environment that has its own: reports, per feature, what the cluster lets the platform do. With `kubeconfig`, tests that credential instead of the stored one. Nothing is stored or deployed.",
+          "Test the cluster of an environment that has its own: reports, per feature, what the cluster lets the platform do. With `kubeconfig` or `clusterAgentToken`, tests that credential instead of the stored one. Nothing is stored or deployed.",
         tags: ["Organization"],
         params: z.object({ id: UuidIdSchema }),
         body: z.object({
           kubeconfig: z.string().min(1).optional(),
+          clusterAgentToken: z.string().min(1).optional(),
           namespace: KubernetesNamespaceSchema.optional(),
           agentRuntimePlatformBaseUrl: z.string().nullable().optional(),
         }),

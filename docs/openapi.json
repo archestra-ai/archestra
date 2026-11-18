@@ -223269,6 +223269,9 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "clusterAgent": {
+                            "type": "boolean"
+                          },
                           "agentRuntimePlatformBaseUrl": {
                             "nullable": true,
                             "type": "string"
@@ -223341,6 +223344,7 @@
                           "validationRegex",
                           "trustedImageRegistries",
                           "kubeconfigServer",
+                          "clusterAgent",
                           "agentRuntimePlatformBaseUrl",
                           "deletingAt",
                           "sortOrder",
@@ -223686,6 +223690,27 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "clusterAgent": {
+                    "type": "object",
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "token": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "caCertificate": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "url",
+                      "token"
+                    ]
+                  },
                   "agentRuntimePlatformBaseUrl": {
                     "nullable": true,
                     "type": "string",
@@ -223874,6 +223899,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "clusterAgent": {
+                      "type": "boolean"
+                    },
                     "agentRuntimePlatformBaseUrl": {
                       "nullable": true,
                       "type": "string"
@@ -223907,6 +223935,7 @@
                     "validationRegex",
                     "trustedImageRegistries",
                     "kubeconfigServer",
+                    "clusterAgent",
                     "agentRuntimePlatformBaseUrl",
                     "deletingAt",
                     "sortOrder",
@@ -224265,6 +224294,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "clusterAgent": {
+                      "type": "boolean"
+                    },
                     "agentRuntimePlatformBaseUrl": {
                       "nullable": true,
                       "type": "string"
@@ -224329,6 +224361,7 @@
                     "validationRegex",
                     "trustedImageRegistries",
                     "kubeconfigServer",
+                    "clusterAgent",
                     "agentRuntimePlatformBaseUrl",
                     "deletingAt",
                     "sortOrder",
@@ -224615,6 +224648,10 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "clusterAgentToken": {
+                    "type": "string",
+                    "minLength": 1
+                  },
                   "agentRuntimePlatformBaseUrl": {
                     "nullable": true,
                     "type": "string",
@@ -224812,6 +224849,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "clusterAgent": {
+                      "type": "boolean"
+                    },
                     "agentRuntimePlatformBaseUrl": {
                       "nullable": true,
                       "type": "string"
@@ -224845,6 +224885,7 @@
                     "validationRegex",
                     "trustedImageRegistries",
                     "kubeconfigServer",
+                    "clusterAgent",
                     "agentRuntimePlatformBaseUrl",
                     "deletingAt",
                     "sortOrder",
@@ -226071,7 +226112,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Test a kubeconfig before creating an environment with it: reports, per feature, what its cluster lets the platform do in the given namespace. Nothing is stored or deployed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`environment:create`](/docs/reference/permissions#environment:create): Create deployment environments",
+        "description": "Test a kubeconfig or a cluster agent before creating an environment with it: reports, per feature, what its cluster lets the platform do in the given namespace. Nothing is stored or deployed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`environment:create`](/docs/reference/permissions#environment:create): Create deployment environments",
         "requestBody": {
           "required": true,
           "content": {
@@ -226082,6 +226123,27 @@
                   "kubeconfig": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "clusterAgent": {
+                    "type": "object",
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "token": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "caCertificate": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "url",
+                      "token"
+                    ]
                   },
                   "namespace": {
                     "type": "string",
@@ -226095,7 +226157,6 @@
                   }
                 },
                 "required": [
-                  "kubeconfig",
                   "namespace"
                 ]
               }
@@ -226405,7 +226466,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Test the cluster of an environment that has its own: reports, per feature, what the cluster lets the platform do. With `kubeconfig`, tests that credential instead of the stored one. Nothing is stored or deployed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`environment:update`](/docs/reference/permissions#environment:update): Modify deployment environments, including the org default environment",
+        "description": "Test the cluster of an environment that has its own: reports, per feature, what the cluster lets the platform do. With `kubeconfig` or `clusterAgentToken`, tests that credential instead of the stored one. Nothing is stored or deployed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`environment:update`](/docs/reference/permissions#environment:update): Modify deployment environments, including the org default environment",
         "requestBody": {
           "required": true,
           "content": {
@@ -226414,6 +226475,10 @@
                 "type": "object",
                 "properties": {
                   "kubeconfig": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "clusterAgentToken": {
                     "type": "string",
                     "minLength": 1
                   },

@@ -20,6 +20,11 @@ export interface EnvironmentClusterPermission {
    * only on a cluster that has the add-on, so it is only needed there.
    */
   onlyWhen?: ClusterAddOn;
+  /**
+   * Not needed when the platform reaches the cluster through its cluster
+   * agent, which does this itself from inside the cluster.
+   */
+  notThroughAgent?: true;
 }
 
 /**
@@ -60,11 +65,13 @@ export const ENVIRONMENT_CLUSTER_PERMISSIONS: EnvironmentClusterPermission[] = [
     verbs: ["get", "create"],
   },
   {
-    // streamable-http MCP servers are reached through the API server.
+    // streamable-http MCP servers are reached through the API server, or
+    // through the cluster agent, which connects to the pod itself.
     features: ["mcpServers"],
     apiGroup: "",
     resource: "pods/portforward",
     verbs: ["get", "create"],
+    notThroughAgent: true,
   },
   {
     features: ["mcpServers"],

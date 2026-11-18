@@ -1,0 +1,20 @@
+{
+  "name": "@archestra/cluster-agent",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Runs in a Kubernetes cluster that an Archestra environment deploys into. Archestra calls it instead of holding a credential for the cluster.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "vitest run",
+    "type-check": "tsc6 --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "catalog:",
+    "vitest": "^4.1.11"
+  }
+}

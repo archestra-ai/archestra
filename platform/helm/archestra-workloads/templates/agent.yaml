@@ -1,0 +1,150 @@
+{{- if .Values.agent.enabled }}
+{{- $secretName := "archestra-cluster-agent" }}
+{{- $token := .Values.agent.token }}
+{{- if not $token }}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace $secretName }}
+{{- if and $existing $existing.data $existing.data.token }}
+{{- $token = b64dec $existing.data.token }}
+{{- else }}
+{{- $token = randAlphaNum 48 }}
+{{- end }}
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-workloads.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  token: {{ $token | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: archestra-cluster-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-workloads.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cluster-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: cluster-agent
+  template:
+    metadata:
+      labels:
+        {{- include "archestra-workloads.labels" . | nindent 8 }}
+        app.kubernetes.io/component: cluster-agent
+      annotations:
+        # Restart the agent when its token changes.
+        checksum/token: {{ $token | sha256sum | trunc 16 }}
+    spec:
+      serviceAccountName: {{ include "archestra-workloads.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: agent
+          image: {{ .Values.agent.image }}
+          imagePullPolicy: {{ .Values.agent.imagePullPolicy }}
+          env:
+            - name: ARCHESTRA_CLUSTER_AGENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: token
+            - name: ARCHESTRA_CLUSTER_AGENT_NAMESPACES
+              value: {{ include "archestra-workloads.namespaces" . | fromJsonArray | join "," | quote }}
+            - name: ARCHESTRA_CLUSTER_AGENT_PORT
+              value: "8443"
+            {{- if .Values.agent.archestraUrl }}
+            - name: ARCHESTRA_URL
+              value: {{ .Values.agent.archestraUrl | quote }}
+            - name: ARCHESTRA_CLUSTER_AGENT_PLATFORM_PORT
+              value: {{ .Values.agent.platformPort | quote }}
+            {{- end }}
+            {{- if .Values.agent.tlsSecretName }}
+            - name: ARCHESTRA_CLUSTER_AGENT_TLS_CERT_FILE
+              value: /tls/tls.crt
+            - name: ARCHESTRA_CLUSTER_AGENT_TLS_KEY_FILE
+              value: /tls/tls.key
+            {{- end }}
+          ports:
+            - name: agent
+              containerPort: 8443
+            {{- if .Values.agent.archestraUrl }}
+            - name: platform
+              containerPort: {{ .Values.agent.platformPort }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: agent
+              scheme: {{ if .Values.agent.tlsSecretName }}HTTPS{{ else }}HTTP{{ end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.agent.resources | nindent 12 }}
+          {{- if .Values.agent.tlsSecretName }}
+          volumeMounts:
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+          {{- end }}
+      {{- if .Values.agent.tlsSecretName }}
+      volumes:
+        - name: tls
+          secret:
+            secretName: {{ .Values.agent.tlsSecretName }}
+      {{- end }}
+---
+# Where the platform calls the agent.
+apiVersion: v1
+kind: Service
+metadata:
+  name: archestra-cluster-agent-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-workloads.labels" . | nindent 4 }}
+  {{- with .Values.agent.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.agent.service.type }}
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: cluster-agent
+  ports:
+    - name: agent
+      port: {{ .Values.agent.service.port }}
+      targetPort: agent
+{{- if .Values.agent.archestraUrl }}
+---
+# Pods in this cluster reach the platform here: Agent Runtime sessions call
+# the LLM proxy and the MCP gateway through it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: archestra-cluster-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-workloads.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: cluster-agent
+  ports:
+    - name: platform
+      port: {{ .Values.agent.platformPort }}
+      targetPort: platform
+{{- end }}
+{{- end }}

@@ -228,17 +228,35 @@ export function useTestEnvironmentCluster() {
     mutationFn: async (params: {
       environmentId?: string;
       kubeconfig?: string;
+      /** A cluster agent to test before an environment is created with it. */
+      clusterAgent?: { url: string; token: string; caCertificate?: string };
+      /** A replacement token for the agent of `environmentId`. */
+      clusterAgentToken?: string;
       namespace: string;
       agentRuntimePlatformBaseUrl: string | null;
     }) => {
-      const { environmentId, kubeconfig, ...rest } = params;
+      const {
+        environmentId,
+        kubeconfig,
+        clusterAgent,
+        clusterAgentToken,
+        ...rest
+      } = params;
       const { data, error } = environmentId
         ? await archestraApiSdk.testEnvironmentCluster({
             path: { id: environmentId },
-            body: { ...rest, ...(kubeconfig ? { kubeconfig } : {}) },
+            body: {
+              ...rest,
+              ...(kubeconfig ? { kubeconfig } : {}),
+              ...(clusterAgentToken ? { clusterAgentToken } : {}),
+            },
           })
         : await archestraApiSdk.testEnvironmentKubeconfig({
-            body: { ...rest, kubeconfig: kubeconfig ?? "" },
+            body: {
+              ...rest,
+              ...(kubeconfig ? { kubeconfig } : {}),
+              ...(clusterAgent ? { clusterAgent } : {}),
+            },
           });
       if (error) {
         handleApiError(error);

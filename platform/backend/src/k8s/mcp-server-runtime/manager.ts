@@ -15,6 +15,7 @@ import {
   checkNamespaceDeployAccess,
   createK8sClients,
   isK8sNotFoundError,
+  type K8sCluster,
   loadKubeConfig,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -144,6 +145,7 @@ interface ClusterClients {
   k8sLog: k8s.Log;
   k8sExec: k8s.Exec;
   k8sPortForward?: k8s.PortForward;
+  openPodStream?: K8sCluster["openPodStream"];
 }
 
 /** Where an MCP server's Kubernetes objects live: a cluster and a namespace in it. */
@@ -542,7 +544,7 @@ export class McpServerRuntimeManager {
               catalogItem.environmentId,
             )
           : undefined;
-        if (!environment?.kubeconfigSecretId) {
+        if (!environment?.kubeconfigServer) {
           localServers.push(server);
           localCatalogItems.push(catalogItem);
           continue;
@@ -903,7 +905,7 @@ export class McpServerRuntimeManager {
     purpose: { forCleanup?: boolean } = {},
   ): Promise<DeploymentTarget> {
     const namespace = environment?.namespace ?? this.namespace;
-    if (!environment?.kubeconfigSecretId) return this.platformTarget(namespace);
+    if (!environment?.kubeconfigServer) return this.platformTarget(namespace);
     const cluster = await environmentClusters.forEnvironment(
       environment,
       purpose,
@@ -925,6 +927,7 @@ export class McpServerRuntimeManager {
         k8sLog: cluster.log,
         k8sExec: cluster.exec,
         k8sPortForward: cluster.portForward,
+        openPodStream: cluster.openPodStream,
       },
     };
   }
@@ -4909,6 +4912,38 @@ export class McpServerRuntimeManager {
       }
     }
     return targets;
+  }
+
+  /**
+   * Bring up the installed servers of one environment that has its own
+   * cluster, as startup does: for a cluster that became reachable after
+   * startup, such as one whose cluster agent just connected. Never throws.
+   */
+  async startServersOfEnvironment(environmentId: string): Promise<void> {
+    if (!this.isEnabled) return;
+    const servers: McpServer[] = [];
+    const catalogs: CatalogItem[] = [];
+    for (const server of await McpServerModel.findAll()) {
+      if (!server.catalogId) continue;
+      const catalogItem = await InternalMcpCatalogModel.findById(
+        server.catalogId,
+      );
+      if (
+        catalogItem?.serverType === "local" &&
+        catalogItem.environmentId === environmentId
+      ) {
+        servers.push(server);
+        catalogs.push(catalogItem);
+      }
+    }
+    if (servers.length === 0) return;
+    const cache = await this.buildNetworkPolicyResolutionCache(catalogs);
+    await this.startEnvironmentClusterServers({
+      environment: cache.environmentsById.get(environmentId),
+      servers,
+      catalogs,
+      cache,
+    });
   }
 
   /**

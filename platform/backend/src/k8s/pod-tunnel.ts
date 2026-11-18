@@ -25,13 +25,22 @@ export function createPodTunnelAgent(params: {
    * that follows a deployment can return whichever pod is ready now.
    */
   resolvePodName: () => Promise<string>;
+  /**
+   * Open the byte stream to the pod some other way than a port-forward, such
+   * as through the cluster agent, which connects to the pod from inside its
+   * cluster and keeps the API server out of the data path.
+   */
+  openStream?: (podName: string) => Promise<Duplex>;
 }): Agent {
   return new Agent({
     // One request at a time per connection: a response stream that stays open
     // must not hold back the next request.
     pipelining: 1,
     connect: (_options, callback) => {
-      openPodTunnelSocket(params).then(
+      (params.openStream
+        ? openStreamSocket(params.resolvePodName, params.openStream)
+        : openPodTunnelSocket(params)
+      ).then(
         // undici types the connection as a net.Socket; it only uses the
         // stream surface and the socket-option methods the tunnel provides.
         (socket) => callback(null, socket as never),
@@ -46,6 +55,21 @@ export function createPodTunnelAgent(params: {
 }
 
 // === Internal helpers ===
+
+async function openStreamSocket(
+  resolvePodName: () => Promise<string>,
+  openStream: (podName: string) => Promise<Duplex>,
+): Promise<Duplex> {
+  const socket = await openStream(await resolvePodName());
+  // undici sets TCP options on what it assumes is a net.Socket.
+  return Object.assign(socket, {
+    setNoDelay: () => socket,
+    setKeepAlive: () => socket,
+    setTimeout: () => socket,
+    ref: () => socket,
+    unref: () => socket,
+  });
+}
 
 async function openPodTunnelSocket(params: {
   portForward: k8s.PortForward;

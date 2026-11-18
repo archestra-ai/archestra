@@ -5631,7 +5631,7 @@ export const bulkDeleteEnvironments = <ThrowOnError extends boolean = false>(opt
 });
 
 /**
- * Test a kubeconfig before creating an environment with it: reports, per feature, what its cluster lets the platform do in the given namespace. Nothing is stored or deployed.
+ * Test a kubeconfig or a cluster agent before creating an environment with it: reports, per feature, what its cluster lets the platform do in the given namespace. Nothing is stored or deployed.
  *
  * Authentication:
  *
@@ -5651,7 +5651,7 @@ export const testEnvironmentKubeconfig = <ThrowOnError extends boolean = false>(
 });
 
 /**
- * Test the cluster of an environment that has its own: reports, per feature, what the cluster lets the platform do. With `kubeconfig`, tests that credential instead of the stored one. Nothing is stored or deployed.
+ * Test the cluster of an environment that has its own: reports, per feature, what the cluster lets the platform do. With `kubeconfig` or `clusterAgentToken`, tests that credential instead of the stored one. Nothing is stored or deployed.
  *
  * Authentication:
  *

@@ -29,6 +29,7 @@ import {
   isK8sConflictError,
   isK8sNotFoundError,
   isTransientK8sApiError,
+  type K8sCluster,
   sanitizeLabelValue,
   sanitizeMetadataLabels,
   withK8sApiRetry,
@@ -578,6 +579,8 @@ interface K8sDeploymentOptions {
   clusterEnvironmentId?: string | null;
   /** Reaches the pod's HTTP port through the API server; needed off the platform's cluster. */
   k8sPortForward?: k8s.PortForward;
+  /** Reaches the pod's HTTP port from inside its cluster, through the cluster agent. */
+  openPodStream?: K8sCluster["openPodStream"];
 }
 
 /**
@@ -596,6 +599,7 @@ export default class K8sDeployment {
   private k8sLog: k8s.Log;
   private k8sExec: Exec;
   private k8sPortForward?: k8s.PortForward;
+  private openPodStream?: K8sCluster["openPodStream"];
   private readonly environmentClusterId: string | null;
   private defaultNamespace: string;
   private deploymentName: string; // Used for deployment name
@@ -648,6 +652,7 @@ export default class K8sDeployment {
     this.k8sLog = options.k8sLog;
     this.k8sExec = options.k8sExec;
     this.k8sPortForward = options.k8sPortForward;
+    this.openPodStream = options.openPodStream;
     this.environmentClusterId = options.clusterEnvironmentId ?? null;
     this.defaultNamespace = options.namespace;
     this.catalogItem = options.catalogItem;
@@ -6117,10 +6122,16 @@ export default class K8sDeployment {
       }
       return running;
     };
+    const port = catalogItem?.localConfig?.httpPort || 8080;
+    const openPodStream = this.openPodStream;
     return createPodTunnelAgent({
       portForward: this.k8sPortForward,
       namespace: this.namespace,
-      port: catalogItem?.localConfig?.httpPort || 8080,
+      port,
+      // A cluster agent connects to the pod from inside its cluster.
+      openStream: openPodStream
+        ? (pod) => openPodStream({ namespace: this.namespace, pod, port })
+        : undefined,
       resolvePodName: () => {
         podName ??= findRunningPod().catch((error) => {
           // Not found yet: the next connection looks again.

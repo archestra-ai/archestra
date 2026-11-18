@@ -467,7 +467,8 @@ export function buildAgentRuntimePlatformEgressPolicy(params: {
   >;
   platformNamespace: string;
   platformPodLabels: Record<string, string>;
-  platformPorts: number[];
+  /** Numbers, or container port names. */
+  platformPorts: (number | string)[];
   clusterDnsIps: string[];
   platformService?: { ips: string[]; port: number };
   /**

@@ -37,22 +37,51 @@ export function environmentDeleteBlock(
 }
 
 /**
+ * How an environment reaches a cluster of its own: through the cluster agent
+ * installed there, which Archestra calls with the agent's token, or through a
+ * kubeconfig that Archestra stores.
+ */
+export type EnvironmentClusterConnection = "agent" | "kubeconfig";
+
+/** The cluster choices offered when an environment is created. */
+export type EnvironmentClusterChoice =
+  | "platform"
+  | EnvironmentClusterConnection;
+
+/**
  * The cluster fields of the environment editor.
  *
- * `ownCluster` and `kubeconfig` are set when an environment is created; later
- * `kubeconfig` holds only a replacement credential for the same cluster.
+ * `ownCluster`, `connection`, `kubeconfig` and `agentUrl` are set when an
+ * environment is created; later `kubeconfig` and `agentToken` hold only a
+ * replacement credential for the same cluster.
  */
 export interface EnvironmentClusterDraft {
   ownCluster: boolean;
+  connection: EnvironmentClusterConnection;
   kubeconfig: string;
+  agentUrl: string;
+  agentToken: string;
+  /** PEM CA certificate of the agent, when its certificate is not public. */
+  agentCa: string;
   agentRuntimePlatformBaseUrl: string;
 }
 
 export const EMPTY_ENVIRONMENT_CLUSTER_DRAFT: EnvironmentClusterDraft = {
   ownCluster: false,
+  connection: "agent",
   kubeconfig: "",
+  agentUrl: "",
+  agentToken: "",
+  agentCa: "",
   agentRuntimePlatformBaseUrl: "",
 };
+
+/** The choice a draft stands for. */
+export function environmentClusterChoice(
+  draft: EnvironmentClusterDraft,
+): EnvironmentClusterChoice {
+  return draft.ownCluster ? draft.connection : "platform";
+}
 
 /**
  * The address to suggest for the Agent Runtime platform URL: the first
@@ -69,19 +98,22 @@ export function suggestedAgentRuntimePlatformUrl(
 }
 
 /**
- * Choose the cluster of a new environment. Choosing another cluster fills an
- * empty platform URL with the suggested one; the admin can change it.
+ * Choose the cluster of a new environment. Choosing a kubeconfig fills an
+ * empty platform URL with the suggested one; the admin can change it. Through
+ * the cluster agent the platform URL is the agent's, set by Archestra.
  */
 export function chooseEnvironmentCluster(
   draft: EnvironmentClusterDraft,
-  ownCluster: boolean,
+  choice: EnvironmentClusterChoice,
   suggestedPlatformUrl: string,
 ): EnvironmentClusterDraft {
+  if (choice === "platform") return { ...draft, ownCluster: false };
   return {
     ...draft,
-    ownCluster,
+    ownCluster: true,
+    connection: choice,
     agentRuntimePlatformBaseUrl:
-      ownCluster && draft.agentRuntimePlatformBaseUrl.trim() === ""
+      choice === "kubeconfig" && draft.agentRuntimePlatformBaseUrl.trim() === ""
         ? suggestedPlatformUrl
         : draft.agentRuntimePlatformBaseUrl,
   };
@@ -91,13 +123,20 @@ export function chooseEnvironmentCluster(
 export function environmentClusterDraftFor(
   environment: {
     kubeconfigServer: string | null;
+    clusterAgent: boolean;
     agentRuntimePlatformBaseUrl: string | null;
   } | null,
 ): EnvironmentClusterDraft {
   if (!environment) return EMPTY_ENVIRONMENT_CLUSTER_DRAFT;
   return {
     ownCluster: environment.kubeconfigServer !== null,
+    connection: environment.clusterAgent ? "agent" : "kubeconfig",
     kubeconfig: "",
+    agentUrl: environment.clusterAgent
+      ? (environment.kubeconfigServer ?? "")
+      : "",
+    agentToken: "",
+    agentCa: "",
     agentRuntimePlatformBaseUrl: environment.agentRuntimePlatformBaseUrl ?? "",
   };
 }
@@ -111,8 +150,18 @@ export function environmentClusterCreateError(params: {
   namespace: string;
 }): string | null {
   if (!params.draft.ownCluster) return null;
-  if (params.draft.kubeconfig.trim() === "") {
+  if (
+    params.draft.connection === "kubeconfig" &&
+    params.draft.kubeconfig.trim() === ""
+  ) {
     return "Paste the kubeconfig of the cluster.";
+  }
+  if (
+    params.draft.connection === "agent" &&
+    (params.draft.agentUrl.trim() === "" ||
+      params.draft.agentToken.trim() === "")
+  ) {
+    return "Enter the cluster agent's address and token.";
   }
   if (params.namespace.trim() === "") {
     return "Enter the namespace of that cluster to deploy into.";
@@ -125,9 +174,19 @@ export function environmentClusterCreateFields(
   draft: EnvironmentClusterDraft,
 ): Pick<
   archestraApiTypes.CreateEnvironmentData["body"],
-  "kubeconfig" | "agentRuntimePlatformBaseUrl"
+  "kubeconfig" | "clusterAgent" | "agentRuntimePlatformBaseUrl"
 > {
   if (!draft.ownCluster) return {};
+  if (draft.connection === "agent") {
+    const ca = draft.agentCa.trim();
+    return {
+      clusterAgent: {
+        url: draft.agentUrl.trim(),
+        token: draft.agentToken.trim(),
+        ...(ca ? { caCertificate: ca } : {}),
+      },
+    };
+  }
   const platformUrl = draft.agentRuntimePlatformBaseUrl.trim();
   return {
     kubeconfig: draft.kubeconfig,
@@ -147,7 +206,7 @@ export function environmentClusterUpdateFields(params: {
   };
 }): Pick<
   NonNullable<archestraApiTypes.UpdateEnvironmentData["body"]>,
-  "kubeconfig" | "agentRuntimePlatformBaseUrl"
+  "kubeconfig" | "clusterAgentToken" | "agentRuntimePlatformBaseUrl"
 > {
   const { draft, environment } = params;
   if (environment.kubeconfigServer === null) return {};
@@ -156,13 +215,19 @@ export function environmentClusterUpdateFields(params: {
     platformUrl !== (environment.agentRuntimePlatformBaseUrl ?? "");
   return {
     ...(draft.kubeconfig.trim() ? { kubeconfig: draft.kubeconfig } : {}),
+    ...(draft.agentToken.trim()
+      ? { clusterAgentToken: draft.agentToken.trim() }
+      : {}),
     ...(platformUrlChanged
       ? { agentRuntimePlatformBaseUrl: platformUrl || null }
       : {}),
   };
 }
 
-/** The API server of a cluster as shown in lists: its host and port. */
+/**
+ * The API server of a cluster, or its cluster agent, as shown in lists: its
+ * host and port.
+ */
 export function clusterServerLabel(server: string): string {
   try {
     return new URL(server).host || server;

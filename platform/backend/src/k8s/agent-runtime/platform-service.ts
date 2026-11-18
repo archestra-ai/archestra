@@ -9,7 +9,7 @@ export async function resolvePlatformServiceDestination(params: {
   baseUrl: string;
   platformNamespace: string;
   runtimeNamespace: string;
-}): Promise<{ ips: string[]; port: number } | undefined> {
+}): Promise<PlatformServiceDestination | undefined> {
   if (!params.baseUrl) return undefined;
   const url = new URL(params.baseUrl);
   const hostname = url.hostname.replace(/^\[|\]$/g, "");
@@ -38,7 +38,35 @@ export async function resolvePlatformServiceDestination(params: {
   const ips = service.spec?.clusterIPs?.length
     ? service.spec.clusterIPs
     : [service.spec?.clusterIP ?? ""];
-  return { ips: [...new Set(ips.filter((ip) => isIP(ip) !== 0))], port };
+  const servicePort = service.spec?.ports?.find((p) => p.port === port);
+  const selector = service.spec?.selector;
+  return {
+    ips: [...new Set(ips.filter((ip) => isIP(ip) !== 0))],
+    port,
+    // The pods behind the Service, for CNIs that apply egress policy after
+    // the Service address is translated to a pod's.
+    ...(selector && Object.keys(selector).length > 0
+      ? {
+          pods: {
+            namespace: service.metadata?.namespace ?? params.runtimeNamespace,
+            labels: selector,
+            port: servicePort?.targetPort ?? port,
+          },
+        }
+      : {}),
+  };
+}
+
+/** Where a Service named by the platform URL leads. */
+export interface PlatformServiceDestination {
+  ips: string[];
+  port: number;
+  pods?: {
+    namespace: string;
+    labels: Record<string, string>;
+    /** The pods' port: a number, or the container port's name. */
+    port: number | string;
+  };
 }
 
 /**

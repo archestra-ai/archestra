@@ -1,5 +1,10 @@
 import config from "@/config";
 import { resolvePlatformUrlForEnvironmentCluster } from "@/k8s/agent-runtime/platform-service";
+import {
+  type ClusterAgentEndpoint,
+  clusterAgentKubeconfig,
+  normalizeClusterAgentUrl,
+} from "@/k8s/cluster-agent";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import {
   checkEnvironmentCluster,
@@ -9,6 +14,7 @@ import {
   clientsForKubeconfig,
   environmentClusters,
   readEnvironmentKubeconfig,
+  readStoredClusterAgentCredential,
 } from "@/k8s/environment-clusters";
 import {
   type EnvironmentKubeconfig,
@@ -74,6 +80,53 @@ export async function validateEnvironmentKubeconfig(params: {
 }
 
 /**
+ * Check a cluster agent an administrator entered for an environment before
+ * it is stored: its address must be one the platform accepts, it must answer
+ * with this token, and its identity must be able to deploy into the
+ * environment's namespace.
+ */
+export async function validateClusterAgent(params: {
+  url: string;
+  token: string;
+  caCertificate?: string;
+  namespace: string | null | undefined;
+}): Promise<ClusterAgentEndpoint> {
+  if (!mcpServerRuntimeManager.isEnabled) {
+    throw new ApiError(
+      400,
+      "The Kubernetes runtime is not enabled, so an environment cannot deploy into another cluster.",
+    );
+  }
+  const endpoint = clusterAgentEndpoint(params);
+  if (!params.namespace) {
+    throw new ApiError(
+      400,
+      "An environment with its own cluster needs a Kubernetes namespace in that cluster.",
+    );
+  }
+  let missing: string[];
+  try {
+    missing = await findMissingMcpServerPermissions({
+      clients: clientsForKubeconfig(clusterAgentKubeconfig(endpoint)),
+      namespace: params.namespace,
+      throughAgent: true,
+    });
+  } catch {
+    throw new ApiError(
+      400,
+      `Could not reach the cluster agent at ${endpoint.url} with this token.`,
+    );
+  }
+  if (missing.length > 0) {
+    throw new ApiError(
+      400,
+      `The cluster agent at ${endpoint.url} lacks permissions in namespace "${params.namespace}": ${missing.join(", ")}. Add the namespace to the agent's chart.`,
+    );
+  }
+  return endpoint;
+}
+
+/**
  * Check that an environment's own cluster lets its kubeconfig's identity
  * deploy into a namespace the environment is being moved to.
  */
@@ -86,6 +139,7 @@ export async function assertNamespaceDeployableInEnvironmentCluster(params: {
     missing = await findMissingMcpServerPermissions({
       clients: await environmentClusters.forEnvironment(params.environment),
       namespace: params.namespace,
+      throughAgent: params.environment.clusterAgent,
     });
   } catch {
     throw new ApiError(400, "Could not reach the environment's cluster.");
@@ -137,6 +191,10 @@ export async function validateEnvironmentKubeconfigRotation(params: {
 export async function testEnvironmentCluster(params: {
   organizationId: string;
   kubeconfig?: string;
+  /** A cluster agent to test before an environment is created with it. */
+  clusterAgent?: { url: string; token: string; caCertificate?: string };
+  /** A replacement token for the agent of `environmentId`. */
+  clusterAgentToken?: string;
   environmentId?: string;
   namespace?: string | null;
   agentRuntimePlatformBaseUrl?: string | null;
@@ -160,13 +218,34 @@ export async function testEnvironmentCluster(params: {
     const kubeconfig = parseKubeconfig(params.kubeconfig);
     server = kubeconfig.server;
     clients = clientsForKubeconfig(kubeconfig.normalized);
-  } else if (environment?.kubeconfigSecretId) {
+  } else if (params.clusterAgent) {
+    const endpoint = clusterAgentEndpoint(params.clusterAgent);
+    server = endpoint.url;
+    clients = clientsForKubeconfig(clusterAgentKubeconfig(endpoint));
+  } else if (
+    environment?.clusterAgent &&
+    environment.kubeconfigServer &&
+    environment.kubeconfigSecretId &&
+    params.clusterAgentToken
+  ) {
+    server = environment.kubeconfigServer;
+    const stored = await readStoredClusterAgentCredential(
+      environment.kubeconfigSecretId,
+    );
+    clients = clientsForKubeconfig(
+      clusterAgentKubeconfig({
+        url: environment.kubeconfigServer,
+        token: params.clusterAgentToken,
+        ca: stored?.ca,
+      }),
+    );
+  } else if (environment?.kubeconfigServer) {
     server = environment.kubeconfigServer ?? "";
     clients = await environmentClusters.forEnvironment(environment);
   } else {
     throw new ApiError(
       400,
-      "Provide a kubeconfig to test, or an environment that has one.",
+      "Provide a kubeconfig or a cluster agent to test, or an environment that has its own cluster.",
     );
   }
 
@@ -183,6 +262,9 @@ export async function testEnvironmentCluster(params: {
     checks: await checkEnvironmentCluster({
       clients,
       namespace,
+      throughAgent:
+        params.clusterAgent !== undefined ||
+        (!params.kubeconfig && Boolean(environment?.clusterAgent)),
       platformUrl: resolvePlatformUrlForEnvironmentCluster({
         environmentUrl:
           params.agentRuntimePlatformBaseUrl !== undefined
@@ -225,5 +307,25 @@ function parseKubeconfig(content: string): EnvironmentKubeconfig {
       throw new ApiError(400, error.message);
     }
     throw error;
+  }
+}
+
+/** The agent's address in its one spelling, or a 400 that says why not. */
+function clusterAgentEndpoint(params: {
+  url: string;
+  token: string;
+  caCertificate?: string;
+}): ClusterAgentEndpoint {
+  try {
+    return {
+      url: normalizeClusterAgentUrl(params.url),
+      token: params.token,
+      ...(params.caCertificate ? { ca: params.caCertificate } : {}),
+    };
+  } catch (error) {
+    throw new ApiError(
+      400,
+      error instanceof Error ? error.message : "Invalid cluster agent address",
+    );
   }
 }

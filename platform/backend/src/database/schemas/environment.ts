@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -56,8 +57,10 @@ const environmentsTable = pgTable(
       "trusted_image_registries",
     ).$type<TrustedImageRegistries>(),
     /**
-     * Kubeconfig of the cluster this environment's workloads are deployed
-     * into, as a `secret` row. NULL means the platform's own cluster. Set only
+     * Credential for the cluster this environment's workloads are deployed
+     * into, as a `secret` row: a kubeconfig, or for a cluster reached through
+     * its cluster agent, the agent's token. NULL means the platform's own
+     * cluster. Set only
      * when the environment is created: the cluster of an environment never
      * changes, so the environment id identifies one cluster for as long as the
      * environment exists. Later writes only rotate the credential.
@@ -68,8 +71,18 @@ const environmentsTable = pgTable(
       // platform's own cluster; the environment is deleted first.
       { onDelete: "restrict" },
     ),
-    /** API server URL of that cluster, shown to administrators. Not a secret. */
+    /**
+     * The cluster of this environment, shown to administrators. Not a secret.
+     * Its API server URL, or the cluster agent's address. NULL means the
+     * platform's own cluster.
+     */
     kubeconfigServer: text("kubeconfig_server"),
+    /**
+     * The platform reaches this environment's cluster through the cluster
+     * agent installed there, at `kubeconfigServer`, with the token in
+     * `kubeconfigSecretId`. The agent acts with its own ServiceAccount.
+     */
+    clusterAgent: boolean("cluster_agent").notNull().default(false),
     /**
      * Incremented on every kubeconfig write, so a platform replica that did
      * not handle a credential rotation notices it and reloads the secret.

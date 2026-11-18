@@ -22,6 +22,8 @@ import type { EnvironmentClusterCheck, K8sCapabilities } from "@/types";
 export async function checkEnvironmentCluster(params: {
   clients: K8sClients;
   namespace: string;
+  /** The clients reach the cluster through its cluster agent. */
+  throughAgent?: boolean;
   /**
    * The URL Agent Runtime pods in this cluster would call the platform at, or
    * the reason there is none.
@@ -39,7 +41,12 @@ export async function checkEnvironmentCluster(params: {
   );
   let denied: DeniedPermissions;
   try {
-    denied = await findDeniedPermissions({ clients, namespace, capabilities });
+    denied = await findDeniedPermissions({
+      clients,
+      namespace,
+      capabilities,
+      throughAgent: params.throughAgent ?? false,
+    });
   } catch (error) {
     return [
       api,
@@ -68,12 +75,20 @@ export async function checkEnvironmentCluster(params: {
 export async function findMissingMcpServerPermissions(params: {
   clients: K8sClients;
   namespace: string;
+  /** The clients reach the cluster through its cluster agent. */
+  throughAgent?: boolean;
 }): Promise<string[]> {
   const capabilities = await getK8sCapabilitiesFromApi(
     params.clients.customObjectsApi,
     { coreApi: params.clients.coreApi, namespace: params.namespace },
   );
-  return (await findDeniedPermissions({ ...params, capabilities })).mcpServers;
+  return (
+    await findDeniedPermissions({
+      ...params,
+      capabilities,
+      throughAgent: params.throughAgent ?? false,
+    })
+  ).mcpServers;
 }
 
 // === Internal helpers ===
@@ -115,6 +130,7 @@ async function findDeniedPermissions(params: {
   clients: K8sClients;
   namespace: string;
   capabilities: K8sCapabilities;
+  throughAgent: boolean;
 }): Promise<DeniedPermissions> {
   const { clients, namespace, capabilities } = params;
   const installed: Record<
@@ -132,7 +148,9 @@ async function findDeniedPermissions(params: {
     agentRuntime: [],
   };
   const reviews = ENVIRONMENT_CLUSTER_PERMISSIONS.filter(
-    (permission) => !permission.onlyWhen || installed[permission.onlyWhen],
+    (permission) =>
+      (!permission.onlyWhen || installed[permission.onlyWhen]) &&
+      !(params.throughAgent && permission.notThroughAgent),
   ).flatMap((permission) =>
     permission.verbs.map((verb) => ({ permission, verb })),
   );

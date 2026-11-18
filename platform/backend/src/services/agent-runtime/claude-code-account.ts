@@ -268,7 +268,7 @@ class ClaudeCodeAccountManager {
     ).resolveRuntimeScope({
       environmentScope: environment?.namespace,
       organizationScope: organization?.defaultEnvironmentNamespace,
-      environmentClusterId: environment?.kubeconfigSecretId
+      environmentClusterId: environment?.kubeconfigServer
         ? environment.id
         : null,
     });

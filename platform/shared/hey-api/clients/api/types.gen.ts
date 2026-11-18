@@ -59983,6 +59983,7 @@ export type ListEnvironmentsResponses = {
             validationRegex: string | null;
             trustedImageRegistries: Array<string> | null;
             kubeconfigServer: string | null;
+            clusterAgent: boolean;
             agentRuntimePlatformBaseUrl: string | null;
             deletingAt: string | null;
             sortOrder: number;
@@ -60016,6 +60017,11 @@ export type CreateEnvironmentData = {
         description?: string | null;
         namespace?: string | null;
         kubeconfig?: string;
+        clusterAgent?: {
+            url: string;
+            token: string;
+            caCertificate?: string;
+        };
         agentRuntimePlatformBaseUrl?: string | null;
         networkPolicy?: {
             egressMode?: 'off' | 'restricted' | 'unrestricted';
@@ -60125,6 +60131,7 @@ export type CreateEnvironmentResponses = {
         validationRegex: string | null;
         trustedImageRegistries: Array<string> | null;
         kubeconfigServer: string | null;
+        clusterAgent: boolean;
         agentRuntimePlatformBaseUrl: string | null;
         deletingAt: string | null;
         sortOrder: number;
@@ -60324,6 +60331,7 @@ export type GetEnvironmentResponses = {
         validationRegex: string | null;
         trustedImageRegistries: Array<string> | null;
         kubeconfigServer: string | null;
+        clusterAgent: boolean;
         agentRuntimePlatformBaseUrl: string | null;
         deletingAt: string | null;
         sortOrder: number;
@@ -60346,6 +60354,7 @@ export type UpdateEnvironmentData = {
         description?: string | null;
         namespace?: string | null;
         kubeconfig?: string;
+        clusterAgentToken?: string;
         agentRuntimePlatformBaseUrl?: string | null;
         networkPolicy?: {
             egressMode?: 'off' | 'restricted' | 'unrestricted';
@@ -60457,6 +60466,7 @@ export type UpdateEnvironmentResponses = {
         validationRegex: string | null;
         trustedImageRegistries: Array<string> | null;
         kubeconfigServer: string | null;
+        clusterAgent: boolean;
         agentRuntimePlatformBaseUrl: string | null;
         deletingAt: string | null;
         sortOrder: number;
@@ -60665,7 +60675,12 @@ export type BulkDeleteEnvironmentsResponse = BulkDeleteEnvironmentsResponses[key
 
 export type TestEnvironmentKubeconfigData = {
     body: {
-        kubeconfig: string;
+        kubeconfig?: string;
+        clusterAgent?: {
+            url: string;
+            token: string;
+            caCertificate?: string;
+        };
         namespace: string;
         agentRuntimePlatformBaseUrl?: string | null;
     };
@@ -60761,6 +60776,7 @@ export type TestEnvironmentKubeconfigResponse = TestEnvironmentKubeconfigRespons
 export type TestEnvironmentClusterData = {
     body: {
         kubeconfig?: string;
+        clusterAgentToken?: string;
         namespace?: string;
         agentRuntimePlatformBaseUrl?: string | null;
     };

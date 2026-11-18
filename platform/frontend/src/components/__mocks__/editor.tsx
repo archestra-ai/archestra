@@ -11,7 +11,9 @@
  * {@link MOCK_EDITOR_LINE_HEIGHT_PX} per line of the value (plus padding),
  * focus, a content-size subscription that fires when the value changes —
  * which is what an editor sized by its content is listening for — and a
- * decorations collection that holds what it is given. jsdom paints no glyph
+ * decorations collection that holds what it is given. The Monaco namespace
+ * it is handed with accepts a link provider and a link opener and calls
+ * neither: jsdom draws no links to follow. jsdom paints no glyph
  * margin, so the decorations are only kept, never drawn; what goes into them
  * is tested where it is computed.
  */
@@ -55,6 +57,14 @@ export function Editor({
       },
       focus: () => {},
       getValue: () => valueRef.current,
+      getModel: () => ({
+        getLineCount: () => valueRef.current.split("\n").length,
+      }),
+      // A line is revealed and marked, never drawn: jsdom scrolls nothing.
+      revealLineInCenter: () => {},
+      setPosition: () => {},
+      onMouseDown: () => ({ dispose: () => {} }),
+      onDidChangeCursorPosition: () => ({ dispose: () => {} }),
       createDecorationsCollection: (initial: unknown[] = []) => {
         let held = initial;
         return {
@@ -70,7 +80,12 @@ export function Editor({
         };
       },
     } as unknown as Parameters<NonNullable<EditorProps["onMount"]>>[0];
-    onMountRef.current?.(editor, {} as never);
+    const disposable = { dispose: () => {} };
+    const monaco = {
+      languages: { registerLinkProvider: () => disposable },
+      editor: { registerLinkOpener: () => disposable },
+    } as unknown as Parameters<NonNullable<EditorProps["onMount"]>>[1];
+    onMountRef.current?.(editor, monaco);
   }, []);
   // Monaco reports a new content size as the text grows; a host that sizes
   // itself from it sees nothing at all without this. `value` is the content

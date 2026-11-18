@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useServerRulesAccess } from "@/lib/openappa-github-sync.query";
 import { GUARDRAILS_BETA_TOOLTIP } from "@/lib/openappa-maturity";
 import {
   OpenAppaHeaderModeContext,
@@ -47,6 +48,8 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
   const { data: canReadPolicy } = useHasPermissions({
     guardrailsPolicy: ["read"],
   });
+  // A reader of MCP servers' rules alone: the Policy page, for those files.
+  const scoped = useServerRulesAccess().scoped === true;
   const appName = useAppName();
   const { isFresh } = useOpenAppaSetupState();
   const page =
@@ -73,8 +76,9 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
       : pathname === "/openappa/policy"
         ? {
             title: "Policy",
-            description:
-              "Review your guardrail policy and the effective rules applied to tool calls, including rules from batteries.",
+            description: scoped
+              ? "Review the guardrail rules for the MCP servers you can open."
+              : "Review your guardrail policy and the effective rules applied to tool calls, including rules from batteries.",
           }
         : pathname === "/openappa/tests" ||
             pathname.startsWith("/openappa/validation")
@@ -138,6 +142,8 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
           </span>
         )
       }
+      // The policy source is an editor: it takes the height the viewport has.
+      fillContent={pathname === "/openappa/policy"}
       documentTitle={fileDetail ? "Validation" : page.title}
       backLink={
         fileDetail || requestedMode?.back ? (
@@ -165,7 +171,9 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
                     { label: "Policy", href: "/openappa/policy" },
                     { label: "Validations", href: "/openappa/validation" },
                   ]
-                : []),
+                : scoped
+                  ? [{ label: "Policy", href: "/openappa/policy" }]
+                  : []),
               ...(canReadYells
                 ? [{ label: "Yells", href: "/openappa/yells" }]
                 : []),

@@ -1,9 +1,7 @@
 "use client";
 
-import { Editor } from "@/components/editor";
 import { QueryLoadError } from "@/components/query-load-error";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   useEffectivePolicy,
   usePolicyDeclarations,
@@ -11,7 +9,7 @@ import {
 import { formatDate } from "@/lib/utils/date-time";
 import { BATTERY_STATUS } from "./battery-status";
 import { compositionOf } from "./composition-view";
-import { POLICY_EDITOR_OPTIONS } from "./policy-editor-options";
+import { PolicyPaneEditor, PolicyPaneSkeleton } from "./policy-source-pane";
 
 /**
  * The composed document the runtime actually enforces: the organization's text
@@ -19,20 +17,23 @@ import { POLICY_EDITOR_OPTIONS } from "./policy-editor-options";
  * it is to change the text or the batteries it includes. A text the host
  * refused composes to nothing, so the document shown then is the earlier
  * composition the runtime keeps enforcing, or, when none ever opened, the
- * organization's text alone, which enforces nothing.
+ * organization's text alone, which enforces nothing. Fills the height its
+ * parent gives it.
  */
 export function EffectivePolicyView() {
   const effective = useEffectivePolicy();
   const declarations = usePolicyDeclarations();
   if (effective.isPending)
-    return <Skeleton className="h-[65vh] w-full rounded-t-none" />;
+    return <PolicyPaneSkeleton className="min-h-0 flex-1" />;
   if (effective.isError || !effective.data)
     return (
-      <QueryLoadError
-        title="Could not load the effective policy"
-        error={effective.error}
-        onRetry={() => effective.refetch()}
-      />
+      <div className="p-3">
+        <QueryLoadError
+          title="Could not load the effective policy"
+          error={effective.error}
+          onRetry={() => effective.refetch()}
+        />
+      </div>
     );
   const { content, contentHash, rootRevision, lastError } = effective.data;
   const { served, refusal } = compositionOf(effective.data);
@@ -58,12 +59,12 @@ export function EffectivePolicyView() {
         : "refused-root-only";
   return (
     <div
-      className="overflow-hidden rounded-b-lg border bg-background"
+      className="flex min-h-0 flex-1 flex-col"
       data-testid="effective-policy"
       data-composition={state}
     >
       {stubs.length > 0 && (
-        <div className="border-b px-4 py-3">
+        <div className="shrink-0 border-b px-3 py-2">
           <InlineNotice variant="warning" data-testid="effective-policy-stubs">
             <InlineNoticeText>
               <span>Composed as empty stubs, their rules left out: </span>
@@ -83,7 +84,7 @@ export function EffectivePolicyView() {
         </div>
       )}
       {lastError && (
-        <div className="border-b px-4 py-3">
+        <div className="shrink-0 border-b px-3 py-2">
           <InlineNotice
             variant={served.kind === "root_only" ? "error" : "warning"}
             data-testid="effective-policy-error"
@@ -101,17 +102,13 @@ export function EffectivePolicyView() {
           </InlineNotice>
         </div>
       )}
-      <Editor
-        height="min(50vh, 560px)"
-        language="ini"
-        value={content}
-        options={{
-          ...POLICY_EDITOR_OPTIONS,
-          readOnly: true,
-          ariaLabel: "Effective guardrails policy",
-        }}
+      <PolicyPaneEditor
+        path="effective-policy.toml"
+        content={content}
+        ariaLabel="Effective guardrails policy"
+        className="min-h-0 flex-1"
       />
-      <div className="border-t px-4 py-3 text-xs text-muted-foreground">
+      <div className="flex shrink-0 flex-wrap gap-x-4 border-t px-3 py-1.5 text-xs text-muted-foreground">
         <span>
           {served.kind === "current"
             ? `Composed from revision ${rootRevision} · ${hash}`
@@ -122,7 +119,7 @@ export function EffectivePolicyView() {
                 : `Revision ${rootRevision} refused · enforcing revision ${served.rootRevision} · ${hash}`}
         </span>
         {effective.data.servedRevision && (
-          <span className="block">
+          <span>
             {`Runtime revision ${effective.data.servedRevision.revision} · published ${formatDate(
               {
                 date: effective.data.servedRevision.publishedAt,

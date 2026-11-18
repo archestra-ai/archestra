@@ -12,6 +12,7 @@ import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { ClientRedirect } from "@/components/client-redirect";
 import { useHasPagePermissions } from "@/lib/auth/auth.query";
 import { useTeamLimitAccess } from "@/lib/limits-access";
+import { useServerRulesAccess } from "@/lib/openappa-github-sync.query";
 
 export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   children,
@@ -25,6 +26,9 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
     requiredPermissions || {},
   );
   const canSeeSettings = useSettingsAreaAccess();
+  // The Policy page also opens to a reader of some MCP server's rules.
+  const serverRules = useServerRulesAccess();
+  const isPolicy = pathname === POLICY_PATH;
 
   // No loader while the permission check is in flight. It used to render one
   // here, inside the shell and centred on the content column — a different
@@ -41,7 +45,8 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
       (pathname === "/llm/limits" && limitsAccess.isPending) ||
       (pathname === "/llm/costs" &&
         !hasRequiredPermissions &&
-        limitsAccess.isTeamAdminPending)) &&
+        limitsAccess.isTeamAdminPending) ||
+      (isPolicy && !hasRequiredPermissions && serverRules.scoped === null)) &&
     requiredPermissions
   ) {
     return isOptimisticChatPath(pathname) ? <>{children}</> : null;
@@ -71,7 +76,8 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
     !hasRequiredPermissions &&
     !(pathname === "/llm/limits" && limitsAccess.canRead) &&
     // A team admin sees the Costs page scoped to their teams.
-    !(pathname === "/llm/costs" && limitsAccess.isTeamAdmin)
+    !(pathname === "/llm/costs" && limitsAccess.isTeamAdmin) &&
+    !(isPolicy && serverRules.scoped)
   ) {
     return <ForbiddenPage />;
   }
@@ -87,6 +93,8 @@ function isOptimisticChatPath(pathname: string) {
 }
 
 const NON_CONVERSATION_CHAT_SEGMENTS = new Set(["new", "runs"]);
+
+const POLICY_PATH = "/openappa/policy";
 
 function resolvePagePermissions(pathname: string) {
   const exact = requiredPagePermissionsMap[pathname];

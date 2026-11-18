@@ -226,6 +226,9 @@ export const handlers: HttpHandler[] = [
   // Git sync's self-service reads: off, with no protection or App to show,
   // as a deployment that never set it up answers.
   ...getJson("/api/openappa/github-sync/self-service", { enabled: false }),
+  // A reader without the Guardrails permission asks which MCP servers' rules
+  // files they may open: none, so the Policy page stays closed to them.
+  ...getJson("/api/openappa/server-rules/files", { files: [] }),
   ...getJson("/api/openappa/github-sync/protection", null),
   ...getJson("/api/openappa/github-sync/app-grants", null),
   ...notFound("/api/openappa/credential-bindings/:variable"),

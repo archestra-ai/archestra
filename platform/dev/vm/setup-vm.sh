@@ -44,8 +44,9 @@ get() {
 step "apt packages"
 # cmake/clang/libssl-dev/pkg-config: native parts of the Rust crates
 # (aws-lc-sys, openssl-sys). lsof: Tilt's MCP port-forward loop. socat: the
-# kind bridge below.
-packages="build-essential pkg-config cmake clang libssl-dev git curl ca-certificates lsof xz-utils python3 docker.io socat"
+# kind bridge below. lld/llvm: the macOS build of the archestra program for
+# the Mac (dev/build-archestra-cli-dev.sh).
+packages="build-essential pkg-config cmake clang lld llvm libssl-dev git curl ca-certificates lsof xz-utils python3 docker.io socat"
 # shellcheck disable=SC2086
 if ! dpkg -s $packages >/dev/null 2>&1; then
   export DEBIAN_FRONTEND=noninteractive

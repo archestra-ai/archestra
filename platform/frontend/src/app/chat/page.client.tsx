@@ -554,11 +554,7 @@ export function ChatPageContent({
   // runs on, which a new chat on an agent without a model of its own starts
   // on. While its router cannot route, a chat on one shows the normal tier it
   // runs on.
-  const autoRoutingEnabled = useFeature("autoRoutingEnabled") === true;
-  const modelPoolsEnabled = useFeature("llmModelPoolsEnabled") === true;
-  const organizationDefaultModel = useOrganizationDefaultModel({
-    enabled: autoRoutingEnabled,
-  });
+  const organizationDefaultModel = useOrganizationDefaultModel();
   const initialRuntimeCandidate =
     internalAgents.find((agent) => agent.id === initialAgentId) ??
     initialAgentReference;
@@ -1055,13 +1051,9 @@ export function ChatPageContent({
     ? conversationAgent
     : initialAgent;
   const initialPoolSelected = Boolean(
-    modelPoolsEnabled &&
-      initialModelPoolId &&
-      !autoRouterIdOfChoice(initialModelPoolId),
+    initialModelPoolId && !autoRouterIdOfChoice(initialModelPoolId),
   );
-  const conversationPoolSelected = Boolean(
-    modelPoolsEnabled && conversation?.modelPoolId,
-  );
+  const conversationPoolSelected = Boolean(conversation?.modelPoolId);
   const activePoolSelected = conversationId
     ? conversationPoolSelected
     : initialPoolSelected;

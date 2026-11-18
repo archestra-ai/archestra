@@ -531,7 +531,7 @@ tests:
     set:
       archestra.env:
         ARCHESTRA_AUTH_ADMIN_PASSWORD: example-admin-password
-        ARCHESTRA_BETA: "true"
+        ARCHESTRA_ANALYTICS: disabled
     asserts:
       - equal:
           path: spec.template.spec.initContainers[?(@.name == "wait-for-postgres")].env

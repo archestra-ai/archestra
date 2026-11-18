@@ -30,6 +30,8 @@ export const ServiceAccountResponseSchema = z.object({
   createdBy: CreatedByNullableSchema,
   organizationId: z.string(),
   name: z.string(),
+  /** What the account is for; null when nobody wrote it down. */
+  description: z.string().nullable(),
   icon: z.string().nullable(),
   role: z.string(),
   /**
@@ -78,8 +80,21 @@ export const ServiceAccountTokenWithValueResponseSchema =
     token: z.string(),
   });
 
+/**
+ * Optional free text. A blank value clears it, so the form can send what the
+ * field holds without a separate "remove" control.
+ */
+const ServiceAccountDescriptionSchema = z
+  .string()
+  .trim()
+  .max(1000)
+  .nullable()
+  .optional()
+  .transform((value) => (value === "" ? null : value));
+
 export const CreateServiceAccountBodySchema = z.object({
   name: z.string().trim().min(1).max(256),
+  description: ServiceAccountDescriptionSchema,
   icon: z.string().nullable().optional(),
   role: z.string().trim().min(1).max(256),
   teamId: z.string().min(1).nullable().optional(),
@@ -89,6 +104,7 @@ export const CreateServiceAccountBodySchema = z.object({
 export const UpdateServiceAccountBodySchema = z
   .object({
     name: z.string().trim().min(1).max(256).optional(),
+    description: ServiceAccountDescriptionSchema,
     icon: z.string().nullable().optional(),
     role: z.string().trim().min(1).max(256).optional(),
     teamId: z.string().min(1).nullable().optional(),

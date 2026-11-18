@@ -25,7 +25,6 @@ import {
   updateAutoRouter,
 } from "@/auto-routing/settings";
 import { describeRoutedUsage } from "@/auto-routing/usage";
-import config from "@/config";
 import AutoRouterModel from "@/models/auto-router";
 import RoutingPlanModel from "@/models/routing-plan";
 import {
@@ -60,13 +59,6 @@ const TAGS = ["Auto Routing"];
 const RouterParamsSchema = z.object({ id: UuidIdSchema });
 
 const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // onRequest, so a disabled deployment never parses a body.
-  fastify.addHook("onRequest", async () => {
-    if (!config.autoRouting.enabled) {
-      throw new ApiError(404, "Auto routing is not enabled");
-    }
-  });
-
   fastify.get(
     "/api/auto-routing/state",
     {

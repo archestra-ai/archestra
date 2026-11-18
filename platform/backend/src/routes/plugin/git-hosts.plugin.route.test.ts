@@ -1,7 +1,6 @@
 import { generateKeyPairSync } from "node:crypto";
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
-import config from "@/config";
 import { PluginModel } from "@/models";
 import { createGitlabToken } from "@/services/git-credentials";
 import { createGithubAppConfig } from "@/services/github-app-config";
@@ -22,7 +21,6 @@ describe("plugin imports from GitLab and self-hosted GitHub", () => {
   const server = useMswServer();
 
   beforeEach(() => {
-    config.beta = false;
     grantEverywhere(["plugin"]);
   });
 

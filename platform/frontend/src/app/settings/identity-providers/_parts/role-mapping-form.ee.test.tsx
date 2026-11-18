@@ -27,9 +27,9 @@ Element.prototype.scrollIntoView = vi.fn();
 vi.mock("@/lib/role.query", () => ({
   useRoles: () => ({
     data: [
-      { id: "1", role: "admin", name: "admin" },
-      { id: "2", role: "member", name: "member" },
-      { id: "3", role: "power-user", name: "power-user" },
+      { id: "1", role: "admin", name: "admin", predefined: true },
+      { id: "2", role: "member", name: "member", predefined: true },
+      { id: "3", role: "power-user", name: "power-user", predefined: false },
     ],
     isPending: false,
   }),
@@ -359,8 +359,11 @@ describe("RoleMappingForm", () => {
       E2eTestId.IdpRoleMappingDefaultRole,
     ]) {
       await user.click(screen.getByTestId(testId));
-      expect(screen.getByRole("option", { name: /^Member/ })).toBeDisabled();
-      await user.click(screen.getByRole("option", { name: /^Admin/ }));
+      // The last role cannot be removed: clicking it changes nothing.
+      const member = screen.getByRole("checkbox", { name: /^Member/ });
+      await user.click(member);
+      expect(member).toBeChecked();
+      await user.click(screen.getByRole("checkbox", { name: /^Admin/ }));
       await user.keyboard("{Escape}");
     }
     await user.click(screen.getByRole("button", { name: "Save" }));

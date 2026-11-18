@@ -60,10 +60,10 @@ process.env.ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT = "";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED = "false";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT = "";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION = "";
-// Keep unrelated beta features off even when a developer's .env enables them.
-// OpenAPPA is always available; enforcement tests opt in through the deployment
-// Guardrails setting. A test of another beta feature stubs its own gate.
-process.env.ARCHESTRA_BETA = "false";
+// Keep the opt-in M-Files connector off even when a developer's .env enables
+// it; its tests set the gate themselves. OpenAPPA is always available;
+// enforcement tests opt in through the deployment Guardrails setting.
+process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED = "false";
 process.env.ARCHESTRA_LLM_PROXY_PLUGINS = "";
 
 // Set auth secret for tests

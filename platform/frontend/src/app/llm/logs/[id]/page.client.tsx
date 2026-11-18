@@ -346,11 +346,10 @@ export default function SessionDetailPage({
       : null;
 
   // A pooled row names the member key it went to.
-  const poolsEnabled = useFeature("llmModelPoolsEnabled") === true;
   const { data: canReadPools } = useHasPermissions({ llmModel: ["read"] });
   const hasPooledRows = traceRequests.some((row) => row.modelPoolId);
   const { data: pools } = useModelPools({
-    enabled: poolsEnabled && Boolean(canReadPools) && hasPooledRows,
+    enabled: Boolean(canReadPools) && hasPooledRows,
     toastOnError: false,
   });
   const poolKeyNames = useMemo(

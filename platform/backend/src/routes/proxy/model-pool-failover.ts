@@ -22,7 +22,6 @@ import {
   type ModelPoolRetrySettings,
 } from "@archestra/shared/model-pool-retries";
 import { CacheKey, cacheManager } from "@/cache-manager";
-import config from "@/config";
 import logger from "@/logging";
 import { LlmProviderApiKeyModel, ModelPoolModel } from "@/models";
 import {
@@ -156,8 +155,8 @@ export function mayUseModelPool(params: {
 }
 
 /**
- * Plan a named or explicitly selected pool. Returns null when pools are off,
- * a named pool does not exist, or the caller cannot use that named pool.
+ * Plan a named or explicitly selected pool. Returns null when a named pool
+ * does not exist, or the caller cannot use that named pool.
  * A missing selected pool throws 404; no enabled members or any enabled member
  * incompatible with the client wire throws 400. Session affinity keeps a
  * conversation on one healthy member to reuse the provider's prompt cache.
@@ -177,7 +176,6 @@ export async function planModelPool(params: {
   sessionId?: string | null;
   retryCountHeader?: string | string[];
 }): Promise<ModelPoolPlan | null> {
-  if (!config.llmProxy.modelPoolsEnabled) return null;
   const pool = params.poolId
     ? await ModelPoolModel.findById({
         organizationId: params.organizationId,

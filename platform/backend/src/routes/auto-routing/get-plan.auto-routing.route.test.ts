@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import config from "@/config";
-import { beforeEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 import {
   autoRouterId,
   configureAutoRouting,
@@ -11,10 +10,6 @@ import autoRoutingRoutes from "./auto-routing.routes";
 
 describe("GET /api/auto-routing/routers/:id/plans/:planId", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
-  beforeEach(() => {
-    config.autoRouting.enabled = true;
-  });
-
   const getPlan = (routerId: string, id: string) =>
     ctx.app.inject({
       method: "GET",

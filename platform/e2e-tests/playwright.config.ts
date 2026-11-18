@@ -44,12 +44,11 @@ const testPatterns = {
   // Vault K8s startup test — runs in a dedicated CI job with Vault K8s auth
   vaultK8s: "**/vault-k8s-startup.spec.ts",
   llmProxy: "**/llm-proxy/**/*.spec.ts",
-  // OpenAPPA specs need a stack booted with ARCHESTRA_BETA=true,
-  // which the ordinary lite stack is deliberately NOT: with it on the proxy
-  // rejects any tool-declaring request that omits the two APPA tools, which
-  // other lite specs rely on. So these live in their own project, run by
-  // CI against their own stack (in the quickstart job), and must stay out of every
-  // other project's testMatch.
+  // OpenAPPA specs turn on the deployment-wide Guardrails switch. With it on
+  // the proxy rejects any tool-declaring request that omits the two APPA
+  // tools, which other lite specs rely on. So these live in their own project,
+  // run by CI against their own stack (in the quickstart job), and must stay
+  // out of every other project's testMatch.
   openappa: "**/openappa/**/*.spec.ts",
 };
 
@@ -373,10 +372,10 @@ export default defineConfig({
       },
       dependencies: dependencies.testProjects,
     },
-    // OpenAPPA root tool flow (lite environment, but a stack booted with
-    // ARCHESTRA_BETA=true — see scripts/e2e-lite.sh and the
-    // OpenAPPA half of the quickstart CI job). Never add these specs to another
-    // project: against an OpenAPPA-off stack they cannot pass.
+    // OpenAPPA root tool flow (lite environment, on its own stack — see
+    // scripts/e2e-lite.sh and the OpenAPPA half of the quickstart CI job).
+    // Never add these specs to another project: they turn deployment-wide
+    // enforcement on, which the other lite specs cannot run under.
     {
       name: projectNames.openappa,
       testDir: "./tests",

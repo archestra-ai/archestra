@@ -1,9 +1,8 @@
 import { TOOL_LOAD_SKILL_FULL_NAME } from "@archestra/shared";
 import { NoSuchToolError, type UIMessage } from "ai";
-import { describe, onTestFinished, vi } from "vitest";
+import { describe, vi } from "vitest";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-tracker";
-import appConfig from "@/config";
 import ModelModel from "@/models/model";
 import { expect, test } from "@/test";
 import { ensureAutoRouter } from "@/test/auto-routing";
@@ -867,11 +866,6 @@ describe("executeA2AMessage current turn assembly", () => {
       agentType: "agent",
       systemPrompt: "Handle the task.",
       autoRouterId: router.id,
-    });
-    const deployed = appConfig.autoRouting.enabled;
-    appConfig.autoRouting.enabled = true;
-    onTestFinished(() => {
-      appConfig.autoRouting.enabled = deployed;
     });
     const routed: Record<string, string | null | undefined> = {};
     for (const tier of [undefined, "normal", "fast", "smart"] as const) {

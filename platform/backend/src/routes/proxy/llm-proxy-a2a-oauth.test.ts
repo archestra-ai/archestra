@@ -36,7 +36,6 @@ describe("A2A OAuth authorization at actual proxy transport attempts", () => {
   let firstAttempt: (() => Promise<"drop" | "pool" | undefined>) | undefined;
 
   beforeEach(async () => {
-    config.llmProxy.modelPoolsEnabled = true;
     requests = [];
     firstAttempt = undefined;
     upstream = createServer(async (req, res) => {

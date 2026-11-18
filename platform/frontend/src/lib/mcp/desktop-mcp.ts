@@ -38,18 +38,6 @@ export const DESKTOP_MCP_COPY = {
   section: "Devices",
 } as const;
 
-/**
- * Whether the registry form offers Desktop hosting. Desktop MCP is in alpha:
- * only with the beta flag, except for an item that already is one, which
- * keeps its choice.
- */
-export function desktopHostingOffered(params: {
-  betaEnabled: boolean;
-  current: string | undefined;
-}): boolean {
-  return params.betaEnabled || params.current === "desktop_mcp";
-}
-
 /** The Device tab of Personal Settings: the user's device. */
 export const DEVICES_HREF = "/account/devices";
 

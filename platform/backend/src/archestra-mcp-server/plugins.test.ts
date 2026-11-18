@@ -178,6 +178,36 @@ describe("plugin tool execution", () => {
     expect(textOf(result)).toContain("plugin:create");
   });
 
+  test("plugin:create alone creates a plugin, without managing every plugin", async ({
+    makeCustomRole,
+    makeMember,
+    makeUser,
+  }) => {
+    const role = await makeCustomRole(organizationId, {
+      permission: { plugin: ["read", "create"] },
+    });
+    const creator = await makeUser();
+    await makeMember(creator.id, organizationId, { role: role.role });
+    const creatorContext = { ...context, userId: creator.id };
+
+    const created = await executeArchestraTool(
+      TOOL_CREATE_PLUGIN_FULL_NAME,
+      pluginPayload(),
+      creatorContext,
+    );
+    expect(created.isError, textOf(created)).toBeFalsy();
+    const pluginId = (created.structuredContent as { id: string }).id;
+
+    // Reading the bytes back stays with whoever manages every plugin.
+    const read = await executeArchestraTool(
+      TOOL_GET_PLUGIN_FULL_NAME,
+      { id: pluginId },
+      creatorContext,
+    );
+    expect(read.isError).toBe(true);
+    expect(textOf(read)).toContain("manage every plugin");
+  });
+
   test("create_plugin, list_plugins, and get_plugin round-trip exact bytes", async () => {
     const created = await executeArchestraTool(
       TOOL_CREATE_PLUGIN_FULL_NAME,

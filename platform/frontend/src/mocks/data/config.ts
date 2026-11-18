@@ -72,6 +72,7 @@ export function makeConfig(
       openappaEnabled: true,
       agentHooksEnabled: false,
       chatopsTelegramEnabled: false,
+      chatopsWhatsappEnabled: true,
       // On in the mock: the connector-dialog tests exercise the M-Files form,
       // including its Application Account (OAuth) fields.
       kbMfilesConnectorEnabled: true,

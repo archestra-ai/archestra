@@ -8,6 +8,7 @@ import {
   Globe,
   LayoutGrid,
   Mail,
+  MessageSquare,
   Minimize2,
   Route,
   ShieldCheck,
@@ -143,6 +144,7 @@ function getSourceIcon({
         className="shrink-0 rounded-sm"
       />
     ),
+    "chatops:whatsapp": <MessageSquare className="h-3 w-3 shrink-0" />,
     "chatops:jira": (
       <Image
         src="/icons/jira.png"

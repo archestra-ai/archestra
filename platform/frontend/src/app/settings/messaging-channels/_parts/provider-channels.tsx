@@ -40,7 +40,7 @@ type Binding =
 export function ProviderChannels({
   provider,
 }: {
-  provider: "ms-teams" | "telegram";
+  provider: "ms-teams" | "telegram" | "whatsapp";
 }) {
   const bindings = useAllChatOpsBindings();
   const { data: agents = [] } = useAgentOptionsByIds({

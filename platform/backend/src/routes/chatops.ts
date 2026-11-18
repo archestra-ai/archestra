@@ -48,6 +48,7 @@ import {
   errorMessage,
   stripDuplicateAgentFooter,
 } from "@/agents/chatops/utils";
+import WhatsAppProvider from "@/agents/chatops/whatsapp-provider";
 import { isRateLimited } from "@/agents/utils";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission } from "@/auth";
@@ -85,6 +86,7 @@ import {
   SlackChatOpsConfigViewSchema,
   type SlackDbConfig,
   TelegramChatOpsConfigViewSchema,
+  WhatsAppChatOpsConfigViewSchema,
 } from "@/types";
 import {
   type ChatOpsChannelBinding,
@@ -119,6 +121,22 @@ const captureSlackRawBody = async (
  * inside SlackProvider. See EventDedupMap for details.
  */
 const slackWebhookDedup = new EventDedupMap();
+const whatsappWebhookDedup = new EventDedupMap();
+
+const captureWhatsAppRawBody = async (
+  request: { whatsappRawBody?: string },
+  _reply: unknown,
+  payload: AsyncIterable<Buffer | string>,
+) => {
+  const chunks: Buffer[] = [];
+  for await (const chunk of payload) {
+    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+  }
+  const raw = Buffer.concat(chunks).toString("utf8");
+  request.whatsappRawBody = raw;
+  const { Readable } = await import("node:stream");
+  return Readable.from(Buffer.from(raw));
+};
 
 const ChatOpsAssignmentPlanUpdateSchema =
   UpdateChatOpsChannelBindingSchema.pick({
@@ -938,9 +956,136 @@ const msTeamsSignInRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
+/**
+ * WhatsApp Cloud API incoming webhook (GET verification challenge + POST events).
+ */
+export const whatsappWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    "/api/webhooks/chatops/whatsapp",
+    {
+      schema: {
+        description: "WhatsApp Cloud API webhook verification endpoint",
+        tags: ["ChatOps Webhooks"],
+        querystring: z.object({
+          "hub.mode": z.string().optional(),
+          "hub.verify_token": z.string().optional(),
+          "hub.challenge": z.string().optional(),
+        }),
+        response: {
+          200: z.string(),
+          400: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+          403: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const provider = chatOpsManager.getWhatsAppProvider();
+      if (!provider) {
+        throw new ApiError(400, "WhatsApp chatops provider not configured");
+      }
+
+      const challenge = provider.handleValidationChallenge(request.query);
+      if (!challenge) {
+        throw new ApiError(403, "Invalid WhatsApp webhook verification token");
+      }
+
+      return reply.type("text/plain").status(200).send(challenge);
+    },
+  );
+
+  fastify.post(
+    "/api/webhooks/chatops/whatsapp",
+    {
+      // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
+      preParsing: [captureWhatsAppRawBody as any],
+      schema: {
+        description: "WhatsApp Cloud API webhook endpoint",
+        tags: ["ChatOps Webhooks"],
+        body: z.unknown(),
+        response: {
+          200: z.object({ status: z.string() }),
+          400: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+          401: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+          429: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+          500: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const provider = chatOpsManager.getWhatsAppProvider();
+      if (!provider) {
+        logger.warn(
+          "[ChatOps] WhatsApp webhook called but provider not configured",
+        );
+        throw new ApiError(400, "WhatsApp chatops provider not configured");
+      }
+
+      const clientIp = request.ip || "unknown";
+      const rateLimitKey =
+        `${CacheKey.WebhookRateLimit}-chatops-whatsapp-${clientIp}` as AllowedCacheKey;
+      const rateLimitConfig = {
+        windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
+        maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
+      };
+      if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
+        logger.warn(
+          { ip: clientIp },
+          "[ChatOps] Rate limit exceeded for WhatsApp webhook",
+        );
+        throw new ApiError(429, "Too many requests");
+      }
+
+      const headers: Record<string, string | string[] | undefined> = {};
+      for (const [key, value] of Object.entries(request.headers)) {
+        headers[key] = value;
+      }
+
+      const rawBody = (request as unknown as { whatsappRawBody?: string })
+        .whatsappRawBody;
+      if (rawBody === undefined) {
+        throw new ApiError(400, "Could not read request body for verification");
+      }
+
+      const isValid = await provider.validateWebhookRequest(rawBody, headers);
+      if (!isValid) {
+        throw new ApiError(401, "Invalid WhatsApp webhook signature");
+      }
+
+      const body = request.body;
+      const parsed = await provider.parseWebhookNotification(body, headers);
+      if (parsed?.messageId) {
+        if (whatsappWebhookDedup.mark(parsed.messageId)) {
+          return reply.status(200).send({ status: "ok" });
+        }
+      }
+
+      if (provider.parseInteractivePayload(body)) {
+        await chatOpsManager.handleInteractiveSelection(provider, body);
+      } else if (parsed) {
+        await chatOpsManager.handleIncomingMessage(provider, body);
+      }
+
+      return reply.status(200).send({ status: "ok" });
+    },
+  );
+};
+
 const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   await fastify.register(msTeamsWebhookRoutes);
   await fastify.register(msTeamsSignInRoutes);
+  await fastify.register(whatsappWebhookRoutes);
 
   /**
    * Slack webhook endpoint
@@ -2993,6 +3138,93 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/chatops/config/whatsapp",
+    {
+      schema: {
+        operationId: RouteId.GetWhatsAppChatOpsConfig,
+        description:
+          "Get the stored WhatsApp Cloud API chatops configuration without secrets",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(WhatsAppChatOpsConfigViewSchema),
+      },
+    },
+    async () => {
+      const row = await ChatOpsConfigModel.getStoredConfig("whatsapp");
+      const stored = row?.value;
+      const updatedAt = row?.updatedAt ?? null;
+      const base = (
+        config.chatops.webhookBaseUrl || config.frontendBaseUrl
+      ).replace(/\/+$/, "");
+      return {
+        configured: stored
+          ? new WhatsAppProvider(stored).isConfigured()
+          : false,
+        updatedAt,
+        enabled: stored?.enabled ?? false,
+        phoneNumberId: stored?.phoneNumberId || null,
+        businessAccountId: stored?.businessAccountId || null,
+        webhookUrl: `${base}/api/webhooks/chatops/whatsapp`,
+      };
+    },
+  );
+
+  fastify.put(
+    "/api/chatops/config/whatsapp",
+    {
+      schema: {
+        operationId: RouteId.UpdateWhatsAppChatOpsConfig,
+        description: "Update WhatsApp Cloud API chatops configuration",
+        tags: ["ChatOps"],
+        body: z.object({
+          enabled: z.boolean().optional(),
+          accessToken: z.string().max(1024).optional(),
+          phoneNumberId: z.string().max(128).optional(),
+          verifyToken: z.string().max(256).optional(),
+          appSecret: z.string().max(256).optional(),
+          businessAccountId: z.string().max(128).optional(),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      if (!config.chatops.whatsappEnabled) {
+        throw new ApiError(
+          400,
+          "The WhatsApp integration is not enabled on this deployment. Set ARCHESTRA_CHATOPS_WHATSAPP_ENABLED=true and restart.",
+        );
+      }
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "whatsapp",
+      });
+      const {
+        enabled,
+        accessToken,
+        phoneNumberId,
+        verifyToken,
+        appSecret,
+        businessAccountId,
+      } = request.body;
+
+      const existing = await ChatOpsConfigModel.getWhatsAppConfig();
+      const merged = {
+        enabled: enabled ?? existing?.enabled ?? false,
+        accessToken: accessToken ?? existing?.accessToken ?? "",
+        phoneNumberId: phoneNumberId ?? existing?.phoneNumberId ?? "",
+        verifyToken: verifyToken ?? existing?.verifyToken ?? "",
+        appSecret: appSecret ?? existing?.appSecret ?? "",
+        businessAccountId:
+          businessAccountId ?? existing?.businessAccountId ?? undefined,
+      };
+
+      await ChatOpsConfigModel.saveWhatsAppConfig(merged);
+      await chatOpsManager.reinitialize();
+
+      return reply.send({ success: true });
+    },
+  );
+
   /**
    * Mint a one-shot Telegram linking code for the signed-in user.
    * The code rides a t.me/<bot>?start=<code> deep link; when the user taps
@@ -3449,6 +3681,10 @@ async function getProviderInfo(
     tenantId?: string;
     signingSecret?: string;
     appLevelToken?: string;
+    accessToken?: string;
+    phoneNumberId?: string;
+    verifyToken?: string;
+    businessAccountId?: string;
     connectionMode?: ChatOpsConnectionMode;
   };
   dmInfo?: {
@@ -3536,6 +3772,24 @@ async function getProviderInfo(
         dmInfo: provider?.getBotUsername()
           ? { botUsername: provider.getBotUsername() ?? undefined }
           : undefined,
+      };
+    }
+    case "whatsapp": {
+      const provider = chatOpsManager.getWhatsAppProvider();
+      const dbConfig = await ChatOpsConfigModel.getWhatsAppConfig();
+      return {
+        id: "whatsapp",
+        displayName: "WhatsApp",
+        configured: provider?.isConfigured() ?? false,
+        credentials: {
+          accessToken: maskValue(dbConfig?.accessToken ?? ""),
+          phoneNumberId: dbConfig?.phoneNumberId ?? "",
+          verifyToken: dbConfig?.verifyToken ? "••••••••" : "",
+          appSecret: dbConfig?.appSecret ? "••••••••" : "",
+          ...(dbConfig?.businessAccountId
+            ? { businessAccountId: dbConfig.businessAccountId }
+            : {}),
+        },
       };
     }
   }

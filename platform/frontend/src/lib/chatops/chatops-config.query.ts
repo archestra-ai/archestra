@@ -160,6 +160,50 @@ export function useDisconnectNgrok() {
   });
 }
 
+export function useWhatsAppChatOpsConfig() {
+  return useQuery({
+    queryKey: ["chatops", "whatsapp-config"],
+    queryFn: async () => {
+      const { data } = await archestraApiSdk.getWhatsAppChatOpsConfig();
+      return data ?? null;
+    },
+  });
+}
+
+export function useUpdateWhatsAppChatOpsConfig() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (
+      body: NonNullable<
+        archestraApiTypes.UpdateWhatsAppChatOpsConfigData["body"]
+      >,
+    ) => {
+      const { data, error } = await archestraApiSdk.updateWhatsAppChatOpsConfig(
+        { body },
+      );
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) {
+        return;
+      }
+      toast.success("WhatsApp configuration updated");
+      queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "whatsapp-config"] });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+    onError: (error) => {
+      console.error("WhatsApp config update error:", error);
+      toast.error("Failed to update WhatsApp configuration");
+    },
+  });
+}
+
 export function useUpdateTelegramChatOpsConfig() {
   const queryClient = useQueryClient();
 

@@ -912,6 +912,8 @@ export const RouteId = {
   JoinSlackRouterBotChannel: "joinSlackRouterBotChannel",
   UpdateTelegramChatOpsConfig: "updateTelegramChatOpsConfig",
   GetTelegramChatOpsConfig: "getTelegramChatOpsConfig",
+  UpdateWhatsAppChatOpsConfig: "updateWhatsAppChatOpsConfig",
+  GetWhatsAppChatOpsConfig: "getWhatsAppChatOpsConfig",
   LinkTelegramChatOpsAccount: "linkTelegramChatOpsAccount",
   UnlinkTelegramChatOpsAccount: "unlinkTelegramChatOpsAccount",
   GenerateTelegramLinkCode: "generateTelegramLinkCode",

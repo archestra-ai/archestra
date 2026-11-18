@@ -45,6 +45,16 @@ export function useTriggerStatuses() {
   const telegram = chatOpsProviders?.find((p) => p.id === "telegram");
   const telegramActive =
     telegramAvailable && hasLlmKey && !!telegram?.configured;
+
+  const whatsappAvailable =
+    configData?.features.chatopsWhatsappEnabled !== false;
+  const whatsapp = chatOpsProviders?.find((p) => p.id === "whatsapp");
+  const whatsappActive =
+    whatsappAvailable &&
+    (isLocalDev
+      ? reachable && hasLlmKey && !!whatsapp?.configured
+      : hasLlmKey && !!whatsapp?.configured);
+
   const jira = chatOpsProviders?.find((provider) => provider.id === "jira");
   const jiraActive = hasLlmKey && !!jira?.configured;
 
@@ -59,6 +69,7 @@ export function useTriggerStatuses() {
       { id: "ms-teams", active: msTeamsActive, available: true },
       { id: "slack", active: slackActive, available: true },
       { id: "telegram", active: telegramActive, available: telegramAvailable },
+      { id: "whatsapp", active: whatsappActive, available: whatsappAvailable },
       { id: "jira", active: jiraActive, available: true },
       { id: "email", active: emailActive, available: true },
     ] as const
@@ -79,6 +90,8 @@ export function useTriggerStatuses() {
     slack: slackActive,
     telegram: telegramActive,
     telegramAvailable,
+    whatsapp: whatsappActive,
+    whatsappAvailable,
     jira: jiraActive,
     email: emailActive,
     firstProviderHref,

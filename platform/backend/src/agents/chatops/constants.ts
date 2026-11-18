@@ -155,6 +155,12 @@ export const SLACK_CONNECT_TIMEOUT_MS = 10 * TimeInMs.Second;
  */
 export const TELEGRAM_LINK_CODE_TTL_MS = 15 * 60 * 1000;
 
+/**
+ * Meta Graph API version and message length limit for WhatsApp Cloud API.
+ */
+export const WHATSAPP_GRAPH_API_VERSION = "v21.0";
+export const WHATSAPP_MAX_MESSAGE_LENGTH = 4096;
+
 /** @public — re-exported for testability */
 export { SLACK_SLASH_COMMANDS } from "@archestra/shared";
 

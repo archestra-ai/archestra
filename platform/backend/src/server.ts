@@ -172,7 +172,7 @@ import {
   registerStandaloneMetricsEndpoint,
 } from "./metrics-registration";
 import * as routes from "./routes";
-import { msTeamsWebhookRoutes } from "./routes/chatops";
+import { msTeamsWebhookRoutes, whatsappWebhookRoutes } from "./routes/chatops";
 import { publicConfigRoutes } from "./routes/config";
 import { createOAuthAwareCorsDelegate } from "./routes/oauth-cors";
 import {
@@ -540,6 +540,7 @@ const startPublicEndpointsServer = async () => {
   server.get(HEALTH_PATH, () => ({ status: "ok" }));
 
   await server.register(msTeamsWebhookRoutes);
+  await server.register(whatsappWebhookRoutes);
 
   await server.listen({ port: publicEndpointsPort, host });
   server.log.info(

@@ -10,6 +10,7 @@ export const ChatOpsProviderTypeSchema = z.enum([
   "ms-teams",
   "slack",
   "telegram",
+  "whatsapp",
   "jira",
 ]);
 export type ChatOpsProviderType = z.infer<typeof ChatOpsProviderTypeSchema>;
@@ -29,6 +30,10 @@ export const ChatOpsProviderCredentialsSchema = z
     tenantId: z.string().optional(),
     signingSecret: z.string().optional(),
     appLevelToken: z.string().optional(),
+    accessToken: z.string().optional(),
+    phoneNumberId: z.string().optional(),
+    verifyToken: z.string().optional(),
+    businessAccountId: z.string().optional(),
     connectionMode: ChatOpsConnectionModeSchema.optional(),
   })
   .optional();
@@ -85,6 +90,13 @@ export const MsTeamsChatOpsConfigViewSchema =
   });
 
 export const TelegramChatOpsConfigViewSchema = ChatOpsStoredConfigBaseSchema;
+
+export const WhatsAppChatOpsConfigViewSchema =
+  ChatOpsStoredConfigBaseSchema.extend({
+    phoneNumberId: z.string().nullable(),
+    businessAccountId: z.string().nullable(),
+    webhookUrl: z.string(),
+  });
 
 /** Full chatops status response schema */
 export const ChatOpsStatusResponseSchema = z.object({
@@ -868,6 +880,21 @@ export interface TelegramDbConfig {
   enabled: boolean;
   /** Bot token from @BotFather */
   botToken: string;
+}
+
+/** WhatsApp Cloud API config stored as a DB secret */
+export interface WhatsAppDbConfig {
+  enabled: boolean;
+  /** Permanent / System User access token for Meta Graph API */
+  accessToken: string;
+  /** WhatsApp Business Phone Number ID */
+  phoneNumberId: string;
+  /** Webhook verification token (hub.verify_token) */
+  verifyToken: string;
+  /** Meta App Secret used to verify X-Hub-Signature-256 */
+  appSecret: string;
+  /** Optional WhatsApp Business Account (WABA) ID */
+  businessAccountId?: string;
 }
 
 /** ngrok tunnel config stored as a DB secret */

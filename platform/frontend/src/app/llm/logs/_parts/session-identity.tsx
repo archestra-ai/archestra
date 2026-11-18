@@ -346,6 +346,7 @@ const CHATOPS_LOGOS = {
   "chatops:slack": { src: "/icons/slack.png", alt: "Slack" },
   "chatops:ms-teams": { src: "/icons/ms-teams.png", alt: "Microsoft Teams" },
   "chatops:telegram": { src: "/icons/telegram.png", alt: "Telegram" },
+  "chatops:whatsapp": { src: "/icons/telegram.png", alt: "WhatsApp" },
 } as const;
 
 function ActorBadge({ actor, size }: { actor: Actor; size: number }) {

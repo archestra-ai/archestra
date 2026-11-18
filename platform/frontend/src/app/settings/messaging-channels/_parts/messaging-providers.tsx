@@ -19,7 +19,8 @@ export function useMessagingProviders() {
   return CHAT_PROVIDER_IDS.filter(
     (id) =>
       !catalog.isHidden(id) &&
-      (id !== "telegram" || statuses.telegramAvailable),
+      (id !== "telegram" || statuses.telegramAvailable) &&
+      (id !== "whatsapp" || statuses.whatsappAvailable),
   ).map((id) => ({
     id,
     label: MESSAGING_CHANNEL_LABELS[id],
@@ -31,9 +32,11 @@ export function useMessagingProviders() {
           ? statuses.slack
           : id === "telegram"
             ? statuses.telegram
-            : id === "jira"
-              ? statuses.jira
-              : statuses.email,
+            : id === "whatsapp"
+              ? statuses.whatsapp
+              : id === "jira"
+                ? statuses.jira
+                : statuses.email,
   }));
 }
 
@@ -97,6 +100,7 @@ const CHAT_PROVIDER_IDS = [
   "ms-teams",
   "slack",
   "telegram",
+  "whatsapp",
   "jira",
   "email",
 ] as const satisfies readonly MessagingChannelId[];

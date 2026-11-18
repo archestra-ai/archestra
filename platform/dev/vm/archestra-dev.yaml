@@ -4,7 +4,8 @@
 # can only reach what is inside the VM.
 #
 # Created and driven by platform/scripts/dev-vm.sh; see platform/dev/vm/README.md.
-minimumLimaVersion: 2.0.0
+# 2.3: networkOpts.hostLoopback.
+minimumLimaVersion: 2.3.0
 
 base:
 - template:_images/ubuntu-24.04

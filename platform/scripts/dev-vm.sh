@@ -3,98 +3,123 @@
 # no host credentials. See platform/dev/vm/README.md.
 #
 # Usage: dev-vm.sh <command>
-#   create          create and start the VM, install the toolchain
-#   clone           clone archestra into ~/archestra in the VM (public https)
-#   worktree <name> [base]  add a worktree ~/worktrees/<name> in the VM (branch <name>,
-#                   from <base>, default main); it shares the VM's pnpm and Rust caches
-#   push <branch>   copy a local branch into the VM's clone (git bundle, no push access needed)
-#   cluster         create the kind cluster "archestra" in the VM
-#   tilt [name]     run `tilt up` in ~/archestra, or in worktree <name> (UI on http://localhost:20350)
-#   shell [name]    open a shell in the VM, in ~/archestra/platform or the worktree's platform/
-#   ssh-config      print the SSH settings for VS Code / Cursor Remote-SSH and git
-#   remote          add the git remote "vm" to the Mac repo you're in: commit in the VM,
-#                   `git fetch vm` on the Mac, review, push from the Mac
+#   create [ref]    create the VM, install the toolchain, push this repo's <ref> (default
+#                   main) into ~/archestra, create the kind cluster and write the VM's
+#                   .env. Safe to run again: finished steps are skipped.
+#   shell [-w <worktree>] [command]
+#                   open a shell in the VM, in ~/archestra/platform or the worktree's
+#                   platform/; with a command, run it there (quote shell syntax as one
+#                   string). `tilt up` there starts the stack.
+#   push <branch>   send a Mac branch into the VM's repo as mac/<branch> (only the new commits)
+#   worktree <name> [base]
+#                   add ~/worktrees/<name> in the VM on branch <name> (from <base>, default
+#                   main); it shares the VM's .env, pnpm store and Rust build folder
+#   remote          add the git remote "vm" to this repo: commit in the VM, `git fetch vm`
+#                   on the Mac, review, push from the Mac
+#   ssh-config      print the SSH settings that let git and editors reach the VM by name
 #   start | stop | status | delete
 #
-# Env: ARCHESTRA_DEV_VM (VM name, default archestra-dev),
+# Env: ARCHESTRA_DEV_VM (VM name, default archestra-dev); for create also
 #      ARCHESTRA_DEV_VM_CPUS / ARCHESTRA_DEV_VM_MEMORY (GiB) / ARCHESTRA_DEV_VM_DISK (GiB)
 set -euo pipefail
 
 vm="${ARCHESTRA_DEV_VM:-archestra-dev}"
-here="$(cd "$(dirname "$0")" && pwd)"
-platform="$(cd "$here/.." && pwd)"
-template="$platform/dev/vm/archestra-dev.yaml"
-repo_url="https://github.com/archestra-ai/archestra.git"
-# Mac-side ports (guest port + 10000), from archestra-dev.yaml.
-frontend_url="http://localhost:13000"
-api_url="http://localhost:19000"
-
-# platform/ of the main clone, or of worktree <name>.
-checkout_dir() { if [ -n "${1:-}" ]; then echo "~/worktrees/$1/platform"; else echo "~/archestra/platform"; fi; }
+platform="$(cd "$(dirname "$0")/.." && pwd)"
+repo="$(git -C "$platform" rev-parse --show-toplevel)"
 
 die() { echo "dev-vm.sh: $*" >&2; exit 1; }
-need_lima() { command -v limactl >/dev/null || die "install Lima first: brew install lima"; }
-exists() { limactl list -q 2>/dev/null | grep -qx "$vm"; }
-in_vm() { limactl shell --workdir / "$vm" -- bash -lc "$1"; }
-# </dev/null: limactl shell forwards stdin.
-vm_user() { limactl shell --workdir / "$vm" -- id -un </dev/null; }
+# Names end up in commands run in the VM: plain branch and folder names only.
+plain() { case "$1" in '' | -* | *[!A-Za-z0-9._/@-]*) die "not a plain name: $1" ;; esac; }
+vm_shell() { limactl shell --workdir / "$vm" -- "$@"; }
+# Runs a bash command line in the VM in a login shell (PATH with cargo and
+# pnpm). limactl shell forwards stdin; a command must not eat the caller's.
+in_vm() { vm_shell bash -lc "$1" </dev/null; }
+
+# The VM gets code only from the Mac: the Mac pushes into the VM's repo over
+# Lima's SSH. The VM holds no GitHub credentials and has no git remotes. This
+# repo may be a shallow clone.
+push_to_vm() {
+  # Lima's own ssh config, so it works without the ~/.ssh/config Include.
+  # --no-verify: this repo's pre-push hooks aren't for this.
+  GIT_SSH_COMMAND="ssh -F $HOME/.lima/$vm/ssh.config" \
+    git -C "$repo" push --no-verify --quiet "lima-$vm:archestra" "$@"
+}
 
 cmd_create() {
-  need_lima
-  exists && die "VM $vm already exists (dev-vm.sh delete to start over)"
-  local args=()
-  [ -n "${ARCHESTRA_DEV_VM_CPUS:-}" ] && args+=(--cpus "$ARCHESTRA_DEV_VM_CPUS")
-  [ -n "${ARCHESTRA_DEV_VM_MEMORY:-}" ] && args+=(--memory "$ARCHESTRA_DEV_VM_MEMORY")
-  [ -n "${ARCHESTRA_DEV_VM_DISK:-}" ] && args+=(--disk "$ARCHESTRA_DEV_VM_DISK")
-  # ${args[@]+...}: macOS bash 3.2 treats an empty array as unset under set -u.
-  limactl create --tty=false --name "$vm" ${args[@]+"${args[@]}"} "$template"
-  limactl start --tty=false "$vm"
-  cmd_setup
-}
+  local ref="${1:-main}" commit node_version name email
+  command -v limactl >/dev/null || die "install Lima first: brew install lima"
+  plain "$ref"
+  commit="$(git -C "$repo" rev-parse --verify --quiet "$ref^{commit}")" || die "no commit $ref in $repo"
+  # The Node version CI uses.
+  node_version="$(sed -n 's/.*node-version: "\(.*\)".*/\1/p' "$repo/.github/actions/setup-env/action.yml" | head -n 1)"
+  [ -n "$node_version" ] || die "no node-version in .github/actions/setup-env/action.yml"
 
-cmd_setup() {
-  limactl copy "$platform/dev/vm/setup-vm.sh" "$vm:/tmp/setup-vm.sh"
-  limactl shell --workdir / "$vm" -- sudo bash /tmp/setup-vm.sh "$(vm_user)" </dev/null
-  # The docker group applies to new logins; restart so the SSH session gets it.
-  limactl stop "$vm" && limactl start --tty=false "$vm"
+  if ! limactl list -q 2>/dev/null | grep -qx "$vm"; then
+    # shellcheck disable=SC2086
+    limactl create --tty=false --name "$vm" \
+      ${ARCHESTRA_DEV_VM_CPUS:+--cpus "$ARCHESTRA_DEV_VM_CPUS"} \
+      ${ARCHESTRA_DEV_VM_MEMORY:+--memory "$ARCHESTRA_DEV_VM_MEMORY"} \
+      ${ARCHESTRA_DEV_VM_DISK:+--disk "$ARCHESTRA_DEV_VM_DISK"} \
+      "$platform/dev/vm/archestra-dev.yaml"
+  fi
+  [ "$(limactl list --format '{{.Status}}' "$vm")" = Running ] || limactl start --tty=false "$vm"
+
+  limactl copy "$platform/dev/vm/setup-vm.sh" "$platform/dev/vm/setup-checkout.sh" "$vm:/tmp/"
+  vm_shell sudo bash /tmp/setup-vm.sh "$node_version" </dev/null
+  # A new SSH session, so the docker group from setup-vm.sh applies.
+  limactl shell --reconnect --workdir / "$vm" -- true </dev/null
+
+  if in_vm "test ! -e ~/archestra"; then
+    # shallowUpdate: this repo may be a shallow clone. updateInstead: a push
+    # to the checked-out branch also updates the files.
+    in_vm "git init -q -b main ~/archestra && git -C ~/archestra config receive.shallowUpdate true && git -C ~/archestra config receive.denyCurrentBranch updateInstead"
+    echo "Pushing $ref ($commit) into the VM as main..."
+    push_to_vm "$commit:refs/heads/main" || die "push into the VM failed"
+    # Commits in the VM carry your Git name and email (not a credential).
+    name="$(git -C "$repo" config user.name || true)"
+    email="$(git -C "$repo" config user.email || true)"
+    [ -z "$name" ] || in_vm "git config --global user.name $(printf %q "$name")"
+    [ -z "$email" ] || in_vm "git config --global user.email $(printf %q "$email")"
+  fi
+  in_vm "bash /tmp/setup-checkout.sh"
+
   echo
-  echo "Next: dev-vm.sh clone && dev-vm.sh cluster && dev-vm.sh tilt"
+  echo "Ready. Start the stack: dev-vm.sh shell, then 'tilt up' (first run about 8 minutes)."
+  echo "Web UI http://localhost:13000, Tilt UI http://localhost:20350."
 }
 
-cmd_clone() {
-  in_vm "
-    set -e
-    [ -d ~/archestra/.git ] || git clone $repo_url ~/archestra
-    cd ~/archestra/platform
-    # The Mac reaches the VM's frontend and API on shifted ports, and auth
-    # trusts only the origin in ARCHESTRA_FRONTEND_URL.
-    [ -f .env ] || cp .env.example .env
-    sed -i 's|^ARCHESTRA_FRONTEND_URL=.*|ARCHESTRA_FRONTEND_URL=$frontend_url|' .env
-    sed -i 's|^ARCHESTRA_API_BASE_URL=.*|ARCHESTRA_API_BASE_URL=$api_url|' .env
-    # Tilt builds the OpenAPPA addon only with ARCHESTRA_BETA=true; without it
-    # the backend's /ready stays 503 and the login page says it can't reach
-    # the server.
-    sed -i 's|^ARCHESTRA_BETA=.*|ARCHESTRA_BETA=true|' .env
-    rustup show active-toolchain >/dev/null 2>&1 || rustup toolchain install
-    grep -E '^ARCHESTRA_(FRONTEND_URL|API_BASE_URL|BETA)=' .env
-  "
+cmd_shell() {
+  local dir="~/archestra/platform"
+  if [ "${1:-}" = -w ]; then
+    plain "${2:-}"
+    dir="~/worktrees/$2/platform"
+    shift 2
+  fi
+  if [ $# -eq 0 ]; then
+    vm_shell bash -lc "cd $dir && exec bash -l"
+  else
+    vm_shell bash -lc "cd $dir && $*"
+  fi
 }
 
 cmd_push() {
-  local branch="${1:?usage: dev-vm.sh push <branch>}"
-  local tmp
-  tmp="$(mktemp -d)"
-  git -C "$platform" bundle create "$tmp/push.bundle" "$branch"
-  limactl copy "$tmp/push.bundle" "$vm:/tmp/push.bundle"
-  rm -rf "$tmp"
-  in_vm "cd ~/archestra && git fetch /tmp/push.bundle '$branch:$branch' && rm /tmp/push.bundle && echo 'Branch $branch is in the VM: git -C ~/archestra switch $branch'"
+  local branch="${1:-}"
+  plain "$branch"
+  # Only one exact local branch, never --all or other revision options.
+  git -C "$repo" rev-parse --verify --quiet "refs/heads/$branch^{commit}" >/dev/null || die "no local branch $branch"
+  # Into mac/<branch>, never over a VM branch you may be working on. Git
+  # sends only the commits the VM doesn't have.
+  push_to_vm "+refs/heads/$branch:refs/remotes/mac/$branch" || die "push into the VM failed (dev-vm.sh create first?)"
+  echo "In the VM: mac/$branch. Start a branch from it: git switch -c $branch mac/$branch (or merge it into yours)."
 }
 
 cmd_worktree() {
-  local name="${1:?usage: dev-vm.sh worktree <name> [base]}" base="${2:-main}"
-  # Same repo as ~/archestra, so the Mac's "vm" remote sees its branches.
-  # pnpm's store and Tilt's CARGO_TARGET_DIR are per VM user, so the first
-  # install and Rust build reuse what ~/archestra already downloaded and built.
+  local name="${1:-}" base="${2:-main}"
+  plain "$name"
+  plain "$base"
+  # Same repo as ~/archestra, so the Mac's "vm" remote sees its branches. The
+  # .env link is what the repo's worktree hook (worktree-bootstrap.sh) makes;
+  # the hook is only installed after the first `tilt up`.
   in_vm "
     set -e
     cd ~/archestra
@@ -103,43 +128,25 @@ cmd_worktree() {
     else
       git worktree add -b $name ~/worktrees/$name $base
     fi
-    cp ~/archestra/platform/.env ~/worktrees/$name/platform/.env
-    echo 'Worktree ~/worktrees/$name is ready: dev-vm.sh tilt $name (one Tilt at a time: stop the other first)'
+    [ -e ~/worktrees/$name/platform/.env ] || ln -sfn ~/archestra/platform/.env ~/worktrees/$name/platform/.env
   "
+  echo "Worktree ~/worktrees/$name is ready: dev-vm.sh shell -w $name (one Tilt at a time: stop the other first)."
 }
-
-cmd_cluster() {
-  in_vm "kind get clusters 2>/dev/null | grep -qx archestra || kind create cluster --name archestra; kubectl config use-context kind-archestra"
-}
-
-cmd_tilt() {
-  in_vm "cd $(checkout_dir "${1:-}") && exec tilt up --context kind-archestra"
-}
-
-cmd_shell() { limactl shell --workdir / "$vm" -- bash -lc "cd $(checkout_dir "${1:-}") 2>/dev/null || cd; exec bash -l"; }
 
 cmd_remote() {
-  local top url="lima-$vm:archestra"
-  top="$(git rev-parse --show-toplevel 2>/dev/null)" || die "run it inside the Mac git repo to push from"
-  if git -C "$top" remote get-url vm >/dev/null 2>&1; then
-    git -C "$top" remote set-url vm "$url"
-  else
-    git -C "$top" remote add vm "$url"
-  fi
-  echo "remote vm -> $url in $top"
-  # ssh -G prints the settings ssh would use; without the Include the host stays unknown.
-  if [ "$(ssh -G "lima-$vm" 2>/dev/null | awk '$1 == "hostname" { print $2 }')" != "127.0.0.1" ]; then
-    echo "ssh doesn't know lima-$vm yet: add the lines from 'dev-vm.sh ssh-config' to the top of ~/.ssh/config"
-  fi
+  git -C "$repo" remote remove vm 2>/dev/null || true
+  git -C "$repo" remote add vm "lima-$vm:archestra"
+  # The VM's tags are copies of this repo's.
+  git -C "$repo" config remote.vm.tagOpt --no-tags
+  echo "remote vm -> lima-$vm:archestra in $repo (needs the lines from 'dev-vm.sh ssh-config' in ~/.ssh/config)"
 }
 
 cmd_ssh_config() {
   local cfg="$HOME/.lima/$vm/ssh.config"
   [ -f "$cfg" ] || die "no $cfg yet (dev-vm.sh create first)"
   cat <<EOF
-# Add to the top of ~/.ssh/config. Then git ("vm" remote) and VS Code / Cursor
-# (Remote-SSH: Connect to Host... -> lima-$vm, folder ~/archestra/platform)
-# reach the VM by name.
+# Add to the top of ~/.ssh/config. Then git (the "vm" remote) and editors
+# reach the VM as lima-$vm.
 Include $cfg
 Host lima-$vm
   ForwardAgent no
@@ -147,28 +154,23 @@ Host lima-$vm
 # Back to settings for every host, so the lines below stay as they were.
 Match all
 EOF
-  echo
-  echo "# And in VS Code / Cursor user settings, so the editor doesn't hand your"
-  echo "# Mac's SSH agent or Git credentials to the VM:"
-  echo '#   "remote.SSH.enableAgentForwarding": false,'
-  echo '#   "git.terminalAuthentication": false'
 }
 
-cmd="${1:-}"; shift || true
+cmd="${1:-}"
+shift || true
 case "$cmd" in
-  create) cmd_create ;;
-  setup) cmd_setup ;;
-  clone) cmd_clone ;;
-  worktree) cmd_worktree "$@" ;;
-  push) cmd_push "$@" ;;
-  cluster) cmd_cluster ;;
-  tilt) cmd_tilt "$@" ;;
+  create) cmd_create "$@" ;;
   shell) cmd_shell "$@" ;;
-  ssh-config) cmd_ssh_config ;;
+  push) cmd_push "$@" ;;
+  worktree) cmd_worktree "$@" ;;
   remote) cmd_remote ;;
+  ssh-config) cmd_ssh_config ;;
   start) limactl start --tty=false "$vm" ;;
   stop) limactl stop "$vm" ;;
   status) limactl list "$vm" ;;
   delete) limactl delete --force "$vm" ;;
-  *) awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "$0"; [ -z "$cmd" ] || exit 1 ;;
+  *)
+    awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "$0"
+    [ -z "$cmd" ] || exit 1
+    ;;
 esac

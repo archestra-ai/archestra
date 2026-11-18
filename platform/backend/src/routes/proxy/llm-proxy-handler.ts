@@ -1344,9 +1344,10 @@ async function handleObservedLLMProxy<
   // A2A uses the agent's provider credential. Its proof-bound execution
   // reference names the application for audit only; it must not replace the
   // credential identity used by authorization, billing, or proxy limits.
-  const a2aClient = oauthExecution
-    ? await OAuthClientModel.findByClientId(oauthExecution.execution.clientId)
-    : null;
+  const a2aClient =
+    oauthExecution && !authenticatedApp
+      ? await OAuthClientModel.findByClientId(oauthExecution.execution.clientId)
+      : null;
   const a2aClientMetadata = a2aClient
     ? ManagedOauthClientMetadataSchema.safeParse(a2aClient.metadata).data
     : undefined;

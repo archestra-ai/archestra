@@ -137,14 +137,14 @@ export function EffectivePolicyView() {
                 : `Revision ${rootRevision} refused · enforcing revision ${served.rootRevision} · ${hash}`}
         </span>
         {effective.data.servedRevision && (
-          // When the runtime took it up; its own revision counter is a detail.
-          <span
-            title={`Runtime revision ${effective.data.servedRevision.revision}`}
-          >
-            {`In force since ${formatDate({
-              date: effective.data.servedRevision.publishedAt,
-              dateFormat: "MM/dd HH:mm",
-            })}`}
+          // The revision a chat names as the one it follows, and since when.
+          <span>
+            {`Runtime revision ${effective.data.servedRevision.revision} · in force since ${formatDate(
+              {
+                date: effective.data.servedRevision.publishedAt,
+                dateFormat: "MM/dd HH:mm",
+              },
+            )}`}
           </span>
         )}
       </div>

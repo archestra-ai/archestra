@@ -87,16 +87,20 @@ export async function resolveProxyModelsApiKey(params: {
     );
   }
 
-  const agent = params.requestedModel ? await resolveAgent(agentId) : undefined;
+  // Match inference: context-window hints are not distinct catalog models.
+  const requestedModel = params.requestedModel
+    ? stripClaudeContextVariantSuffix(params.requestedModel)
+    : undefined;
+  const agent = requestedModel ? await resolveAgent(agentId) : undefined;
   const assertModelAccess = async (authenticatedUserId?: string) => {
-    if (!params.requestedModel || !agent) return;
+    if (!requestedModel || !agent) return;
     await ModelModel.assertAvailable({
       provider,
-      modelId: params.requestedModel,
+      modelId: requestedModel,
     });
     const access = await checkModelTeamAccess({
       provider,
-      modelId: params.requestedModel,
+      modelId: requestedModel,
       organizationId: agent.organizationId,
       authenticatedUserId,
     });
@@ -127,7 +131,7 @@ export async function resolveProxyModelsApiKey(params: {
       tokenValue: token,
       expectedProvider: provider,
       expectedOrganizationId: agent?.organizationId ?? null,
-      requestedModel: params.requestedModel,
+      requestedModel,
       agentId,
     });
     await assertModelAccess(

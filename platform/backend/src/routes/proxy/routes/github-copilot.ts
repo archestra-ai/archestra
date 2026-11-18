@@ -1,5 +1,5 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
-import { RouteId } from "@archestra/shared";
+import { RouteId, stripClaudeContextVariantSuffix } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -206,9 +206,10 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         ) as AnthropicProvider;
         try {
-          return await client.messages.countTokens(
-            request.body as AnthropicProvider.Messages.MessageCountTokensParams,
-          );
+          return await client.messages.countTokens({
+            ...request.body,
+            model: stripClaudeContextVariantSuffix(request.body.model),
+          } as AnthropicProvider.Messages.MessageCountTokensParams);
         } catch (error) {
           if (!(error instanceof AnthropicProvider.APIError)) throw error;
           // Preserve the upstream status and native error envelope, not SDK

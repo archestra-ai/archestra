@@ -35,6 +35,7 @@ import {
 import InteractionModel from "@/models/interaction";
 import InteractionBillingModel from "@/models/interaction-billing";
 import LimitModel from "@/models/limit";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { encodeGithubAppReference } from "@/services/github-app-copilot-token";
 import { modelSyncService } from "@/services/model-sync";
 import captured from "@/services/vendor-published-pricing.test-data.json";
@@ -1643,7 +1644,7 @@ describe("GitHub Copilot native Messages", () => {
       isDefault: true,
     });
     const owner = await makeUser();
-    await makeMember(owner.id, agent.organizationId);
+    await makeMember(owner.id, agent.organizationId, { role: "member" });
     const passthroughKey = await makePassthroughCredential({
       organizationId: agent.organizationId,
       ownerId: owner.id,
@@ -1882,6 +1883,54 @@ describe("GitHub Copilot native Messages", () => {
       expect(invalid.statusCode, invalid.body).toBe(401);
       expect(countCalls).toBe(2);
       await ModelModel.update(storedModel.id, { ignored: false });
+      const policyKey = {
+        organizationId: agent.organizationId,
+        resource: "llmModel" as const,
+        scope: storedModel.id,
+      };
+      const existingPolicy =
+        await ResourcePermissionPolicyModel.find(policyKey);
+      const restrictedPolicy = await ResourcePermissionPolicyModel.replace({
+        ...policyKey,
+        revision: existingPolicy?.revision ?? 0,
+        grants: [
+          {
+            subject: { type: "user", id: randomUUID() },
+            actions: ["read", "use"],
+          },
+        ],
+      });
+      for (const restrictedModel of [model, `${model}[1m]`]) {
+        const restricted = await app.inject({
+          method: "POST",
+          url: `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
+          headers,
+          payload: { model: restrictedModel, messages },
+        });
+        expect(restricted.statusCode, restricted.body).toBe(403);
+      }
+      expect(countCalls).toBe(2);
+      if (!restrictedPolicy) throw new Error("Failed to restrict model access");
+      await ResourcePermissionPolicyModel.replace({
+        ...policyKey,
+        revision: restrictedPolicy.revision,
+        grants: [
+          { subject: { type: "user", id: owner.id }, actions: ["read", "use"] },
+        ],
+      });
+      const suffixed = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
+        headers: {
+          ...headers,
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+        },
+        payload: { model: `${model}[1m]`, messages },
+      });
+      expect(suffixed.statusCode, suffixed.body).toBe(200);
+      expect(suffixed.json()).toEqual({ input_tokens: 42 });
+      expect(countCalls).toBe(3);
+
       server.use(
         http.post(
           "https://api.githubcopilot.com/v1/messages/count_tokens",

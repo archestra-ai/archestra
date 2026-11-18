@@ -52,7 +52,10 @@ show them the lines from `platform/scripts/dev-vm.sh ssh-config`.
 
 First find out how the code you work on reaches the VM. Run
 `mutagen sync list` on the Mac: a session named like the checkout's folder
-means a synced checkout.
+means a synced checkout. If the user asks for the sync and there is no session
+yet, create it: `platform/scripts/dev-vm-sync.py start` in that checkout, then
+`dev-vm-sync.py run 'pnpm install'` from `platform/`. Start Tilt in the copy
+only after stopping a Tilt that runs elsewhere in the VM.
 
 ### Synced checkout (edit on the Mac)
 

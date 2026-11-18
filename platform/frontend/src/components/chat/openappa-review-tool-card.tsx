@@ -12,7 +12,12 @@ import {
   getReviewCardView,
   type ReviewDecision,
 } from "@/components/chat/openappa-review-presentation";
-import { ToolStatusRow } from "@/components/chat/tool-status-row";
+import { Button } from "@/components/ui/button";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 
 /**
  * An OpenAPPA review shown like Chat's tool approval: the reviewed tool's
@@ -49,11 +54,7 @@ export function OpenappaReviewToolCard({
   const hasInput = view.toolCard?.input !== undefined;
 
   return (
-    <Tool
-      id={id}
-      defaultOpen={hasInput}
-      className={hasInput ? "mb-0 cursor-pointer" : "mb-0"}
-    >
+    <Tool id={id} defaultOpen={hasInput} className="mb-0">
       {view.toolCard ? (
         <ToolHeader
           type={`tool-${view.toolCard.title ?? "call"}`}
@@ -67,31 +68,69 @@ export function OpenappaReviewToolCard({
           <ToolInput input={view.toolCard?.input} />
         </ToolContent>
       ) : null}
-      <ToolStatusRow
-        icon={<ClockIcon className="size-4 text-amber-600" />}
-        title="Approval required"
-        description={
-          <span className="whitespace-pre-wrap [overflow-wrap:anywhere]">
-            {view.description}
-          </span>
-        }
-        secondaryText={secondaryText}
-        actions={[
-          {
-            label: "Approve",
-            variant: "secondary",
-            icon: <CheckCircleIcon className="size-4" />,
-            disabled,
-            onClick: () => onDecide("approve"),
-          },
-          {
-            label: "Deny",
-            variant: "outline",
-            disabled,
-            onClick: () => onDecide("deny"),
-          },
-        ]}
-      />
+      <div className="space-y-3 p-3">
+        <InlineNotice>
+          <ClockIcon />
+          <InlineNoticeBody>
+            <span className="font-medium">Approval required</span>
+            <InlineNoticeText className="whitespace-pre-wrap [overflow-wrap:anywhere]">
+              {view.description}
+            </InlineNoticeText>
+          </InlineNoticeBody>
+        </InlineNotice>
+        {view.coverage ? (
+          <div className="space-y-2 text-xs">
+            <p className="font-medium">Approving also accepts:</p>
+            <ul
+              aria-label="Approval consequences"
+              className="list-disc space-y-2 pl-4 text-muted-foreground"
+            >
+              {view.coverage.map((line, index) => (
+                <li
+                  // biome-ignore lint/suspicious/noArrayIndexKey: coverage is an immutable review snapshot and may repeat a line
+                  key={index}
+                  className="whitespace-pre-wrap pl-1 leading-relaxed [overflow-wrap:anywhere]"
+                >
+                  {line}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {view.details ? (
+          <p className="whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+            {view.details}
+          </p>
+        ) : null}
+        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border/60 pt-3">
+          {secondaryText ? (
+            <p className="mr-auto min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+              {secondaryText}
+            </p>
+          ) : null}
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={disabled}
+              onClick={() => onDecide("approve")}
+            >
+              <CheckCircleIcon className="size-4" />
+              <span>Approve</span>
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={disabled}
+              onClick={() => onDecide("deny")}
+            >
+              Deny
+            </Button>
+          </div>
+        </div>
+      </div>
     </Tool>
   );
 }

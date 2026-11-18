@@ -61,10 +61,8 @@ describe("getReviewCardView", () => {
       }),
     ).toEqual({
       toolCard: { title: "Bash" },
-      description: [
-        REVIEW_STATUS_DESCRIPTION,
-        "Approving also accepts:\n  - first\n  - second",
-      ].join("\n\n"),
+      description: REVIEW_STATUS_DESCRIPTION,
+      coverage: ["first", "second"],
     });
   });
 
@@ -77,9 +75,8 @@ describe("getReviewCardView", () => {
       }),
     ).toEqual({
       toolCard: { title: "Bash" },
-      description: [REVIEW_STATUS_DESCRIPTION, "The whole review."].join(
-        "\n\n",
-      ),
+      description: REVIEW_STATUS_DESCRIPTION,
+      details: "The whole review.",
     });
   });
 
@@ -88,7 +85,8 @@ describe("getReviewCardView", () => {
       getReviewCardView({ message: "Old review.", reviewedTool: "Bash" }),
     ).toEqual({
       toolCard: { title: "Bash" },
-      description: [REVIEW_STATUS_DESCRIPTION, "Old review."].join("\n\n"),
+      description: REVIEW_STATUS_DESCRIPTION,
+      details: "Old review.",
     });
   });
 

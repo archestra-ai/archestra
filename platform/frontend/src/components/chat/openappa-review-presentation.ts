@@ -49,8 +49,12 @@ export const REVIEW_STATUS_DESCRIPTION =
 export type ReviewCardView = {
   /** Present when the review names a tool or carries arguments. */
   toolCard?: { title?: string; input?: unknown };
-  /** Visible review text, including any additional approval scope. */
+  /** Short prompt, or the original message when no tool is provided. */
   description: string;
+  /** Each additional consequence stays visible as a separate list item. */
+  coverage?: string[];
+  /** Original review text for requests without structured coverage. */
+  details?: string;
 };
 
 /**
@@ -81,22 +85,18 @@ export function getReviewCardView({
   }
   // No coverage and no text: a request from before the platform sent either,
   // whose message is the review itself.
-  const details = reviewedCoverage
-    ? reviewedCoverage.length
-      ? [
-          "Approving also accepts:",
-          ...reviewedCoverage.map((line) => `  - ${line}`),
-        ].join("\n")
-      : undefined
-    : (reviewedText ?? message).trim();
+  const details =
+    reviewedCoverage === undefined
+      ? (reviewedText ?? message).trim()
+      : undefined;
   return {
     toolCard: {
       ...(tool ? { title: tool } : {}),
       ...(input !== undefined ? { input } : {}),
     },
-    description: details
-      ? [REVIEW_STATUS_DESCRIPTION, details].join("\n\n")
-      : REVIEW_STATUS_DESCRIPTION,
+    description: REVIEW_STATUS_DESCRIPTION,
+    ...(reviewedCoverage?.length ? { coverage: reviewedCoverage } : {}),
+    ...(details ? { details } : {}),
   };
 }
 

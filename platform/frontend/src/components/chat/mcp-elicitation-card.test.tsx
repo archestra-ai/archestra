@@ -142,11 +142,15 @@ describe("McpElicitationCard", () => {
 
   it("keeps accepted review coverage and decision controls visible when arguments are collapsed", async () => {
     const user = userEvent.setup();
+    const coverage = [
+      "the readers must be the public audience",
+      "other tools may also need approval, decided call by call",
+    ];
     render(
       <McpElicitationCard
         requests={[
           openappaReview({
-            coverage: ["the readers must be the public audience"],
+            coverage,
           }),
         ]}
         onRespond={vi.fn()}
@@ -157,10 +161,19 @@ describe("McpElicitationCard", () => {
     expect(card).toHaveTextContent("Approving also accepts:");
     expect(card).toHaveTextContent("the readers must be the public audience");
     expect(card).not.toHaveTextContent("APPA asks you to rule");
+    const consequences = screen.getByRole("list", {
+      name: "Approval consequences",
+    });
+    expect(
+      within(consequences)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(coverage);
     await user.click(screen.getByText("archestra__todo_write"));
     expect(screen.getByRole("button", { name: "Approve" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Deny" })).toBeVisible();
     expect(card).toHaveTextContent("the readers must be the public audience");
+    expect(consequences).toBeVisible();
     expect(screen.queryByText(/qa-hitl/)).not.toBeInTheDocument();
   });
 

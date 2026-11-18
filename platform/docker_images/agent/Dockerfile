@@ -231,7 +231,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-codex
 USER root
-RUN pnpm add --global @openai/codex@0.167.0 \
+RUN pnpm add --global @openai/codex@0.167.1 \
  && codex --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
@@ -362,14 +362,14 @@ ARG TARGETARCH
 ENV GROK_DISABLE_AUTOUPDATER=1
 USER root
 RUN case "$TARGETARCH" in \
-      amd64) grok_arch=x64; checksum=62caf590f69b031821fbbae03650a1c57923aaf680a1861082ea7a324fbc546f ;; \
-      arm64) grok_arch=arm64; checksum=805875012d15c191868806dcda1f49522e382fe1848ff962e8371b07641fc64b ;; \
+      amd64) grok_arch=x64; checksum=65196b2082645faab3d4f1603008cb0db58d8b9b18bfdff481a4ee4ff256accd ;; \
+      arm64) grok_arch=arm64; checksum=f51375bc06869d739f60ad208f0dd154fe50967dce610fd34501025f163f0620 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /tmp/grok /opt/grok/bin \
  && cd /tmp/grok \
- && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.80" \
- && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.80.tgz" \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.81" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.81.tgz" \
  && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
  && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
  && chmod 0755 /opt/grok/bin/grok \
@@ -397,8 +397,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /tmp/kimi \
  && cd /tmp/kimi \
- && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.5.2)" kimi-code.tgz \
- && echo "6bb52eba0a90b8f04707664c8aef1ecc0148c09d1d9fac5a9ee4674ea6b6a575eed769e0ee4be2800957cb8ed3c4d2a99f28fcbe068d4ad79d4efe246ea482b8  kimi-code.tgz" | sha512sum -c - \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.5.3)" kimi-code.tgz \
+ && echo "35d06db598a4b5984a747d6dbbfdb903e225d4cc4ed514c4d6001d6439a8828093e20f0bee4de970b789a70cbb3cd26f1e8f4217c7c3262699f67b083e7f866a  kimi-code.tgz" | sha512sum -c - \
  && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
  && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
  && cd / && rm -rf /tmp/kimi /root/.npm \
@@ -422,13 +422,13 @@ FROM agent-base AS agent-copilot
 USER root
 ENV COPILOT_AUTO_UPDATE=false
 RUN case "$TARGETARCH" in \
-      amd64) copilot_arch=x64; copilot_checksum=2435538cc4e28431606a18ed70fc324428d926ac3f753597d32fe2dc9cfaf3e8b4d98f7f1251eca4625c2798a7bb442b48cfe1bf9400c69f21c45607ad19e10b ;; \
-      arm64) copilot_arch=arm64; copilot_checksum=8f032a726b44d3c84010e279f2e993e41de447090b902af8f1148727375aeb6f1e0cbe7db6d3e0f9548194546da34c376af05823071b4c315e9bd5ea62c4a207 ;; \
+      amd64) copilot_arch=x64; copilot_checksum=1bbbdaa1b706f3086dfe31e824321afdbb4b3c0746b02d4b7ba551f9aeb83ce1b85a3e6cf85ec6da8de80368af9d341dc2fab092c49fef98f6f5a4e1cdbb7aed ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=2bc3cb235179527e176c0d77137499a25386d3d8794dda00b24666dfb0d91165256049d68b72a4e149499c89dd9a6ed74a69f7d239b5d549a88f1a707115aee1 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /opt/copilot \
  && cd /tmp \
- && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.108)" copilot.tgz \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.109)" copilot.tgz \
  && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
  && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
  && test -s /opt/copilot/LICENSE.md \

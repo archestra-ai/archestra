@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { preloadResponseMarkdown } from "@/components/ai-elements/response";
 
+vi.mock("@/lib/hooks/use-app-name");
+
 // The markdown renderer is a lazy chunk; once loaded it renders in one pass.
 beforeAll(() => preloadResponseMarkdown());
 
@@ -181,6 +183,63 @@ describe("McpElicitationCard", () => {
     expect(card).toHaveTextContent("the readers must be the public audience");
     expect(consequences).toBeVisible();
     expect(screen.queryByText(/qa-hitl/)).not.toBeInTheDocument();
+  });
+
+  it("shows skill fields and Markdown instructions while retaining the exact copyable request", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText");
+    const onRespond = vi.fn().mockResolvedValue(true);
+    const raw = JSON.stringify(
+      {
+        content:
+          "---\nname: example-skill\ndescription: >-\n  Review the complete\n  skill request.\n---\n\n# Review steps\n\nCheck the proposed changes.",
+        files: [
+          { path: "references/checklist.md", content: "Keep this file." },
+        ],
+      },
+      null,
+      4,
+    );
+    render(
+      <McpElicitationCard
+        requests={[
+          {
+            ...openappaReview(),
+            reviewedTool: "archestra__create_skill",
+            reviewedArguments: raw,
+          },
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    const definitions = screen.getAllByRole("definition");
+    expect(screen.getAllByRole("term").map((term) => term.textContent)).toEqual(
+      ["Name", "Description", "Instructions", "Additional arguments"],
+    );
+    expect(definitions[0]).toHaveTextContent("example-skill");
+    expect(definitions[1]).toHaveTextContent(
+      "Review the complete skill request.",
+    );
+    expect(
+      within(definitions[2]).getByRole("heading", { name: "Review steps" }),
+    ).toBeVisible();
+    expect(definitions[3]).toHaveTextContent("references/checklist.md");
+    expect(
+      screen.queryByRole("button", { name: "Copy original request" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Original request" }));
+    await user.click(
+      screen.getByRole("button", { name: "Copy original request" }),
+    );
+    expect(writeText).toHaveBeenCalledWith(raw);
+    await user.click(screen.getByRole("button", { name: "Approve" }));
+    expect(onRespond).toHaveBeenCalledExactlyOnceWith({
+      id: "review-1",
+      action: "accept",
+      content: { action: "approve" },
+    });
   });
 
   it.each([

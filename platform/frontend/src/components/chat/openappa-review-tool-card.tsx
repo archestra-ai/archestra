@@ -14,6 +14,9 @@ import {
   type ReviewDecision,
 } from "@/components/chat/openappa-review-presentation";
 import { Button } from "@/components/ui/button";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
+import { SkillApprovalInput } from "./skill-approval-input";
+import { getSkillApprovalView } from "./skill-approval-presentation";
 
 /**
  * An OpenAPPA review shown like Chat's tool approval: the reviewed tool's
@@ -40,6 +43,7 @@ export function OpenappaReviewToolCard({
   secondaryText?: ReactNode;
   onDecide: (decision: ReviewDecision) => void;
 }) {
+  const { getToolShortName } = useArchestraMcpIdentity();
   const view = getReviewCardView({
     message,
     ...(reviewedTool ? { reviewedTool } : {}),
@@ -48,6 +52,10 @@ export function OpenappaReviewToolCard({
     ...(reviewedText ? { reviewedText } : {}),
   });
   const hasInput = view.toolCard?.input !== undefined;
+  const skill = getSkillApprovalView(
+    reviewedTool ? getToolShortName(reviewedTool) : null,
+    reviewedArguments,
+  );
 
   return (
     <Tool id={id} defaultOpen={hasInput} className="mb-0">
@@ -61,7 +69,11 @@ export function OpenappaReviewToolCard({
       ) : null}
       {hasInput ? (
         <ToolContent>
-          <ToolInput input={view.toolCard?.input} />
+          {skill ? (
+            <SkillApprovalInput skill={skill} />
+          ) : (
+            <ToolInput input={view.toolCard?.input} />
+          )}
         </ToolContent>
       ) : null}
       <div className="space-y-3 p-3">

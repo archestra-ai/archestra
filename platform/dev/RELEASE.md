@@ -203,18 +203,9 @@ The operator or release agent must create, queue, monitor, and verify these PRs 
 
 ### Write The Upgrade Guide
 
-Every new stable line ships a page that tells operators how to upgrade from the previous line, for example `docs/pages/admin/upgrade-v1-3-to-v1-4.md` on `release/1.4`. Operators read it before they upgrade, so it must be on `release/X.Y` before `X.Y.0` publishes, and it then appears in the `vX.Y` docs.
+Every new stable line ships a page that tells platform admins how to upgrade from the previous line, for example `docs/pages/admin/upgrade-v1-3-to-v1-4.md` on `release/1.4`. Admins read it before they upgrade, so it must be on `release/X.Y` before `X.Y.0` publishes; it then appears in the `vX.Y` docs. The `Release Freeze Check` on the `X.Y.0` release PR fails until `docs/pages/admin/upgrade-v*-to-vX-Y.md` exists.
 
-1. Name it `docs/pages/admin/upgrade-vA-B-to-vX-Y.md`, where `A.B` is the previous stable line. The release check matches `upgrade-v*-to-vX-Y.md`.
-2. Find what operators must act on, from the previous line's branch point to `release/X.Y`:
-   - commits marked breaking (`feat!:`, `fix!:`, `BREAKING`) and data that a migration drops instead of converting;
-   - removed or renamed Helm values (`platform/helm/archestra/values.yaml`) and environment variables (`platform/backend/src/config.ts`);
-   - migrations that need the old pods stopped, or that run long on large tables;
-   - removed API routes, MCP tools, and settings pages.
-3. Use the v1.4 page's shape: Before You Upgrade, Upgrade, After You Upgrade, Breaking Changes, Helm Values, Environment Variables, Roll Back. Follow the `archestra-docs-writer` skill.
-4. Link it from **Release Channels And Upgrades** in `docs/pages/admin/deployment.md`, and merge it through the `release/X.Y` queue.
-
-Keep it current: when a later `X.Y.Z` patch adds an operator action, update the page in the same backport.
+Write it with the `archestra-upgrade-guide` skill. When a later `X.Y.Z` patch adds an admin action, update the page in the same backport.
 
 ### Release Please Configuration
 

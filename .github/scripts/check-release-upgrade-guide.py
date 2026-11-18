@@ -32,7 +32,7 @@ def main() -> int:
     print(
         f"::error::{version} starts a new stable line but has no upgrade guide. "
         f"Add {GUIDES}/{pattern.replace('*', '<previous major>-<previous minor>')} to release/{major}.{minor} "
-        "before merging this release PR. See 'Write The Upgrade Guide' in platform/dev/RELEASE.md."
+        "before merging this release PR. Write it with the archestra-upgrade-guide skill (platform/dev/RELEASE.md, Write The Upgrade Guide)."
     )
     return 1
 

@@ -59,7 +59,7 @@ Do not hard-code ruleset IDs, check names, integration IDs, or queue parameters 
    - `draft: true`
 2. Open the release-configuration PR against `release/X.Y`, monitor its required checks, and merge it through the new queue.
 3. Inventory open PRs against the previous stable line. Recreate every still-required fix that already landed on `main` as a `cherry-pick -x` backport to `release/X.Y` and merge it before the initial release. Wait for Release Please to update the release PR.
-4. Write the upgrade guide from the previous line to `X.Y` (`docs/pages/admin/upgrade-vA-B-to-vX-Y.md`), following **Write The Upgrade Guide** in `platform/dev/RELEASE.md` and the `archestra-docs-writer` skill. Merge it to `release/X.Y` through the queue. The `Release Freeze Check` on the `X.Y.0` release PR fails until it exists; never bypass that failure.
+4. Write the upgrade guide from the previous line to `X.Y` (`docs/pages/admin/upgrade-vA-B-to-vX-Y.md`), with the `archestra-upgrade-guide` skill. Merge it to `release/X.Y` through the queue. The `Release Freeze Check` on the `X.Y.0` release PR fails until it exists; never bypass that failure.
 5. Wait for Release Please to create or update the `X.Y.0` PR. Verify its base, manifest version, changelog, release configuration, and required checks. Finish qualification before merging; the release workflow publishes automatically.
 6. Complete the old-line retirement below before merging the release PR. The selected beta and backported fixes must already have passed qualification.
 

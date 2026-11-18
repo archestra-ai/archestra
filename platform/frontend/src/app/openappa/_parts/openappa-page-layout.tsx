@@ -138,6 +138,8 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
           </span>
         )
       }
+      // The policy source is an editor: it takes the height the viewport has.
+      fillContent={pathname === "/openappa/policy"}
       documentTitle={fileDetail ? "Validation" : page.title}
       backLink={
         fileDetail || requestedMode?.back ? (

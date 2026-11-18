@@ -10,13 +10,14 @@ import {
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { useRouter } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   afterAll,
   afterEach,
   beforeAll,
   beforeEach,
   expect,
+  type MockInstance,
   test,
   vi,
 } from "vitest";
@@ -29,7 +30,6 @@ vi.mock("@/components/editor");
 vi.mock("next/navigation");
 vi.mock("sonner");
 vi.mock("@/lib/clients/auth/auth-client");
-const mockRouterPush = vi.fn();
 const origin = "http://localhost:9000";
 const url = `${origin}/api/guardrails-policy`;
 const content = "[policy]\nversion = 2\n";
@@ -92,18 +92,25 @@ const effective = {
   composition: current,
 };
 let effectiveRequests = 0;
+let pushState: MockInstance<typeof window.history.pushState>;
 const server = setupServer();
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: "error" });
+  // The file palette scrolls its selected item into view; jsdom has no layout.
+  Element.prototype.scrollIntoView = vi.fn();
+});
 beforeEach(() => {
   vi.mocked(authClient.getSession).mockResolvedValue({
     data: makeSession(),
     error: null,
   } as Awaited<ReturnType<typeof authClient.getSession>>);
   archestraApiClient.setConfig({ baseUrl: origin });
-  vi.mocked(useRouter).mockReturnValue({
-    push: mockRouterPush,
-  } as unknown as ReturnType<typeof useRouter>);
-  mockRouterPush.mockClear();
+  vi.mocked(usePathname).mockReturnValue("/openappa/policy");
+  // Opening a file moves the URL; the test reads where to and remounts there.
+  pushState = vi
+    .spyOn(window.history, "pushState")
+    .mockImplementation(() => {});
+  window.localStorage.clear();
   effectiveRequests = 0;
   server.use(
     http.get(`${origin}/api/user/permissions`, () =>
@@ -133,24 +140,33 @@ beforeEach(() => {
     }),
   );
 });
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  pushState.mockRestore();
+});
 afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
 });
-function mount(sourceEntry?: string) {
+function mount(query = "") {
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams(query) as unknown as ReturnType<typeof useSearchParams>,
+  );
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   render(
     <QueryClientProvider client={client}>
-      <GuardrailsPolicyEditor sourceEntry={sourceEntry} />
+      <GuardrailsPolicyEditor />
     </QueryClientProvider>,
   );
   return client;
 }
+const entryQuery = (entry: string) => new URLSearchParams({ entry }).toString();
+/** The URL the page last moved to. */
+const lastUrl = () => pushState.mock.calls.at(-1)?.[2];
 
-test("the policy source explains how an editor can change it", async () => {
+test("the policy source says how an editor can change it", async () => {
   mount();
 
   expect(
@@ -158,9 +174,11 @@ test("the policy source explains how an editor can change it", async () => {
       name: "Organization guardrails policy",
     }),
   ).toHaveAttribute("readonly");
-  expect(screen.getByRole("alert")).toHaveTextContent(
-    "Change this policy with the configuration agent in chat.",
-  );
+  expect(
+    await screen.findByRole("img", {
+      name: "Read-only. Change this policy with the configuration agent in chat.",
+    }),
+  ).toBeVisible();
   expect(
     await screen.findByRole("link", { name: "Change in chat" }),
   ).toHaveAttribute("href", "/chat?agentId=appa-agent");
@@ -179,9 +197,11 @@ test("a reader sees the policy without a change action", async () => {
       name: "Organization guardrails policy",
     }),
   ).toHaveAttribute("readonly");
-  expect(screen.getByRole("alert")).toHaveTextContent(
-    "Ask an administrator to change this policy.",
-  );
+  expect(
+    screen.getByRole("img", {
+      name: "Read-only. Ask an administrator to change this policy.",
+    }),
+  ).toBeVisible();
   expect(
     screen.queryByRole("link", { name: "Change in chat" }),
   ).not.toBeInTheDocument();
@@ -212,27 +232,36 @@ test("a repository-owned policy points editors to its repository", async () => {
       name: "Organization guardrails policy",
     }),
   ).toHaveAttribute("readonly");
-  expect(await screen.findByRole("alert")).toHaveTextContent(
-    "Change this policy in its connected repository.",
-  );
   expect(
-    screen.getByRole("link", { name: "Edit in repository" }),
+    await screen.findByRole("img", {
+      name: "Read-only. Change this policy in its connected repository.",
+    }),
+  ).toBeVisible();
+  expect(
+    await screen.findByRole("link", { name: "Edit in repository" }),
   ).toHaveAttribute(
     "href",
     "https://github.com/example/policies/edit/main/appa.toml",
   );
   expect(
-    screen.getByRole("link", { name: /Managed in GitHub/ }),
+    screen.getByRole("link", { name: "Managed in GitHub" }),
   ).toHaveAttribute(
     "href",
     "https://github.com/example/policies/blob/main/appa.toml",
   );
+  // The repository names the root file; the explorer shows it under that name.
+  expect(
+    within(screen.getByRole("navigation", { name: "Policy files" })).getByRole(
+      "button",
+      { name: "appa.toml" },
+    ),
+  ).toHaveAttribute("aria-current", "page");
   expect(
     screen.queryByRole("link", { name: "Change in chat" }),
   ).not.toBeInTheDocument();
 });
 
-test("the Policy page selects an included battery source and searches its status", async () => {
+test("the explorer separates the organization policy from its batteries, and a battery opens as one", async () => {
   const githubEntry = "batteries/github/appa.toml";
   server.use(
     http.get(declarationsUrl, () =>
@@ -253,7 +282,7 @@ test("the Policy page selects an included battery source and searches its status
       });
     }),
   );
-  mount(githubEntry);
+  mount(entryQuery(githubEntry));
 
   expect(
     await screen.findByRole("textbox", {
@@ -266,24 +295,66 @@ test("the Policy page selects an included battery source and searches its status
     }),
   ).not.toBeInTheDocument();
 
-  await userEvent.click(
-    screen.getByRole("combobox", { name: "Policy source file" }),
-  );
-  await userEvent.type(
-    await screen.findByPlaceholderText("Search batteries and files"),
-    "enforced",
-  );
-  expect(screen.getByRole("option", { name: /GitHubEnforced/ })).toBeVisible();
+  const explorer = screen.getByRole("navigation", { name: "Policy files" });
   expect(
-    screen.queryByRole("option", { name: /pendingNeeds a credential/ }),
-  ).not.toBeInTheDocument();
+    within(explorer).getByRole("button", { name: "Organization policy" }),
+  ).toHaveAttribute("aria-expanded", "true");
+  // Two batteries, each in its own folder, under the Batteries section.
+  expect(
+    await within(explorer).findByRole("button", { name: /^Batteries\s*2$/ }),
+  ).toBeVisible();
+  expect(
+    within(explorer).getByRole("button", { name: /appa\.toml\s*Enforced/ }),
+  ).toHaveAttribute("aria-current", "page");
+  expect(
+    within(explorer).getByRole("button", {
+      name: /policy\.toml\s*Needs a credential/,
+    }),
+  ).not.toHaveAttribute("aria-current");
+  // The bar names what is open, so a battery never reads as the organization's text.
+  expect(screen.getByTestId("policy-file-kind")).toHaveTextContent("Battery");
+
   await userEvent.click(
-    screen.getByRole("option", { name: "Organization policy" }),
+    within(explorer).getByRole("button", { name: "policy.toml" }),
   );
-  expect(mockRouterPush).toHaveBeenCalledWith("/openappa/policy");
+  expect(lastUrl()).toBe("/openappa/policy");
 });
 
-test("the picker lists the repository's files the root folds in, and a file opens read-only with its edit link", async () => {
+test("the file palette searches batteries by their status and opens the chosen file", async () => {
+  server.use(
+    http.get(declarationsUrl, () =>
+      HttpResponse.json({
+        ...declarations,
+        batteries: [
+          battery("acme", "active", 3),
+          battery("globex", "missing_credentials", 4),
+        ],
+      }),
+    ),
+  );
+  mount();
+  await screen.findByRole("textbox", {
+    name: "Organization guardrails policy",
+  });
+
+  await userEvent.click(
+    screen.getByRole("button", { name: "Open a policy file" }),
+  );
+  await userEvent.type(
+    await screen.findByPlaceholderText("Go to file"),
+    "credential",
+  );
+  expect(screen.getByRole("option", { name: /globex/ })).toBeVisible();
+  expect(
+    screen.queryByRole("option", { name: /acme/ }),
+  ).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("option", { name: /globex/ }));
+  expect(lastUrl()).toBe(
+    `/openappa/policy?${entryQuery("globex/policy.toml")}`,
+  );
+});
+
+test("the explorer lists the repository's files in their folders, and a file opens read-only with its edit link", async () => {
   const entry = "mcp/payments_api.toml";
   const text =
     '[policy]\nversion = 2\n\n[[policy.tool]]\nname = "payments_api__refund_payment"\n';
@@ -316,31 +387,38 @@ test("the picker lists the repository's files the root folds in, and a file open
     }),
   );
   mount();
-  await userEvent.click(
-    await screen.findByRole("combobox", { name: "Policy source file" }),
-  );
+  const explorer = screen.getByRole("navigation", { name: "Policy files" });
   expect(
-    await screen.findByRole("option", {
-      name: /mcp\/payments_api\.tomlMCP server rules/,
+    await within(explorer).findByRole("button", {
+      name: /^Repository files\s*2$/,
     }),
   ).toBeVisible();
+  expect(within(explorer).getByRole("button", { name: "mcp" })).toBeVisible();
   expect(
-    screen.getByRole("option", { name: /shared\/rules\.tomlRepository file/ }),
+    within(explorer).getByRole("button", { name: "shared" }),
+  ).toBeVisible();
+  expect(
+    within(explorer).getByRole("button", { name: "rules.toml" }),
   ).toBeVisible();
   await userEvent.click(
-    screen.getByRole("option", { name: /mcp\/payments_api\.toml/ }),
+    within(explorer).getByRole("button", { name: "payments_api.toml" }),
   );
-  expect(mockRouterPush).toHaveBeenCalledWith(
-    "/openappa/policy?entry=mcp%2Fpayments_api.toml",
-  );
+  expect(lastUrl()).toBe(`/openappa/policy?${entryQuery(entry)}`);
   cleanup();
 
-  mount(entry);
+  mount(entryQuery(entry));
   expect(
     await screen.findByRole("textbox", { name: "mcp/payments_api.toml TOML" }),
   ).toHaveValue(text);
+  await waitFor(() =>
+    expect(screen.getByTestId("policy-file-kind")).toHaveTextContent(
+      "MCP server rules",
+    ),
+  );
   expect(
-    screen.getByText("Change this file in its connected repository."),
+    screen.getByRole("img", {
+      name: "Read-only. Change this file in its connected repository.",
+    }),
   ).toBeVisible();
   expect(
     await screen.findByRole("link", { name: "Edit in repository" }),
@@ -366,7 +444,7 @@ test("battery source remains available when root policy and GitHub sync fail", a
       }),
     ),
   );
-  mount(entry);
+  mount(entryQuery(entry));
   expect(
     await screen.findByRole("textbox", { name: "GitHub battery policy TOML" }),
   ).toHaveValue('[[policy.tool]]\nname = "mcp/github/get_commit"\n');
@@ -384,7 +462,7 @@ test("policy invalidation refreshes the displayed battery source", async () => {
       }),
     ),
   );
-  const client = mount(entry);
+  const client = mount(entryQuery(entry));
   const source = await screen.findByRole("textbox", {
     name: "GitHub battery policy TOML",
   });
@@ -394,7 +472,38 @@ test("policy invalidation refreshes the displayed battery source", async () => {
   await waitFor(() => expect(source).toHaveValue(batteryContent));
 });
 
-test("the editor footer counts the composed batteries and the unenforced ones", async () => {
+test("the outline lists the open file's rules, and a rule opens at its line", async () => {
+  server.use(
+    http.get(url, () =>
+      HttpResponse.json({
+        ...policy,
+        content:
+          '[policy]\nversion = 2\n\n[[policy.tool]]\nname = "docs__read"\n\n[[policy.tool]]\nname = "blog__publish"\n',
+      }),
+    ),
+  );
+  mount();
+  const outline = screen.getByRole("complementary", { name: "Rule outline" });
+  await userEvent.click(
+    await within(outline).findByRole("button", { name: /blog__publish/ }),
+  );
+  expect(lastUrl()).toBe("/openappa/policy?line=8");
+  expect(
+    within(outline).getByRole("button", { name: /docs__read/ }),
+  ).toBeVisible();
+  cleanup();
+
+  // The rule the line falls in is the outline's current one.
+  mount("line=8");
+  expect(
+    await within(
+      screen.getByRole("complementary", { name: "Rule outline" }),
+    ).findByRole("button", { name: /blog__publish/ }),
+  ).toHaveAttribute("aria-current", "location");
+  expect(screen.getByText("Line 8")).toBeVisible();
+});
+
+test("the explorer counts the batteries the composition does not enforce", async () => {
   server.use(
     http.get(declarationsUrl, () =>
       HttpResponse.json({
@@ -408,16 +517,13 @@ test("the editor footer counts the composed batteries and the unenforced ones", 
     ),
   );
   mount();
-  const summary = await screen.findByTestId("composition-summary");
-  await waitFor(() => expect(summary).toHaveAttribute("data-batteries", "3"));
-  expect(summary).toHaveAttribute("data-not-enforced", "1");
-  expect(summary).not.toHaveAttribute("data-failed");
   expect(
-    within(summary).getByRole("link", { name: "1 not enforced" }),
+    await screen.findByRole("link", { name: "1 not enforced" }),
   ).toHaveAttribute("href", "/openappa/batteries?status=attention");
+  expect(screen.queryByTestId("composition-notice")).not.toBeInTheDocument();
 });
 
-test("a refusal that keeps an earlier composition says which one stays enforced", async () => {
+test("a refusal that keeps an earlier composition says so above the source", async () => {
   server.use(
     http.get(declarationsUrl, () =>
       HttpResponse.json({
@@ -442,16 +548,15 @@ test("a refusal that keeps an earlier composition says which one stays enforced"
     ),
   );
   mount();
-  const summary = await screen.findByTestId("composition-summary");
-  await waitFor(() => expect(summary).toHaveAttribute("data-stale", "true"));
-  expect(summary).not.toHaveAttribute("data-failed");
-  expect(summary).toHaveAttribute("data-not-enforced", "0");
-  expect(summary).toHaveTextContent(
-    "Revision 2 was refused · an earlier composition stays enforced",
-  );
+  const notice = await screen.findByTestId("composition-notice");
+  expect(notice).toHaveTextContent("Revision 2 was refused");
+  expect(notice).toHaveTextContent("stays enforced");
+  expect(
+    screen.queryByRole("link", { name: /not enforced/ }),
+  ).not.toBeInTheDocument();
 });
 
-test("a refusal with no earlier composition says nothing is enforced instead of counting batteries", async () => {
+test("a refusal with no earlier composition says nothing is enforced", async () => {
   server.use(
     http.get(declarationsUrl, () =>
       HttpResponse.json({
@@ -470,10 +575,9 @@ test("a refusal with no earlier composition says nothing is enforced instead of 
     ),
   );
   mount();
-  const summary = await screen.findByTestId("composition-summary");
-  await waitFor(() => expect(summary).toHaveAttribute("data-failed", "true"));
-  expect(summary).toHaveTextContent("Composition failed: nothing is enforced");
-  expect(summary).not.toHaveAttribute("data-batteries");
+  expect(await screen.findByTestId("composition-notice")).toHaveTextContent(
+    "Nothing is enforced",
+  );
 });
 
 test("the effective policy is fetched only once its view is selected", async () => {
@@ -504,12 +608,15 @@ test("the effective policy is fetched only once its view is selected", async () 
   await screen.findByRole("textbox", {
     name: "Organization guardrails policy",
   });
-  expect(effectiveRequests).toBe(0);
   expect(
     screen.queryByRole("textbox", { name: "Effective guardrails policy" }),
   ).not.toBeInTheDocument();
-
   await userEvent.click(screen.getByRole("tab", { name: "Effective" }));
+  expect(lastUrl()).toBe("/openappa/policy?view=effective");
+  expect(effectiveRequests).toBe(0);
+  cleanup();
+
+  mount("view=effective");
   expect(
     await screen.findByRole("textbox", { name: "Effective guardrails policy" }),
   ).toHaveValue(effective.content);
@@ -545,8 +652,7 @@ test("the composed view names the batteries that fold in as empty stubs", async 
       }),
     ),
   );
-  mount();
-  await userEvent.click(await screen.findByRole("tab", { name: "Effective" }));
+  mount("view=effective");
   const stubs = await screen.findByTestId("effective-policy-stubs");
   expect(stubs).toHaveTextContent("globex");
   expect(stubs).toHaveTextContent("initech");
@@ -563,15 +669,14 @@ test("the composed view lists no stub while every battery is active", async () =
       }),
     ),
   );
-  mount();
-  await userEvent.click(await screen.findByRole("tab", { name: "Effective" }));
+  mount("view=effective");
   await screen.findByRole("textbox", { name: "Effective guardrails policy" });
   expect(
     screen.queryByTestId("effective-policy-stubs"),
   ).not.toBeInTheDocument();
 });
 
-test("the source picker shows only in the Source view", async () => {
+test("the files and the rule outline show only in the Source view", async () => {
   mount();
   expect(
     await screen.findByRole("textbox", {
@@ -583,12 +688,34 @@ test("the source picker shows only in the Source view", async () => {
   expect(screen.queryByText("Not yet saved")).not.toBeInTheDocument();
   expect(screen.getAllByRole("tablist")).toHaveLength(1);
   expect(
-    screen.getByRole("combobox", { name: "Policy source file" }),
+    screen.getByRole("navigation", { name: "Policy files" }),
   ).toBeVisible();
-  await userEvent.click(screen.getByRole("tab", { name: "Effective" }));
+  await userEvent.click(screen.getByRole("button", { name: "Hide files" }));
+  expect(
+    screen.queryByRole("navigation", { name: "Policy files" }),
+  ).not.toBeInTheDocument();
+  cleanup();
+
+  // The choice is remembered for the next visit.
+  mount();
+  await screen.findByRole("textbox", {
+    name: "Organization guardrails policy",
+  });
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Show files" }),
+  );
+  expect(
+    screen.getByRole("navigation", { name: "Policy files" }),
+  ).toBeVisible();
+  cleanup();
+
+  mount("view=effective");
   await screen.findByRole("textbox", { name: "Effective guardrails policy" });
   expect(
-    screen.queryByRole("combobox", { name: "Policy source file" }),
+    screen.queryByRole("navigation", { name: "Policy files" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("complementary", { name: "Rule outline" }),
   ).not.toBeInTheDocument();
   expect(
     screen.getByText("What the runtime enforces, batteries included."),

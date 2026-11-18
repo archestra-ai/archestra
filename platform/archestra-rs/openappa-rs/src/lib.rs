@@ -44,7 +44,8 @@ use crate::{
         CompletedOperation, OperationState, ResultClaim, YellArguments, cancellation_operation,
         cancelled_call, claim_operation, claim_result, expected_actor, finish_operation,
         finish_remedy, operation_semantic, proposed, read_operation_state,
-        recorded_call_presentation, remedy_binding, required_arguments, tool_call_context,
+        recorded_call_presentation, recorded_declaration, remedy_binding, required_arguments,
+        tool_call_context,
     },
     remedy::{
         OutputSource, RemedyAct, authoritative_unexecuted_response, decision_text,
@@ -71,8 +72,8 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnKind, SpawnRef,
-    ToolOutcome, TrajectoryId, WireDecision,
+    Actor, DeclaredArguments, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling,
+    SpawnKind, SpawnRef, ToolOutcome, TrajectoryId, WireDecision,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -781,6 +782,7 @@ impl State {
                     spawn: None,
                     prompt: None,
                     ruling,
+                    declares: None,
                 },
             )
             .await;
@@ -955,6 +957,7 @@ impl State {
                     spawn: input.spawn.then_some(SpawnKind::Single),
                     prompt: None,
                     ruling: None,
+                    declares: input.declares.clone().map(DeclaredArguments::from),
                 },
                 HookEventKind::Prompt => HookEvent::Prompt {
                     actor: actor.clone(),
@@ -1333,6 +1336,7 @@ impl State {
             spawn: call.spawn.then_some(SpawnKind::Single),
             prompt: None,
             ruling: None,
+            declares: recorded_declaration(&recorded)?.map(DeclaredArguments::from),
         };
         let outcome = hooks::handle_embedded_with_options(
             &self.runtime,

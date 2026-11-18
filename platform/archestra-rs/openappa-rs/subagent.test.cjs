@@ -1,8 +1,8 @@
 /**
  * The runtime contract Archestra's in-process subagents rely on: a delegation
- * call's return is declared on the caller's behalf through a probe of the same
- * call under its own operation, the child hears its contract at its start,
- * and its return crosses only through the declared route.
+ * call carries the return it declares for its child, the runtime applies it
+ * within that call's own hook, the child hears its contract at its start, and
+ * its return crosses only through the declared route.
  */
 const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
@@ -18,6 +18,9 @@ version = 2
 [[policy.tool]]
 name = "agent__reader"
 delta = {}
+[[policy.tool]]
+name = "agent__scout"
+delta = { trust = "suspicious" }
 [[policy.tool]]
 name = "read_inbox"
 delta = { trust = "suspicious" }
@@ -76,26 +79,20 @@ function family() {
     presentation,
     ...extra,
   });
-  const spawnCall = (callId) =>
-    call(callId, 'agent__reader', { arguments: { message: 'count the days' }, spawn: true });
+  const spawnCall = (callId, extra = {}) =>
+    call(callId, 'agent__reader', { arguments: { message: 'count the days' }, spawn: true, ...extra });
   const child = { ...parent, session_id: `${parent.session_id}:agent:s1`, parent_id: parent.session_id };
   return { organization, parent, child, hook, remedy, call, spawnCall };
 }
 
-/** Declares the spawn's return through a probe, then dispatches the real call. */
-async function startSpawn({ parent, hook, remedy, spawnCall }, returnSchema) {
-  const probe = await hook(parent, spawnCall('s1:declare'));
-  assert.equal(probe.decision, 'deny_call', 'an undeclared spawn is held');
-  const offer = probe.offers.find((candidate) =>
-    returnSchema ? candidate.returns?.sanitizer === 'attest-schema' : candidate.returns === 'as_spoken',
-  );
-  assert.ok(offer, 'the held spawn offers the requested return');
-  const declared = await remedy(parent, 's1:return', {
-    offer_id: offer.offer_id,
-    label: {},
-    ...(returnSchema ? { return_schema: returnSchema } : {}),
-  });
-  return { declared, call: await hook(parent, spawnCall('s1')) };
+/** The return a delegation call declares: as spoken, or attested against a schema. */
+function declaring(returnSchema) {
+  return { declares: { label: {}, ...(returnSchema ? { return_schema: returnSchema } : {}) } };
+}
+
+/** Dispatches the spawn once, carrying the return it declares. */
+async function startSpawn({ parent, hook, spawnCall }, returnSchema) {
+  return { call: await hook(parent, spawnCall('s1', declaring(returnSchema))) };
 }
 
 async function crossedReturns(run) {
@@ -105,12 +102,11 @@ async function crossedReturns(run) {
   });
 }
 
-test('a probe-declared spawn starts its child once, under the real call', { skip: !databaseUrl }, async () => {
+test('a spawn that declares its return starts its child from that one call', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2);
   const run = family();
-  const { declared, call } = await startSpawn(run, schema);
-  assert.equal(declared.result.isError, false);
-  assert.equal(call.decision, 'allow_call');
+  const { call } = await startSpawn(run, schema);
+  assert.equal(call.decision, 'allow_call', JSON.stringify(call));
   assert.ok(call.spawn_binding, 'the real call carries the prepared fork');
 
   const start = await run.hook(run.child, { event: 'session_start', spawn_call_id: 's1' });
@@ -131,6 +127,62 @@ test('a probe-declared spawn starts its child once, under the real call', { skip
     outcome: 'success',
   });
   assert.equal(result.decision, 'ack', "the crossed value is the spawn's result");
+});
+
+// A narrowing that stands at the spawn's block is applied after the declaration. The spawn's
+// approval is spent and its fork prepared only by the call proposed again after it, so no
+// withheld call is cancelled and its child's return reaches the parent.
+test('a spawn that also narrows releases once, on the call proposed again after its narrowing', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const run = family();
+  const scout = (callId) =>
+    run.call(callId, 'agent__scout', { arguments: { message: 'look around' }, spawn: true, ...declaring() });
+  const blocked = await run.hook(run.parent, scout('s1'));
+  assert.equal(blocked.decision, 'deny_call', 'the narrowing still blocks the spawn');
+  assert.ok(blocked.offers.length > 0, 'the narrowing is offered');
+  assert.ok(!blocked.offers.some((offer) => offer.returns), 'the declared return stands, so no plan declares one');
+  const narrowed = await run.remedy(run.parent, 's1:narrow', { offer_id: blocked.offers[0].offer_id });
+  assert.equal(narrowed.result.isError, false, JSON.stringify(narrowed));
+
+  const call = await run.hook(run.parent, scout('s2'));
+  assert.equal(call.decision, 'allow_call', JSON.stringify(call));
+  assert.ok(call.spawn_binding, 'the call proposed again carries the prepared fork');
+
+  const child = { ...run.parent, session_id: `${run.parent.session_id}:agent:s2`, parent_id: run.parent.session_id };
+  assert.equal((await run.hook(child, { event: 'session_start', spawn_call_id: 's2' })).decision, 'context');
+  const returned = await run.hook(child, { event: 'child_return', operation_id: 'runtime-return:s2:r1', output: 'nothing unusual' });
+  assert.equal(returned.decision, 'ack');
+  const [record] = await native.loadChildReturns(run.organization, run.parent.session_id, {
+    childSessionId: child.session_id,
+    operationPrefix: 'runtime-return:s2:',
+  });
+  const result = await run.hook(run.parent, {
+    event: 'tool_result',
+    tool_call_id: 's2',
+    spawned_id: child.session_id,
+    output: record.value,
+    outcome: 'success',
+  });
+  assert.equal(result.decision, 'ack', JSON.stringify(result));
+  assert.equal(result.approved_output, 'nothing unusual');
+});
+
+test('a return declared on a call that starts no subagent is refused before the call is recorded', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const run = family();
+  const client = new Client({ connectionString: databaseUrl });
+  await client.connect();
+  try {
+    await assert.rejects(run.hook(run.parent, run.call('c1', 'publish', declaring())), { code: 'invalid_input' });
+    const recorded = await client.query(
+      'SELECT 1 FROM openappa_operations WHERE organization_id = $1 AND session_id = $2 AND operation_id = $3',
+      [run.organization, run.parent.session_id, 'call:c1'],
+    );
+    assert.equal(recorded.rowCount, 0, 'no receipt fences the call');
+    assert.equal((await run.hook(run.parent, run.call('c1', 'publish'))).decision, 'allow_call', 'the call without it is judged');
+  } finally {
+    await client.end();
+  }
 });
 
 test('a return declared ahead, as the gateway does without an offer, releases only the next spawn', { skip: !databaseUrl }, async () => {
@@ -194,13 +246,18 @@ test('a declaration ahead is made under its tool call id, and a retry of it answ
 test('an attested return schema admits only bounded leaves', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2);
   const run = family();
+  const unbounded = { ...schema, additionalProperties: false };
+  const { call } = await startSpawn(run, unbounded);
+  assert.equal(call.decision, 'deny_call', 'a declaration that does not compile is not applied');
+  const offer = call.offers.find((candidate) => candidate.returns?.sanitizer === 'attest-schema');
+  assert.ok(offer, 'the block still offers its own attestation');
   await assert.rejects(
-    () => startSpawn(run, { ...schema, additionalProperties: false }),
+    () => run.remedy(run.parent, 's1:return', { offer_id: offer.offer_id, label: {}, return_schema: unbounded }),
     /return_schema.*does not compile.*return shape/,
-    'the delegation tool rejects an unsupported return-shape dialect',
+    'the attestation plan rejects an unsupported return-shape dialect',
   );
-  const call = await run.hook(run.parent, run.spawnCall('s1'));
-  assert.equal(call.decision, 'deny_call', 'a refused declaration leaves the spawn held');
+  const held = await run.hook(run.parent, run.spawnCall('s2'));
+  assert.equal(held.decision, 'deny_call', 'a refused declaration leaves the spawn held');
 });
 
 test("an attested child may read untrusted data and still answer at its parent's trust", { skip: !databaseUrl }, async () => {
@@ -239,9 +296,9 @@ test('a suspicious parent is not offered an attested return', { skip: !databaseU
   assert.equal((await run.hook(run.parent, run.call('r2', 'read_inbox'))).decision, 'allow_call');
   await run.hook(run.parent, { event: 'tool_result', tool_call_id: 'r2', output: 'lease ends in 3 days', outcome: 'success' });
 
-  const probe = await run.hook(run.parent, run.spawnCall('s1:declare'));
-  assert.equal(probe.decision, 'deny_call', 'an undeclared spawn is held');
-  const returns = probe.offers.map((offer) => offer.returns);
+  const spawn = await run.hook(run.parent, run.spawnCall('s1', declaring(schema)));
+  assert.equal(spawn.decision, 'deny_call', 'the attested return is not applied');
+  const returns = spawn.offers.map((offer) => offer.returns);
   assert.ok(returns.includes('as_spoken'));
   assert.ok(!returns.some((route) => route?.sanitizer === 'attest-schema'), 'the attestation would be refused');
 });
@@ -402,8 +459,7 @@ test('a rewritten child return answers child_return, crosses through its echo, a
   try {
     for (const event of ['child_return', 'child_end']) {
       const run = family();
-      const { declared, call } = await startSpawn(run, listSchema);
-      assert.equal(declared.result.isError, false);
+      const { call } = await startSpawn(run, listSchema);
       assert.equal(call.decision, 'allow_call');
       await run.hook(run.child, { event: 'session_start', spawn_call_id: 's1' });
       const said = `{ "days": 3, "list": [${Array.from({ length: 256 }, (_, i) => 100 + (i % 200)).join(', ')}] }`;

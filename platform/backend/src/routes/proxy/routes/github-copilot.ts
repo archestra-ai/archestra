@@ -6,6 +6,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
+import { sanitizeForwardedRequest } from "@/openappa/request";
 import { fetchGithubCopilotModels } from "@/routes/chat/model-fetchers/github-copilot";
 import {
   Anthropic,
@@ -21,6 +22,7 @@ import {
 import { githubCopilotMessagesAdapterFactory } from "../adapters/github-copilot-messages";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { removeMarkersFromBody } from "../utils/gateway-tool-declarations";
 import {
   extractAnthropicToken,
   extractBearerToken,
@@ -206,8 +208,14 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         ) as AnthropicProvider;
         try {
+          // Count requests bypass inference preparation. Apply the same
+          // provider-bound cleaning as catch-all token-count endpoints without
+          // mutating the validated request used by authentication/observers.
+          const countBody = structuredClone(request.body);
+          removeMarkersFromBody(countBody);
+          sanitizeForwardedRequest(countBody);
           return await client.messages.countTokens({
-            ...request.body,
+            ...countBody,
             model: stripClaudeContextVariantSuffix(request.body.model),
           } as AnthropicProvider.Messages.MessageCountTokensParams);
         } catch (error) {

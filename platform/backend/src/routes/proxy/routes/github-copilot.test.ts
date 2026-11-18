@@ -18,6 +18,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, jsonSchema, streamText, tool } from "ai";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
+import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import {
   type ModelsDevApiResponse,
   modelsDevClient,
@@ -36,6 +37,7 @@ import InteractionModel from "@/models/interaction";
 import InteractionBillingModel from "@/models/interaction-billing";
 import LimitModel from "@/models/limit";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { appendSessionReceipt } from "@/openappa/session-token";
 import { encodeGithubAppReference } from "@/services/github-app-copilot-token";
 import { modelSyncService } from "@/services/model-sync";
 import captured from "@/services/vendor-published-pricing.test-data.json";
@@ -2262,6 +2264,95 @@ describe("Copilot native Messages with a stored GitHub App", () => {
       expect(message.json().content).toEqual([{ type: "text", text: "OK" }]);
       expect(modelCalls).toBe(2);
       expect(mintCalls).toBe(1);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe("Copilot token counting provider-bound sanitization", () => {
+  test("strips gateway attestation and OpenAPPA receipts while preserving ordinary content", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const app = createTestApp();
+    await app.register(githubCopilotProxyRoutes);
+    const agent = await makeAgent();
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+    const description = attestToolDescription({
+      organizationId: agent.organizationId,
+      gatewayId: randomUUID(),
+      advertisedName: "files__read",
+      kind: "t",
+      description: "Read the requested file.",
+    });
+    const cleanPayload = {
+      model: "claude-haiku-4.5",
+      system: "Inspect files without changing them.",
+      messages: [
+        { role: "user", content: "Read example.txt" },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "I found the file." }],
+        },
+        { role: "user", content: "What does it contain?" },
+      ],
+      tools: [
+        {
+          name: "files__read",
+          description: "Read the requested file.",
+          input_schema: {
+            type: "object",
+            properties: { path: { type: "string", description: "File path" } },
+            required: ["path"],
+          },
+        },
+      ],
+    };
+    const payload = structuredClone(cleanPayload);
+    if (!description) throw new Error("Expected marked tool description");
+    payload.tools[0].description = description;
+    payload.messages[1].content = [
+      {
+        type: "text",
+        text: appendSessionReceipt("I found the file.", "AAA-AAAA"),
+      },
+    ];
+    const original = structuredClone(payload);
+    let upstream: unknown;
+    stubTokenExchange();
+    server.use(
+      http.post(
+        "https://api.githubcopilot.com/v1/messages/count_tokens",
+        async ({ request }) => {
+          upstream = await request.json();
+          return HttpResponse.json({ input_tokens: 31 });
+        },
+      ),
+    );
+    try {
+      const result = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/v1/messages/count_tokens`,
+        headers: {
+          "x-api-key": uniqueGithubToken(),
+          "x-archestra-virtual-key": passthroughKey,
+          "anthropic-version": "2023-06-01",
+        },
+        payload,
+      });
+      expect(result.statusCode, result.body).toBe(200);
+      expect(result.json()).toEqual({ input_tokens: 31 });
+      expect(upstream).toEqual(cleanPayload);
+      expect(JSON.stringify(upstream)).not.toContain("gwa1");
+      expect(JSON.stringify(upstream)).not.toContain("AAA-AAAA");
+      expect(payload).toEqual(original);
     } finally {
       await app.close();
     }

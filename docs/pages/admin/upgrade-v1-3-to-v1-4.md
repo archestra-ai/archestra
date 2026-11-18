@@ -55,7 +55,7 @@ Each change below needs an action from you or from the people who use Archestra.
 | Resource visibility (`scope`, `teams`, `visibility`, `teamIds`) becomes [permission grants](/docs/admin/access-control#granular-access-control). Sending those fields to the API returns `400`. | Update scripts and Terraform that set visibility. Review access after the conversion. |
 | Extra LLM proxies are removed. Their history moves to the default proxy. | None. Check that clients call the default proxy. |
 | Team and organization MCP gateway tokens become service accounts with the same token value. `/api/tokens` is removed. | None for clients. Manage the tokens under **Settings → Service Accounts**. |
-| `GET /api/agents/options` and `GET /api/projects` return pages: `{ data, pagination }`. | Update API clients to read `data` and follow the cursor. |
+| [`GET /api/agents/options`](/docs/reference/api#/Agents/getAgentOptions) and [`GET /api/projects`](/docs/reference/api#/Projects/getProjects) return pages: `{ data, pagination }`. | Update API clients to read `data` and follow the cursor. |
 | The task MCP tools are renamed to runs: `start_task` is [`start_run`](/docs/reference/archestra-mcp-server#start_run), and `get_task`, `list_tasks`, `steer_task`, `cancel_task`, and `post_task_file` follow the same pattern. | Update prompts and clients that call them. |
 | The Code Sandbox runs Python 3.14 instead of 3.12. Existing sandboxes replay their commands on 3.14. | Fix commands that use modules removed in 3.14, such as `cgi`. |
 | Agent Runtime turns on when the cluster has the Agent Sandbox controller. | Install the controller. See [Agent Runtime setup](/docs/agents/runtime/setup#cluster-prerequisites). |

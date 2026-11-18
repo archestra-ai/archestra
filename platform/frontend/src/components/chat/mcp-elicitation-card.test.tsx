@@ -143,6 +143,7 @@ describe("McpElicitationCard", () => {
   it("keeps accepted review coverage and decision controls visible when arguments are collapsed", async () => {
     const user = userEvent.setup();
     const coverage = [
+      "after this, the agent can't use `archestra__list_skills` or `archestra__load_skill` in this conversation",
       "the readers must be the public audience",
       "other tools may also need approval, decided call by call",
     ];
@@ -168,7 +169,12 @@ describe("McpElicitationCard", () => {
       within(consequences)
         .getAllByRole("listitem")
         .map((item) => item.textContent),
-    ).toEqual(coverage);
+    ).toEqual(coverage.map((line) => line.replaceAll("`", "")));
+    expect(
+      within(consequences)
+        .getAllByRole("code")
+        .map((code) => code.textContent),
+    ).toEqual(["archestra__list_skills", "archestra__load_skill"]);
     await user.click(screen.getByText("archestra__todo_write"));
     expect(screen.getByRole("button", { name: "Approve" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Deny" })).toBeVisible();

@@ -2,6 +2,7 @@
 
 import { CheckCircleIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { Response } from "@/components/ai-elements/response";
 import {
   Tool,
   ToolContent,
@@ -75,9 +76,9 @@ export function OpenappaReviewToolCard({
                 <li
                   // biome-ignore lint/suspicious/noArrayIndexKey: coverage is an immutable review snapshot and may repeat a line
                   key={index}
-                  className="whitespace-pre-wrap pl-1 leading-relaxed [overflow-wrap:anywhere]"
+                  className="pl-1 leading-relaxed [overflow-wrap:anywhere]"
                 >
-                  {line}
+                  <Response preserveLineBreaks>{line}</Response>
                 </li>
               ))}
             </ul>

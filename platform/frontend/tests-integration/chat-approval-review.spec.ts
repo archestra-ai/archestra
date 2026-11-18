@@ -143,7 +143,19 @@ for (const viewport of [
       const consequences = card.getByRole("list", {
         name: "Approval consequences",
       });
-      await expect(consequences.getByRole("listitem")).toHaveText(coverage);
+      await expect(consequences.getByRole("listitem")).toHaveText(
+        coverage.map((line) => line.replaceAll("`", "")),
+      );
+      await expect(consequences.getByRole("code")).toHaveText([
+        "knowledge__retrieve_document",
+        "browser__console_messages",
+        "browser__fill_form",
+        "browser__hover",
+        "browser__install",
+        "workspace__add_team_external_group",
+        "workspace__assign_knowledge_base_to_agent",
+        "workspace__assign_knowledge_connector_to_agent",
+      ]);
       await expect(card.getByRole("term")).toHaveText([
         "path",
         "repo",

@@ -12,6 +12,7 @@ import type {
   SlackAppConfigToken,
   SlackDbConfig,
   TelegramDbConfig,
+  WhatsAppDbConfig,
 } from "@/types";
 import { type JiraDbConfig, JiraDbConfigSchema } from "@/types/chatops-jira";
 import {
@@ -28,12 +29,14 @@ const SLACK_SECRET_NAME = "chatops-slack";
 const SLACK_AGENT_BOTS_SECRET_NAME = "chatops-slack-agent-bots";
 const SLACK_APP_CONFIG_TOKEN_SECRET_NAME = "chatops-slack-app-config-token";
 const TELEGRAM_SECRET_NAME = "chatops-telegram";
+const WHATSAPP_SECRET_NAME = "chatops-whatsapp";
 const NGROK_SECRET_NAME = "chatops-ngrok";
 const JIRA_SECRET_NAME = "chatops-jira";
 const PROVIDER_SECRET_NAMES: Record<ChatOpsProviderType, string> = {
   "ms-teams": MS_TEAMS_SECRET_NAME,
   slack: SLACK_SECRET_NAME,
   telegram: TELEGRAM_SECRET_NAME,
+  whatsapp: WHATSAPP_SECRET_NAME,
   jira: JIRA_SECRET_NAME,
 };
 
@@ -41,6 +44,7 @@ interface ProviderDbConfigs {
   "ms-teams": MsTeamsDbConfig;
   slack: SlackDbConfig;
   telegram: TelegramDbConfig;
+  whatsapp: WhatsAppDbConfig;
   jira: JiraDbConfig;
 }
 
@@ -264,6 +268,18 @@ class ChatOpsConfigModel {
     logger.info("ChatOpsConfigModel: saved Telegram config to DB");
   }
 
+  async getWhatsAppConfig(): Promise<WhatsAppDbConfig | null> {
+    return this.getConfig<WhatsAppDbConfig>(WHATSAPP_SECRET_NAME);
+  }
+
+  async saveWhatsAppConfig(value: WhatsAppDbConfig): Promise<void> {
+    await this.saveConfig(
+      WHATSAPP_SECRET_NAME,
+      value as unknown as SecretValue,
+    );
+    logger.info("ChatOpsConfigModel: saved WhatsApp config to DB");
+  }
+
   async getNgrokConfig(): Promise<NgrokDbConfig | null> {
     return this.getConfig<NgrokDbConfig>(NGROK_SECRET_NAME);
   }
@@ -277,15 +293,23 @@ class ChatOpsConfigModel {
    * Non-secret ChatOps connectivity snapshot for audit diffs.
    */
   async getRedactedSnapshotForAudit(): Promise<Record<string, unknown>> {
-    const [ms, slack, telegram, ngrok, slackAgentBots, slackAppConfigToken] =
-      await Promise.all([
-        this.getMsTeamsConfig(),
-        this.getSlackConfig(),
-        this.getTelegramConfig(),
-        this.getNgrokConfig(),
-        this.getSlackAgentBots(),
-        this.getSlackAppConfigToken(),
-      ]);
+    const [
+      ms,
+      slack,
+      telegram,
+      whatsapp,
+      ngrok,
+      slackAgentBots,
+      slackAppConfigToken,
+    ] = await Promise.all([
+      this.getMsTeamsConfig(),
+      this.getSlackConfig(),
+      this.getTelegramConfig(),
+      this.getWhatsAppConfig(),
+      this.getNgrokConfig(),
+      this.getSlackAgentBots(),
+      this.getSlackAppConfigToken(),
+    ]);
 
     return {
       msTeams: ms
@@ -318,6 +342,15 @@ class ChatOpsConfigModel {
         ? {
             enabled: telegram.enabled,
             hasBotToken: Boolean(telegram.botToken),
+          }
+        : null,
+      whatsapp: whatsapp
+        ? {
+            enabled: whatsapp.enabled,
+            hasAccessToken: Boolean(whatsapp.accessToken),
+            hasPhoneNumberId: Boolean(whatsapp.phoneNumberId),
+            hasAppSecret: Boolean(whatsapp.appSecret),
+            hasVerifyToken: Boolean(whatsapp.verifyToken),
           }
         : null,
       ngrok: ngrok

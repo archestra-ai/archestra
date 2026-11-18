@@ -10,6 +10,7 @@ export const ChatOpsProviderTypeSchema = z.enum([
   "ms-teams",
   "slack",
   "telegram",
+  "whatsapp",
   "jira",
 ]);
 export type ChatOpsProviderType = z.infer<typeof ChatOpsProviderTypeSchema>;
@@ -24,6 +25,9 @@ export type ChatOpsStatus = z.infer<typeof ChatOpsStatusSchema>;
 export const ChatOpsProviderCredentialsSchema = z
   .object({
     botToken: z.string().optional(),
+    accessToken: z.string().optional(),
+    phoneNumberId: z.string().optional(),
+    verifyToken: z.string().optional(),
     appId: z.string().optional(),
     appSecret: z.string().optional(),
     tenantId: z.string().optional(),
@@ -41,6 +45,8 @@ export const ChatOpsDmInfoSchema = z
     appId: z.string().optional(),
     /** Telegram bot username, used to build t.me deep links */
     botUsername: z.string().optional(),
+    /** WhatsApp business phone number, used to build wa.me deep links */
+    displayPhoneNumber: z.string().optional(),
   })
   .optional();
 
@@ -85,6 +91,12 @@ export const MsTeamsChatOpsConfigViewSchema =
   });
 
 export const TelegramChatOpsConfigViewSchema = ChatOpsStoredConfigBaseSchema;
+
+export const WhatsAppChatOpsConfigViewSchema =
+  ChatOpsStoredConfigBaseSchema.extend({
+    phoneNumberId: z.string().nullable(),
+    displayPhoneNumber: z.string().nullable(),
+  });
 
 /** Full chatops status response schema */
 export const ChatOpsStatusResponseSchema = z.object({
@@ -868,6 +880,21 @@ export interface TelegramDbConfig {
   enabled: boolean;
   /** Bot token from @BotFather */
   botToken: string;
+}
+
+/** WhatsApp Cloud API config stored as a DB secret */
+export interface WhatsAppDbConfig {
+  enabled: boolean;
+  /** Meta Graph API permanent or system-user access token */
+  accessToken: string;
+  /** WhatsApp Business phone number ID */
+  phoneNumberId: string;
+  /** Meta App Secret used to verify X-Hub-Signature-256 webhook signatures */
+  appSecret: string;
+  /** Webhook subscription verify token matched against hub.verify_token */
+  verifyToken: string;
+  /** Optional business phone number for wa.me deep links */
+  displayPhoneNumber?: string;
 }
 
 /** ngrok tunnel config stored as a DB secret */

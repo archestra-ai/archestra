@@ -188,6 +188,10 @@ export const CacheKey = {
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */
   TelegramLinkCode: "chatops-telegram-link",
+  /** WhatsApp approval-button payloads (interactive button id is capped at 256 chars) */
+  WhatsAppApprovalCallback: "chatops-whatsapp-approval",
+  /** One-shot codes linking a WhatsApp chat to a signed-in user */
+  WhatsAppLinkCode: "chatops-whatsapp-link",
   /** Positive "this chat session is an encrypted chat" lookups for LLM proxy redaction */
   /**
    * v2: entries changed from a bare `true` to a facts object (fingerprint +

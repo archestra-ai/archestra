@@ -379,6 +379,8 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/openai-codex-auth/" },
   // Ephemeral Telegram link code (the account-binding /link IS audited).
   { kind: "exact", value: "/api/chatops/telegram/link-code" },
+  // Ephemeral WhatsApp link code (the account-binding /link IS audited).
+  { kind: "exact", value: "/api/chatops/whatsapp/link-code" },
   // High-volume / best-effort artifact surfaces.
   { kind: "prefix", value: "/api/skill-sandbox/artifacts" },
   // Read-only probes / navigational / suggestion routes — mutate no org state.

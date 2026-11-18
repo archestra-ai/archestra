@@ -1265,6 +1265,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/chatops/telegram/link": {
     resourceType: "chatOpsBinding",
   },
+  "/api/chatops/whatsapp/link": {
+    resourceType: "chatOpsBinding",
+  },
+  "/api/chatops/config/whatsapp": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, _orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
   "/api/chatops/config/ms-teams": {
     resourceType: "chatOpsConfig",
     resourceIdSource: "organizationContext",

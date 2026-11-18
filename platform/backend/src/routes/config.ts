@@ -175,6 +175,7 @@ export const ConfigResponseSchema = z.strictObject({
     openappaEnabled: z.boolean(),
     agentHooksEnabled: z.boolean(),
     chatopsTelegramEnabled: z.boolean(),
+    chatopsWhatsappEnabled: z.boolean(),
     /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
     kbMfilesConnectorEnabled: z.boolean(),
     /** BETA: the Model Pools page and pool routing. */
@@ -289,6 +290,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       openappaEnabled: enterpriseTier.isOpenappaActive(),
       agentHooksEnabled: config.hooks.enabled,
       chatopsTelegramEnabled: config.chatops.telegramEnabled,
+      chatopsWhatsappEnabled: config.chatops.whatsappEnabled,
       kbMfilesConnectorEnabled: config.kb.mfilesConnectorEnabled,
       llmModelPoolsEnabled: config.llmProxy.modelPoolsEnabled,
       kbMfilesOauthEnabled: config.kb.mfilesOauthEnabled,

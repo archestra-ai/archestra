@@ -34,6 +34,7 @@ import {
   SLACK_CONNECT_TIMEOUT_MS,
   SLACK_DEFAULT_CONNECTION_MODE,
   TELEGRAM_LINK_CODE_TTL_MS,
+  WHATSAPP_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
 import { isMsTeamsConfigured } from "@/agents/chatops/ms-teams-config";
 import { msTeamsDirectory } from "@/agents/chatops/ms-teams-directory";
@@ -48,6 +49,7 @@ import {
   errorMessage,
   stripDuplicateAgentFooter,
 } from "@/agents/chatops/utils";
+import WhatsAppProvider from "@/agents/chatops/whatsapp-provider";
 import { isRateLimited } from "@/agents/utils";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission } from "@/auth";
@@ -85,6 +87,7 @@ import {
   SlackChatOpsConfigViewSchema,
   type SlackDbConfig,
   TelegramChatOpsConfigViewSchema,
+  WhatsAppChatOpsConfigViewSchema,
 } from "@/types";
 import {
   type ChatOpsChannelBinding,
@@ -119,6 +122,7 @@ const captureSlackRawBody = async (
  * inside SlackProvider. See EventDedupMap for details.
  */
 const slackWebhookDedup = new EventDedupMap();
+const whatsAppWebhookDedup = new EventDedupMap();
 
 const ChatOpsAssignmentPlanUpdateSchema =
   UpdateChatOpsChannelBindingSchema.pick({
@@ -941,6 +945,121 @@ const msTeamsSignInRoutes: FastifyPluginAsyncZod = async (fastify) => {
 const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   await fastify.register(msTeamsWebhookRoutes);
   await fastify.register(msTeamsSignInRoutes);
+
+  /**
+   * WhatsApp Cloud API webhook verification endpoint (GET)
+   */
+  fastify.get(
+    "/api/webhooks/chatops/whatsapp",
+    {
+      schema: {
+        description: "WhatsApp Cloud API webhook verification endpoint",
+        tags: ["ChatOps Webhooks"],
+        querystring: z.object({
+          "hub.mode": z.string().optional(),
+          "hub.verify_token": z.string().optional(),
+          "hub.challenge": z.string().optional(),
+        }),
+        response: {
+          200: z.string(),
+          400: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+          403: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const provider = chatOpsManager.getWhatsAppProvider();
+      if (!provider) {
+        throw new ApiError(400, "WhatsApp chatops provider not configured");
+      }
+
+      const challenge = provider.handleValidationChallenge(request.query);
+      if (challenge === null) {
+        logger.warn("[ChatOps] Invalid WhatsApp webhook verification token");
+        throw new ApiError(403, "Invalid webhook verification token");
+      }
+
+      return reply.type("text/plain").send(challenge);
+    },
+  );
+
+  /**
+   * WhatsApp Cloud API inbound webhook endpoint (POST)
+   */
+  fastify.post(
+    "/api/webhooks/chatops/whatsapp",
+    {
+      // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
+      preParsing: [captureSlackRawBody as any],
+      schema: {
+        description: "WhatsApp Cloud API inbound events webhook endpoint",
+        tags: ["ChatOps Webhooks"],
+        body: z.unknown(),
+        response: {
+          200: z.object({ ok: z.boolean() }),
+          400: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+          401: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+          429: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const provider = chatOpsManager.getWhatsAppProvider();
+      if (!provider) {
+        throw new ApiError(400, "WhatsApp chatops provider not configured");
+      }
+
+      const clientIp = request.ip || "unknown";
+      const rateLimitKey =
+        `${CacheKey.WebhookRateLimit}-chatops-whatsapp-${clientIp}` as AllowedCacheKey;
+      if (
+        await isRateLimited(rateLimitKey, {
+          windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
+          maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
+        })
+      ) {
+        throw new ApiError(429, "Too many requests");
+      }
+
+      const rawBody = (request as unknown as { slackRawBody?: string })
+        .slackRawBody;
+      if (!rawBody) {
+        throw new ApiError(400, "Could not read request body for verification");
+      }
+
+      const headers: Record<string, string | string[] | undefined> = {};
+      for (const [key, value] of Object.entries(request.headers)) {
+        headers[key] = value;
+      }
+
+      const isValid = await provider.validateWebhookRequest(rawBody, headers);
+      if (!isValid) {
+        logger.warn("[ChatOps] Invalid WhatsApp webhook signature");
+        throw new ApiError(401, "Invalid request signature");
+      }
+
+      provider
+        .handleWebhookPayload(request.body, whatsAppWebhookDedup)
+        .catch((error) => {
+          logger.error(
+            { error: errorMessage(error) },
+            "[ChatOps] Error processing WhatsApp webhook payload (async)",
+          );
+        });
+
+      return reply.send({ ok: true });
+    },
+  );
 
   /**
    * Slack webhook endpoint
@@ -3196,6 +3315,306 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/chatops/config/whatsapp",
+    {
+      schema: {
+        operationId: RouteId.GetWhatsAppChatOpsConfig,
+        description:
+          "Get the stored WhatsApp chatops configuration without secret tokens",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(WhatsAppChatOpsConfigViewSchema),
+      },
+    },
+    async () => {
+      const row = await ChatOpsConfigModel.getStoredConfig("whatsapp");
+      const stored = row?.value;
+      const updatedAt = row?.updatedAt ?? null;
+      return {
+        configured: stored
+          ? new WhatsAppProvider(stored).isConfigured()
+          : false,
+        updatedAt,
+        enabled: stored?.enabled ?? false,
+        phoneNumberId: stored?.phoneNumberId || null,
+        displayPhoneNumber:
+          chatOpsManager.getWhatsAppProvider()?.getDisplayPhoneNumber() ??
+          (stored?.displayPhoneNumber || null),
+      };
+    },
+  );
+
+  fastify.put(
+    "/api/chatops/config/whatsapp",
+    {
+      schema: {
+        operationId: RouteId.UpdateWhatsAppChatOpsConfig,
+        description: "Update WhatsApp chatops configuration",
+        tags: ["ChatOps"],
+        body: z.object({
+          enabled: z.boolean().optional(),
+          accessToken: z.string().max(1024).optional(),
+          phoneNumberId: z.string().max(128).optional(),
+          appSecret: z.string().max(256).optional(),
+          verifyToken: z.string().max(256).optional(),
+          displayPhoneNumber: z.string().max(64).optional(),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      if (!config.chatops.whatsappEnabled) {
+        throw new ApiError(
+          400,
+          "The WhatsApp integration is not enabled on this deployment. Set ARCHESTRA_CHATOPS_WHATSAPP_ENABLED=true and restart.",
+        );
+      }
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "whatsapp",
+      });
+
+      const existing = await ChatOpsConfigModel.getWhatsAppConfig();
+      const merged = {
+        enabled: request.body.enabled ?? existing?.enabled ?? false,
+        accessToken: request.body.accessToken ?? existing?.accessToken ?? "",
+        phoneNumberId:
+          request.body.phoneNumberId ?? existing?.phoneNumberId ?? "",
+        appSecret: request.body.appSecret ?? existing?.appSecret ?? "",
+        verifyToken: request.body.verifyToken ?? existing?.verifyToken ?? "",
+        displayPhoneNumber:
+          request.body.displayPhoneNumber ?? existing?.displayPhoneNumber ?? "",
+      };
+
+      if (merged.enabled) {
+        if (
+          !merged.accessToken ||
+          !merged.phoneNumberId ||
+          !merged.appSecret ||
+          !merged.verifyToken
+        ) {
+          throw new ApiError(
+            400,
+            "WhatsApp requires an Access Token, Phone Number ID, App Secret, and Verify Token when enabled.",
+          );
+        }
+
+        try {
+          const response = await fetch(
+            `https://graph.facebook.com/v21.0/${encodeURIComponent(merged.phoneNumberId)}?fields=id,display_phone_number`,
+            {
+              headers: { Authorization: `Bearer ${merged.accessToken}` },
+              signal: AbortSignal.timeout(10_000),
+            },
+          );
+          const body = (await response.json()) as {
+            id?: string;
+            display_phone_number?: string;
+            error?: unknown;
+          };
+          if (!response.ok || !body.id || body.error) {
+            throw new Error("Graph API phone lookup failed");
+          }
+          if (!merged.displayPhoneNumber && body.display_phone_number) {
+            merged.displayPhoneNumber = body.display_phone_number;
+          }
+        } catch {
+          throw new ApiError(
+            400,
+            "Invalid WhatsApp credentials: could not verify the Phone Number ID with Meta Graph API.",
+          );
+        }
+      }
+
+      await ChatOpsConfigModel.saveWhatsAppConfig(merged);
+      await chatOpsManager.reinitialize();
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/chatops/whatsapp/link-code",
+    {
+      schema: {
+        operationId: RouteId.GenerateWhatsAppLinkCode,
+        description:
+          "Generate a one-shot code that links the current user's WhatsApp account via a wa.me deep link",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(
+          z.object({
+            code: z.string(),
+            displayPhoneNumber: z.string().nullable(),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      if (!config.chatops.whatsappEnabled) {
+        throw new ApiError(
+          400,
+          "The WhatsApp integration is not enabled on this deployment.",
+        );
+      }
+      const provider = chatOpsManager.getWhatsAppProvider();
+      if (!provider?.isConfigured()) {
+        throw new ApiError(400, "WhatsApp is not configured yet.");
+      }
+
+      const code = randomUUID();
+      await cacheManager.set(
+        `${CacheKey.WhatsAppLinkCode}-${code}`,
+        { email: request.user.email },
+        WHATSAPP_LINK_CODE_TTL_MS,
+      );
+
+      return reply.send({
+        code,
+        displayPhoneNumber: provider.getDisplayPhoneNumber(),
+      });
+    },
+  );
+
+  fastify.post(
+    "/api/chatops/whatsapp/link",
+    {
+      schema: {
+        operationId: RouteId.LinkWhatsAppChatOpsAccount,
+        description:
+          "Link the current user's WhatsApp account using a code from the bot",
+        tags: ["ChatOps"],
+        body: z.object({ code: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      if (!config.chatops.whatsappEnabled) {
+        throw new ApiError(
+          400,
+          "The WhatsApp integration is not enabled on this deployment.",
+        );
+      }
+
+      const payload = await cacheManager.getAndDelete<{ waId?: string }>(
+        `${CacheKey.WhatsAppLinkCode}-${request.body.code}`,
+      );
+      if (!payload?.waId) {
+        throw new ApiError(
+          400,
+          "This linking code is invalid or expired. Send /start to the WhatsApp bot again to get a fresh link.",
+        );
+      }
+
+      const email = request.user.email;
+      const chatBinding = await ChatOpsChannelBindingModel.findByChannel({
+        provider: "whatsapp",
+        channelId: payload.waId,
+        workspaceId: null,
+      });
+      if (
+        chatBinding?.dmOwnerEmail &&
+        chatBinding.dmOwnerEmail.toLowerCase() !== email.toLowerCase()
+      ) {
+        throw new ApiError(
+          400,
+          "This WhatsApp number is already linked to another user.",
+        );
+      }
+
+      if (!chatBinding) {
+        const existingDm =
+          await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
+            organizationId: request.organizationId,
+            provider: "whatsapp",
+            dmOwnerEmail: email,
+          });
+        if (existingDm) {
+          await ChatOpsChannelBindingModel.fulfillDmBinding({
+            id: existingDm.id,
+            organizationId: request.organizationId,
+            realChannelId: payload.waId,
+            workspaceId: null,
+          });
+        } else {
+          await ChatOpsChannelBindingModel.create({
+            organizationId: request.organizationId,
+            provider: "whatsapp",
+            channelId: payload.waId,
+            isDm: true,
+            dmOwnerEmail: email,
+            channelName: `Direct Message - ${email}`,
+            agentId: null,
+          });
+        }
+      }
+
+      chatOpsManager
+        .getWhatsAppProvider()
+        ?.sendDirectMessage({
+          userId: payload.waId,
+          text: `✅ Linked to ${email}. Send a message to start!`,
+        })
+        .catch(() => {});
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.delete(
+    "/api/chatops/whatsapp/link",
+    {
+      schema: {
+        operationId: RouteId.UnlinkWhatsAppChatOpsAccount,
+        description: "Unlink the current user's WhatsApp account",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const email = request.user.email;
+      const dmBinding =
+        await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
+          organizationId: request.organizationId,
+          provider: "whatsapp",
+          dmOwnerEmail: email,
+        });
+      if (!dmBinding || dmBinding.channelId.startsWith("dm:pending:")) {
+        throw new ApiError(404, "No linked WhatsApp account found.");
+      }
+
+      request.auditResourceId = { value: dmBinding.id };
+      request.auditBefore = await ChatOpsChannelBindingModel.findByIdForAudit(
+        dmBinding.id,
+        request.organizationId,
+      );
+
+      const deleted =
+        await ChatOpsChannelBindingModel.deleteByIdAndOrganization(
+          dmBinding.id,
+          request.organizationId,
+        );
+      if (!deleted) {
+        throw new ApiError(404, "No linked WhatsApp account found.");
+      }
+
+      await invalidateChannelAnswerAll({
+        provider: deleted.provider,
+        channelId: deleted.channelId,
+        workspaceId: deleted.workspaceId,
+      });
+
+      chatOpsManager
+        .getWhatsAppProvider()
+        ?.sendDirectMessage({
+          userId: deleted.channelId,
+          text: `This WhatsApp number was unlinked from ${email}. Send /start to link it again.`,
+        })
+        .catch(() => {});
+
+      return reply.send({ success: true });
+    },
+  );
+
   /**
    * Refresh channel discovery for a provider.
    * Clears the TTL cache, then triggers immediate discovery if the provider
@@ -3444,6 +3863,9 @@ async function getProviderInfo(
   configured: boolean;
   credentials?: {
     botToken?: string;
+    accessToken?: string;
+    phoneNumberId?: string;
+    verifyToken?: string;
     appId?: string;
     appSecret?: string;
     tenantId?: string;
@@ -3456,6 +3878,7 @@ async function getProviderInfo(
     teamId?: string;
     appId?: string;
     botUsername?: string;
+    displayPhoneNumber?: string;
   };
 }> {
   switch (providerType) {
@@ -3536,6 +3959,27 @@ async function getProviderInfo(
         dmInfo: provider?.getBotUsername()
           ? { botUsername: provider.getBotUsername() ?? undefined }
           : undefined,
+      };
+    }
+    case "whatsapp": {
+      const provider = chatOpsManager.getWhatsAppProvider();
+      const dbConfig = await ChatOpsConfigModel.getWhatsAppConfig();
+      const displayPhoneNumber =
+        provider?.getDisplayPhoneNumber() ??
+        (dbConfig?.displayPhoneNumber
+          ? dbConfig.displayPhoneNumber.replace(/\D+/g, "")
+          : undefined);
+      return {
+        id: "whatsapp",
+        displayName: "WhatsApp",
+        configured: provider?.isConfigured() ?? false,
+        credentials: {
+          accessToken: maskValue(dbConfig?.accessToken ?? ""),
+          phoneNumberId: maskValue(dbConfig?.phoneNumberId ?? ""),
+          appSecret: dbConfig?.appSecret ? "••••••••" : "",
+          verifyToken: dbConfig?.verifyToken ? "••••••••" : "",
+        },
+        dmInfo: displayPhoneNumber ? { displayPhoneNumber } : undefined,
       };
     }
   }

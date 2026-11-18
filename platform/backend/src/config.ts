@@ -4425,6 +4425,9 @@ const config = {
     // the config endpoint rejects updates, and the frontend hides the
     // Telegram messaging channel.
     telegramEnabled: process.env.ARCHESTRA_CHATOPS_TELEGRAM_ENABLED !== "false",
+    // The WhatsApp integration is on by default, with
+    // ARCHESTRA_CHATOPS_WHATSAPP_ENABLED=false as the operator opt-out.
+    whatsappEnabled: process.env.ARCHESTRA_CHATOPS_WHATSAPP_ENABLED !== "false",
     // Signup welcome for auto-provisioned chatops users: on by default, with
     // ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED=false as the operator opt-out
     // for deployments whose chatops users don't get web app access — the

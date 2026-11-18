@@ -1452,6 +1452,29 @@ See [Telegram](/docs/agents/triggers-and-channels/telegram) for setup. Telegram 
   - Default: unset (save the token on the Telegram channel page instead)
   - Values: `123456789:ABC...` format
 
+### WhatsApp
+
+WhatsApp uses the Meta WhatsApp Cloud API with signed webhook delivery at `/api/webhooks/chatops/whatsapp`.
+
+- **`ARCHESTRA_CHATOPS_WHATSAPP_ENABLED`** - Makes the WhatsApp channel available.
+  - Default: `true`
+  - Values: `true`, `false`. With `false`, the channel is hidden and never starts.
+
+- **`ARCHESTRA_CHATOPS_WHATSAPP_ACCESS_TOKEN`** - Meta Graph API permanent or system-user access token.
+  - Default: unset
+
+- **`ARCHESTRA_CHATOPS_WHATSAPP_PHONE_NUMBER_ID`** - WhatsApp Business phone number ID.
+  - Default: unset
+
+- **`ARCHESTRA_CHATOPS_WHATSAPP_APP_SECRET`** - Meta App Secret used to verify `X-Hub-Signature-256` webhook payloads.
+  - Default: unset
+
+- **`ARCHESTRA_CHATOPS_WHATSAPP_VERIFY_TOKEN`** - Webhook subscription verify token matched against `hub.verify_token`.
+  - Default: unset
+
+- **`ARCHESTRA_CHATOPS_WHATSAPP_DISPLAY_PHONE_NUMBER`** - Optional business phone number (digits) used to build `wa.me` deep links.
+  - Default: unset
+
 ### Public URL
 
 These variables open an [ngrok](https://ngrok.com) tunnel to Archestra on startup, for a local instance. [Public Webhook Endpoints](/docs/admin/deployment/networking#public-webhook-endpoints) lists what must be reachable from the internet.

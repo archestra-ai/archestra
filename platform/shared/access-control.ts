@@ -1715,6 +1715,16 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.LinkTelegramChatOpsAccount]: {},
   [RouteId.UnlinkTelegramChatOpsAccount]: {},
   [RouteId.GenerateTelegramLinkCode]: {},
+  [RouteId.UpdateWhatsAppChatOpsConfig]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.GetWhatsAppChatOpsConfig]: {
+    organizationSettings: ["read"],
+  },
+  // Any authenticated user can link or unlink their own WhatsApp account
+  [RouteId.LinkWhatsAppChatOpsAccount]: {},
+  [RouteId.UnlinkWhatsAppChatOpsAccount]: {},
+  [RouteId.GenerateWhatsAppLinkCode]: {},
   [RouteId.ConnectNgrok]: {
     organizationSettings: ["update"],
   },
@@ -2290,6 +2300,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/messaging-channels/slack": { organizationSettings: ["read"] },
   "/settings/messaging-channels/ms-teams": { organizationSettings: ["read"] },
   "/settings/messaging-channels/telegram": { organizationSettings: ["read"] },
+  "/settings/messaging-channels/whatsapp": { organizationSettings: ["read"] },
   "/settings/messaging-channels/email": { organizationSettings: ["read"] },
   "/settings/apps": { organizationSettings: ["read"] },
   "/settings/environments": { environment: ["update"] },

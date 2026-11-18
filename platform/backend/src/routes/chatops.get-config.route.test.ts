@@ -64,6 +64,13 @@ describe("GET /api/chatops/config/:provider", () => {
       updatedAt: null,
       enabled: false,
     });
+    expect((await get("whatsapp")).json()).toEqual({
+      configured: false,
+      updatedAt: null,
+      enabled: false,
+      phoneNumberId: null,
+      displayPhoneNumber: null,
+    });
   });
 
   test("returns stored identifiers and never a secret", async () => {
@@ -90,10 +97,19 @@ describe("GET /api/chatops/config/:provider", () => {
       enabled: true,
       botToken: SECRETS[5],
     });
+    await ChatOpsConfigModel.saveWhatsAppConfig({
+      enabled: true,
+      accessToken: "EAAB-whatsapp-token-under-test",
+      phoneNumberId: "109876543210",
+      appSecret: "whatsapp-app-secret-under-test",
+      verifyToken: "whatsapp-verify-token-under-test",
+      displayPhoneNumber: "15550109999",
+    });
 
     const slack = await get("slack");
     const teams = await get("ms-teams");
     const telegram = await get("telegram");
+    const whatsapp = await get("whatsapp");
 
     expect(slack.statusCode, slack.body).toBe(200);
     expect(slack.json()).toEqual({
@@ -117,7 +133,17 @@ describe("GET /api/chatops/config/:provider", () => {
       updatedAt: expect.any(String),
       enabled: true,
     });
-    for (const response of [slack, teams, telegram])
+    expect(whatsapp.json()).toEqual({
+      configured: true,
+      updatedAt: expect.any(String),
+      enabled: true,
+      phoneNumberId: "109876543210",
+      displayPhoneNumber: "15550109999",
+    });
+    expect(whatsapp.body).not.toContain("EAAB-whatsapp-token-under-test");
+    expect(whatsapp.body).not.toContain("whatsapp-app-secret-under-test");
+    expect(whatsapp.body).not.toContain("whatsapp-verify-token-under-test");
+    for (const response of [slack, teams, telegram, whatsapp])
       for (const secret of SECRETS) expect(response.body).not.toContain(secret);
   });
 

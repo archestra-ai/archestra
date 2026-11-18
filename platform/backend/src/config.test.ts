@@ -85,6 +85,7 @@ import config, {
   parseSampleRate,
   parseSandboxMemoryMaxBytes,
   parseShutdownSeconds,
+  parseSiteConfig,
   parseSpiffeTrustDomain,
   parseSreApiServerCidrs,
   parseTrustProxy,
@@ -2415,6 +2416,53 @@ describe("parseFileStorageFilesystemRoot", () => {
     );
   });
 });
+describe("parseSiteConfig", () => {
+  const env = {
+    name: undefined,
+    role: undefined,
+    internalUrl: undefined,
+    allowVersionSkew: undefined,
+    remoteDatabase: undefined,
+  };
+
+  test("a single install is the primary site named default", () => {
+    expect(parseSiteConfig(env)).toEqual({
+      name: "default",
+      role: "primary",
+      internalUrl: null,
+      allowVersionSkew: false,
+      remoteDatabase: false,
+    });
+  });
+
+  test("reads a secondary site and trims the internal URL's trailing slash", () => {
+    expect(
+      parseSiteConfig({
+        name: "gcp-us",
+        role: "Secondary",
+        internalUrl: "http://archestra.gcp.internal:9000/",
+        allowVersionSkew: "true",
+        remoteDatabase: "true",
+      }),
+    ).toEqual({
+      name: "gcp-us",
+      role: "secondary",
+      internalUrl: "http://archestra.gcp.internal:9000",
+      allowVersionSkew: true,
+      remoteDatabase: true,
+    });
+  });
+
+  test("refuses a name that cannot go in a URL or label, and an unknown role", () => {
+    expect(() => parseSiteConfig({ ...env, name: "GCP US" })).toThrow(
+      /ARCHESTRA_SITE_NAME/,
+    );
+    expect(() => parseSiteConfig({ ...env, role: "replica" })).toThrow(
+      /ARCHESTRA_SITE_ROLE/,
+    );
+  });
+});
+
 describe("parseProcessType", () => {
   test("should return 'all' when undefined", () => {
     expect(parseProcessType(undefined)).toBe("all");

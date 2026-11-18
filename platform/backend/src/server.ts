@@ -139,6 +139,9 @@ import { ensureScopedResourcePermissionCutover } from "@/services/resource-permi
 import { seedRequiredStartingData } from "@/services/seed";
 import { sreAgentService } from "@/services/sre-agent";
 import { systemKeyManager } from "@/services/system-key-manager";
+import { registerSite } from "@/sites/registry";
+import { startRemoteDatabaseMode } from "@/sites/remote-database";
+import { assertSiteCanStart } from "@/sites/startup-guard";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { createStartupHealthServer } from "@/startup-health";
 import { taskQueueService } from "@/task-queue";
@@ -946,6 +949,13 @@ const startWebServer = async () => {
 
     // Initialize database connection first
     await initializeDatabase();
+
+    // Before anything writes: a secondary site on another version than the
+    // primary's must not touch the primary's schema. Then announce this site
+    // so the others can route to it.
+    await assertSiteCanStart();
+    await registerSite();
+    startRemoteDatabaseMode();
 
     // Start the cache manager before seeding: seeding invalidates cached
     // entries, and against an unstarted manager those deletes are skipped.

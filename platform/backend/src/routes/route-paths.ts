@@ -187,3 +187,9 @@ export const OPENAPPA_ARCHESTRA_ANNOTATOR_PATH =
 
 /** Authenticated read-only instruction refresh for installed connection wrappers. */
 export const CONNECTION_INSTRUCTIONS_PATH = "/v1/connection-instructions";
+/**
+ * The internal channel between sites sharing one database (see
+ * `sites/README.md`). Skips user auth: every request carries a site token
+ * signed with a key derived from the shared auth secret.
+ */
+export const SITE_CHANNEL_PREFIX = "/api/internal/sites";

@@ -158,6 +158,8 @@ import { LlmThroughput, ThroughputError } from "@/services/llm-throughput";
 import { llmToolCallSessions } from "@/services/llm-tool-call-sessions";
 import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
+import { canCallHere, currentSiteName } from "@/sites/registry";
+import { writeAfterResponse } from "@/sites/remote-database";
 import {
   ApiError,
   type GatewayAgent,
@@ -1724,6 +1726,7 @@ async function handleObservedLLMProxy<
             reachable: (tierProvider) =>
               isPoolableProvider(tierProvider) &&
               canReachMember(autoRouteWire, tierProvider),
+            callable: canCallHere,
           })
         : null;
     if (autoRouteUser && !autoRoute)
@@ -2077,6 +2080,13 @@ async function handleObservedLLMProxy<
       perKeyProviderApiKeyRow ??=
         await LlmProviderApiKeyModel.findById(perKeyChatApiKeyId);
       const row = perKeyProviderApiKeyRow;
+      // Every site calls providers directly (see sites/README.md): a keyless
+      // key needs this site's own cloud credentials for its provider.
+      if (row && !modelPoolPlan && !autoRoutedMember && !canCallHere(row))
+        throw new ApiError(
+          503,
+          `Provider key "${row.name}" uses ${row.provider} cloud credentials that site "${currentSiteName()}" is not configured for. Send the request to a site that has them, or configure them on this site.`,
+        );
       perKeyExtraHeaders = row?.extraHeaders ?? null;
       if (!row) {
         logger.warn(
@@ -2519,7 +2529,7 @@ async function handleObservedLLMProxy<
               };
               // Persist the attempt and settle minute spend before admitting
               // the next member. Mark failover only when a non-hidden choice opens.
-              await persistProxyInteraction({
+              const { written } = await persistProxyInteraction({
                 record,
                 encryptedChat,
                 streamTiming,
@@ -2530,8 +2540,10 @@ async function handleObservedLLMProxy<
               });
               return async (outcome) => {
                 if (outcome === "failed_over")
-                  await InteractionModel.markPoolAttemptFailedOver(
-                    interactionId,
+                  await writeAfterResponse("model pool attempt outcome", () =>
+                    written.then(() =>
+                      InteractionModel.markPoolAttemptFailedOver(interactionId),
+                    ),
                   );
               };
             },
@@ -5606,7 +5618,7 @@ async function persistProxyInteraction({
   throughput?: LlmThroughput;
   autoRouting: AutoRoutingRequestContext | undefined;
   upstreamAttempt?: UpstreamAttempt;
-}): Promise<void> {
+}): Promise<{ written: Promise<void> }> {
   // Snapshot before database work; streaming calls reach here after consumption,
   // so this includes the full stream rather than just time to its first byte.
   record = {
@@ -5627,23 +5639,34 @@ async function persistProxyInteraction({
     attemptOutcome: upstreamAttempt?.attemptOutcome,
     failureReason: upstreamAttempt?.failureReason,
   };
-  await InteractionModel.record(
-    encryptedChat.kind === "redact"
+  // A fixed id makes the write idempotent, so a queued write can retry it.
+  const stored = {
+    ...(encryptedChat.kind === "redact"
       ? redactEncryptedChatInteraction(record)
-      : record,
-    encryptedChat.kind === "encrypt" ? encryptedChat.audit : null,
-  );
-  try {
-    await throughput?.settleSpend(
-      record.cost,
-      record.billingMode === "subscription" ? "subscription" : "metered",
+      : record),
+    id: record.id ?? uuidv7(),
+  };
+  const settleSpend = async () => {
+    try {
+      await throughput?.settleSpend(
+        record.cost,
+        record.billingMode === "subscription" ? "subscription" : "metered",
+      );
+    } catch (error) {
+      // The request's charge is already settled. Failing it now would invite a
+      // retry that pays for the inference twice; the next admission reads the
+      // per-minute meter and fails closed if it is still unavailable.
+      logger.error({ err: error }, "Unable to record per-minute spend");
+    }
+  };
+  // On a site far from its database this lands after the response.
+  return writeAfterResponse("LLM proxy interaction", async () => {
+    await InteractionModel.record(
+      stored,
+      encryptedChat.kind === "encrypt" ? encryptedChat.audit : null,
     );
-  } catch (error) {
-    // The request's charge is already settled. Failing it now would invite a
-    // retry that pays for the inference twice; the next admission reads the
-    // per-minute meter and fails closed if it is still unavailable.
-    logger.error({ err: error }, "Unable to record per-minute spend");
-  }
+    await settleSpend();
+  });
 }
 
 /**

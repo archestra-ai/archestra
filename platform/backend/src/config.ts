@@ -1569,6 +1569,61 @@ export function parseProcessType(value: string | undefined): ProcessType {
   return "all";
 }
 
+export type SiteRole = "primary" | "secondary";
+
+export interface SiteConfig {
+  /** Unique among the sites sharing the database. */
+  name: string;
+  /**
+   * `primary` owns the schema and the encryption key; a `secondary` never
+   * migrates, never writes the encryption canary, and refuses to start on a
+   * version other than the primary's.
+   */
+  role: SiteRole;
+  /** Where other sites reach this one's internal channel; unset when none. */
+  internalUrl: string | null;
+  /** Escape hatch for a deliberate mixed-version window during an upgrade. */
+  allowVersionSkew: boolean;
+  /**
+   * The database is in another cloud or region: LLM proxy requests read
+   * configuration from a per-pod cache and record logs and spend after the
+   * response, so a request makes no round trip to the database when warm.
+   */
+  remoteDatabase: boolean;
+}
+
+const DEFAULT_SITE_NAME = "default";
+
+/** @public — exported for testability */
+export function parseSiteConfig(env: {
+  name: string | undefined;
+  role: string | undefined;
+  internalUrl: string | undefined;
+  allowVersionSkew: string | undefined;
+  remoteDatabase: string | undefined;
+}): SiteConfig {
+  const name = env.name?.trim() || DEFAULT_SITE_NAME;
+  if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) {
+    throw new Error(
+      `ARCHESTRA_SITE_NAME "${name}" must be lowercase letters, digits and dashes (at most 63 characters)`,
+    );
+  }
+  const role = env.role?.trim().toLowerCase() || "primary";
+  if (role !== "primary" && role !== "secondary") {
+    throw new Error(
+      `ARCHESTRA_SITE_ROLE must be "primary" or "secondary", got "${role}"`,
+    );
+  }
+  const internalUrl = env.internalUrl?.trim().replace(/\/+$/, "") || null;
+  return {
+    name,
+    role,
+    internalUrl,
+    allowVersionSkew: env.allowVersionSkew === "true",
+    remoteDatabase: env.remoteDatabase === "true",
+  };
+}
+
 /**
  * Parse a `*_RETENTION_DAYS` env var into a non-negative integer.
  * Default is 0 (retention disabled — rows are never auto-deleted).
@@ -4447,6 +4502,17 @@ const config = {
     ),
   },
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
+  /**
+   * This install's identity among the installs ("sites") sharing one
+   * database. See `sites/README.md`. A single install needs none of it.
+   */
+  site: parseSiteConfig({
+    name: process.env.ARCHESTRA_SITE_NAME,
+    role: process.env.ARCHESTRA_SITE_ROLE,
+    internalUrl: process.env.ARCHESTRA_SITE_INTERNAL_URL,
+    allowVersionSkew: process.env.ARCHESTRA_SITE_ALLOW_VERSION_SKEW,
+    remoteDatabase: process.env.ARCHESTRA_SITE_REMOTE_DATABASE,
+  }),
   maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,
   // Instance-wide banner (markdown) shown at the top of the UI. Unlike
   // maintenanceMode it does not affect request handling.

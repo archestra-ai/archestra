@@ -12,6 +12,7 @@ import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  SiteModel,
 } from "@/models";
 import {
   fetchAnthropicModels,
@@ -200,6 +201,13 @@ class SystemKeyManager {
           { provider, apiKeyId: existingKey.id },
           "Keeping system API key (provider disabled, ARCHESTRA_LLM_SYSTEM_KEYS_AUTO_DELETE_ENABLED is off)",
         );
+      } else if (existingKey && (await anotherSiteEnables(provider))) {
+        // The key is shared by every site on this database (see
+        // `sites/README.md`); a site that enables the provider still uses it.
+        logger.debug(
+          { provider, apiKeyId: existingKey.id },
+          "Keeping system API key (provider disabled here, enabled on another site)",
+        );
       } else if (existingKey) {
         // Provider disabled, delete system key
         logger.info(
@@ -309,3 +317,16 @@ class SystemKeyManager {
 
 // Export singleton instance
 export const systemKeyManager = new SystemKeyManager();
+
+/**
+ * Whether another registered site enables this keyless provider. A site that
+ * is down still counts: its key must survive its restart.
+ */
+async function anotherSiteEnables(provider: SupportedProvider) {
+  const sites = await SiteModel.findAll();
+  return sites.some(
+    (site) =>
+      site.name !== config.site.name &&
+      site.capabilities.keylessProviders.includes(provider),
+  );
+}

@@ -153,6 +153,7 @@ export { default as SecretModel } from "./secret";
 export { default as ServiceAccountModel } from "./service-account";
 /** @public — re-exported for testability (consumed by src/test/fixtures.ts) */
 export { default as SessionModel } from "./session";
+export { default as SiteModel } from "./site";
 export { default as SkillModel } from "./skill";
 export { default as SkillEnvironmentModel } from "./skill-environment";
 export { default as SkillFileModel } from "./skill-file";

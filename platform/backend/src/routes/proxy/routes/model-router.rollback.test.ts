@@ -14,7 +14,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { vi } from "vitest";
+import { onTestFinished, vi } from "vitest";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -2522,6 +2522,12 @@ describe("model router proxy routes", () => {
     makeOrganization,
   }) => {
     const { LlmProviderApiKeyModel } = await import("@/models");
+    const { systemKeyManager } = await import("@/services/system-key-manager");
+    // This site has the Vertex AI credentials the system key relies on.
+    const enabled = vi
+      .spyOn(systemKeyManager, "getEnabledProviders")
+      .mockReturnValue(["gemini"]);
+    onTestFinished(() => enabled.mockRestore());
     const app = createFastifyApp();
     await app.register(modelRouterProxyRoutes);
     await upsertModel({ provider: "gemini", modelId: "gemini-2.5-pro" });

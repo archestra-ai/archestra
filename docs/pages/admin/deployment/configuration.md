@@ -58,6 +58,33 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Default: derived from an `*.rds.amazonaws.com` database hostname, falling back to `AWS_REGION` or `AWS_DEFAULT_REGION`
   - Set it when connecting to RDS or Aurora through a custom DNS name without `AWS_REGION` set.
 
+## Sites
+
+Several installs can share one database, each in its own cluster or cloud. See [Multiple Clusters and Clouds](/docs/admin/deployment/multi-site). A single install needs none of these.
+
+- **`ARCHESTRA_SITE_NAME`** - This install's name among the sites sharing the database.
+  - Default: `default`
+  - Values: lowercase letters, digits and dashes, at most 63 characters
+  - In Helm, set `archestra.site.name`.
+
+- **`ARCHESTRA_SITE_ROLE`** - Whether this site owns the schema and the encryption key.
+  - Default: `primary`
+  - Values: `primary`, `secondary`
+  - A secondary never runs migrations (the Helm chart skips the migration Job), only verifies the encryption key and refuses to start on another version than the primary's. In Helm, set `archestra.site.role`.
+
+- **`ARCHESTRA_SITE_INTERNAL_URL`** - The base URL other sites reach this site's backend on. Recorded in the site registry; no feature calls other sites yet.
+  - Default: none
+  - Values: `http://archestra.gcp.internal:9000`
+  - In Helm, set `archestra.site.internalUrl`.
+
+- **`ARCHESTRA_SITE_ALLOW_VERSION_SKEW`** - Lets a secondary start on another version than the primary's.
+  - Default: `false`
+  - Set it only for a deliberate mixed-version window during an upgrade, then unset it.
+
+- **`ARCHESTRA_SITE_REMOTE_DATABASE`** - Set on a site whose database is in another cloud or region. LLM proxy requests then read configuration from a cache in each pod and write logs and spend after the response, so a warm request makes no database round trip. See [Multiple Clusters and Clouds](/docs/admin/deployment/multi-site#run-a-site-far-from-the-database).
+  - Default: `false`
+  - In Helm, set `archestra.site.remoteDatabase`.
+
 ## Server and Network
 
 - **`ARCHESTRA_API_BASE_URL`** - Public URL of the Archestra API, shown in the connection instructions for the LLM Proxy, MCP Gateway, and A2A Gateway.

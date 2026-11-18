@@ -30,6 +30,19 @@ import { reencryptStoredSecrets } from "./reencrypt";
 export async function verifySecretsEncryptionKey(): Promise<void> {
   const canary = await EncryptionKeyCanaryModel.get();
 
+  // A secondary site only checks: the primary writes the canary, rotates and
+  // re-encrypts. Anything but a readable canary is a misconfigured site.
+  if (config.site.role === "secondary") {
+    if (canary && canDecrypt(canary.encryptedCanary)) return;
+    throw new Error(
+      canary
+        ? "This site's encryption secret cannot decrypt the secrets the primary site stored. A secondary site " +
+            "(ARCHESTRA_SITE_ROLE=secondary) must use the primary site's auth Secret byte for byte."
+        : "No encryption key canary found. Start the primary site first: a secondary site " +
+            "(ARCHESTRA_SITE_ROLE=secondary) never writes it.",
+    );
+  }
+
   if (canary) {
     if (canDecrypt(canary.encryptedCanary)) return;
 

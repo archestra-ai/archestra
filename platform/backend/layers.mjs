@@ -806,7 +806,8 @@ const layerTable = [
   },
   {
     name: "services",
-    path: "^src/(services|app-templates)/",
+    // `sites/`: the registry and channel of installs sharing one database.
+    path: "^src/(services|app-templates|sites)/",
     // Reads the error tracker's report of the previous container's exit.
     files: ["src/observability/previous-termination-report.ts"],
     project: APP,

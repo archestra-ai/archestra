@@ -4,7 +4,8 @@
   "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-services.tsbuildinfo" },
   "include": [
     "src/ambient/*.d.ts",
-    "src/services/**/*.test.ts"
+    "src/services/**/*.test.ts",
+    "src/sites/**/*.test.ts"
   ],
   "references": [
     { "path": "../shared/tsconfig.lib.json" },

@@ -25,6 +25,7 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { LlmProviderApiKeyModel, ModelPoolModel } from "@/models";
+import { canCallHere, currentSiteName } from "@/sites/registry";
 import {
   ApiError,
   type ModelPool,
@@ -216,13 +217,28 @@ export async function planModelPool(params: {
       )
       .map((key) => key.id),
   );
-  const enabled = allEnabled.filter((member) =>
+  const usable = allEnabled.filter((member) =>
     usableKeys.has(member.providerApiKeyId),
   );
-  if (enabled.length === 0)
+  if (usable.length === 0)
     throw new ApiError(
       403,
       "No model pool members are available to this caller. Personal connections can only be used by their owner.",
+    );
+  // Every site calls providers directly, so a member on a keyless key this
+  // site has no cloud credentials for is skipped here (see sites/README.md).
+  const callableKeys = new Set(
+    keys.filter((key) => canCallHere(key)).map((key) => key.id),
+  );
+  const enabled = usable.filter((member) =>
+    callableKeys.has(member.providerApiKeyId),
+  );
+  if (enabled.length === 0)
+    throw new ApiError(
+      503,
+      `No member of this model pool can be called on site "${currentSiteName()}": its members use cloud credentials (${[
+        ...new Set(usable.map((member) => member.provider)),
+      ].join(", ")}) this site is not configured for.`,
     );
   const reachable = enabled.filter((member) =>
     canReachMember(params.inbound, member.provider),
@@ -894,7 +910,11 @@ async function benchMember(params: {
       benchKey(
         params.poolId,
         params.memberId,
-        params.reason.startsWith("credit_exhausted") ? "credit" : undefined,
+        params.reason.startsWith("credit_exhausted")
+          ? "credit"
+          : benchedPerSite(params.reason)
+            ? "site"
+            : undefined,
       ),
       { until: Date.now() + ms, reason: params.reason } satisfies Bench,
       ms,
@@ -912,16 +932,23 @@ async function readBenches(pool: {
   const benches = await cacheManager.getMany<Bench>(
     pool.members.flatMap((member) => [
       benchKey(pool.id, member.id),
+      benchKey(pool.id, member.id, "site"),
       benchKey(pool.id, member.id, "credit"),
     ]),
   );
   const byMember = new Map<string, Bench>();
   for (const member of pool.members) {
     const credit = benches.get(benchKey(pool.id, member.id, "credit"));
+    const shared = benches.get(benchKey(pool.id, member.id));
+    const local = benches.get(benchKey(pool.id, member.id, "site"));
     const bench =
       credit && credit.until > Date.now()
         ? credit
-        : benches.get(benchKey(pool.id, member.id));
+        : shared && local
+          ? shared.until >= local.until
+            ? shared
+            : local
+          : (shared ?? local);
     if (bench) byMember.set(member.id, bench);
   }
   return byMember;
@@ -946,8 +973,24 @@ function toMs(seconds: number | null): number | undefined {
   return seconds === null ? undefined : seconds * 1000;
 }
 
-function benchKey(poolId: string, memberId: string, kind?: "credit") {
-  return `${CacheKey.ModelPoolBench}-${poolId}:${memberId}${kind ? ":credit" : ""}` as const;
+/**
+ * A member's bench slots. Credit exhaustion and provider answers (rate
+ * limits, auth, server errors) hold on every site; a network failure or a
+ * timeout is this site's path to the provider (see `sites/README.md`), so
+ * it benches the member only here.
+ */
+function benchKey(poolId: string, memberId: string, kind?: "credit" | "site") {
+  const suffix =
+    kind === "credit"
+      ? ":credit"
+      : kind === "site"
+        ? `@${currentSiteName()}`
+        : "";
+  return `${CacheKey.ModelPoolBench}-${poolId}:${memberId}${suffix}` as const;
+}
+
+function benchedPerSite(reason: string): boolean {
+  return reason.startsWith("unreachable") || reason.startsWith("timeout");
 }
 
 /** A number in [0, 1): seeded draws repeat for the same seed. */

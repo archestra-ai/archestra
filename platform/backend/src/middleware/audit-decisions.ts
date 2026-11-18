@@ -1056,6 +1056,11 @@ export const AUDIT_DECISIONS = {
   // =========================================================================
   // Site notifications
   // =========================================================================
+  sitesTable: {
+    audited: false,
+    reason:
+      "registry each install writes about itself on startup and heartbeat; no user action",
+  },
   siteNotificationsTable: {
     audited: false,
     reason: "ephemeral in-app notifications; per-user UI state",

@@ -162,6 +162,13 @@ async function syncDueApiKeys(maxKeys: number): Promise<void> {
   >();
   const regularKeys: LlmProviderApiKeyForModelSync[] = [];
   for (const apiKey of dueKeys) {
+    // A keyless key this site has no credentials for is synced by a site
+    // that has them (see `sites/README.md`).
+    if (
+      apiKey.isSystem &&
+      !systemKeyManager.getEnabledProviders().includes(apiKey.provider)
+    )
+      continue;
     if (shouldHandleWithSystemKeySync(apiKey)) {
       const keys = systemKeysByOrganization.get(apiKey.organizationId) ?? [];
       keys.push(apiKey);

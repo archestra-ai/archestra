@@ -256,6 +256,11 @@ export async function routeInternalAutoSession(params: {
   /** The body as the platform sent it, in OpenAI or Anthropic message shapes. */
   body: unknown;
   reachable: (provider: Model["provider"]) => boolean;
+  /** Whether this site can call the provider with a tier's key. */
+  callable: (key: {
+    isSystem: boolean;
+    provider: Model["provider"];
+  }) => boolean;
 }): Promise<InternalAutoRoute | null> {
   const { request, organizationId } = params;
   const unroutable = (reason: string) => {
@@ -305,6 +310,17 @@ export async function routeInternalAutoSession(params: {
     );
   }
   const tiers = requireEligible(eligibility);
+  // Every site calls providers directly: a tier on a keyless key this site
+  // has no cloud credentials for can't be routed to.
+  const tierKeys = await LlmProviderApiKeyModel.findByIds([
+    ...new Set(tiers.map((tier) => tier.providerApiKeyId)),
+  ]);
+  const uncallable = tierKeys.find((key) => !params.callable(key));
+  if (uncallable) {
+    return unroutable(
+      `provider key "${uncallable.name}" uses ${uncallable.provider} cloud credentials this site is not configured for`,
+    );
+  }
   const text = firstUserText("chat_completions", params.body);
   const sessionKey = RoutingDecisionModel.sessionKey({
     sessionId: params.sessionId,

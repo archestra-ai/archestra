@@ -38,6 +38,7 @@ import {
   ORGANIZATION_APPEARANCE_SETTINGS_PATH,
   PUBLIC_CONFIG_PATH,
   READY_PATH,
+  SITE_CHANNEL_PREFIX,
   SKILL_MARKETPLACE_PREFIX,
   SKILL_MARKETPLACE_STATIC_PATH,
   SPIFFE_ISSUER_PATH,
@@ -174,6 +175,8 @@ export class Authnz {
       url.startsWith("/api/auth") ||
       url.startsWith("/api/invitation/") || // Allow invitation check without auth
       isLlmProxyPath(url) ||
+      // Site-to-site channel: each handler verifies a signed site token.
+      url.startsWith(`${SITE_CHANNEL_PREFIX}/`) ||
       url === "/openapi.json" ||
       url === HEALTH_PATH ||
       url === READY_PATH ||

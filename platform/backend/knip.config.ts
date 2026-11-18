@@ -25,6 +25,9 @@ const config: KnipConfig = {
     "scripts/update-vscode-client-version.mjs!",
     "scripts/update-openappa-template.mjs!",
     "scripts/generate-grok-toml.mjs!",
+    // The client of the signed site-to-site channel (src/sites/README.md),
+    // the base for features that run work on another site; no caller yet.
+    "src/sites/channel-client.ts!",
     // Test infrastructure used by *.test.ts files (dev-only entries)
     "src/test/**/*.ts",
     // Loaded by `vitest run --config` for the opt-in session storage benchmark.

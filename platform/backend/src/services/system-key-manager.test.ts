@@ -46,6 +46,7 @@ import config from "@/config";
 import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
+  SiteModel,
   VirtualApiKeyModel,
 } from "@/models";
 import {
@@ -168,6 +169,33 @@ describe("systemKeyManager", () => {
 
     expect(await LlmProviderApiKeyModel.findSystemKey("gemini")).toBeNull();
     expect(await mappedKeyIds()).toEqual([]);
+  });
+
+  test("a site without Vertex AI keeps the shared key while another site enables it", async ({
+    makeOrganization,
+    makeVirtualApiKey,
+  }) => {
+    const organization = await makeOrganization();
+    const { geminiKey, mappedKeyIds } = await setUpVertexKeyInUse(
+      organization.id,
+      makeVirtualApiKey,
+    );
+    await SiteModel.upsert({
+      name: "gcp",
+      role: "secondary",
+      internalUrl: null,
+      version: "test",
+      capabilities: { keylessProviders: ["gemini"] },
+    });
+
+    // This site ("default") has no Vertex AI settings.
+    vi.mocked(isVertexAiEnabled).mockReturnValue(false);
+    await systemKeyManager.syncSystemKeys(organization.id);
+
+    await expect(
+      LlmProviderApiKeyModel.findSystemKey("gemini"),
+    ).resolves.toMatchObject({ id: geminiKey.id });
+    expect(await mappedKeyIds()).toEqual([geminiKey.id]);
   });
 
   test("reports failed providers while continuing to sync healthy system keys", async ({

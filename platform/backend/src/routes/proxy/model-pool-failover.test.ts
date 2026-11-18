@@ -1,7 +1,8 @@
 import { vi } from "vitest";
 import config from "@/config";
-import { ModelPoolModel } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import { LlmProviderApiKeyModel, ModelPoolModel } from "@/models";
+import { systemKeyManager } from "@/services/system-key-manager";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { ApiError } from "@/types";
 import {
@@ -407,6 +408,121 @@ describe("planModelPool", () => {
         benchReason: null,
       }),
     ]);
+  });
+});
+
+describe("pools across sites", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    config.site.name = "default";
+  });
+
+  test("skips members on keyless keys this site has no credentials for", async ({
+    makeOrganization,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const vertex = await LlmProviderApiKeyModel.createSystemKey({
+      organizationId: org.id,
+      name: "Vertex AI (Gemini)",
+      provider: "gemini",
+    });
+    const stored = await makeLlmProviderApiKey(org.id, null, {
+      provider: "gemini",
+    });
+    const flash = await ModelPoolModel.create({
+      organizationId: org.id,
+      input: {
+        name: "flash",
+        members: [
+          member(vertex.id, "gemini-2.5-flash", 1),
+          member(stored.id, "gemini-2.5-flash", 2),
+        ],
+      },
+    });
+    const vertexOnly = await ModelPoolModel.create({
+      organizationId: org.id,
+      input: {
+        name: "vertex-only",
+        members: [member(vertex.id, "gemini-2.5-flash", 1)],
+      },
+    });
+    const plan = (pool: { id: string; name: string }) =>
+      planModelPool({
+        organizationId: org.id,
+        name: pool.name,
+        poolId: pool.id,
+        inbound: "gemini",
+        caller: { providerApiKeyIds: [] },
+      });
+    const enabled = vi.spyOn(systemKeyManager, "getEnabledProviders");
+
+    enabled.mockReturnValue([]);
+    expect((await plan(flash))?.members.map((m) => m.providerApiKeyId)).toEqual(
+      [stored.id],
+    );
+    await expect(plan(vertexOnly)).rejects.toMatchObject({
+      statusCode: 503,
+      message: expect.stringContaining('site "default"'),
+    });
+
+    enabled.mockReturnValue(["gemini"]);
+    expect((await plan(flash))?.members.map((m) => m.providerApiKeyId)).toEqual(
+      [vertex.id, stored.id],
+    );
+  });
+
+  test("a timeout benches a member on this site only; a rate limit on every site", async ({
+    makeOrganization,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const first = await makeLlmProviderApiKey(org.id, null);
+    const second = await makeLlmProviderApiKey(org.id, null);
+    await ModelPoolModel.create({
+      organizationId: org.id,
+      input: {
+        name: "haiku",
+        members: [
+          member(first.id, "claude-haiku-4-5", 1),
+          member(second.id, "claude-haiku-4-5", 2),
+        ],
+      },
+    });
+    const planParams = {
+      organizationId: org.id,
+      name: "haiku",
+      inbound: "anthropic" as const,
+      caller: { providerApiKeyIds: [first.id] },
+    };
+    const failFirstWith = async (status: number) =>
+      openThroughModelPool({
+        plan: (await planModelPool(planParams)) as ModelPoolPlan,
+        attempt: {},
+        transportFor: async (m) => transport(m.providerApiKeyId),
+        open: async (t) => {
+          if ((await t.execute({})) === first.id) throw httpError(status);
+          return "ok";
+        },
+        isRetryable: () => false,
+        shouldContinue: () => true,
+        prepareFailedAttempt: async () => async () => {},
+      });
+    const orderOn = async (site: string) => {
+      config.site.name = site;
+      const plan = await planModelPool(planParams);
+      config.site.name = "default";
+      return plan?.members.map((m) => m.providerApiKeyId);
+    };
+
+    await failFirstWith(504);
+    expect(await orderOn("default")).toEqual([second.id, first.id]);
+    expect(await orderOn("gcp")).toEqual([first.id, second.id]);
+
+    config.site.name = "gcp";
+    await failFirstWith(429);
+    config.site.name = "default";
+    expect(await orderOn("azure")).toEqual([second.id, first.id]);
   });
 });
 

@@ -5,6 +5,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { infrastructureSpansEnabled } from "@/observability/tracing/infrastructure-spans";
 import { buildPgConnectionConfig } from "./rds-iam";
+import { installPoolReadCache } from "./read-cache";
 import {
   installDbErrorSafetyNet,
   withTransactionRetry,
@@ -135,6 +136,17 @@ export function getPoolStats(): {
     waitingCount: pool.waitingCount,
     maxSize: config.database.poolMax,
   };
+}
+
+/**
+ * Serve allowed standalone SELECTs through `read` (see `read-cache.ts`).
+ * Call once, after {@link initializeDatabase}.
+ */
+export function cachePoolReads(
+  params: Parameters<typeof installPoolReadCache>[1],
+): void {
+  if (!pool) throw new Error("Database not initialized");
+  installPoolReadCache(pool as never, params);
 }
 
 /**

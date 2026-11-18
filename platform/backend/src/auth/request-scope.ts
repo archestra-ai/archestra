@@ -11,6 +11,7 @@ class RequestScope {
   private storage = new AsyncLocalStorage<{
     memo: Map<string, Promise<unknown>>;
     sharesConfig: boolean;
+    cachesReads: boolean;
   } | null>();
 
   /**
@@ -18,12 +19,20 @@ class RequestScope {
    * `sharesConfig` also lets the request read configuration other requests
    * read recently (see `readConfig`): only for requests that never write it.
    */
-  enter(params: { memoize: boolean; sharesConfig?: boolean }): void {
+  enter(params: {
+    memoize: boolean;
+    sharesConfig?: boolean;
+    cachesReads?: boolean;
+  }): void {
     // Always rebinds, so a write on a keep-alive connection never inherits
     // the scope of the read before it.
     this.storage.enterWith(
       params.memoize
-        ? { memo: new Map(), sharesConfig: params.sharesConfig ?? false }
+        ? {
+            memo: new Map(),
+            sharesConfig: params.sharesConfig ?? false,
+            cachesReads: params.cachesReads ?? false,
+          }
         : null,
     );
   }
@@ -36,6 +45,14 @@ class RequestScope {
   /** Whether the current request may read configuration cached across requests. */
   sharesConfig(): boolean {
     return this.storage.getStore()?.sharesConfig ?? false;
+  }
+
+  /**
+   * Whether the current request's standalone configuration SELECTs may be
+   * served from the pool read cache (`database/read-cache.ts`).
+   */
+  cachesReads(): boolean {
+    return this.storage.getStore()?.cachesReads ?? false;
   }
 
   /** `load()` once per request and key, or every time outside a read scope. */

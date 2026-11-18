@@ -706,6 +706,28 @@ archestra:
   # release ship none, so the images follow their version tags.
   releaseImageDigests: {}
 
+  # This install's identity when several installs ("sites"), for example one
+  # per cloud, share one database. Leave empty for a single install.
+  site:
+    # Unique among the sites: lowercase letters, digits and dashes. Each site
+    # calls LLM providers itself, with the cloud credentials of its own
+    # environment for keyless providers.
+    name: ""
+    # primary (default) owns the schema and the encryption key. secondary
+    # never migrates (the migration Job is skipped), only verifies the
+    # encryption key, and refuses to start on another version than the
+    # primary's. Use the primary's database URL and auth Secret.
+    role: ""
+    # Base URL the other sites reach this site's backend on, e.g.
+    # http://archestra.internal.example.com:9000. Recorded in the site
+    # registry; no feature calls other sites yet.
+    internalUrl: ""
+    # true when the database is in another cloud or region. LLM proxy
+    # requests then read configuration from a per-pod cache kept current by
+    # database notifications, and record logs and spend after the response,
+    # so a warm request makes no round trip to the database.
+    remoteDatabase: false
+
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Set to false to turn the Kubernetes orchestrator off: the platform loads

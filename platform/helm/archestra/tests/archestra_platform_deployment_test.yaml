@@ -3071,6 +3071,34 @@ tests:
             name: ARCHESTRA_DATABASE_RUN_MIGRATIONS_ON_STARTUP
             value: "false"
 
+  - it: should pass the site identity and skip startup migrations on a secondary site
+    documentIndex: 1
+    set:
+      archestra.site.name: gcp-us
+      archestra.site.role: secondary
+      archestra.site.internalUrl: http://archestra-gcp.internal:9000
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_RUN_MIGRATIONS_ON_STARTUP
+            value: "false"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SITE_NAME
+            value: gcp-us
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SITE_ROLE
+            value: secondary
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SITE_INTERNAL_URL
+            value: http://archestra-gcp.internal:9000
+
   - it: should add multiple env vars with fieldRef
     documentIndex: 1
     set:

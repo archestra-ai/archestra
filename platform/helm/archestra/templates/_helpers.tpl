@@ -305,7 +305,25 @@ producing a duplicate env entry.
 {{- end }}
 {{- if not (hasKey .Values.archestra.env "ARCHESTRA_DATABASE_RUN_MIGRATIONS_ON_STARTUP") }}
 - name: ARCHESTRA_DATABASE_RUN_MIGRATIONS_ON_STARTUP
-  value: {{ .Values.archestra.migrationJob.enabled | quote }}
+  value: {{ include "archestra-platform.runsMigrations" . | quote }}
+{{- end }}
+{{- with .Values.archestra.site }}
+{{- if .name }}
+- name: ARCHESTRA_SITE_NAME
+  value: {{ .name | quote }}
+{{- end }}
+{{- if .role }}
+- name: ARCHESTRA_SITE_ROLE
+  value: {{ .role | quote }}
+{{- end }}
+{{- if .internalUrl }}
+- name: ARCHESTRA_SITE_INTERNAL_URL
+  value: {{ .internalUrl | quote }}
+{{- end }}
+{{- if .remoteDatabase }}
+- name: ARCHESTRA_SITE_REMOTE_DATABASE
+  value: "true"
+{{- end }}
 {{- end }}
 {{- include "archestra-platform.databaseEnv" . }}
 {{- $databasePoolProvided := hasKey .Values.archestra.env "ARCHESTRA_DATABASE_POOL_MAX" }}
@@ -1714,3 +1732,16 @@ Usage: include "archestra-platform.pinnedImage" (dict "image" ... "registry" ...
 {{- include "archestra-platform.imageRegistry" (dict "image" .image "registry" $registry) -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Whether this release applies database migrations: the migration Job and the
+web pod's startup migration. A secondary site (archestra.site.role) never
+does; the primary sharing its database owns the schema.
+*/}}
+{{- define "archestra-platform.runsMigrations" -}}
+{{- if and .Values.archestra.migrationJob.enabled (ne ((.Values.archestra.site).role | default "primary") "secondary") -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end }}

@@ -131,26 +131,24 @@ The v1.4 container migrates the database when it starts. It also rebuilds its em
 
 A v1.3 values file renders with the v1.4 chart, but these keys need changes:
 
-| Key | Change |
-| --- | --- |
-| `archestra.imageTag` | Delete it, or set it to the v1.4 version. A values file from `helm show values` pins `1.3.81`, which keeps v1.3 running under the v1.4 chart. |
-| `archestra.worker.nodeSelector`, `archestra.worker.tolerations` | Delete `{}` or `[]`. In v1.4 an empty value clears the shared `archestra.*` value instead of inheriting it. |
-| `archestra.terminationGracePeriodSeconds` | Delete it to derive it from the shutdown settings. A value below that budget, 120 seconds by default, fails the upgrade. |
-| `archestra.worker.podAnnotations` | Removed. Use `archestra.podAnnotations`. |
-| `archestra.renderer.*`, `archestra.orchestrator.mcpIdleHibernationEnabled` | Removed. Delete them. |
+- `archestra.imageTag`: delete it, or set it to the v1.4 version. A values file from `helm show values` pins `1.3.81`, which keeps v1.3 running under the v1.4 chart.
+- `archestra.worker.nodeSelector` and `archestra.worker.tolerations`: delete them if they are `{}` or `[]`. In v1.4 an empty value clears the shared `archestra.*` value instead of inheriting it.
+- `archestra.terminationGracePeriodSeconds`: delete it to derive it from the shutdown settings. A value below that budget, 120 seconds by default, fails the upgrade.
+- `archestra.worker.podAnnotations`: removed. Use `archestra.podAnnotations`.
+- `archestra.renderer.*` and `archestra.orchestrator.mcpIdleHibernationEnabled`: removed. Delete them.
 
 If you manage the Role yourself (`rbac.create: false`), add the rules the v1.4 chart adds for events, persistent volume claims, and Agent Sandbox resources.
 
 ## Environment Variables
 
-| v1.3 variable | In v1.4 |
-| --- | --- |
-| `ARCHESTRA_AGENT_RUNTIME_ENABLED` | Removed. Agent Runtime turns on when the cluster has the Agent Sandbox controller. |
-| `ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE` | Use [`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY) and [`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG). |
-| `ARCHESTRA_AGENT_RUNTIME_EPHEMERAL_STORAGE_LIMIT` | Workspaces are persistent volumes. Size them with [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE). |
-| `ARCHESTRA_PLUGINS_ENABLED`, `ARCHESTRA_MCP_SERVER_ALERTING_ENABLED`, `ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED` | Removed. Plugins, MCP server alerts, and connector permission sync are always available. Setting `false` no longer turns them off. |
-| `ARCHESTRA_MCP_SKILLS_ENABLED`, `ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED` | Removed. These follow [`ARCHESTRA_BETA`](/docs/reference/configuration#ARCHESTRA_BETA). |
-| `ARCHESTRA_APP_RECORDING_RENDERER_URL` | Removed with app recordings. |
+Remove these v1.3 variables, or move them to their replacement:
+
+- `ARCHESTRA_AGENT_RUNTIME_ENABLED`: removed. Agent Runtime turns on when the cluster has the Agent Sandbox controller.
+- `ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`: use [`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY) and [`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG).
+- `ARCHESTRA_AGENT_RUNTIME_EPHEMERAL_STORAGE_LIMIT`: workspaces are persistent volumes. Size them with [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE).
+- `ARCHESTRA_PLUGINS_ENABLED`, `ARCHESTRA_MCP_SERVER_ALERTING_ENABLED`, and `ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED`: removed. Plugins, MCP server alerts, and connector permission sync are always available, so setting `false` no longer turns them off.
+- `ARCHESTRA_MCP_SKILLS_ENABLED` and `ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED`: removed. These follow [`ARCHESTRA_BETA`](/docs/reference/configuration#ARCHESTRA_BETA).
+- `ARCHESTRA_APP_RECORDING_RENDERER_URL`: removed with app recordings.
 
 ## Roll Back
 

@@ -56,6 +56,7 @@ import {
   type RuntimeFailureCode,
   runtimeFailureCode,
   unansweredAnnotationNotice,
+  undeclaredReturnNotice,
   undeclaredToolNotice,
 } from "@/openappa/failure";
 import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
@@ -101,7 +102,6 @@ export const APPA_CHAT_SOURCES = [
 ] as const;
 export type AppaChatSource = (typeof APPA_CHAT_SOURCES)[number];
 /** The runtime's built-in sanitizer of a schema-attested subagent return. */
-const ATTEST_SCHEMA_SANITIZER = "attest-schema";
 type ExecutionOutcome = "success" | "failure" | "unknown";
 type OutputSource = "tool" | "runtime";
 type RuntimeReason = string;
@@ -1389,8 +1389,9 @@ type AppaCallDecision =
        */
       recorded?: true;
       /**
-       * The call's annotator gave no answer. The runtime has no record of
-       * the call, so its result is answered by the proxy, not the runtime.
+       * The runtime never ruled on the call: its annotator gave no answer or
+       * its return could not be declared. The runtime has no record of the
+       * call, so its result is answered by the proxy, not the runtime.
        */
       unanswered?: true;
     };
@@ -1572,10 +1573,8 @@ export async function evaluateToolCalls(
         const refusal = await declareSpawnReturn({
           session,
           callId: call.id,
-          event,
           declaration,
           controlToolName: options.control?.name,
-          policy,
         });
         if (refusal) return refusal;
       }
@@ -2046,90 +2045,51 @@ export type SpawnReturnDeclaration =
   | { kind: "as_spoken" }
   | { kind: "attested"; schema: Record<string, unknown> };
 
-const OfferedReturnSchema = z.union([
-  z.literal("as_spoken"),
-  z.object({ sanitizer: z.string() }),
-]);
-
 /**
- * Declares the return of a spawn the runtime holds until its return is
- * declared. A probe of the same call, under its own operation, surfaces the
- * offers; the call itself is then dispatched once, already declared. Returns
- * the refusal the caller reports instead of dispatching.
+ * Declares a spawn's return ahead of it, so the spawn is the only operation
+ * the runtime rules on: its block, offers and approval belong to the call the
+ * client sent. A probe of the call would spend that call's approval. Returns
+ * the refusal the caller reports instead of dispatching; the runtime holds no
+ * record of it.
  */
 async function declareSpawnReturn(params: {
   session: OpenAppaSession;
   callId: string;
-  event: Record<string, unknown>;
   declaration: SpawnReturnDeclaration;
   controlToolName?: string;
-  policy: SharedPolicy;
 }): Promise<AppaCallDecision | undefined> {
-  const probeId = `${params.callId}:declare`;
-  const probe = await dispatch(
-    params.session,
-    { ...params.event, operation_id: `call:${probeId}` },
-    await params.policy(),
-  );
-  switch (probe.decision) {
-    case "allow_call":
-      await dispatch(
-        params.session,
-        { event: "cancel_call", tool_call_id: probeId },
-        await params.policy(),
-      );
-      return undefined;
-    case "pass_control":
-      return undefined;
-    case "deny_call":
-      break;
-    default:
-      return { kind: "deny", feedback: decisionMessage(probe) };
-  }
-  const wanted = params.declaration;
-  const offer = (probe.offers ?? []).find((candidate) => {
-    const returns = OfferedReturnSchema.safeParse(
-      (candidate as { returns?: unknown }).returns,
-    );
-    if (!returns.success) return false;
-    return wanted.kind === "as_spoken"
-      ? returns.data === "as_spoken"
-      : typeof returns.data === "object" &&
-          returns.data.sanitizer === ATTEST_SCHEMA_SANITIZER;
-  });
-  if (!offer) {
-    return {
-      kind: "deny",
-      feedback:
-        wanted.kind === "attested"
-          ? `This policy offers no \`${ATTEST_SCHEMA_SANITIZER}\` return for this subagent, so \`return_schema\` cannot be honored. Call it without \`return_schema\`, or ask an administrator to declare the sanitizer.\n\n${probe.feedback}`
-          : probe.feedback,
-      offers: (probe.offers ?? []).map((candidate) => candidate.offer_id),
-    };
-  }
   const args = {
-    offer_id: offer.offer_id,
     label: {},
-    ...(wanted.kind === "attested"
-      ? { return_schema: normalizeReturnSchemaNode(wanted.schema) }
+    ...(params.declaration.kind === "attested"
+      ? { return_schema: normalizeReturnSchemaNode(params.declaration.schema) }
       : {}),
   };
-  const declared = await executeRemedyByOffer({
-    organizationId: params.session.organization_id,
-    callerId: params.session.caller_id,
-    sessionId: params.session.session_id,
-    ...(params.session.parent_id ? { parentId: params.session.parent_id } : {}),
-    toolCallId: `${params.callId}:return`,
-    controlToolName: params.controlToolName,
-    originalArguments: JSON.stringify(args),
-    args,
-  });
+  let declared: Awaited<ReturnType<typeof executeRemedyByOffer>>;
+  try {
+    declared = await executeRemedyByOffer({
+      organizationId: params.session.organization_id,
+      callerId: params.session.caller_id,
+      sessionId: params.session.session_id,
+      ...(params.session.parent_id
+        ? { parentId: params.session.parent_id }
+        : {}),
+      toolCallId: `${params.callId}:return`,
+      controlToolName: params.controlToolName,
+      originalArguments: JSON.stringify(args),
+      args,
+    });
+  } catch (error) {
+    const notice = undeclaredReturnNotice(error);
+    if (notice === null) throw error;
+    return { kind: "deny", feedback: notice, unanswered: true };
+  }
   if (!declared.result.isError) return undefined;
   return {
     kind: "deny",
     feedback: declared.result.content
       .flatMap((block) => (block.type === "text" ? [block.text] : []))
       .join("\n"),
+    unanswered: true,
   };
 }
 

@@ -1,8 +1,8 @@
 /**
  * The runtime contract Archestra's in-process subagents rely on: a delegation
- * call's return is declared on the caller's behalf through a probe of the same
- * call under its own operation, the child hears its contract at its start,
- * and its return crosses only through the declared route.
+ * call's return is declared on the caller's behalf ahead of the call, the
+ * child hears its contract at its start, and its return crosses only through
+ * the declared route.
  */
 const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
@@ -42,12 +42,12 @@ const schema = {
   required: ['days'],
 };
 
-function family() {
+function family(rules = policy) {
   const organization = `subagent-${randomUUID()}`;
   const parent = { organization_id: organization, caller_id: 'user:test', session_id: `user:test|${randomUUID()}` };
   const hook = async (session, event) =>
-    JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
-  const remedy = async (session, toolCallId, args) =>
+    JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), rules));
+  const remedy = async (session, toolCallId, args, ruling) =>
     JSON.parse(
       await native.executeRemedyByOffer(
         JSON.stringify({
@@ -64,8 +64,9 @@ function family() {
           arguments: args,
           original_arguments: JSON.stringify(args),
           presentation,
+          ...(ruling ? { ruling } : {}),
         }),
-        policy,
+        rules,
       ),
     );
   const call = (callId, tool, extra = {}) => ({
@@ -149,6 +150,53 @@ test('a return declared ahead, as the gateway does without an offer, releases on
 
   const next = await run.hook(run.parent, run.spawnCall('s2'));
   assert.equal(next.decision, 'deny_call', 'a declaration covers one spawn');
+});
+
+const approvalPolicy = (contextControl) => ({
+  content: `[policy]
+version = 2
+[[policy.tool]]
+name = "agent__reader"
+delta = {}
+requires = { attention = ["gate"] }
+[[policy.authority]]
+name = "human-approval"
+[policy.authority.permits]
+attention = ["*"]
+[externals.authorities.human-approval]
+builtin = "hitl"
+[policy.deployment]
+context_control = ${contextControl}
+`,
+  credentials: {},
+});
+
+test('a spawn a person approved runs on its retry, declared ahead like its first attempt', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const run = family(approvalPolicy(true));
+  await run.hook(run.parent, { event: 'session_start' });
+  const firstDeclared = await run.remedy(run.parent, 's1:return', { label: {} });
+  assert.equal(firstDeclared.result.isError, false, JSON.stringify(firstDeclared));
+
+  const held = await run.hook(run.parent, run.spawnCall('s1'));
+  assert.equal(held.decision, 'deny_call', JSON.stringify(held));
+  const [review] = held.review ?? [];
+  assert.ok(review, 'the held spawn asks a person under its own call');
+  const approved = await run.remedy(run.parent, 's1:approval', { offer_id: review.offer_id }, 'approve');
+  assert.equal(approved.result.isError, false, JSON.stringify(approved));
+
+  const retryDeclared = await run.remedy(run.parent, 's2:return', { label: {} });
+  assert.equal(retryDeclared.result.isError, false, JSON.stringify(retryDeclared));
+  const retry = await run.hook(run.parent, run.spawnCall('s2'));
+  assert.equal(retry.decision, 'allow_call', JSON.stringify(retry));
+  assert.ok(retry.spawn_binding, 'the approved retry starts its child');
+});
+
+test('without context control a return is not declared, so the spawn is refused before it is ruled', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const run = family(approvalPolicy(false));
+  await run.hook(run.parent, { event: 'session_start' });
+  await assert.rejects(run.remedy(run.parent, 's1:return', { label: {} }), (error) => error.code === 'remedy');
 });
 
 /** The attempts the family's log recorded declarations ahead under, in log order. */

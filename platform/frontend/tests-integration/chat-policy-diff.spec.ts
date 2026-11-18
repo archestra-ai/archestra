@@ -9,6 +9,8 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   page,
   mswControl,
 }, testInfo) => {
+  // Opening and reopening each run a large diff computation.
+  testInfo.setTimeout(120_000);
   const key = makeLlmProviderApiKey({ provider: "openai" });
   const agent = makeAgent({ llmApiKeyId: key.id });
   const conversation = makeConversation({
@@ -125,10 +127,10 @@ test("reviews a large policy without expanding the chat, and keeps the review us
       timeout: 60_000,
     },
   );
-  // Wait for Monaco's real diff worker and first-change reveal.
+  // Allow the 30-second diff computation budget plus first-change rendering.
   await expect(
     dialog.getByText("tool_13259", { exact: false }).first(),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 60_000 });
   await dialog.getByRole("button", { name: "Next change" }).click();
   await expect(
     dialog.getByText('final_review = "updated"', { exact: true }),
@@ -138,18 +140,30 @@ test("reviews a large policy without expanding the chat, and keeps the review us
     dialog.getByText("tool_13259", { exact: false }).first(),
   ).toBeVisible();
   const split = dialog.getByRole("switch", { name: "Side by side view" });
-  const unchanged = dialog.getByRole("switch", {
-    name: "Show unchanged lines",
-  });
   await expect(split).not.toBeChecked();
-  await expect(unchanged).not.toBeChecked();
-  // Both view options are independent switches, usable from the keyboard.
+  // Layout remains keyboard accessible; unchanged regions use inline controls.
   await split.focus();
   await split.press("Space");
   await expect(split).toBeChecked();
-  await expect(unchanged).not.toBeChecked();
-  await unchanged.check();
-  await expect(split).toBeChecked();
+  await dialog
+    .getByRole("button", { name: "Show Unchanged Region", exact: true })
+    .first()
+    .click();
+  await dialog
+    .getByRole("textbox", { name: /Proposed policy/ })
+    .press("Control+Home");
+  await expect(
+    dialog.getByText("# Policy line 1", { exact: true }).first(),
+  ).toBeVisible();
+  // Monaco exposes collapse as a glyph-margin decoration without an ARIA role.
+  await dialog
+    .locator(".fold-unchanged")
+    .filter({ visible: true })
+    .first()
+    .click();
+  await expect(
+    dialog.getByText("13256 hidden lines", { exact: true }).first(),
+  ).toBeVisible();
   await expect(
     dialog.getByText("tool_13259", { exact: false }).first(),
   ).toBeVisible();
@@ -171,9 +185,7 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   await page.setViewportSize({ width: 390, height: 720 });
   await split.uncheck();
   await expect(split).not.toBeChecked();
-  await expect(unchanged).toBeChecked();
   await expect(split).toBeInViewport();
-  await expect(unchanged).toBeInViewport();
   await expect(
     dialog.getByRole("button", { name: "Next change" }),
   ).toBeInViewport();
@@ -199,5 +211,5 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   ).toBeEnabled();
   await expect(
     dialog.getByText("tool_13259", { exact: false }).first(),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 60_000 });
 });

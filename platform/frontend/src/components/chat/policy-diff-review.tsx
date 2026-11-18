@@ -1,14 +1,7 @@
 "use client";
 
 import type { DiffOnMount } from "@monaco-editor/react";
-import {
-  ArrowDown,
-  ArrowUp,
-  Columns2,
-  type LucideIcon,
-  Search,
-  UnfoldVertical,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, Columns2, Search } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { DiffEditor } from "@/components/diff-editor";
 import { Button } from "@/components/ui/button";
@@ -20,6 +13,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils/tailwind";
+import styles from "./policy-diff-review.module.css";
 
 /** Monaco renders only visible lines and keeps navigation within the review. */
 export function PolicyDiffReview({
@@ -35,7 +29,6 @@ export function PolicyDiffReview({
   const editorRef = useRef<Parameters<DiffOnMount>[0] | null>(null);
   const [ready, setReady] = useState(false);
   const [sideBySide, setSideBySide] = useState(false);
-  const [showUnchanged, setShowUnchanged] = useState(false);
   const revealFrame = useRef<number | null>(null);
 
   useEffect(
@@ -53,7 +46,7 @@ export function PolicyDiffReview({
       .getVisibleRanges()[0]?.startLineNumber;
     update();
     if (revealFrame.current !== null) cancelAnimationFrame(revealFrame.current);
-    // Folding and layout changes affect scroll offsets. Keep the visible policy
+    // Layout changes affect scroll offsets. Keep the visible policy
     // line in view after Monaco applies the new layout.
     if (line !== undefined) {
       revealFrame.current = requestAnimationFrame(() => {
@@ -65,31 +58,13 @@ export function PolicyDiffReview({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3">
-        <fieldset
-          aria-label="Diff view options"
-          className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row"
-        >
-          <DiffViewSwitch
-            id={`${controlId}-side-by-side`}
-            icon={Columns2}
-            label="Side by side view"
-            description="Compare current and proposed policies in two columns. Turn off for a single combined view."
-            checked={sideBySide}
-            onCheckedChange={(checked) =>
-              updateView(() => setSideBySide(checked))
-            }
-          />
-          <DiffViewSwitch
-            id={`${controlId}-unchanged`}
-            icon={UnfoldVertical}
-            label="Show unchanged lines"
-            description="Expand all unchanged lines. Turn off to fold them and focus on changes."
-            checked={showUnchanged}
-            onCheckedChange={(checked) =>
-              updateView(() => setShowUnchanged(checked))
-            }
-          />
-        </fieldset>
+        <SideBySideSwitch
+          id={`${controlId}-side-by-side`}
+          checked={sideBySide}
+          onCheckedChange={(checked) =>
+            updateView(() => setSideBySide(checked))
+          }
+        />
         <div className="ml-auto flex items-center gap-1">
           <Button
             size="sm"
@@ -130,13 +105,9 @@ export function PolicyDiffReview({
         <span className="px-4">
           {sideBySide ? "Current" : "Current → Proposed"}
         </span>
-        <span className={sideBySide ? "px-4" : "px-4 text-right"}>
-          {sideBySide
-            ? "Proposed"
-            : `Unchanged lines ${showUnchanged ? "shown" : "folded"}`}
-        </span>
+        {sideBySide && <span className="px-4">Proposed</span>}
       </div>
-      <div className="min-h-0 flex-1">
+      <div className={cn("min-h-0 flex-1", styles.editor)}>
         <DiffEditor
           original={before}
           modified={after}
@@ -161,7 +132,7 @@ export function PolicyDiffReview({
             useInlineViewWhenSpaceIsLimited: false,
             diffWordWrap: "off",
             hideUnchangedRegions: {
-              enabled: !showUnchanged,
+              enabled: true,
               contextLineCount: 3,
             },
             ignoreTrimWhitespace: false,
@@ -180,26 +151,22 @@ export function PolicyDiffReview({
   );
 }
 
-function DiffViewSwitch({
+function SideBySideSwitch({
   id,
-  icon: Icon,
-  label,
-  description,
   checked,
   onCheckedChange,
 }: {
   id: string;
-  icon: LucideIcon;
-  label: string;
-  description: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
 }) {
+  const description =
+    "Compare current and proposed policies in two columns. Turn off for a single combined view.";
   return (
     <Tooltip delayDuration={350}>
       <div
         className={cn(
-          "flex min-h-10 items-center gap-3 rounded-md border px-2.5 py-1.5 transition-colors hover:bg-accent/50 sm:min-h-8",
+          "flex min-h-10 w-full items-center gap-3 rounded-md border px-2.5 py-1.5 transition-colors hover:bg-accent/50 sm:min-h-8 sm:w-auto",
           checked && "border-ring/40 bg-accent/60",
         )}
       >
@@ -207,14 +174,14 @@ function DiffViewSwitch({
           htmlFor={id}
           className="flex flex-1 cursor-pointer items-center gap-2 whitespace-nowrap font-normal"
         >
-          <Icon
+          <Columns2
             aria-hidden="true"
             className={cn(
               "size-4 shrink-0 text-muted-foreground",
               checked && "text-foreground",
             )}
           />
-          <span>{label}</span>
+          <span>Side by side view</span>
         </Label>
         {/* Tooltip and Switch each need their own data-state element. */}
         <TooltipTrigger asChild>

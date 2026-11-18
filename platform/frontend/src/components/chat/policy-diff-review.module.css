@@ -1,0 +1,21 @@
+/* Monaco owns these controls. Match Lucide's UnfoldVertical / FoldVertical
+   (ISC license) without changing the icons in other editors. */
+.editor :global(.diff-hidden-lines .codicon-unfold)::before,
+.editor :global(.fold-unchanged.codicon-fold)::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background-color: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+}
+
+.editor :global(.diff-hidden-lines .codicon-unfold)::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22v-6M12 8V2M4 12H2M10 12H8M16 12h-2M22 12h-2M15 19l-3 3-3-3M15 5l-3-3-3 3'/%3E%3C/svg%3E");
+}
+
+.editor :global(.fold-unchanged.codicon-fold)::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22v-6M12 8V2M4 12H2M10 12H8M16 12h-2M22 12h-2M15 19l-3-3-3 3M15 5l-3 3-3-3'/%3E%3C/svg%3E");
+}

@@ -32,7 +32,7 @@ stack, with its own ports, database and logins; `start` prints its URLs.
    `platform/.env` with this stack's ports; the user adds their own keys to it
    on the Mac.
 2. `scripts/dev-vm-sync.py run 'pnpm install --frozen-lockfile'`.
-3. Start Tilt (Background tasks) if the user wants the app.
+3. `scripts/dev-vm-sync.py tilt` if the user wants the app.
 
 **A new branch in a synced checkout:** just `git switch -c <branch>` on the
 Mac. The sync carries the changed files over by itself. If the switch changed
@@ -49,12 +49,12 @@ Tilt picks up the rest.
 3. `scripts/dev-vm-sync.py run 'pnpm install --frozen-lockfile'`. The pnpm
    store and the Rust build folder are shared, so this and Tilt's first run
    are fast.
-4. Start its Tilt (Background tasks) if the user wants the app. It runs next
-   to the other checkouts' stacks; up to 5 at once.
-5. When the user removes the worktree, first stop its Tilt, then
-   `mutagen sync terminate <folder>`,
-   `ssh lima-archestra-dev 'rm -rf ~/sync/<folder>'` and
-   `ssh lima-archestra-dev 'kubectl delete namespace <ARCHESTRA_K8S_NAMESPACE from its .env>'`.
+4. `scripts/dev-vm-sync.py tilt` if the user wants the app. It runs next to
+   the other checkouts' stacks; up to 5 at once.
+
+**Removing a worktree:** `git worktree remove ../<folder>` on the Mac, then
+`dev-vm-sync.py prune`. It stops the worktree's Tilt and removes its sync, VM
+copy and namespace (with its database).
 
 ## Commands
 
@@ -94,24 +94,29 @@ the login settings, so `cargo` is missing or rebuilds everything from scratch.
 
 ## Background tasks
 
-Long-lived processes go in a tmux session in the VM, so they outlive your
-command. One session per checkout, `tilt-<folder>`. From `platform/`:
+Each checkout's Tilt runs in the VM in a tmux session of its own, so it
+outlives your command.
 
 ```sh
-dev-vm-sync.py run 'tmux new-session -d -s tilt-<folder> -e TILT_PORT=$TILT_PORT -c "$PWD" "bash -lc \"tilt up\""'
-dev-vm-sync.py run 'tilt get uiresources'                   # Tilt state
-dev-vm-sync.py run 'tilt logs pnpm-dev-backend'             # a resource's logs
-dev-vm-sync.py run 'tilt trigger pnpm-dev-backend'          # rebuild a resource
-ssh lima-archestra-dev 'tmux ls'                            # what runs
-ssh lima-archestra-dev 'tmux kill-session -t tilt-<folder>' # stop this checkout's Tilt
+dev-vm-sync.py tilt                                  # start this checkout's Tilt; no-op if it runs
+dev-vm-sync.py tilt stop                             # stop it; pods and database stay
+dev-vm-sync.py status                                # every synced checkout: URLs, running or not
+dev-vm-sync.py prune                                 # remove stacks of checkouts that no longer exist
+dev-vm-sync.py run 'tilt get uiresources'            # Tilt state
+dev-vm-sync.py run 'tilt logs pnpm-dev-backend'      # a resource's logs
+dev-vm-sync.py run 'tilt trigger pnpm-dev-backend'   # rebuild a resource
 ```
 
+- Start and stop Tilt only with `tilt` and `tilt stop`, never with your own
+  tmux session or a bare `tilt up`.
+- A stack whose checkout exists is not garbage. Stop it only when the user
+  asks; never stop another checkout's Tilt.
+- Run `prune` after removing a worktree, or when `status` shows a checkout as
+  gone or lists leftovers.
 - `run` sets `TILT_PORT` from the checkout's `.env`, so `tilt` commands reach
   this checkout's Tilt, not another one.
-- Before starting Tilt, check `tmux ls`. The user may also run it in their own
-  terminal: `run 'tilt get uiresources'` answers when this checkout's Tilt is
-  up.
-- Never stop another checkout's Tilt.
+- Never `tilt trigger uncategorized`: Tilt deletes everything in it first,
+  the stack's namespace and database included.
 - For a long job you wait on (a test suite), run `dev-vm-sync.py run` as a
   background shell command instead.
 

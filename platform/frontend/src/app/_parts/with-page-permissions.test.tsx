@@ -6,11 +6,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPagePermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import { hasPagePermissions } from "@/lib/auth/auth.utils";
 import { useTeamLimitAccess } from "@/lib/limits-access";
+import { useServerRulesAccess } from "@/lib/openappa-github-sync.query";
 import { WithPagePermissions } from "./with-page-permissions";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/limits-access");
+vi.mock("@/lib/openappa-github-sync.query");
 // Read only when a grant on one credential might open Settings.
 vi.mock("@/lib/runtime-credentials.query", () => ({
   useRuntimeCredentials: () => ({ data: [], isPending: false }),
@@ -52,6 +54,10 @@ function renderAt(pathname: string) {
 describe("WithPagePermissions", () => {
   beforeEach(() => {
     replace.mockClear();
+    vi.mocked(useServerRulesAccess).mockReturnValue({
+      scoped: false,
+      files: [],
+    });
     vi.mocked(useRouter).mockReturnValue({
       replace,
     } as unknown as ReturnType<typeof useRouter>);
@@ -161,5 +167,31 @@ describe("WithPagePermissions", () => {
     renderAt("/account/credentials");
     expect(screen.getByText("Page content")).toBeVisible();
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("opens the Policy page to a member who may read an MCP server's rules, and no other Guardrails page", () => {
+    signInAs(predefinedPermissionsMap.member);
+    const refused = renderAt("/openappa/policy");
+    expect(screen.queryByText("Page content")).not.toBeInTheDocument();
+    refused.unmount();
+
+    // Not known yet: neither the page nor a refusal.
+    vi.mocked(useServerRulesAccess).mockReturnValue({
+      scoped: null,
+      files: [],
+    });
+    const pending = renderAt("/openappa/policy");
+    expect(pending.container).toBeEmptyDOMElement();
+    pending.unmount();
+
+    vi.mocked(useServerRulesAccess).mockReturnValue({
+      scoped: true,
+      files: [],
+    });
+    const policy = renderAt("/openappa/policy");
+    expect(screen.getByText("Page content")).toBeVisible();
+    policy.unmount();
+    renderAt("/openappa/batteries");
+    expect(screen.queryByText("Page content")).not.toBeInTheDocument();
   });
 });

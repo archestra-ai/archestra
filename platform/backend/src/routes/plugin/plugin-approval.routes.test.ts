@@ -30,35 +30,36 @@ describe("plugin executable-content approval", () => {
     await app.close();
   });
 
-  test("requires plugin:admin to create approved executable bytes", async () => {
-    const response = await app.inject({
+  test("plugin:create alone creates a plugin, without managing every plugin", async ({
+    makeCustomRole,
+    makeMember,
+  }) => {
+    const role = await makeCustomRole(organizationId, {
+      permission: { plugin: ["read", "create"] },
+    });
+    await makeMember(user.id, organizationId, { role: role.role });
+
+    const created = await app.inject({
       method: "POST",
       url: "/api/plugins",
       payload: createPayload(),
     });
-    expect(response.statusCode).toBe(403);
+    expect(created.statusCode, created.body).toBe(200);
+    const { id } = created.json();
+
+    // Reading the bytes back and changing them stay with whoever manages
+    // every plugin.
+    const read = await app.inject({ method: "GET", url: `/api/plugins/${id}` });
+    expect(read.statusCode).toBe(403);
+    const updated = await app.inject({
+      method: "PUT",
+      url: `/api/plugins/${id}`,
+      payload: { files: createPayload().files },
+    });
+    expect(updated.statusCode).toBe(403);
   });
 
-  test("requires plugin:admin to import or apply GitHub bytes", async () => {
-    const preview = await app.inject({
-      method: "POST",
-      url: "/api/plugins/github/preview",
-      payload: { repoUrl: "trusted/example" },
-    });
-    expect(preview.statusCode).toBe(403);
-
-    const imported = await app.inject({
-      method: "POST",
-      url: "/api/plugins/github/import",
-      payload: {
-        repoUrl: "trusted/example",
-        displayName: "Imported plugin",
-        clientType: "claude-code",
-        approvedCommitSha: "a".repeat(40),
-      },
-    });
-    expect(imported.statusCode).toBe(403);
-
+  test("requires plugin:admin to read or apply GitHub bytes", async () => {
     const tracked = await PluginModel.create({
       organizationId,
       userId: user.id,

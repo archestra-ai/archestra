@@ -33,6 +33,12 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Roles"],
         querystring: PaginationQuerySchema.extend({
           name: z.string().optional(),
+          kind: z
+            .enum(["custom"])
+            .optional()
+            .describe(
+              "Limit the list to one kind of role. `custom` leaves out the built-in roles, which cannot be edited.",
+            ),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectOrganizationRoleSchema),
@@ -44,13 +50,14 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { ac: ["create"] },
         headers,
       );
-      const { limit, offset, name } = query;
+      const { limit, offset, name, kind } = query;
 
       const result = await OrganizationRoleModel.getAllPaginated({
         organizationId,
         limit,
         offset,
         name,
+        customOnly: kind === "custom",
         isAdmin: canManageRoles,
       });
 

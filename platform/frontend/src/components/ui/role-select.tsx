@@ -6,11 +6,11 @@ import { ShieldAlert } from "lucide-react";
 import type * as React from "react";
 import { filterControlClass } from "@/components/filter-bar";
 import { RoleOptionLabel } from "@/components/role-type-icon";
-import { RolePicker } from "@/components/ui/role-picker";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useAllPermissions } from "@/lib/auth/auth.query";
 import { useRoles } from "@/lib/role.query";
 import { formatRoleName } from "@/lib/utils/role";
+import { RolePicker } from "./role-picker";
 
 interface RoleSelectProps {
   mode?: "assignment" | "filter";
@@ -132,6 +132,7 @@ export function RoleSelect({
   if (multiple && mode === "assignment") {
     return (
       <RolePicker
+        placeholder={placeholder}
         value={value}
         onValueChange={onValueChange}
         minSelected={allowEmpty ? 0 : 1}

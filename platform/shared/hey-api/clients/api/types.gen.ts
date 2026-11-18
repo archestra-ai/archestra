@@ -128229,6 +128229,10 @@ export type GetRolesData = {
         limit?: number;
         offset?: number;
         name?: string;
+        /**
+         * Limit the list to one kind of role. `custom` leaves out the built-in roles, which cannot be edited.
+         */
+        kind?: 'custom';
     };
     url: '/api/roles';
 };

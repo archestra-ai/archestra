@@ -144,14 +144,16 @@ test("summarizes multiple roles and reveals the full assignment in a tooltip", a
       <ServiceAccountsSettingsPage />
     </QueryClientProvider>,
   );
-  const roles = await screen.findByRole("button", {
-    name: "View assigned roles: Member, Admin, Platform Admin, Editor",
-  });
-  expect(roles).toHaveTextContent("Member+3");
-  await user.hover(roles);
-  const tooltip = await screen.findByRole("tooltip");
+  const roles = await screen.findByRole("list", { name: "Roles" });
+  expect(roles).toHaveTextContent("MemberAdmin+2");
+  expect(within(roles).queryByText("Editor")).toBeNull();
+  // The rest unfold in the cell: nothing floats over the table.
+  await user.click(
+    within(roles).getByRole("button", { name: "Show 2 more roles" }),
+  );
   for (const name of ["Member", "Admin", "Platform Admin", "Editor"])
-    expect(within(tooltip).getByText(name)).toBeVisible();
+    expect(within(roles).getByText(name)).toBeVisible();
+  expect(screen.queryByRole("tooltip")).toBeNull();
 });
 
 test("offers row edits only on accounts the user holds an update grant for", async () => {

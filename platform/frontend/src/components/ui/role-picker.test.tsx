@@ -32,16 +32,15 @@ function Harness({
   );
 }
 
-async function openGroup(
+/** Open the picker and show one area's roles in the right pane. */
+async function openArea(
   user: ReturnType<typeof userEvent.setup>,
   name: string,
 ) {
   await user.click(screen.getByRole("combobox", { name: "Roles" }));
-  const groups = screen.getByRole("navigation", { name: "Role groups" });
   await user.click(
-    within(groups).getByRole("button", { name: new RegExp(`^${name}`) }),
+    screen.getByRole("button", { name: new RegExp(`^${name}`) }),
   );
-  return screen.getByRole("list", { name: `${name} roles` });
 }
 
 describe("RolePicker", () => {
@@ -77,20 +76,12 @@ describe("RolePicker", () => {
     } as unknown as ReturnType<typeof useAllPermissions>);
   });
 
-  it("stages choices until Update and discards them when closed", async () => {
+  it("applies each choice at once and shows it on the trigger", async () => {
     const user = userEvent.setup();
-    const onChange = vi.fn();
-    render(<Harness onChange={onChange} />);
+    render(<Harness />);
 
-    const agents = await openGroup(user, "Agents");
-    await user.click(within(agents).getByLabelText("Agent Writer"));
-    await user.keyboard("{Escape}");
-    expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByTestId("value")).toHaveTextContent("member");
-
-    const again = await openGroup(user, "Agents");
-    await user.click(within(again).getByLabelText("Agent Writer"));
-    await user.click(screen.getByRole("button", { name: "Update" }));
+    await openArea(user, "Agents");
+    await user.click(screen.getByRole("checkbox", { name: /^Agent Writer/ }));
     expect(screen.getByTestId("value")).toHaveTextContent(
       "member,fixed:agents:writer",
     );
@@ -99,54 +90,94 @@ describe("RolePicker", () => {
     ).toBeVisible();
   });
 
-  it("takes a whole group with its checkbox, skipping roles the viewer cannot grant", async () => {
+  it("keeps the last required role", async () => {
     const user = userEvent.setup();
     render(<Harness />);
-
-    await openGroup(user, "Agents");
-    // The viewer lacks agent:configure-runtime, so the runtime role stays out.
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all Agents roles" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Update" }));
-    expect(screen.getByTestId("value")).toHaveTextContent(
-      "member,fixed:agents:reader,fixed:agents:writer",
-    );
-  });
-
-  it("refuses a role granting what the viewer lacks", async () => {
-    const user = userEvent.setup();
-    render(<Harness />);
-
-    const logs = await openGroup(user, "Logs & Audit");
-    expect(
-      within(logs).getByRole("checkbox", { name: "Log Admin" }),
-    ).toBeDisabled();
-    expect(
-      within(logs).getByRole("checkbox", { name: "Log Reader" }),
-    ).toBeEnabled();
-  });
-
-  it("clears one group with Clear and everything with Clear all", async () => {
-    const user = userEvent.setup();
-    render(
-      <Harness initial="member,fixed:agents:reader,fixed:mcp-gateways:reader" />,
-    );
-
-    await openGroup(user, "Agents");
-    await user.click(screen.getByRole("button", { name: "Clear" }));
-    await user.click(screen.getByRole("button", { name: "Update" }));
-    expect(screen.getByTestId("value")).toHaveTextContent(
-      "member,fixed:mcp-gateways:reader",
-    );
 
     await user.click(screen.getByRole("combobox", { name: "Roles" }));
-    await user.click(screen.getByRole("button", { name: "Clear all" }));
-    // An assignment needs at least one role.
-    expect(screen.getByRole("button", { name: "Update" })).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: /^Member/ }));
+    expect(screen.getByTestId("value")).toHaveTextContent("member");
   });
 
-  it("finds a fixed role by searching across groups", async () => {
+  it("takes a whole area with its checkbox, skipping roles the viewer cannot grant", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.click(screen.getByRole("combobox", { name: "Roles" }));
+    // The viewer holds log:read but not log:admin, so Log Admin stays out.
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select all Logs & Audit roles" }),
+    );
+    const value = screen.getByTestId("value");
+    expect(value).toHaveTextContent("fixed:logs:reader");
+    expect(value).not.toHaveTextContent("fixed:logs:admin");
+  });
+
+  it("refuses a role granting what the viewer lacks and says why", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await openArea(user, "Logs & Audit");
+    const locked = screen.getByRole("checkbox", { name: /^Log Admin/ });
+    expect(locked).toHaveAttribute("aria-disabled", "true");
+    await user.click(locked);
+    expect(screen.getByTestId("value")).toHaveTextContent(/^member$/);
+
+    await user.click(
+      screen.getByRole("button", { name: "Show what Log Admin grants" }),
+    );
+    expect(screen.getByText(/You can't grant this/)).toBeVisible();
+  });
+
+  it("unfolds a role's permissions in words, never as raw keys", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await openArea(user, "Agents");
+    await user.click(
+      screen.getByRole("button", { name: "Show what Agent Writer grants" }),
+    );
+    const granted = screen.getByRole("list", { name: "3 permissions" });
+    expect(within(granted).getByText("View agents")).toBeVisible();
+    expect(within(granted).getByText("Create agents")).toBeVisible();
+    expect(granted).not.toHaveTextContent(":");
+    // Nothing floats over the menu.
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("leaves out a stored permission that no longer exists", async () => {
+    vi.mocked(useRoles).mockReturnValue({
+      data: [
+        {
+          id: "member",
+          role: "member",
+          name: "Member",
+          predefined: true,
+          permission: { agent: ["read"] },
+        },
+        {
+          id: "legacy",
+          role: "legacy",
+          name: "Legacy",
+          predefined: false,
+          permission: { agent: ["read", "configure-runtime"] },
+        },
+      ],
+      isPending: false,
+    } as unknown as ReturnType<typeof useRoles>);
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await openArea(user, "Custom roles");
+    await user.click(
+      screen.getByRole("button", { name: "Show what Legacy grants" }),
+    );
+    const granted = screen.getByRole("list", { name: "1 permission" });
+    expect(granted).toHaveTextContent("View agents");
+    expect(granted).not.toHaveTextContent("configure-runtime");
+  });
+
+  it("finds a granular role by searching across areas", async () => {
     const user = userEvent.setup();
     render(<Harness />);
 
@@ -155,11 +186,9 @@ describe("RolePicker", () => {
       screen.getByRole("textbox", { name: "Search roles" }),
       "gateway writer",
     );
-    const results = screen.getByRole("list", { name: "Matching roles" });
     await user.click(
-      within(results).getByRole("checkbox", { name: /^MCP Gateway Writer/ }),
+      screen.getByRole("checkbox", { name: /^MCP Gateway Writer/ }),
     );
-    await user.click(screen.getByRole("button", { name: "Update" }));
     expect(screen.getByTestId("value")).toHaveTextContent(
       "member,fixed:mcp-gateways:writer",
     );

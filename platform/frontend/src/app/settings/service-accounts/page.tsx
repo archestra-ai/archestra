@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import { openRowOnPlainClick } from "@/components/agent-pages/row-click-shield";
+import { AssignedRoles } from "@/components/assigned-roles";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
@@ -31,7 +32,6 @@ import { SearchInput } from "@/components/search-input";
 import { AccountHealthBadge } from "@/components/service-account-status-badge";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -69,7 +69,6 @@ import {
   getAccountHealth,
 } from "@/lib/service-account-status";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { formatRoleName } from "@/lib/utils/role";
 import { useSetSettingsAction } from "../layout";
 import { CreateServiceAccountDialog } from "./_parts/create-service-account-dialog";
 
@@ -293,8 +292,9 @@ export default function ServiceAccountsSettingsPage() {
       {
         accessorKey: "role",
         header: "Roles",
-        size: 128,
-        cell: ({ row }) => <RolesCell role={row.original.role} />,
+        // Room for two role names side by side.
+        size: 280,
+        cell: ({ row }) => <AssignedRoles role={row.original.role} />,
       },
       {
         accessorKey: "disabled",
@@ -608,40 +608,6 @@ function DescriptionNote({ description }: { description: string }) {
       </TooltipTrigger>
       <TooltipContent className="max-w-xs whitespace-pre-line text-left">
         {description}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function RolesCell({ role }: { role: string }) {
-  const roles = role.split(",").map((value) => formatRoleName(value.trim()));
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <UnstyledButton
-          type="button"
-          aria-label={`View assigned roles: ${roles.join(", ")}`}
-          className="flex min-w-0 max-w-full items-center gap-1"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <Badge variant="secondary" className="min-w-0 shrink">
-            <span className="truncate">{roles[0]}</span>
-          </Badge>
-          {roles.length > 1 && (
-            <span className="shrink-0 text-xs text-muted-foreground">
-              +{roles.length - 1}
-            </span>
-          )}
-        </UnstyledButton>
-      </TooltipTrigger>
-      <TooltipContent>
-        <div className="flex max-w-xs flex-wrap gap-1">
-          {roles.map((name) => (
-            <Badge key={name} variant="secondary">
-              {name}
-            </Badge>
-          ))}
-        </div>
       </TooltipContent>
     </Tooltip>
   );

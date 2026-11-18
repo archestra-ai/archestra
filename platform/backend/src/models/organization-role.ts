@@ -603,17 +603,21 @@ class OrganizationRoleModel {
     limit: number;
     offset: number;
     name?: string;
+    /** Leave out the built-in roles: only what the organization authored. */
+    customOnly?: boolean;
     isAdmin: boolean;
   }): Promise<{ data: OrganizationRole[]; total: number }> {
-    const { organizationId, limit, offset, name, isAdmin } = params;
+    const { organizationId, limit, offset, name, customOnly, isAdmin } = params;
 
     const normalizedSearch = name?.trim().toLowerCase();
-    const predefinedRoles = OrganizationRoleModel.getPredefinedOnly(
-      organizationId,
-    ).filter((role) => {
-      if (!normalizedSearch) return true;
-      return role.name.toLowerCase().includes(normalizedSearch);
-    });
+    const predefinedRoles = customOnly
+      ? []
+      : OrganizationRoleModel.getPredefinedOnly(organizationId).filter(
+          (role) => {
+            if (!normalizedSearch) return true;
+            return role.name.toLowerCase().includes(normalizedSearch);
+          },
+        );
 
     if (!isAdmin) {
       const pagedPredefined = predefinedRoles.slice(offset, offset + limit);

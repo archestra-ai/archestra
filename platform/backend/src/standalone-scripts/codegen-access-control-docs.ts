@@ -190,9 +190,9 @@ Every organization has these four roles. You cannot edit or delete them.
 
 ${generatePredefinedRolesSections()}
 
-## Fixed Roles
+## Granular Roles
 
-Each fixed role grants one slice of the permissions below, so you can give a user, team, or service account exactly the access it needs without writing a custom role. Assign as many as you like; their permissions add up. You cannot edit or delete them.
+Each granular role grants one slice of the permissions below, so you can give a user, team, or service account exactly the access it needs without writing a custom role. Assign as many as you like; their permissions add up. You cannot edit or delete them.
 
 ${generateFixedRolesTable()}
 <span id="llm-api-permissions"></span>

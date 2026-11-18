@@ -190,11 +190,11 @@ describe("AuthSettingsPage", () => {
     );
     await user.click(screen.getByRole("option", { name: "24 hours" }));
 
-    // Default roles: retain member and add admin. The picker stages the
-    // choice until Update.
+    // Default roles: retain member and add admin. The picker applies each
+    // choice at once; Escape closes it.
     await user.click(screen.getByTestId("default-member-role-select"));
     await user.click(screen.getByRole("checkbox", { name: /^Admin/ }));
-    await user.click(screen.getByRole("button", { name: "Update" }));
+    await user.keyboard("{Escape}");
 
     await user.click(screen.getByRole("button", { name: "Save" }));
 

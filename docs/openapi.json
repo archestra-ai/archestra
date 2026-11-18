@@ -497006,6 +497006,18 @@
             "in": "query",
             "name": "name",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "custom"
+              ]
+            },
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "description": "Limit the list to one kind of role. `custom` leaves out the built-in roles, which cannot be edited."
           }
         ],
         "responses": {

@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "What each built-in role can do, and every permission a custom role can hold"
 order: 2
-lastUpdated: 2026-11-14
+lastUpdated: 2026-11-18
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -82,15 +82,14 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Teams | `read` |
 
 
-## Fixed Roles
+## Granular Roles
 
-Each fixed role grants one slice of the permissions below, so you can give a user, team, or service account exactly the access it needs without writing a custom role. Assign as many as you like; their permissions add up. You cannot edit or delete them.
+Each granular role grants one slice of the permissions below, so you can give a user, team, or service account exactly the access it needs without writing a custom role. Assign as many as you like; their permissions add up. You cannot edit or delete them.
 
 | Group | Role | Identifier | Permissions |
 |-------|------|------------|-------------|
 | Agents | Agent Reader | `fixed:agents:reader` | `agent:read` |
 | Agents | Agent Writer | `fixed:agents:writer` | `agent:read`, `agent:create`, `agent:delete` |
-| Agents | Agent Runtime Configurator | `fixed:agents:runtime-configurator` | `agent:read`, `agent:configure-runtime` |
 | Skills | Skill Reader | `fixed:skills:reader` | `skill:read` |
 | Skills | Skill Writer | `fixed:skills:writer` | `skill:read`, `skill:create`, `skill:delete` |
 | Plugins | Plugin Reader | `fixed:plugins:reader` | `plugin:read` |
@@ -124,6 +123,8 @@ Each fixed role grants one slice of the permissions below, so you can give a use
 | LLM Costs & Limits | Cost Reader | `fixed:llm-costs:reader` | `llmCost:read` |
 | LLM Costs & Limits | Limit Reader | `fixed:llm-limits:reader` | `llmLimit:read` |
 | LLM Costs & Limits | Limit Writer | `fixed:llm-limits:writer` | `llmLimit:read`, `llmLimit:create`, `llmLimit:update`, `llmLimit:delete` |
+| LLM Costs & Limits | Cost Export Reader | `fixed:cost-exports:reader` | `costExport:read` |
+| LLM Costs & Limits | Cost Export Writer | `fixed:cost-exports:writer` | `costExport:read`, `costExport:create`, `costExport:update`, `costExport:delete` |
 | Logs & Audit | Log Reader | `fixed:logs:reader` | `log:read` |
 | Logs & Audit | Log Admin | `fixed:logs:admin` | `log:read`, `log:admin` |
 | Logs & Audit | Audit Log Reader | `fixed:audit-log:reader` | `auditLog:read` |

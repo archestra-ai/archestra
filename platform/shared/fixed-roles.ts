@@ -36,7 +36,6 @@ interface FixedRoleGroup {
   roles: FixedRole[];
 }
 
-
 export const fixedRoleGroups: FixedRoleGroup[] = [
   group("agents", "Agents", [
     role(
@@ -50,12 +49,6 @@ export const fixedRoleGroups: FixedRoleGroup[] = [
       "Agent Writer",
       "Create agents and manage the deleted ones",
       { agent: ["read", "create", "delete"] },
-    ),
-    role(
-      "agents:runtime-configurator",
-      "Agent Runtime Configurator",
-      "Create runtime-backed agents and change their runtime configuration",
-      { agent: ["read", "configure-runtime"] },
     ),
   ]),
   group("skills", "Skills", [
@@ -252,6 +245,18 @@ export const fixedRoleGroups: FixedRoleGroup[] = [
       "Limit Writer",
       "Create, edit, and remove token and spend limits",
       { llmLimit: ["read", "create", "update", "delete"] },
+    ),
+    role(
+      "cost-exports:reader",
+      "Cost Export Reader",
+      "View scheduled cost exports and their run status",
+      { costExport: ["read"] },
+    ),
+    role(
+      "cost-exports:writer",
+      "Cost Export Writer",
+      "Schedule, change, run, and delete cost exports",
+      { costExport: ["read", "create", "update", "delete"] },
     ),
   ]),
   group("logs", "Logs & Audit", [

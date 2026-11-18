@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import {
@@ -43,7 +43,10 @@ export function RoleEditPage({ roleId }: { roleId: string }) {
   const { data: role, isPending, isLoadingError, refetch } = useRole(roleId);
   const { data: grantable } = useAllPermissions();
   const updateMutation = useUpdateRole();
-  const detailHref = `/settings/roles/${roleId}`;
+  // Back, Cancel and Save all return to where the edit was opened from: the
+  // roles table (its pencil adds `?from=list`) or the role's own page.
+  const fromList = useSearchParams().get("from") === "list";
+  const returnHref = fromList ? "/settings/roles" : `/settings/roles/${roleId}`;
   const form = useForm<RoleFormValues>({
     defaultValues: { name: "", description: "", permission: {} },
     values: role
@@ -68,10 +71,14 @@ export function RoleEditPage({ roleId }: { roleId: string }) {
       ),
       documentTitle: role ? `Edit ${role.name}` : "Edit role",
       icon: role ? <RoleTypeIcon predefined={role.predefined} /> : undefined,
-      backLink: <PageBackLink href={detailHref}>Back to role</PageBackLink>,
+      backLink: (
+        <PageBackLink href={returnHref}>
+          {fromList ? "Back to roles" : "Back to role"}
+        </PageBackLink>
+      ),
     });
     return () => setPageHeader(null);
-  }, [setPageHeader, role, detailHref]);
+  }, [setPageHeader, role, returnHref, fromList]);
 
   // The list page's Create button would otherwise stay in the header.
   useEffect(() => {
@@ -87,7 +94,7 @@ export function RoleEditPage({ roleId }: { roleId: string }) {
       if (open) return;
       const next = pendingHrefRef.current;
       pendingHrefRef.current = null;
-      router.push(next ?? detailHref);
+      router.push(next ?? returnHref);
     },
   });
   const requestNavigate = useCallback(
@@ -115,7 +122,7 @@ export function RoleEditPage({ roleId }: { roleId: string }) {
         onSuccess: () => {
           // The saved values are the new baseline, so leaving no longer asks.
           form.reset(values);
-          router.push(detailHref);
+          router.push(returnHref);
         },
       },
     );
@@ -140,7 +147,7 @@ export function RoleEditPage({ roleId }: { roleId: string }) {
     );
   }
   if (role.predefined) {
-    return <ClientRedirect to={detailHref} />;
+    return <ClientRedirect to={returnHref} />;
   }
   return (
     <Form {...form}>
@@ -162,7 +169,7 @@ export function RoleEditPage({ roleId }: { roleId: string }) {
               size="sm"
               type="button"
               variant="outline"
-              onClick={() => requestNavigate(detailHref)}
+              onClick={() => requestNavigate(returnHref)}
             >
               Cancel
             </Button>

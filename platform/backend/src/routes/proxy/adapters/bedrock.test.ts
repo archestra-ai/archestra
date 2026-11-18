@@ -1296,6 +1296,8 @@ describe("Bedrock structured-output fallback", () => {
     expect(seen[1].inferenceConfig).toEqual({ maxTokens: 100 });
     expect(seen[1].messages).toEqual(seen[0].messages);
     expect(response.output?.message?.content?.[0]).toEqual({ text: "ok" });
+    // The caller stores this object as the request sent to the model.
+    expect(request).not.toHaveProperty("outputConfig");
   });
 
   test("streaming retries without outputConfig before yielding events", async () => {

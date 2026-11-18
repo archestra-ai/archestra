@@ -2,6 +2,7 @@ import { HttpResponse, http } from "msw";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
+  InteractionModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
   VirtualApiKeyModel,
@@ -313,6 +314,16 @@ for (const stream of [false, true]) {
         true,
         false,
       ]);
+      // The log keeps the constraint the client asked for, and shows that
+      // the request the model accepted carried none.
+      const logged = await InteractionModel.findAllPaginated({
+        limit: 1,
+        offset: 0,
+      });
+      expect(logged.data[0].request).toHaveProperty("outputConfig");
+      expect(logged.data[0].processedRequest).not.toHaveProperty(
+        "outputConfig",
+      );
     },
   );
 }

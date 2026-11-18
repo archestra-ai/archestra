@@ -1873,11 +1873,17 @@ function stripBedrockSamplingParams(
  * is then unconstrained, which is what the caller got before the proxy forwarded
  * the constraint. A schema error from a model that supports the field is not
  * retried.
+ *
+ * When the retry is accepted, the field is also removed from `request`: the
+ * caller stores that object as the request sent to the model, and a later
+ * attempt with it must not send the refused field again.
  */
-async function withOutputConfigFallback<TResult>(
-  input: BedrockCommandInput,
-  run: (input: BedrockCommandInput) => Promise<TResult>,
-): Promise<TResult> {
+async function withOutputConfigFallback<TResult>(params: {
+  request: BedrockRequest;
+  input: BedrockCommandInput;
+  run: (input: BedrockCommandInput) => Promise<TResult>;
+}): Promise<TResult> {
+  const { request, input, run } = params;
   try {
     return await run(input);
   } catch (error) {
@@ -1888,7 +1894,10 @@ async function withOutputConfigFallback<TResult>(
       { provider: "bedrock", modelId: input.modelId },
       "[llm-proxy] model has no structured output support; retrying without outputConfig",
     );
-    return run({ ...input, outputConfig: undefined });
+    const result = await run({ ...input, outputConfig: undefined });
+    delete request.outputConfig;
+    bedrockCommandContextCache.delete(request);
+    return result;
   }
 }
 
@@ -2004,9 +2013,11 @@ export const bedrockAdapterFactory: LLMProvider<
       strip: stripBedrockSamplingParams,
       logContext: { provider: "bedrock", modelId: commandInput.modelId },
       run: (input) =>
-        withOutputConfigFallback(input, (attempt) =>
-          bedrockClient.converse(request.modelId, attempt),
-        ),
+        withOutputConfigFallback({
+          request,
+          input,
+          run: (attempt) => bedrockClient.converse(request.modelId, attempt),
+        }),
     });
 
     // Convert response to our internal format with decoded tool names.
@@ -2090,9 +2101,12 @@ export const bedrockAdapterFactory: LLMProvider<
       strip: stripBedrockSamplingParams,
       logContext: { provider: "bedrock", modelId: commandInput.modelId },
       run: (input) =>
-        withOutputConfigFallback(input, (attempt) =>
-          bedrockClient.converseStream(request.modelId, attempt),
-        ),
+        withOutputConfigFallback({
+          request,
+          input,
+          run: (attempt) =>
+            bedrockClient.converseStream(request.modelId, attempt),
+        }),
     });
   },
 

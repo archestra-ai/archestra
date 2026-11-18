@@ -1,9 +1,18 @@
 "use client";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect, useState } from "react";
+import {
+  hashKey,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { appLifecycle } from "@/lib/app-lifecycle";
-import { seedShellQueries, useSession } from "@/lib/auth/auth.query";
+import {
+  authQueryKeys,
+  seedShellQueries,
+  useAllPermissions,
+  useSession,
+} from "@/lib/auth/auth.query";
 import type { ShellSeed } from "@/lib/auth/shell-seed.server";
 import {
   clearPersistedQueryCache,
@@ -63,6 +72,7 @@ export const ArchestraQueryClientProvider = ({
   return (
     <QueryClientProvider client={queryClient}>
       <PersistedQueryCacheScope client={queryClient} />
+      <PermissionScopedCache client={queryClient} />
       {children}
     </QueryClientProvider>
   );
@@ -86,6 +96,35 @@ function PersistedQueryCacheScope({ client }: { client: QueryClient }) {
     }
     syncPersistedQueryCacheScope(client, `${userId}:${organizationId}`);
   }, [client, isPending, userId, organizationId]);
+
+  return null;
+}
+
+/**
+ * Marks everything else in the cache outdated once the viewer's permissions
+ * change. The lists and details held there were answered for the previous
+ * role, and each would otherwise stay on screen until its own stale time ran
+ * out. A refetch that returns the same map keeps the same object, so only a
+ * real change gets here.
+ */
+function PermissionScopedCache({ client }: { client: QueryClient }) {
+  const { data: permissions } = useAllPermissions();
+  const previousPermissions = useRef(permissions);
+
+  useEffect(() => {
+    const previous = previousPermissions.current;
+    previousPermissions.current = permissions;
+    if (!previous || !permissions || previous === permissions) return;
+    void client.invalidateQueries(
+      {
+        // All but the map itself, which is what just answered.
+        predicate: (query) =>
+          query.queryHash !== hashKey(authQueryKeys.userPermissions()),
+      },
+      // A request already on its way is answered for the new role.
+      { cancelRefetch: false },
+    );
+  }, [client, permissions]);
 
   return null;
 }

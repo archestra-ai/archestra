@@ -112,3 +112,46 @@ describe("EditableAssistantMessage actions", () => {
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
   });
 });
+
+describe("EditableAssistantMessage policy previews", () => {
+  const text = "Explanation.\n\n```diff\n-old\n+new\n```";
+  const policyDiffReferences = [
+    {
+      before: "old",
+      after: "new",
+      path: "organization.appa.toml",
+      changes: JSON.stringify(["-old", "+new"]),
+    },
+  ];
+
+  it("shows the explanation once and retains the original diff when editing", () => {
+    const props = {
+      ...baseProps,
+      text,
+      policyDiffReferences,
+      onSave: vi.fn(),
+    };
+    const { rerender } = render(
+      <EditableAssistantMessage {...props} isEditing={false} />,
+    );
+    expect(screen.getByText("Explanation.")).toBeInTheDocument();
+    expect(screen.queryByText(/-old/)).toBeNull();
+
+    rerender(<EditableAssistantMessage {...props} isEditing />);
+    expect(screen.getByRole("textbox")).toHaveValue(text);
+  });
+
+  it("does not leave an empty bubble when the whole part repeats a preview", () => {
+    const { container } = render(
+      <EditableAssistantMessage
+        {...baseProps}
+        text={"```diff\n-old\n+new\n```"}
+        policyDiffReferences={policyDiffReferences}
+        showActions
+        isEditing={false}
+        onSave={vi.fn()}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+});

@@ -8,25 +8,12 @@ import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import { cn } from "@/lib/utils/tailwind";
+import {
+  parsePolicyChange,
+  parsePolicyOutput,
+} from "./openappa-policy-change.utils";
 import { PolicyDiff } from "./policy-diff";
 import { getPolicyDiffRows } from "./policy-diff-rows";
-
-type PolicyChange = {
-  stage?: "preview";
-  delivery: "revision" | "pull_request";
-  before: string;
-  after: string;
-  /** The backend's unified diff, trimmed to the changed hunks. */
-  diff?: string;
-  path?: string;
-  revision?: number;
-  number?: number;
-  url?: string;
-  warnings?: string[];
-  errors?: string[];
-  enforcement?: { enabled: boolean; reason?: string };
-  effective?: { error: string | null; batteries: { status: string }[] };
-};
 
 export function OpenAppaPolicyChange({
   output,
@@ -264,7 +251,7 @@ function GithubSyncTip() {
  * preview or an unreadable result.
  */
 export function getValidationSaveResult(output: unknown): SaveResult | null {
-  const change = parseOutput(output);
+  const change = parsePolicyOutput(output);
   if (!change || change.stage === "preview") return null;
   const pullUrl =
     change.delivery === "pull_request" &&
@@ -319,53 +306,6 @@ export function isOpenAppaPolicyChange(
   validationChange = false,
 ): boolean {
   return parsePolicyChange(output, validationChange) !== null;
-}
-
-function parseOutput(output: unknown): Record<string, unknown> | null {
-  let candidate = output;
-  if (candidate && typeof candidate === "object") {
-    if ("isError" in candidate && candidate.isError === true) return null;
-    if ("structuredContent" in candidate) {
-      candidate = candidate.structuredContent;
-    } else if ("content" in candidate) {
-      candidate = candidate.content;
-    }
-  }
-  if (Array.isArray(candidate)) {
-    candidate = candidate.find(
-      (item) => item && typeof item === "object" && item.type === "text",
-    )?.text;
-  }
-  if (typeof candidate === "string") {
-    try {
-      candidate = JSON.parse(candidate);
-    } catch {
-      return null;
-    }
-  }
-  if (!candidate || typeof candidate !== "object") return null;
-  return candidate as Record<string, unknown>;
-}
-
-function parsePolicyChange(
-  output: unknown,
-  validationChange = false,
-): PolicyChange | null {
-  const value = parseOutput(output);
-  if (!value) return null;
-  // A validation preview never changes the policy, so it has no diff card.
-  if (
-    validationChange &&
-    (value.stage === "preview" || value.before === value.after)
-  )
-    return null;
-  if (
-    (value.delivery !== "revision" && value.delivery !== "pull_request") ||
-    typeof value.before !== "string" ||
-    typeof value.after !== "string"
-  )
-    return null;
-  return value as PolicyChange;
 }
 
 /**

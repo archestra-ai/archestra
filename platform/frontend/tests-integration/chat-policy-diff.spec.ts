@@ -66,6 +66,10 @@ test("reviews a large policy without expanding the chat, and keeps the review us
           input: {},
           output,
         },
+        {
+          type: "text",
+          text: `The policy changes are ready for review.\n\n\`\`\`diff\n${output.structuredContent.diff}\n\`\`\`\n\nPlease review before applying.`,
+        },
       ],
     },
   ];
@@ -105,6 +109,15 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   await page.goto(`/chat/${conversation.id}`);
   const preview = page.getByRole("region", { name: "Diff preview" });
   await expect(preview).toBeVisible();
+  await expect(
+    page.getByText("The policy changes are ready for review.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Please review before applying.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Code block", exact: true }),
+  ).toHaveCount(0);
   await expect(page.getByText("9,001 added", { exact: true })).toBeVisible();
   await expect(page.getByText("9,001 removed", { exact: true })).toBeVisible();
   // The screenshot's five-digit line number must stay on a single line.

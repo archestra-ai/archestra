@@ -149,6 +149,7 @@ import {
   RemedyGuardrailsSteps,
 } from "./openappa-remedy-chain-card";
 import type { RemedyChain } from "./openappa-remedy-chains";
+import { collectPolicyDiffReferences } from "./policy-diff-deduplication";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -403,6 +404,10 @@ export function ChatMessages({
           }),
         ]),
       ),
+    [messages, getToolShortName],
+  );
+  const policyDiffReferences = useMemo(
+    () => collectPolicyDiffReferences(messages, getToolShortName),
     [messages, getToolShortName],
   );
   const groupedAskUserToolCallIds = useMemo(
@@ -1106,6 +1111,9 @@ export function ChatMessages({
                                         partIndex={i}
                                         partKey={partKey}
                                         text={parsedPart.text}
+                                        policyDiffReferences={policyDiffReferences
+                                          .get(message.id)
+                                          ?.get(i)}
                                         isEditing={editingPartKey === partKey}
                                         showActions={
                                           showActions && isLastParsedTextPart
@@ -1146,6 +1154,9 @@ export function ChatMessages({
                                   partIndex={i}
                                   partKey={partKey}
                                   text={part.text}
+                                  policyDiffReferences={policyDiffReferences
+                                    .get(message.id)
+                                    ?.get(i)}
                                   isEditing={editingPartKey === partKey}
                                   showActions={showActions}
                                   citationParts={citationParts}

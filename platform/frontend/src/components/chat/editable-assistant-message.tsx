@@ -16,6 +16,10 @@ import {
 import type { KnowledgeGraphCitationsProps } from "@/components/chat/knowledge-graph-citations";
 import { KnowledgeGraphCitations } from "@/components/chat/knowledge-graph-citations";
 import { MessageActions } from "@/components/chat/message-actions";
+import {
+  omitRepeatedPolicyDiffs,
+  type PolicyDiffReference,
+} from "./policy-diff-deduplication";
 
 interface EditableAssistantMessageProps {
   messageId: string;
@@ -25,6 +29,7 @@ interface EditableAssistantMessageProps {
   isEditing: boolean;
   showActions: boolean;
   citationParts?: KnowledgeGraphCitationsProps["parts"];
+  policyDiffReferences?: readonly PolicyDiffReference[];
   editDisabled?: boolean;
   isStreaming?: boolean;
   /** Omit for a read-only transcript: hides edit. */
@@ -54,6 +59,7 @@ export const EditableAssistantMessage = memo(function EditableAssistantMessage({
   isEditing,
   showActions,
   citationParts,
+  policyDiffReferences,
   editDisabled = false,
   isStreaming = false,
   onStartEdit,
@@ -79,8 +85,14 @@ export const EditableAssistantMessage = memo(function EditableAssistantMessage({
     () => (citationParts ? foldCitationSources(visibleText) : null),
     [citationParts, visibleText],
   );
-  const displayText =
-    folded && folded.entries.length > 0 ? folded.displayText : visibleText;
+  const displayText = useMemo(
+    () =>
+      omitRepeatedPolicyDiffs(
+        folded && folded.entries.length > 0 ? folded.displayText : visibleText,
+        policyDiffReferences,
+      ),
+    [folded, visibleText, policyDiffReferences],
+  );
 
   const handleStartEdit = () => {
     onStartEdit?.(partKey);
@@ -108,6 +120,8 @@ export const EditableAssistantMessage = memo(function EditableAssistantMessage({
       />
     );
   }
+
+  if (!displayText.trim()) return null;
 
   return (
     <Message from="assistant" className="group/message">

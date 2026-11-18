@@ -5,6 +5,7 @@ import {
   OAUTH_TOKEN_ID_PREFIX,
 } from "@archestra/shared";
 import { generateText, streamText } from "ai";
+import { vi } from "vitest";
 import { authorizeA2AModel } from "@/agents/a2a/oauth-model";
 import { a2aOAuthExecutionHeader } from "@/clients/a2a-oauth-execution";
 import {
@@ -23,6 +24,7 @@ import {
   ManagedOauthClientModel,
   ModelPoolModel,
   OAuthAccessTokenModel,
+  OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -99,6 +101,7 @@ describe("A2A OAuth authorization at actual proxy transport attempts", () => {
     config.api.port = (app.server.address() as AddressInfo).port;
   });
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app?.close();
     await new Promise<void>((resolve) => upstream?.close(() => resolve()));
   });
@@ -109,9 +112,15 @@ describe("A2A OAuth authorization at actual proxy transport attempts", () => {
       "pool",
       "timeout",
       "virtual-key-timeout",
+      "audit-lookup-failure",
     ] as const) {
       const virtualCredential = scenario === "virtual-key-timeout";
-      const failure = virtualCredential ? "timeout" : scenario;
+      const auditLookupFailure = scenario === "audit-lookup-failure";
+      const failure = virtualCredential
+        ? "timeout"
+        : auditLookupFailure
+          ? "drop"
+          : scenario;
       for (const revoked of [false, true]) {
         test(`${stream ? "stream" : "generate"} ${scenario}: ${revoked ? "revocation stops next attempt" : "valid retries succeed"}`, async ({
           makeAgent,
@@ -203,6 +212,11 @@ describe("A2A OAuth authorization at actual proxy transport attempts", () => {
                 model: ["gpt-4o-mini"],
               })
             : undefined;
+          if (auditLookupFailure) {
+            vi.spyOn(OAuthClientModel, "findByClientId").mockRejectedValue(
+              new Error("Synthetic audit lookup failure"),
+            );
+          }
           const model = authorizeA2AModel({
             agentId: agent.id,
             organizationId: agent.organizationId,
@@ -280,8 +294,10 @@ describe("A2A OAuth authorization at actual proxy transport attempts", () => {
             }
             for (const interaction of interactions) {
               expect(interaction).toMatchObject({
-                authenticatedAppId: oauthClient.id,
-                authenticatedAppName: oauthClient.name,
+                authenticatedAppId: auditLookupFailure ? null : oauthClient.id,
+                authenticatedAppName: auditLookupFailure
+                  ? null
+                  : oauthClient.name,
                 userId: null,
                 serviceAccountId: null,
                 authMethod: virtualCredential ? "virtual_key" : "internal",

@@ -1346,7 +1346,15 @@ async function handleObservedLLMProxy<
   // credential identity used by authorization, billing, or proxy limits.
   const a2aClient =
     oauthExecution && !authenticatedApp
-      ? await OAuthClientModel.findByClientId(oauthExecution.execution.clientId)
+      ? await OAuthClientModel.findByClientId(
+          oauthExecution.execution.clientId,
+        ).catch((error) => {
+          logger.warn(
+            { error },
+            "Failed to resolve A2A OAuth application for audit",
+          );
+          return null;
+        })
       : null;
   const a2aClientMetadata = a2aClient
     ? ManagedOauthClientMetadataSchema.safeParse(a2aClient.metadata).data

@@ -45,8 +45,10 @@ Tilt picks up the rest.
 3. `scripts/dev-vm-sync.py run 'pnpm install --frozen-lockfile'`. The pnpm
    store and the Rust build folder are shared, so this and Tilt's first run
    are fast.
-4. For the app: stop the running Tilt
-   (`ssh lima-archestra-dev 'tmux kill-session -t tilt'`), then start it here.
+4. For the app, Tilt must run here. Only one Tilt can run in the VM: all
+   copies share its ports (3000, 9000, 10350), its kind cluster and the
+   `archestra-dev` database. If one runs for another checkout, tell the user
+   and stop it only when they agree.
 5. When the user removes the worktree, first
    `mutagen sync terminate <folder>` and
    `ssh lima-archestra-dev 'rm -rf ~/sync/<folder>'`.
@@ -101,8 +103,10 @@ ssh lima-archestra-dev 'tmux ls'                     # what runs
 ssh lima-archestra-dev 'tmux kill-session -t tilt'   # stop Tilt
 ```
 
-- Check `tmux ls` before starting Tilt: one Tilt at a time in the VM, across
-  all synced checkouts. The user may run it in their own terminal instead.
+- Before starting Tilt, check `tmux ls` and `pgrep -af "tilt up"` over `ssh`:
+  one Tilt at a time in the VM, across all synced checkouts (shared ports,
+  cluster and database). If one runs, ask the user before stopping it; it may
+  be theirs, in their own terminal.
 - For a long job you wait on (a test suite), run `dev-vm-sync.py run` as a
   background shell command instead.
 

@@ -71,16 +71,14 @@ export function ExternalMcpSkillPage({ id }: { id: string }) {
           page to read the latest source bytes.
         </InlineNoticeText>
       </InlineNotice>
-      <div className="rounded-lg border p-6">
-        <SkillContentEditor
-          manifest={manifest}
-          files={skill.files}
-          onManifestChange={() => undefined}
-          onFilesChange={() => undefined}
-          readOnly
-          className="h-[calc(100vh-20rem)] min-h-[32rem]"
-        />
-      </div>
+      <SkillContentEditor
+        manifest={manifest}
+        files={skill.files}
+        onManifestChange={() => undefined}
+        onFilesChange={() => undefined}
+        readOnly
+        className="h-[calc(100vh-20rem)] min-h-[32rem]"
+      />
     </PageLayout>
   );
 }

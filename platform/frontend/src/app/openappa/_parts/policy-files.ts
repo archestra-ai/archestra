@@ -40,37 +40,6 @@ export type PolicyFile = {
   disabled: boolean;
 };
 
-export type PolicyTreeNode =
-  | { type: "dir"; name: string; path: string; children: PolicyTreeNode[] }
-  | { type: "file"; name: string; path: string; file: PolicyFile };
-
-/**
- * The files as folders: folders first, then files, each alphabetical. A folder
- * whose only child is a folder merges with it ("batteries/archestra"), as an
- * IDE's compact folders do.
- */
-export function buildPolicyTree(files: PolicyFile[]): PolicyTreeNode[] {
-  const top: PolicyTreeNode[] = [];
-  for (const file of files) {
-    let level = top;
-    let prefix = "";
-    for (const segment of file.path.split("/").slice(0, -1)) {
-      prefix = prefix ? `${prefix}/${segment}` : segment;
-      let dir = level.find(
-        (node): node is Extract<PolicyTreeNode, { type: "dir" }> =>
-          node.type === "dir" && node.name === segment,
-      );
-      if (!dir) {
-        dir = { type: "dir", name: segment, path: prefix, children: [] };
-        level.push(dir);
-      }
-      level = dir.children;
-    }
-    level.push({ type: "file", name: file.name, path: file.path, file });
-  }
-  return compact(sort(top));
-}
-
 /** The name of each `[[policy.tool]]` rule, with the line its name is on. */
 export function parsePolicyRules(
   content: string,
@@ -130,27 +99,4 @@ export function policyIncludeLinks(
     if (text.includes("]")) break;
   }
   return links;
-}
-
-function sort(nodes: PolicyTreeNode[]): PolicyTreeNode[] {
-  return nodes
-    .map((node) =>
-      node.type === "dir" ? { ...node, children: sort(node.children) } : node,
-    )
-    .sort((a, b) => {
-      if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-}
-
-function compact(nodes: PolicyTreeNode[]): PolicyTreeNode[] {
-  return nodes.map((node) => {
-    if (node.type === "file") return node;
-    let dir = node;
-    while (dir.children.length === 1 && dir.children[0].type === "dir") {
-      const only = dir.children[0];
-      dir = { ...only, name: `${dir.name}/${only.name}` };
-    }
-    return { ...dir, children: compact(dir.children) };
-  });
 }

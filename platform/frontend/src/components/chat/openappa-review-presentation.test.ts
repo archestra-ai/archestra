@@ -4,7 +4,6 @@ import {
   getReviewCardView,
   getReviewDecisionContent,
   parseJsonArguments,
-  REVIEW_STATUS_DESCRIPTION,
   reviveJsonStrings,
 } from "./openappa-review-presentation";
 
@@ -33,7 +32,7 @@ describe("parseJsonArguments", () => {
 });
 
 describe("getReviewCardView", () => {
-  it("shows the tool card with parsed arguments and the standard prompt", () => {
+  it("shows the tool card with parsed arguments", () => {
     expect(
       getReviewCardView({
         message: "Approve this call?",
@@ -48,7 +47,6 @@ describe("getReviewCardView", () => {
         title: "archestra__todo_write",
         input: { todos: [{ id: 1, content: "qa-hitl", status: "pending" }] },
       },
-      description: REVIEW_STATUS_DESCRIPTION,
     });
   });
 
@@ -61,7 +59,6 @@ describe("getReviewCardView", () => {
       }),
     ).toEqual({
       toolCard: { title: "Bash" },
-      description: REVIEW_STATUS_DESCRIPTION,
       coverage: ["first", "second"],
     });
   });
@@ -75,7 +72,6 @@ describe("getReviewCardView", () => {
       }),
     ).toEqual({
       toolCard: { title: "Bash" },
-      description: REVIEW_STATUS_DESCRIPTION,
       details: "The whole review.",
     });
   });
@@ -85,7 +81,6 @@ describe("getReviewCardView", () => {
       getReviewCardView({ message: "Old review.", reviewedTool: "Bash" }),
     ).toEqual({
       toolCard: { title: "Bash" },
-      description: REVIEW_STATUS_DESCRIPTION,
       details: "Old review.",
     });
   });
@@ -93,10 +88,8 @@ describe("getReviewCardView", () => {
   it("falls back to the message when the review names no tool", () => {
     expect(
       getReviewCardView({ message: "  Allow the agent to continue?  " }),
-    ).toEqual({ description: "Allow the agent to continue?" });
-    expect(getReviewCardView({ message: "" })).toEqual({
-      description: REVIEW_STATUS_DESCRIPTION,
-    });
+    ).toEqual({ details: "Allow the agent to continue?" });
+    expect(getReviewCardView({ message: "" })).toEqual({});
   });
 });
 

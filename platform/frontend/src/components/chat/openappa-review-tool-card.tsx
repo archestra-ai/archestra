@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircleIcon, ClockIcon } from "lucide-react";
+import { CheckCircleIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   Tool,
@@ -13,11 +13,6 @@ import {
   type ReviewDecision,
 } from "@/components/chat/openappa-review-presentation";
 import { Button } from "@/components/ui/button";
-import {
-  InlineNotice,
-  InlineNoticeBody,
-  InlineNoticeText,
-} from "@/components/ui/inline-notice";
 
 /**
  * An OpenAPPA review shown like Chat's tool approval: the reviewed tool's
@@ -69,15 +64,6 @@ export function OpenappaReviewToolCard({
         </ToolContent>
       ) : null}
       <div className="space-y-3 p-3">
-        <InlineNotice>
-          <ClockIcon />
-          <InlineNoticeBody>
-            <span className="font-medium">Approval required</span>
-            <InlineNoticeText className="whitespace-pre-wrap [overflow-wrap:anywhere]">
-              {view.description}
-            </InlineNoticeText>
-          </InlineNoticeBody>
-        </InlineNotice>
         {view.coverage ? (
           <div className="space-y-2 text-xs">
             <p className="font-medium">Approving also accepts:</p>

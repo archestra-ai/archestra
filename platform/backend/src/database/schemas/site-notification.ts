@@ -11,6 +11,8 @@ const siteNotificationsTable = pgTable("site_notification", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   isActive: boolean("is_active").notNull().default(true),
+  /** When false, the banner shows no close button and ignores past dismissals. */
+  dismissible: boolean("dismissible").notNull().default(true),
 });
 
 export default siteNotificationsTable;

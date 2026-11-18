@@ -1,6 +1,7 @@
 # Individual Preferences
 
 - Read `CLAUDE_LOCAL.md` in this directory if it exists (untracked individual preferences).
+- Before running pnpm, cargo, tilt, kubectl or tests, check `echo $ARCHESTRA_DEV_MODE`. If it is `2`, the stack runs in the dev VM: use the `archestra-dev-vm` skill instead of the commands below.
 
 ## Working Directory
 

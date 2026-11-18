@@ -1,8 +1,10 @@
 # Dev VM (prototype)
 
 Runs the whole Archestra dev stack (Tilt, backend, frontend, kind, PostgreSQL,
-MCP server pods) inside a Lima VM. The Mac only runs Lima, your browser and
-your editor. It is a trial next to the normal Mac setup, which is not changed.
+MCP server pods) in a Lima VM, so code from npm, cargo and container images
+never runs on your Mac. You keep editing a normal checkout on the Mac, with
+your own editor and agent. It is a trial next to the normal Mac setup, which
+is not changed.
 
 ```
  Mac                                   Lima VM (Ubuntu, own disk)
@@ -10,7 +12,8 @@ your editor. It is a trial next to the normal Mac setup, which is not changed.
  browser  localhost:13000  ──────────▶ :3000  frontend (next dev)
           localhost:19000  ──────────▶ :9000  backend
           localhost:20350  ──────────▶ :10350 Tilt UI
- git repo ── push / fetch over SSH ──▶ ~/archestra (no remotes)
+ checkout ── Mutagen, one way ───────▶ ~/sync/<folder> (no .git)
+          ◀── pull: code only ───────
                                        docker ─ kind "archestra"
  ~/.aws ~/.ssh ~/.kube  ✗ not visible     postgres, MCP pods, sandbox
  Mac 127.0.0.1 services ✗ blocked by Lima (hostLoopback: false)
@@ -19,133 +22,164 @@ your editor. It is a trial next to the normal Mac setup, which is not changed.
 ## Setup
 
 ```sh
-brew install lima
-platform/scripts/dev-vm.sh create   # VM, toolchain, code, kind cluster, .env
-platform/scripts/dev-vm.sh shell    # a shell in the VM's platform/; then: tilt up
+brew install lima mutagen-io/mutagen/mutagen
+platform/scripts/dev-vm.sh create       # the VM, its tools, the kind cluster, ~/.ssh/config
+echo 'export ARCHESTRA_DEV_MODE=2' >> ~/.zshenv   # tells git hooks and agents you use the VM
+cd platform
+echo 'I work in the dev VM with the one-way Mutagen sync. Use the archestra-dev-vm skill.' >> CLAUDE_LOCAL.md
+scripts/dev-vm-sync.py start            # sync this checkout into the VM
+scripts/dev-vm-sync.py run              # a shell there: pnpm install, then tilt up
 ```
-
-Tell the repo's git hooks that you use the VM, once, in `~/.zshenv`:
-
-```sh
-export ARCHESTRA_DEV_MODE=2   # 1: edit in the VM, 2: edit on the Mac (one-way sync); unset or 0: the Mac setup
-```
-
-With 1 or 2, creating a worktree no longer installs dependencies on the Mac,
-and the pre-commit check, which needs them, is skipped with a note. A git
-client that doesn't read your shell's variables still behaves as unset.
 
 Open http://localhost:13000 (admin@example.com / password). The first
 `tilt up` takes about 8 minutes: the pnpm store is empty, and prebuilt napi
 addons exist only for linux x64, so on Apple Silicon every Rust addon compiles
 from source.
 
-`create` is safe to run again, also while Tilt runs; it skips what is done. It
-pushes this repo's `main` (or `create <ref>`) into the VM, and writes the VM's
-settings into `~/archestra/platform/.env`: the forwarded frontend and API URLs,
-`ARCHESTRA_BETA=true`, the Agent Runtime URL, and no warm Agent Runtime pod.
+## Commands
 
-It also copies the macOS SDK of the Mac's Command Line Tools
-(`xcode-select --install`) into the VM, about 300 MB of headers and library
-stubs. With it, Tilt's `archestra-cli-build` builds the `archestra` program
-for the Mac as well as for the VM, so the install command on the Connect page
-works on the Mac with the program of your checkout.
+All from the Mac. `dev-vm.sh` and `dev-vm-sync.py` are in `platform/scripts/`;
+run `dev-vm-sync.py` from inside the checkout.
 
-Resources: 6 CPUs, 12 GiB, 100 GiB disk by default; set
-`ARCHESTRA_DEV_VM_CPUS`, `ARCHESTRA_DEV_VM_MEMORY`, `ARCHESTRA_DEV_VM_DISK`
-before the first `create`. An Agent Runtime run of the default tier M asks for
-4 CPUs and 8 GiB, which needs about 10 CPUs and 16 GiB for the VM.
-
-`dev-vm.sh shell <command>` runs one command in the VM's `platform/`
-(`-w <name>` for a worktree), `dev-vm.sh stop` frees the VM's memory; the
-disk, caches and cluster stay.
-
-## Getting code in and out
-
-The VM has no GitHub credentials and its repo has no remotes. Code moves only
-between the Mac and the VM, over Lima's SSH:
+The VM:
 
 ```sh
-platform/scripts/dev-vm.sh push <branch>   # Mac -> VM, as mac/<branch>, only the new commits
-
-platform/scripts/dev-vm.sh ssh-config      # lines for the top of ~/.ssh/config (once)
-platform/scripts/dev-vm.sh remote          # "vm" remote in this repo (once)
-git fetch vm                               # VM -> Mac
-git log -p origin/main..vm/<branch>        # review: code in the VM is untrusted
-git push origin vm/<branch>:<branch>       # GitHub, from the Mac only
+dev-vm.sh create                           # create or update the VM: tools, kind cluster, ~/.ssh/config
+dev-vm.sh start                            # start a stopped VM
+dev-vm.sh stop                             # stop it and free its memory; disk, caches and cluster stay
+dev-vm.sh status                           # is it running
+dev-vm.sh delete                           # delete the VM with its disk
+ssh lima-archestra-dev                     # a shell in the VM itself: docker, systemctl, logs
 ```
 
-Because GitHub only ever talks to the Mac, this also works for a private repo
-and for a shallow Mac clone.
-
-## Worktrees
-
-Use one VM for every checkout. `dev-vm.sh worktree <name> [base]` adds
-`~/worktrees/<name>` in the VM. All checkouts share the VM's `.env`, pnpm store
-and Rust build folder, so only the VM's first `tilt up` is slow. One Tilt at a
-time: stop the running one, then `dev-vm.sh shell -w <name>` and `tilt up`.
-
-## Editing on the Mac (one-way sync)
-
-Edit a normal checkout or worktree on the Mac, with your own editor and
-agent, and let the VM run a copy of it. [Mutagen](https://mutagen.io) keeps
-the copy up to date in one direction, Mac to VM, in well under a second.
+The checkout in it:
 
 ```sh
-brew install mutagen-io/mutagen/mutagen
-cd <checkout on the Mac>/platform                # after dev-vm.sh create and ssh-config
-scripts/dev-vm-sync.py start                     # copy to ~/sync/<folder name> in the VM
-scripts/dev-vm-sync.py run                       # a shell in the copy: pnpm install, tilt up
-scripts/dev-vm-sync.py run 'pnpm test'           # one command, in the folder you are in
-scripts/dev-vm-sync.py pull 'pnpm db:generate'   # a command that writes source files
+dev-vm-sync.py start                       # sync this checkout into the VM
+dev-vm-sync.py run                         # a shell in the VM copy, in the folder you are in
+dev-vm-sync.py run 'pnpm test'             # one command there
+dev-vm-sync.py pull 'pnpm db:generate'     # a command that writes source files: bring them back
+mutagen sync list                          # the synced checkouts
+mutagen sync terminate <folder name>       # stop syncing one, e.g. before removing its worktree
 ```
 
-- The VM gets what git tracks plus `platform/.env`. `start` writes that file
-  with the VM's settings when there is none; whatever you put in it is copied
-  into the VM. A `.env` that is a link is not copied.
-- `node_modules` and build output exist only in the VM. Nothing the VM writes
-  comes back, and a change it makes to a copied file is undone at once.
-- So a command that writes source files (`pnpm db:generate`, `pnpm add`,
-  `pnpm codegen`, `pnpm lint:fix`) goes through `pull`: it runs in the VM and
-  the files it changed are copied to the Mac, for you to review with
-  `git diff`. Files the Mac runs by itself are never copied: git hooks
-  (`.husky`), agent and editor settings (`.claude`, `.agents`, `.vscode`,
-  `AGENTS.md` and others), `.envrc`, `.github`. Don't edit on the Mac while a
-  `pull` runs.
-- Git stays on the Mac; the copy has no `.git`. Tilt's `husky-hooks` resource
-  is red there, and the repo's commit check can't run on either side: run
-  `pnpm lint` and `pnpm type-check` with `run` before you commit. With
-  `ARCHESTRA_DEV_MODE=2` the pre-commit hook lets the commit through.
-- Don't run `pnpm` on the Mac. Without `ARCHESTRA_DEV_MODE`, the repo's hook
-  installs dependencies there when you create a worktree.
-- One Tilt at a time in the VM: stop the one in `~/archestra` first.
+Checks:
 
-## Editing in the VM
-
-With the lines from `dev-vm.sh ssh-config`, Remote-SSH in VS Code or Cursor
-reaches the VM as `lima-archestra-dev`, folder `~/archestra/platform`. Note
-that Remote-SSH trusts the remote: the extension's own security note says a
-compromised remote could run code on your machine. Turn these off in the
-editor's user settings:
-
-```json
-"remote.SSH.enableAgentForwarding": false,
-"git.terminalAuthentication": false
+```sh
+.agents/skills/archestra-dev-vm/check.sh   # the VM can't see your files, keys or localhost; this checkout is synced
 ```
 
-## Agent skill
+It checks, and prints a fix for each failure:
 
-`.agents/skills/archestra-dev-vm` tells coding agents how to work through the
-VM. Its `check.sh` checks the setup from the Mac: the VM's isolation settings,
-ssh, the `vm` remote, and that the VM holds no credentials and no git remotes.
+- no Mac folders are shared into the VM, and your SSH agent isn't passed in;
+- the VM can't reach services on your Mac's `localhost`;
+- `ssh lima-archestra-dev` works, and this checkout is synced;
+- the VM holds no git, GitHub, Docker, SSH, AWS or gcloud credentials.
 
-## Not tried in this prototype
+## Daily use
 
-- With the one-way sync: `pnpm add`, `pnpm codegen` and `pnpm lint:fix`
-  through `pull` (`pnpm db:generate` works), a VM restart or Mac sleep while
-  syncing, and a checkout that already has `node_modules` on the Mac.
+- Edit on the Mac, commit on the Mac. Don't run `pnpm` or `cargo` there.
+- Before a commit, run `pnpm lint` and `pnpm type-check` with `run`: the
+  pre-commit check is skipped in this setup.
+- For each new worktree, run `dev-vm-sync.py start` in it. One Tilt at a time
+  in the VM: stop the running one first.
+- After a Node or Rust version bump in the repo, run `dev-vm.sh create` again.
 
-- A full Agent Runtime turn with a real model (the VM has no LLM key). The run
-  pod starts and reaches the backend.
-- The code sandbox is off by default as on the Mac; set
-  `ARCHESTRA_CODE_RUNTIME_ENABLED=true` in the VM's `.env`.
-- MinIO and the observability stack.
+## How it works
+
+### The VM
+
+Made by `dev-vm.sh create` from `archestra-dev.yaml` and `setup-vm.sh`.
+
+- Ubuntu, on its own disk. No Mac folders, no SSH agent, no credentials.
+- It can't reach your Mac's `localhost`. Lima enforces this on the Mac side,
+  so even root in the VM can't undo it.
+- Only three ports come out, shifted by 10000 so they don't clash with a stack
+  on the Mac: app 13000, API 19000, Tilt 20350.
+- Tools: Node at CI's version, Rust at `rust-toolchain.toml`'s, plus kind,
+  kubectl, helm and Tilt. Every download is pinned and checksummed.
+- Docker runs inside the VM, and kind runs on it.
+- Agent Runtime pods in kind call the backend through a service in the VM,
+  `archestra-kind-backend-bridge`. The backend listens only on the VM's
+  `127.0.0.1:9000`, which pods can't reach; the service forwards the kind
+  network's address (`172.18.0.1:9000`, the Agent Runtime URL in `.env`) to
+  it. On the Mac setup, Docker Desktop's `host.docker.internal` does this.
+- `create` is safe to run again, also while Tilt runs: it skips what is done.
+- Default size: 6 CPUs, 12 GiB memory, 100 GiB disk. To change it, set
+  `ARCHESTRA_DEV_VM_CPUS`, `ARCHESTRA_DEV_VM_MEMORY` or `ARCHESTRA_DEV_VM_DISK`
+  before the first `create`. An Agent Runtime run of tier M needs about
+  10 CPUs and 16 GiB.
+
+### The sync
+
+Started by `dev-vm-sync.py start`, done by [Mutagen](https://mutagen.io).
+
+- Copies the checkout to `~/sync/<folder name>` in the VM, in under a second.
+- Copies every file your `.gitignore` files don't ignore, new files too, plus
+  `platform/.env`.
+- One way only: the VM copy always matches the Mac. If something in the VM
+  changes a copied file, the sync puts it back.
+- `node_modules` and build output exist only in the VM.
+- The copy has no `.git`: git stays on the Mac. That's why Tilt's
+  `husky-hooks` resource is red in the VM.
+
+### Settings (`platform/.env`)
+
+- If the checkout has none, `start` writes it: `.env.example` plus the VM's
+  ports, `ARCHESTRA_BETA=true`, the Agent Runtime URL and no warm Agent
+  Runtime pod.
+- After that it's your file. Edit it on the Mac; the VM gets it, with
+  anything you add, keys too.
+- A `.env` that is a link isn't copied.
+
+### Bringing files back (`pull`)
+
+Some commands write source files you need to commit: `pnpm lint:fix`,
+`pnpm db:generate`, `pnpm codegen`, `pnpm add`, `cargo fmt`, `cargo update`,
+or building a Rust addon (`pnpm --dir archestra-rs/<name> build:dev`), which
+regenerates its TypeScript files. Run with
+`run`, their changes stay in the VM and the sync undoes them. `pull` is for
+those: it pauses the sync, runs the command, and copies back the files it
+changed. It takes only:
+
+- code in `platform/`: `.ts .tsx .js .jsx .mjs .cjs .rs .css .sql`, which
+  covers Rust sources and the addons' generated `index.d.ts` and `index.cjs`
+- migrations: `platform/backend/src/database/migrations/`
+- dependency files: `package.json`, `pnpm-lock.yaml`, `Cargo.toml`, `Cargo.lock`
+- what `pnpm codegen` writes: `docs/openapi.json`, generated docs and skill
+  copies, Grafana dashboards (the `GENERATED` list in `dev-vm-sync.py`)
+
+It never takes:
+
+- anything in `platform/scripts/` or `platform/dev/`: your Mac runs scripts
+  from there
+- anything in a folder or file starting with a dot: git hooks, agent and
+  editor settings
+
+Everything else is listed as left out, for example `rust-toolchain.toml`
+or `deny.toml`: change those on the Mac. Build output, such as the compiled `.node`
+addons and `target/`, never comes back: git ignores it, and it is built for
+Linux anyway. It writes only plain files, never
+through a link, and deletes only files git tracks. Review with `git diff`.
+Don't edit on the Mac while a `pull` runs.
+
+### `ARCHESTRA_DEV_MODE=2`
+
+The one switch for this setup.
+
+- Without it, the git hooks behave as on the Mac setup: a new worktree runs
+  `pnpm install` on the Mac, and each commit runs a check that needs
+  `node_modules`. With it, the hooks skip both.
+- Agents read it too (`platform/AGENTS.md`) and switch to the
+  `archestra-dev-vm` skill.
+- It goes in `~/.zshenv` because zsh reads that file for every shell,
+  including the ones git hooks and agents run in. `~/.zshrc` is read only by
+  terminal windows.
+- A git app that doesn't start from your shell still sees it unset.
+
+### The `archestra` CLI for the Mac
+
+- `create` copies the macOS SDK from your Command Line Tools into the VM
+  (`xcode-select --install`, about 300 MB).
+- With it, Tilt also builds the `archestra` program for the Mac, so the
+  install command on the Connect page works on your Mac.

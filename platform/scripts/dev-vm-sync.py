@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Edit on the Mac, run in the dev VM (prototype; see platform/dev/vm/README.md).
+"""Edit on the Mac, run in the dev VM (see platform/dev/vm/README.md).
 
-Mutagen keeps a one-way copy of this checkout in the VM: what git tracks plus
-platform/.env. Nothing the VM writes comes back, and what it changes in the
+Mutagen keeps a one-way copy of this checkout in the VM: every file the
+repo's .gitignore files don't ignore, plus platform/.env. Nothing the VM writes comes back, and what it changes in the
 copied files is undone, except through `pull`.
 
 Usage, from inside the checkout:
@@ -16,8 +16,9 @@ Usage, from inside the checkout:
       Like run, for a command that writes source files (pnpm db:generate,
       pnpm add, pnpm codegen, pnpm lint:fix): copies the files it changed back
       here. Review them with git diff.
-      Files your Mac runs by itself (git hooks, agent and editor settings, CI)
-      are never copied: change those on the Mac.
+      Only code, migrations and dependency files in platform/ and the files
+      codegen writes come back, never from platform/scripts/, platform/dev/ or
+      a folder starting with a dot: change anything else on the Mac.
 
 Env: ARCHESTRA_DEV_VM (VM name, default archestra-dev).
 """
@@ -34,12 +35,22 @@ import tempfile
 VM = os.environ.get("ARCHESTRA_DEV_VM", "archestra-dev")
 HOST = "lima-" + VM
 SSH = ["ssh", "-F", os.path.expanduser("~/.lima/%s/ssh.config" % VM), "-o", "BatchMode=yes", HOST]
-# Folders and files the Mac runs or obeys by itself.
-GUARDED = {
-    ".git", ".husky", ".github", ".envrc", ".mcp.json", ".vscode", ".idea", ".cursor",
-    ".claude", ".agents", ".codex", "AGENTS.md", "CLAUDE.md", "CLAUDE_LOCAL.md",
-}
-GUARDED_FOLDED = {name.casefold() for name in GUARDED}
+# What `pull` takes back from the VM; everything else stays out.
+CODE = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".rs", ".css", ".sql")
+MIGRATIONS = "platform/backend/src/database/migrations/"
+DEPENDENCY_FILES = {"package.json", "pnpm-lock.yaml", "cargo.toml", "cargo.lock"}
+# The Mac runs scripts from these (dev-vm-sync.py, dev-vm.sh, the Lima config).
+MAC_RUNS = ("platform/scripts/", "platform/dev/")
+# What `pnpm codegen` writes besides code; CI checks these are up to date. A
+# file, or a folder (ends with /) and the ending of the files in it.
+GENERATED = (
+    ("docs/openapi.json", ""),
+    ("docs/pages/reference/permissions.md", ""),
+    ("docs/pages/reference/archestra-mcp-server/", ".md"),
+    ("platform/backend/src/skills/", ".generated.md"),
+    ("platform/backend/src/archestra-mcp-server/search-texts.generated.json", ""),
+    ("platform/dev/grafana/dashboards/", ".json"),
+)
 # Never worth listing: git ignores them, and they are large.
 PRUNED = ["node_modules", ".next", "target", "dist", ".git"]
 
@@ -110,22 +121,43 @@ def ignore_rules():
     return rules
 
 
+def vm_settings():
+    """The settings the stack needs in the VM, on top of .env.example."""
+    gateway = ssh("/usr/local/sbin/archestra-kind-backend-bridge gateway").decode().strip()
+    if not re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", gateway):
+        die("no kind network in the VM: dev-vm.sh create")
+    return {
+        # The Mac reaches the VM's frontend and API on these forwarded ports
+        # (archestra-dev.yaml), and auth trusts only the origin in
+        # ARCHESTRA_FRONTEND_URL.
+        "ARCHESTRA_FRONTEND_URL": "http://localhost:13000",
+        "ARCHESTRA_API_BASE_URL": "http://localhost:19000",
+        # Tilt builds the OpenAPPA addon only with ARCHESTRA_BETA=true; without
+        # it the backend's /ready stays 503 and the login page says it can't
+        # reach the server.
+        "ARCHESTRA_BETA": "true",
+        # Agent Runtime pods reach the backend through the bridge (setup-vm.sh).
+        # Setting the URL is also what turns Agent Runtime on in Tilt for kind.
+        "ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL": "http://%s:9000" % gateway,
+        # No spare Agent Runtime pod: a spare holds its full size (8 GiB for
+        # tier M) while idle, and Tilt's default with Agent Runtime on is 1.
+        "ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE": "0",
+    }
+
+
 def write_env():
-    """The VM needs its own settings (forwarded ports, the Agent Runtime URL).
-    `dev-vm.sh create` wrote them into the VM's first checkout: take them from
-    there and add them to this checkout's .env.example."""
+    """Writes platform/.env from .env.example and the VM's settings, unless
+    there is one."""
     env = os.path.join(TOP, "platform", ".env")
     if os.path.islink(env):
         print("Note: platform/.env is a link, which is not copied. Replace it with a file to give the VM its settings.")
     if os.path.lexists(env):
         return
-    lines = ssh("cd ~/archestra/platform && grep -vxFf .env.example .env || true").decode().splitlines()
-    lines = [line for line in lines if re.fullmatch(r"[A-Z0-9_]+=[\x20-\x7e]*", line)]
-    names = {line.split("=")[0] for line in lines}
+    settings = vm_settings()
     with open(env + ".example") as f:
-        kept = [line for line in f if line.split("=")[0] not in names]
+        kept = [line for line in f if line.split("=")[0] not in settings]
     with open(env, "w") as f:
-        f.write("".join(kept) + "\n".join(lines) + "\n")
+        f.write("".join(kept) + "".join("%s=%s\n" % item for item in settings.items()))
     print("Wrote platform/.env with the VM's settings. It is copied into the VM, with anything you add to it.")
 
 
@@ -144,7 +176,7 @@ def start():
     with tempfile.NamedTemporaryFile("w", suffix=".yml") as f:
         f.write("\n".join(config) + "\n")
         f.flush()
-        # Mutagen uses your own ssh: it needs the lines from `dev-vm.sh ssh-config`.
+        # Mutagen uses your own ssh: `dev-vm.sh create` adds the VM to ~/.ssh/config.
         run(["mutagen", "sync", "create", "--name", NAME, "-c", f.name, TOP, "%s:%s" % (HOST, VM_DIR)])
     mutagen("flush", NAME)
     print("Syncing %s -> %s:~/%s. Next, from platform/: dev-vm-sync.py run, then pnpm install and tilt up." % (TOP, VM, VM_DIR))
@@ -155,9 +187,22 @@ def is_plain(path):
     return not any(part in ("", ".", "..") for part in parts) and not re.search(r"[\x00-\x1f]", path)
 
 
-def is_guarded(path):
-    # A Mac disk ignores case: .Husky is .husky there.
-    return any(part.casefold() in GUARDED_FOLDED for part in path.split("/"))
+def is_allowed(path):
+    """Code, migrations and dependency files in platform/, outside the folders
+    the Mac runs scripts from, and the files codegen writes. Never a folder or
+    file starting with a dot (git hooks, agent and editor settings)."""
+    if not path.isascii():
+        return False
+    path = path.lower()  # a Mac disk ignores case: Platform/Scripts is platform/scripts there
+    parts = path.split("/")
+    if any(p.startswith(".") for p in parts):
+        return False
+    for place, ending in GENERATED:
+        if path == place or (place.endswith("/") and path.startswith(place) and path.endswith(ending)):
+            return True
+    if parts[0] != "platform" or path.startswith(MAC_RUNS):
+        return False
+    return path.startswith(MIGRATIONS) or path.endswith(CODE) or parts[-1] in DEPENDENCY_FILES
 
 
 def pull(command):
@@ -190,9 +235,9 @@ def pull(command):
             ignored = set(nul_list(found.stdout))
         ignored = sorted(ignored)
         changed = [p for p in changed if p not in ignored]
-        guarded = [p for p in changed + deleted if is_guarded(p)]
-        changed = [p for p in changed if p not in guarded]
-        deleted = [p for p in deleted if p not in guarded]
+        refused = [p for p in changed + deleted if not is_allowed(p)]
+        changed = [p for p in changed if is_allowed(p)]
+        deleted = [p for p in deleted if is_allowed(p)]
 
         copied = copy_from_vm(changed)
         for path in deleted:
@@ -204,14 +249,14 @@ def pull(command):
         mutagen("flush", NAME)  # undoes whatever was not taken
 
     for title, paths in (("Copied to the Mac", copied), ("Deleted on the Mac", deleted),
-                         ("Left out, the Mac runs these by itself (change them on the Mac)", guarded),
+                         ("Left out, pull takes only code, migrations, dependency files and codegen output (change these on the Mac)", refused),
                          ("Left out, git ignores these", ignored),
                          ("Left out, not a plain path or not a regular file", odd + sorted(set(changed) - set(copied)))):
         if paths:
             print("\n%s:" % title)
             for path in paths:
                 print("  " + path)
-    if not (copied or deleted or guarded or ignored or odd):
+    if not (copied or deleted or refused or ignored or odd):
         print("\nThe command changed no source files.")
     print("\nReview with: git status, git diff")
     sys.exit(status)
@@ -231,9 +276,10 @@ def copy_from_vm(paths):
             folder = os.path.dirname(target)
             if path not in wanted or not member.isreg() or os.path.islink(target):
                 continue
-            os.makedirs(folder, exist_ok=True)
+            # Before creating anything: a symlinked folder that leads out of the checkout.
             if os.path.realpath(folder) != top and not os.path.realpath(folder).startswith(top + os.sep):
-                continue  # a symlinked folder that leads out of the checkout
+                continue
+            os.makedirs(folder, exist_ok=True)
             with tempfile.NamedTemporaryFile(dir=folder, delete=False) as out:
                 shutil.copyfileobj(archive.extractfile(member), out)
             os.chmod(out.name, 0o755 if member.mode & 0o100 else 0o644)

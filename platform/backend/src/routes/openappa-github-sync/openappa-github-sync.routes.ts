@@ -1,5 +1,6 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
 import logger from "@/logging";
 import { openappaGithubAppSetup } from "@/services/openappa-github-app-setup";
 import {
@@ -14,9 +15,12 @@ import {
 } from "@/services/openappa-github-sync";
 import {
   ensureSelfServiceInclude,
+  listServerRulesFiles,
+  readServerRulesFile,
   selfServiceIncludeState,
 } from "@/services/openappa-server-rules";
 import { constructResponseSchema, DeleteObjectResponseSchema } from "@/types";
+import { BatteryPolicySourceSchema } from "@/types/openappa-batteries";
 import {
   AppaGithubAppAccountsSchema,
   AppaGithubAppInstallResultSchema,
@@ -38,6 +42,7 @@ import {
   AppaRepositoryProtectionSchema,
   AppaSelfServiceAvailabilitySchema,
   CreateAppaGithubRepositorySchema,
+  ServerRulesFilesSchema,
 } from "@/types/openappa-github-sync";
 
 const routes: FastifyPluginAsyncZod = async (app) => {
@@ -104,6 +109,46 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request, reply) =>
       reply.send(await getAppaSelfService(request.organizationId)),
+  );
+  app.get(
+    "/api/openappa/server-rules/files",
+    {
+      schema: {
+        operationId: RouteId.GetOpenappaServerRulesFiles,
+        description:
+          "The MCP servers' Guardrails rules files the caller may open: those of servers they may open in the MCP registry",
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(ServerRulesFilesSchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send({
+        files: await listServerRulesFiles({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+        }),
+      }),
+  );
+  app.get(
+    "/api/openappa/server-rules/source",
+    {
+      schema: {
+        operationId: RouteId.GetOpenappaServerRulesSource,
+        description:
+          "One MCP server's Guardrails rules file, for a caller who may open that server in the MCP registry",
+        tags: ["OpenAPPA"],
+        querystring: z.object({ entry: z.string().min(1).max(512) }),
+        response: constructResponseSchema(BatteryPolicySourceSchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send(
+        await readServerRulesFile({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          path: request.query.entry,
+        }),
+      ),
   );
   app.put(
     "/api/openappa/github-sync",

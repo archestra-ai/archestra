@@ -37,9 +37,11 @@ import {
   ensureSelfServiceInclude,
   getServerRules,
   getServerRulesChangeStatus,
+  listServerRulesFiles,
   previewServerRulesChange,
   proposeSelfServiceInclude,
   proposeServerRulesChange,
+  readServerRulesFile,
   selfServiceIncludeState,
 } from "./openappa-server-rules";
 
@@ -5276,4 +5278,163 @@ test("a read lists every rule for the server's tools across the policy, the root
     },
   ]);
   expect(read.instruction).toContain("other files of the policy keep");
+});
+
+test("a member with no Guardrails permission lists and reads only the rules files of servers they may open, and learns which they may change", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeTeam,
+  makeTeamMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const payments = await makeTeam(org.id, admin.id, { name: "Payments" });
+  // Pat edits payments_api, Sam may only use it, Lee may open the helpdesk
+  // alone, and Kim, a member, may open neither.
+  const pat = await makeUser({ name: "Pat" });
+  await makeTeamMember(payments.id, pat.id);
+  const sam = await makeUser({ name: "Sam" });
+  await makeMember(sam.id, org.id);
+  const finance = await makeTeam(org.id, admin.id, { name: "Finance" });
+  const lee = await makeUser({ name: "Lee" });
+  await makeTeamMember(finance.id, lee.id);
+  const addServer = async (params: {
+    name: string;
+    editors: string;
+    everyone: boolean;
+  }) => {
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: params.name,
+        serverType: "remote",
+        serverUrl: `https://${params.name}.example.com/mcp`,
+        scope: "org",
+      },
+      {
+        organizationId: org.id,
+        initialPermissionGrants: [
+          {
+            subject: { type: "team", id: params.editors },
+            actions: ["read", "use", "update"],
+          },
+          ...(params.everyone
+            ? [
+                {
+                  subject: { type: "organization" as const, id: "*" as const },
+                  actions: ["read" as const, "use" as const],
+                },
+              ]
+            : []),
+        ],
+      },
+    );
+    await ToolModel.createToolIfNotExists({
+      name: `${params.name}__read`,
+      description: "read",
+      parameters: {},
+      catalogId: catalog.id,
+    });
+    return catalog;
+  };
+  const paymentsApi = await addServer({
+    name: "payments_api",
+    editors: payments.id,
+    everyone: true,
+  });
+  const helpdesk = await addServer({
+    name: "helpdesk",
+    editors: finance.id,
+    everyone: false,
+  });
+  const helpdeskRules = `[policy]
+version = 2
+
+[[policy.tool]]
+name = "helpdesk__read"
+delta = { trust = "suspicious" }
+`;
+  await connectApp({ organizationId: org.id });
+  serveRepository({
+    head: FIRST,
+    files: {
+      [FIRST]: {
+        "appa.toml": `include = ["mcp/*.toml"]\n${RULES}`,
+        "mcp/payments_api.toml": REFUNDS,
+        "mcp/helpdesk.toml": helpdeskRules,
+      },
+    },
+  });
+  await syncAppaGithubPolicy(org.id);
+  expect(
+    (
+      await openappaBatteriesService.policyDeclarations(org.id)
+    ).repositoryFiles.map((file) => file.path),
+  ).toEqual(
+    expect.arrayContaining(["mcp/payments_api.toml", "mcp/helpdesk.toml"]),
+  );
+
+  const list = (userId: string) =>
+    listServerRulesFiles({ organizationId: org.id, userId });
+  const read = (userId: string, path: string) =>
+    readServerRulesFile({ organizationId: org.id, userId, path });
+  const paymentsFile = {
+    path: "mcp/payments_api.toml",
+    servers: [{ id: paymentsApi.id, name: "payments_api" }],
+  };
+
+  // The editor sees the file and may change it; the helpdesk stays hidden.
+  expect(await list(pat.id)).toEqual([{ ...paymentsFile, canEdit: true }]);
+  expect(await read(pat.id, "mcp/payments_api.toml")).toEqual({
+    entry: "mcp/payments_api.toml",
+    name: "mcp/payments_api.toml",
+    kind: "repository",
+    content: REFUNDS,
+  });
+  // A reader of the server reads its rules and may not change them.
+  expect(await list(sam.id)).toEqual([{ ...paymentsFile, canEdit: false }]);
+  // Lee may open both servers: one to edit, one to read.
+  expect(await list(lee.id)).toEqual(
+    expect.arrayContaining([
+      { ...paymentsFile, canEdit: false },
+      {
+        path: "mcp/helpdesk.toml",
+        servers: [{ id: helpdesk.id, name: "helpdesk" }],
+        canEdit: true,
+      },
+    ]),
+  );
+  expect((await read(lee.id, "mcp/helpdesk.toml")).content).toBe(helpdeskRules);
+
+  // Another server's file, the organization's own files and the root answer
+  // as a file that does not exist, to everyone without the registry's grant.
+  for (const path of [
+    "mcp/helpdesk.toml",
+    "shared/extra.toml",
+    "appa.toml",
+    "mcp/missing.toml",
+    "../appa.toml",
+  ])
+    await expect(read(sam.id, path)).rejects.toMatchObject({
+      statusCode: 404,
+    });
+  // Even an administrator reads only the servers' files here: the root has
+  // its own route, behind the Guardrails permission.
+  await expect(read(admin.id, "appa.toml")).rejects.toMatchObject({
+    statusCode: 404,
+  });
+  expect((await list(admin.id)).map((file) => file.path).sort()).toEqual([
+    "mcp/helpdesk.toml",
+    "mcp/payments_api.toml",
+  ]);
+
+  // Self-service off: the files are the organization's policy alone.
+  config.openappa.selfService = "disabled";
+  expect((await getAppaSelfService(org.id)).enabled).toBe(false);
+  expect(await list(pat.id)).toEqual([]);
+  await expect(read(pat.id, "mcp/payments_api.toml")).rejects.toMatchObject({
+    statusCode: 404,
+  });
 });

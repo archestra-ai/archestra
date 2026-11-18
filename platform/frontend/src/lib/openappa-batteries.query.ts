@@ -51,8 +51,8 @@ export const batteryMatchesQueryKey = (catalogId: string) => [
  * included battery with its status, servers and credential rows, the aliases
  * no battery declares, the composition's last error and a held GitHub pull.
  */
-export function usePolicyDeclarations() {
-  return useQuery(policyDeclarationsQuery);
+export function usePolicyDeclarations(enabled = true) {
+  return useQuery({ ...policyDeclarationsQuery, enabled });
 }
 
 /** The composed document the runtime enforces: the root text with its batteries. */
@@ -74,14 +74,27 @@ export function useEffectivePolicy(
 }
 
 /** The source TOML of one exact include in the current organization policy. */
-export function useBatteryPolicySource(entry: string) {
+export function useBatteryPolicySource(
+  entry: string,
+  /**
+   * Read through the MCP server's own route, which takes access to the
+   * server in the registry rather than a Guardrails permission.
+   */
+  options: { serverRules?: boolean } = {},
+) {
+  const serverRules = options.serverRules === true;
   return useQuery({
-    queryKey: [...batteriesQueryKey, "policy-source", entry],
+    queryKey: [
+      ...batteriesQueryKey,
+      serverRules ? "server-rules-source" : "policy-source",
+      entry,
+    ],
     queryFn: async (): Promise<BatteryPolicySource> => {
-      const { data, error } =
-        await archestraApiSdk.getOpenappaBatteryPolicySource({
-          query: { entry },
-        });
+      const { data, error } = await (serverRules
+        ? archestraApiSdk.getOpenappaServerRulesSource
+        : archestraApiSdk.getOpenappaBatteryPolicySource)({
+        query: { entry },
+      });
       throwOnApiError(error, { toastOnError: false });
       return answered(data);
     },

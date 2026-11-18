@@ -107,6 +107,58 @@ export function useAppaSelfService(enabled = true) {
 }
 export const appaSelfServiceQueryKey = ["openappa-github-sync", "self-service"];
 
+/**
+ * The MCP servers' rules files this reader may open with no Guardrails
+ * permission: those of servers they may open in the MCP registry.
+ */
+function useServerRulesFiles(enabled = true) {
+  const { data: canRead } = useHasPermissions({ mcpRegistry: ["read"] });
+  return useQuery({
+    enabled: enabled && canRead === true,
+    queryKey: serverRulesFilesQueryKey,
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getOpenappaServerRulesFiles();
+      throwOnApiError(error, { toastOnError: false });
+      return data?.files ?? [];
+    },
+    staleTime: 60_000,
+  });
+}
+const serverRulesFilesQueryKey = ["openappa-github-sync", "server-rules-files"];
+
+/**
+ * Whether the Policy page is open to this reader through their MCP servers
+ * alone: no Guardrails permission, and at least one server's rules file they
+ * may open. Null until known. The page then lists only those files.
+ */
+export function useServerRulesAccess(): {
+  scoped: boolean | null;
+  files: ServerRulesFile[];
+} {
+  const policy = useHasPermissions({ guardrailsPolicy: ["read"] });
+  const registry = useHasPermissions({ mcpRegistry: ["read"] });
+  // Asked only of a reader without the permission. With Guardrails off the
+  // list is empty, so the answer is no.
+  const wanted = policy.data === false;
+  const files = useServerRulesFiles(wanted);
+  const scoped = policy.isPending
+    ? null
+    : policy.data === true
+      ? false
+      : registry.isPending
+        ? null
+        : registry.data !== true
+          ? false
+          : files.isPending
+            ? null
+            : (files.data?.length ?? 0) > 0;
+  return { scoped, files: scoped ? (files.data ?? NO_FILES) : NO_FILES };
+}
+type ServerRulesFile =
+  archestraApiTypes.GetOpenappaServerRulesFilesResponses["200"]["files"][number];
+const NO_FILES: ServerRulesFile[] = [];
+
 export function useConfigureAppaGithubSync() {
   const client = useQueryClient();
   return useMutation({

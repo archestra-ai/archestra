@@ -1,6 +1,7 @@
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { useMemo } from "react";
 import { usePermissionMap, useScopedCapabilities } from "@/lib/auth/auth.query";
+import { useServerRulesAccess } from "@/lib/openappa-github-sync.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import {
   canSeeSettingsArea,
@@ -17,6 +18,7 @@ import {
  */
 export function useNavPermissionMap(): Record<string, boolean> | null {
   const pageMap = usePermissionMap(requiredPagePermissionsMap);
+  const serverRules = useServerRulesAccess();
   const manageMap = usePermissionMap(SETTINGS_MANAGE_PERMISSIONS);
   const { data: capabilities = NO_CAPABILITIES } = useScopedCapabilities();
   const permissionMap = useMemo(
@@ -40,6 +42,9 @@ export function useNavPermissionMap(): Record<string, boolean> | null {
   if (needsCredentials && credentials.isPending) return null;
   return {
     ...pageMap,
+    // A reader of some MCP server's rules opens the Policy page for them.
+    "/openappa/policy":
+      !!pageMap["/openappa/policy"] || serverRules.scoped === true,
     "/settings": canSeeSettingsArea({
       permissionMap,
       capabilities,

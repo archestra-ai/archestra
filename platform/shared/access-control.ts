@@ -1765,6 +1765,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOpenAppaYell]: { log: ["read"] },
   [RouteId.UpdateOpenAppaYell]: { log: ["read"] },
   [RouteId.GetOpenappaExternalConsults]: { log: ["read"] },
+  // Consults and yells in one timeline, each scoped as its own list is.
+  [RouteId.GetOpenappaGuardrailEvents]: { log: ["read"] },
   [RouteId.GetOpenappaExternalConsult]: { log: ["read"] },
   [RouteId.GetOpenappaLabelChanges]: { log: ["read"] },
   // Read-only views of what the policy covers; nothing here changes state.
@@ -2078,7 +2080,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // page then lists only those files (`useServerRulesAccess`).
   "/openappa/policy": { guardrailsPolicy: ["read"] },
   "/openappa/batteries": { guardrailsPolicy: ["read"] },
-  "/openappa/yells": { log: ["read"] },
 
   // Logs
   "/llm/logs": { log: ["read"] },
@@ -2086,6 +2087,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/audit/logs": { auditLog: ["read"] },
   "/consults/logs": { log: ["read"] },
   "/consults/logs/[id]": { log: ["read"] },
+  "/consults/logs/yells/[id]": { log: ["read"] },
   "/connections/logs": { log: ["admin"], member: ["read"] },
 
   // Knowledge

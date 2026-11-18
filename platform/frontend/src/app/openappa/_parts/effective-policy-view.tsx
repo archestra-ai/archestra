@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { QueryLoadError } from "@/components/query-load-error";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {
@@ -51,6 +52,9 @@ export function EffectivePolicyView() {
       : served.kind === "previous"
         ? (served.batteries ?? []).filter((battery) => !battery.composed)
         : [];
+  const entryOf = (name: string) =>
+    declarations.data?.batteries.find((battery) => battery.name === name)
+      ?.entry ?? null;
   const state =
     served.kind === "current"
       ? "composed"
@@ -67,18 +71,32 @@ export function EffectivePolicyView() {
         <div className="shrink-0 border-b px-3 py-2">
           <InlineNotice variant="warning" data-testid="effective-policy-stubs">
             <InlineNoticeText>
-              <span>Composed as empty stubs, their rules left out: </span>
+              <span>
+                {stubs.length === 1
+                  ? "One battery's rules are left out of this policy until it is set up: "
+                  : `${stubs.length} batteries' rules are left out of this policy until they are set up: `}
+              </span>
               {stubs.map((battery, index) => (
                 <span key={battery.name}>
                   {index > 0 ? <span>, </span> : null}
-                  <span className="font-medium">{battery.name}</span>
+                  {entryOf(battery.name) ? (
+                    // Its file in the Source view says what it needs and fixes it.
+                    <Link
+                      href={`/openappa/policy?${new URLSearchParams({ entry: entryOf(battery.name) ?? "" })}`}
+                      className="font-medium underline underline-offset-2"
+                    >
+                      {battery.name}
+                    </Link>
+                  ) : (
+                    <span className="font-medium">{battery.name}</span>
+                  )}
                   <span>
                     {" "}
                     ({BATTERY_STATUS[battery.status].label.toLowerCase()})
                   </span>
                 </span>
               ))}
-              <span>.</span>
+              <span>. Open one to set it up.</span>
             </InlineNoticeText>
           </InlineNotice>
         </div>
@@ -111,7 +129,7 @@ export function EffectivePolicyView() {
       <div className="flex shrink-0 flex-wrap gap-x-4 border-t px-3 py-1.5 text-xs text-muted-foreground">
         <span>
           {served.kind === "current"
-            ? `Composed from revision ${rootRevision} · ${hash}`
+            ? `Built from policy revision ${rootRevision} · ${hash}`
             : served.kind === "root_only"
               ? `Revision ${rootRevision} refused · nothing enforced · ${hash}`
               : served.rootRevision === null
@@ -119,13 +137,14 @@ export function EffectivePolicyView() {
                 : `Revision ${rootRevision} refused · enforcing revision ${served.rootRevision} · ${hash}`}
         </span>
         {effective.data.servedRevision && (
+          // The revision a chat names as the one it follows, and since when.
           <span>
-            {`Runtime revision ${effective.data.servedRevision.revision} · published ${formatDate(
+            {`Runtime revision ${effective.data.servedRevision.revision} · in force since ${formatDate(
               {
                 date: effective.data.servedRevision.publishedAt,
                 dateFormat: "MM/dd HH:mm",
               },
-            )} · open conversations follow it`}
+            )}`}
           </span>
         )}
       </div>

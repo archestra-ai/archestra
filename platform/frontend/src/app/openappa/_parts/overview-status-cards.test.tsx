@@ -214,7 +214,7 @@ test("the dashboard summarizes the latest run time and validation count with a d
   expect(screen.getByText("Failed", statusBadge)).toBeVisible();
   expect(
     screen.getByRole("link", { name: "View Validations" }),
-  ).toHaveAttribute("href", "/openappa/validation");
+  ).toHaveAttribute("href", "/openappa/policy");
 });
 
 test.each([

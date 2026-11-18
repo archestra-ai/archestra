@@ -1227,6 +1227,11 @@ const registry = defineArchestraTools([
             ownerCallerId: reviewSession.caller_id,
           })) ||
         (parseWorkloadPrincipal(reviewSession.caller_id) &&
+          reviewSession.caller_id !== spender) ||
+        // The trajectory is caller-supplied. A person's session, its reviews
+        // and its offers belong to that person alone.
+        (!parseWorkloadPrincipal(spender) &&
+          reviewSession.caller_id !== undefined &&
           reviewSession.caller_id !== spender)
       ) {
         return unknownOfferResult();

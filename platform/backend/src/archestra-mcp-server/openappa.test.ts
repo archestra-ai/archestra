@@ -719,6 +719,33 @@ describe("OpenAPPA tool execution", () => {
     expect(await db.select().from(schema.openappaYellsTable)).toEqual([]);
   });
 
+  test("a caller cannot answer or spend a review in another person's session", async () => {
+    const sessionId = "user:other-user|known-session";
+    await retainRemedyDenial({
+      sessionId,
+      feedback: "Requires attention: human-approval",
+      offerId: "other-users-offer",
+    });
+    const review = vi.spyOn(openappaService, "loadOfferReview");
+    const execute = vi.spyOn(openappaService, "executeRemedyByOffer");
+
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: "other-users-offer",
+        plan: "Submit for approval",
+        trajectory: trajectory({ session_id: sessionId }),
+      },
+      mockContext,
+    );
+
+    expect(result.content).toEqual([
+      { type: "text", text: "[appa] No live offer with this id" },
+    ]);
+    expect(review).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   test("a soft-block override never turns an offer into a session waiver", async () => {
     config.openappa.breakTheGlassOverrides = {
       ...config.openappa.breakTheGlassOverrides,

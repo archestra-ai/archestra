@@ -381,16 +381,26 @@ async function selectRoleOption(
     "role picker trigger should point at its popover via aria-controls",
   ).toBeTruthy();
   const popover = page.locator(`[id="${popoverId}"]`);
-  // The picker stages choices until Update: start from nothing, find the
-  // role by name, and apply.
-  await popover.getByRole("button", { name: "Clear all" }).click();
-  await popover.getByRole("textbox", { name: "Search roles" }).fill(roleName);
-  // The label is the role name followed by its group, so anchor at the start
-  // to keep Admin apart from Platform Admin.
-  await popover
-    .getByRole("checkbox", { name: new RegExp(`^${roleName}\\b`) })
-    .check();
-  await popover.getByRole("button", { name: "Update" }).click();
+  // Each choice applies at once and the last role cannot be removed, so add
+  // the wanted role first, then drop every other selected one.
+  const search = popover.getByRole("textbox", { name: "Search roles" });
+  await search.fill(roleName);
+  // A row reads as the role name run together with a trailing hint, so
+  // anchor at the start (keeping Admin apart from Platform Admin) and take
+  // the first match rather than expecting a word boundary.
+  const wanted = popover
+    .getByRole("checkbox", { name: new RegExp(`^${roleName}`) })
+    .first();
+  await wanted.check();
+  const wantedRole = await wanted.getAttribute("data-role");
+  await search.fill("");
+  const others = popover.locator(
+    `[role="checkbox"][data-role][aria-checked="true"]:not([data-role="${wantedRole}"])`,
+  );
+  while ((await others.count()) > 0) {
+    await others.first().click();
+  }
+  await page.keyboard.press("Escape");
   await expect(popover).not.toBeVisible();
 }
 

@@ -120,6 +120,10 @@ export function PolicyDiffReview({
           }
           onMount={(editor) => {
             editorRef.current = editor;
+            // Both panes scroll together; only the proposed pane needs a track.
+            editor.getOriginalEditor().updateOptions({
+              scrollbar: { vertical: "hidden", verticalScrollbarSize: 0 },
+            });
             setReady(true);
             editor.revealFirstDiff();
           }}
@@ -129,6 +133,7 @@ export function PolicyDiffReview({
             // and fall back to treating the entire file as changed.
             maxComputationTime: 30_000,
             renderSideBySide: sideBySide,
+            renderOverviewRuler: false,
             useInlineViewWhenSpaceIsLimited: false,
             diffWordWrap: "off",
             hideUnchangedRegions: {

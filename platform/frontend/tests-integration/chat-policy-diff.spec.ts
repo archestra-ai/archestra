@@ -131,6 +131,13 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   await expect(
     dialog.getByText("tool_13259", { exact: false }).first(),
   ).toBeVisible({ timeout: 60_000 });
+  // Monaco's scroll tracks and change overview are nonsemantic elements.
+  const verticalTracks = dialog
+    .locator(".scrollbar.vertical, .diffOverview")
+    .filter({ visible: true });
+  const proposedEditor = dialog.locator(".modified-in-monaco-diff-editor");
+  await proposedEditor.hover();
+  await expect(verticalTracks).toHaveCount(1);
   await dialog.getByRole("button", { name: "Next change" }).click();
   await expect(
     dialog.getByText('final_review = "updated"', { exact: true }),
@@ -145,6 +152,8 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   await split.focus();
   await split.press("Space");
   await expect(split).toBeChecked();
+  await proposedEditor.hover();
+  await expect(verticalTracks).toHaveCount(1);
   await dialog
     .getByRole("button", { name: "Show Unchanged Region", exact: true })
     .first()
@@ -185,6 +194,8 @@ test("reviews a large policy without expanding the chat, and keeps the review us
   await page.setViewportSize({ width: 390, height: 720 });
   await split.uncheck();
   await expect(split).not.toBeChecked();
+  await proposedEditor.hover();
+  await expect(verticalTracks).toHaveCount(1);
   await expect(split).toBeInViewport();
   await expect(
     dialog.getByRole("button", { name: "Next change" }),

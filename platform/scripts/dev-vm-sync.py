@@ -8,7 +8,8 @@ copied files is undone, except through `pull`.
 Usage, from inside the checkout:
   dev-vm-sync.py start
       Copy this checkout to ~/sync/<folder name> in the VM and keep it up to
-      date. Writes platform/.env with the VM's settings if there is none.
+      date. Writes platform/.env with the VM's settings if there is none,
+      with ports of its own, so its stack runs next to the other checkouts'.
   dev-vm-sync.py run [<command>]
       Run a command in the VM copy, in the same subfolder you are in; without
       a command, open a shell there (pnpm install, tilt up).
@@ -35,6 +36,11 @@ import tempfile
 VM = os.environ.get("ARCHESTRA_DEV_VM", "archestra-dev")
 HOST = "lima-" + VM
 SSH = ["ssh", "-F", os.path.expanduser("~/.lima/%s/ssh.config" % VM), "-o", "BatchMode=yes", HOST]
+# Stacks that can run at once; archestra-dev.yaml forwards their ports. The
+# first uses Tilt's defaults; stack N (1 to 4) uses app 13000+N, API 19000+N
+# and Tilt 20350+N, the same in the VM and on the Mac.
+STACKS = 5
+
 # What `pull` takes back from the VM; everything else stays out.
 CODE = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".rs", ".css", ".sql")
 MIGRATIONS = "platform/backend/src/database/migrations/"
@@ -79,10 +85,12 @@ def mutagen(*args, quiet=True):
 
 def in_vm_copy(command):
     """Runs a command line in a login shell in the VM copy, in the subfolder
-    the caller is in. Returns its exit code."""
+    the caller is in. Returns its exit code. TILT_PORT points tilt commands at
+    this checkout's Tilt."""
     folder = "~/%s/%s" % (VM_DIR, os.path.relpath(os.getcwd(), TOP))
+    tilt = "export TILT_PORT=%d && " % ports(stack_of(TOP))["tilt_vm"]
     return subprocess.run(["limactl", "shell", "--workdir", "/", VM, "--", "bash", "-lc",
-                           "cd %s && %s" % (folder, command)]).returncode
+                           "%scd %s && %s" % (tilt, folder, command)]).returncode
 
 
 def nul_list(data):
@@ -121,39 +129,114 @@ def ignore_rules():
     return rules
 
 
-def vm_settings():
+def ports(stack):
+    """A stack's ports in the VM, and the ones the Mac reaches them on."""
+    if stack == 0:
+        return {"app": 3000, "api": 9000, "tilt_vm": 10350, "app_mac": 13000, "api_mac": 19000, "tilt_mac": 20350}
+    return {"app": 13000 + stack, "api": 19000 + stack, "tilt_vm": 20350 + stack,
+            "app_mac": 13000 + stack, "api_mac": 19000 + stack, "tilt_mac": 20350 + stack,
+            "int_tests": 13010 + stack, "metrics": 19050 + stack,
+            "postgres": 15432 + stack, "postgres_metrics": 19187 + stack}
+
+
+def read_env(env, key):
+    """A key's value in a .env file, or None."""
+    try:
+        with open(env) as f:
+            for line in f:
+                name, _, value = line.strip().partition("=")
+                if name == key:
+                    return value.strip().strip("\"'")
+    except OSError:
+        pass
+    return None
+
+
+def stack_of(top):
+    """The stack a checkout's platform/.env sets up: 0 without ports of its own."""
+    port = read_env(os.path.join(top, "platform", ".env"), "ARCHESTRA_TILT_PORT") or ""
+    return int(port) - 20350 if port.isdigit() and 20351 <= int(port) < 20350 + STACKS else 0
+
+
+def free_stack():
+    """The first stack no other synced checkout uses. Read from the Mac side:
+    the Mutagen sessions into this VM and their checkouts' .env."""
+    out = subprocess.run(["mutagen", "sync", "list", "--template",
+                          '{{range .}}{{.Beta.Host}}\t{{.Alpha.Path}}{{"\\n"}}{{end}}'],
+                         stdout=subprocess.PIPE, text=True).stdout
+    taken = set()
+    for line in out.splitlines():
+        host, _, top = line.partition("\t")
+        if host == HOST and top and os.path.realpath(top) != os.path.realpath(TOP):
+            taken.add(stack_of(top))
+    free = [n for n in range(STACKS) if n not in taken]
+    if not free:
+        die("all %d stacks are taken by other synced checkouts (mutagen sync list)" % STACKS)
+    return free[0]
+
+
+def namespace():
+    """This checkout's Kubernetes namespace, from its folder name, as
+    scripts/dev-stack.sh makes one from the branch name."""
+    part = re.sub(r"[^a-z0-9-]", "", NAME.lower().replace("_", "-"))[:49].rstrip("-")
+    return "archestra-dev-" + (part or "auto")
+
+
+def vm_settings(stack):
     """The settings the stack needs in the VM, on top of .env.example."""
     gateway = ssh("/usr/local/sbin/archestra-kind-backend-bridge gateway").decode().strip()
     if not re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", gateway):
         die("no kind network in the VM: dev-vm.sh create")
-    return {
+    p = ports(stack)
+    settings = {}
+    if stack:
+        # The keys scripts/dev-stack.sh writes for a stack next to another:
+        # its own ports, Kubernetes namespace (database, MCP servers, Agent
+        # Runtime pods) and login cookies.
+        ns = namespace()
+        settings = {
+            "ARCHESTRA_DATABASE_URL": "postgresql://archestra:archestra_dev_password@localhost:%d/archestra_dev?schema=public" % p["postgres"],
+            "ARCHESTRA_INTERNAL_API_BASE_URL": "http://localhost:%d" % p["api"],
+            "NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL": "http://localhost:%d" % p["api"],
+            "ARCHESTRA_METRICS_PORT": str(p["metrics"]),
+            "ARCHESTRA_K8S_NAMESPACE": ns,
+            "ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE": ns,
+            "ARCHESTRA_POSTGRES_HOST_PORT": str(p["postgres"]),
+            "ARCHESTRA_POSTGRES_METRICS_HOST_PORT": str(p["postgres_metrics"]),
+            "ARCHESTRA_FRONTEND_PORT": str(p["app"]),
+            "ARCHESTRA_FRONTEND_INT_TESTS_PORT": str(p["int_tests"]),
+            "ARCHESTRA_TILT_PORT": str(p["tilt_vm"]),
+            "ARCHESTRA_AUTH_COOKIE_PREFIX": ns,
+        }
+    settings.update({
         # The Mac reaches the VM's frontend and API on these forwarded ports
         # (archestra-dev.yaml), and auth trusts only the origin in
         # ARCHESTRA_FRONTEND_URL.
-        "ARCHESTRA_FRONTEND_URL": "http://localhost:13000",
-        "ARCHESTRA_API_BASE_URL": "http://localhost:19000",
+        "ARCHESTRA_FRONTEND_URL": "http://localhost:%d" % p["app_mac"],
+        "ARCHESTRA_API_BASE_URL": "http://localhost:%d" % p["api_mac"],
         # Tilt builds the OpenAPPA addon only with ARCHESTRA_BETA=true; without
         # it the backend's /ready stays 503 and the login page says it can't
         # reach the server.
         "ARCHESTRA_BETA": "true",
         # Agent Runtime pods reach the backend through the bridge (setup-vm.sh).
         # Setting the URL is also what turns Agent Runtime on in Tilt for kind.
-        "ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL": "http://%s:9000" % gateway,
+        "ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL": "http://%s:%d" % (gateway, p["api"]),
         # No spare Agent Runtime pod: a spare holds its full size (8 GiB for
         # tier M) while idle, and Tilt's default with Agent Runtime on is 1.
         "ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE": "0",
-    }
+    })
+    return settings
 
 
 def write_env():
-    """Writes platform/.env from .env.example and the VM's settings, unless
-    there is one."""
+    """Writes platform/.env from .env.example and the VM's settings, with the
+    first free stack's ports, unless there is one."""
     env = os.path.join(TOP, "platform", ".env")
     if os.path.islink(env):
         print("Note: platform/.env is a link, which is not copied. Replace it with a file to give the VM its settings.")
     if os.path.lexists(env):
         return
-    settings = vm_settings()
+    settings = vm_settings(free_stack())
     with open(env + ".example") as f:
         kept = [line for line in f if line.split("=")[0] not in settings]
     with open(env, "w") as f:
@@ -166,6 +249,7 @@ def start():
     if mutagen("list", NAME) == 0:
         print("Already syncing %s -> %s:~/%s" % (TOP, VM, VM_DIR))
         mutagen("list", NAME, quiet=False)
+        print_urls()
         return
     config = [
         "sync:", "  defaults:", "    mode: one-way-replica",
@@ -180,6 +264,12 @@ def start():
         run(["mutagen", "sync", "create", "--name", NAME, "-c", f.name, TOP, "%s:%s" % (HOST, VM_DIR)])
     mutagen("flush", NAME)
     print("Syncing %s -> %s:~/%s. Next, from platform/: dev-vm-sync.py run, then pnpm install and tilt up." % (TOP, VM, VM_DIR))
+    print_urls()
+
+
+def print_urls():
+    p = ports(stack_of(TOP))
+    print("This checkout's stack: app http://localhost:%d, Tilt http://localhost:%d" % (p["app_mac"], p["tilt_mac"]))
 
 
 def is_plain(path):

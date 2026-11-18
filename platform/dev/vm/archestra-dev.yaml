@@ -11,8 +11,8 @@ base:
 - template:_images/ubuntu-24.04
 
 vmType: vz
-cpus: 6
-memory: 12GiB
+cpus: 10
+memory: 24GiB
 disk: 100GiB
 
 # No host folders: the repository lives on the VM's own disk.
@@ -38,9 +38,12 @@ ssh:
   # Lima uses its own key; don't copy ~/.ssh/*.pub into the VM.
   loadDotSSHPubKeys: false
 
-# The VM's dev ports appear on the Mac with 10000 added, so they never clash
-# with a Tilt stack running on the Mac (3000/9000/10350/5432).
-# Every other guest port stays inside the VM (catch-all ignore rule last).
+# Each synced checkout runs its own stack (dev-vm-sync.py start picks it).
+# The first one uses Tilt's default ports, which appear on the Mac with 10000
+# added, so they never clash with a stack on the Mac (3000/9000/10350/5432).
+# Stacks 1 to 4 use the same ports in the VM and on the Mac: app 13000+N,
+# API 19000+N, Tilt 20350+N. Every other guest port stays inside the VM
+# (catch-all ignore rules last).
 portForwards:
 - guestPort: 3000
   hostPort: 13000
@@ -48,6 +51,12 @@ portForwards:
   hostPort: 19000
 - guestPort: 10350
   hostPort: 20350
+- guestPortRange: [13001, 13004]
+  hostPortRange: [13001, 13004]
+- guestPortRange: [19001, 19004]
+  hostPortRange: [19001, 19004]
+- guestPortRange: [20351, 20354]
+  hostPortRange: [20351, 20354]
 # Both rules are needed: the 0.0.0.0 one doesn't match services bound to
 # 127.0.0.1 (kind's API server, containerd, Tilt internals).
 - guestIP: 127.0.0.1

@@ -45,6 +45,22 @@ const ServiceTierSchema = z.object({
   type: z.enum(["default", "throughput"]).optional(),
 });
 
+// Structured output. `schema` is a JSON Schema serialized to a string.
+const OutputConfigSchema = z.object({
+  textFormat: z
+    .object({
+      type: z.string(),
+      structure: z.object({
+        jsonSchema: z.object({
+          schema: z.string(),
+          name: z.string().optional(),
+          description: z.string().optional(),
+        }),
+      }),
+    })
+    .optional(),
+});
+
 // Prompt variable values (for prompt management)
 const PromptVariableValuesSchema = z.union([
   z.object({ text: z.string() }),
@@ -64,6 +80,7 @@ export const ConverseRequestSchema = z.object({
   guardrailConfig: GuardrailConfigSchema.optional(),
   additionalModelRequestFields: z.record(z.string(), z.unknown()).optional(),
   additionalModelResponseFieldPaths: z.array(z.string()).optional(),
+  outputConfig: OutputConfigSchema.optional(),
   promptVariables: z.record(z.string(), PromptVariableValuesSchema).optional(),
   performanceConfig: PerformanceConfigSchema.optional(),
   serviceTier: ServiceTierSchema.optional(),

@@ -106,7 +106,7 @@ function ConsultDetail({ id }: { id: string }) {
       stackHeaderOnMobile
       backLink={
         <PageBackLink href="/consults/logs">
-          Back to Guardrail consults
+          Back to Guardrails logs
         </PageBackLink>
       }
       description="Not part of a logged LLM session, so it has no trace to open in."
@@ -176,7 +176,7 @@ function ConsultShell({ children }: { children: ReactNode }) {
       title="Consult"
       backLink={
         <PageBackLink href="/consults/logs">
-          Back to Guardrail consults
+          Back to Guardrails logs
         </PageBackLink>
       }
     >

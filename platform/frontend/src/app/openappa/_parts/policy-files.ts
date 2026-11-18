@@ -1,6 +1,9 @@
 import type { EnforcedStatus } from "./battery-status";
 
-/** One file of the policy: the organization's text, a battery, or a repository file. */
+/**
+ * One file the Policy page lists: the organization's text, a battery, a file
+ * the organization policy includes from its repository, or a validation.
+ */
 export type PolicyFile = {
   /** "root" for the organization policy, else the include entry. */
   key: string;
@@ -10,7 +13,7 @@ export type PolicyFile = {
   path: string;
   /** The path's last segment. */
   name: string;
-  kind: "root" | "battery" | "repository";
+  kind: "root" | "battery" | "repository" | "validation";
   /** "Organization policy", a battery's display name, or the file's path. */
   label: string;
   /** Batteries only: how the enforced composition holds it. */
@@ -25,6 +28,14 @@ export type PolicyFile = {
    */
   servers?: { id: string; name: string }[];
   canEdit?: boolean;
+  /** Batteries only: the battery's name, as its settings know it. */
+  batteryName?: string;
+  /** Validations only: what the newest run that replayed the file decided. */
+  validation?: {
+    status: "passed" | "failed" | "cannot_run" | "not_run";
+    /** The name its author gave it: its first comment line. */
+    title: string;
+  };
   /** A battery whose package is missing has no source to open. */
   disabled: boolean;
 };

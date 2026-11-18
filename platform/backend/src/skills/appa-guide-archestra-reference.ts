@@ -110,5 +110,5 @@ A yell's archive is a gzipped JSON file attached to the chat as \`openappa-yell-
    - \`runtime_events\` lists runtime events, ordered by \`seq\`, with the time in \`at\`.
 4. Check what is missing before you conclude. \`truncated_before_seq\` means older facts were left out. \`omitted_reason\` means the report has no trajectory. A tool that appears in no fact and no runtime event was not attempted in the recorded range.
 5. A name can appear as a token such as \`tool-3\`. A token stands for the same thing everywhere in one report and means nothing in another report.
-6. Without \`archestra__run_command\`, say that you cannot open the archive. Ask the operator to download it from the Yells tab and paste the facts to check. Do not guess what the trajectory holds.
+6. Without \`archestra__run_command\`, say that you cannot open the archive. Ask the operator to download it from the Guardrails log and paste the facts to check. Do not guess what the trajectory holds.
 `;

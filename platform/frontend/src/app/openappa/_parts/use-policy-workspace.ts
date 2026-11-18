@@ -1,6 +1,5 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useMemo } from "react";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -16,8 +15,15 @@ import { compositionNotice, enforcedStatus } from "./composition-view";
 import {
   githubPolicyFileUrl,
   githubRepositoryFileUrl,
+  useManagedValidationsLink,
 } from "./github-managed-policy-notice";
 import type { PolicyFile } from "./policy-files";
+import {
+  useValidationSuite,
+  validationEntry,
+  validationPathOf,
+} from "./validation-context";
+import { validationFileStates, validationName } from "./validation-run-history";
 
 export type PolicyWorkspace = ReturnType<typeof usePolicyWorkspace>;
 
@@ -40,6 +46,30 @@ export function usePolicyWorkspace() {
   const serverRules = useServerRulesAccess();
   const scoped = serverRules.scoped === true;
   const declarations = usePolicyDeclarations(serverRules.scoped === false);
+  // The organization's validations: files of the policy like any other.
+  const suite = useValidationSuite();
+  const validationsLink = useManagedValidationsLink(
+    suite?.collection.activeDirectory ?? "",
+  );
+  const validationFiles = useMemo<PolicyFile[]>(() => {
+    if (!suite || scoped) return [];
+    const states = validationFileStates(suite.files, suite.history.data ?? []);
+    return suite.files.map(
+      (file): PolicyFile => ({
+        key: validationEntry(file.path),
+        entry: validationEntry(file.path),
+        path: file.path,
+        name: baseName(file.path),
+        kind: "validation",
+        label: file.path,
+        validation: {
+          status: states.get(file.path)?.status ?? "not_run",
+          title: validationName(file),
+        },
+        disabled: false,
+      }),
+    );
+  }, [suite, scoped]);
 
   const activeEntry = searchParams.get("entry");
   const lineParam = Number(searchParams.get("line"));
@@ -86,7 +116,7 @@ export function usePolicyWorkspace() {
       label: "Organization policy",
       disabled: false,
     };
-    if (!data) return [root];
+    if (!data) return [root, ...validationFiles];
     return [
       root,
       ...data.batteries.map((battery): PolicyFile => {
@@ -98,6 +128,7 @@ export function usePolicyWorkspace() {
           name: baseName(battery.entry),
           kind: "battery",
           label: batteryDisplayName(battery.name),
+          batteryName: battery.name,
           status,
           statusLabel: BATTERY_STATUS[status].label,
           severity: BATTERY_STATUS[status].severity,
@@ -119,8 +150,16 @@ export function usePolicyWorkspace() {
           disabled: false,
         }),
       ),
+      ...validationFiles,
     ];
-  }, [declarations.data, rootPath, serversFolder, scoped, serverRules.files]);
+  }, [
+    declarations.data,
+    rootPath,
+    serversFolder,
+    scoped,
+    serverRules.files,
+    validationFiles,
+  ]);
 
   // A linked entry opens before the declarations name it, and when they fail.
   const active: PolicyFile =
@@ -129,9 +168,9 @@ export function usePolicyWorkspace() {
       ? {
           key: activeEntry,
           entry: activeEntry,
-          path: activeEntry,
+          path: validationPathOf(activeEntry) ?? activeEntry,
           name: baseName(activeEntry),
-          kind: "repository",
+          kind: validationPathOf(activeEntry) ? "validation" : "repository",
           label: activeEntry,
           disabled: false,
         }
@@ -182,13 +221,20 @@ export function usePolicyWorkspace() {
     /** The connected repository's policy file, to read. */
     repositoryUrl: managed ? githubPolicyFileUrl(sync.data, "blob") : null,
     /** Where the open file is changed in the repository; null for a battery. */
-    editUrl: !managed
-      ? null
-      : active.kind === "root"
-        ? githubPolicyFileUrl(sync.data, "edit")
-        : active.kind === "repository" && active.entry
-          ? githubRepositoryFileUrl(sync.data, active.entry, "edit")
-          : null,
+    editUrl:
+      active.kind === "validation"
+        ? suite?.github && validationsLink.href
+          ? `${validationsLink.href}/${active.path}`
+          : null
+        : !managed
+          ? null
+          : active.kind === "root"
+            ? githubPolicyFileUrl(sync.data, "edit")
+            : active.kind === "repository" && active.entry
+              ? githubRepositoryFileUrl(sync.data, active.entry, "edit")
+              : null,
+    /** The validations, once they are there to show; null for a reader of server rules. */
+    validations: scoped ? null : suite,
     /** The policy changes through the configuration agent in chat. */
     canChangeInChat: !managed && canUpdate === true,
     /** A refused composition; null while the latest revision composed. */
@@ -197,10 +243,8 @@ export function usePolicyWorkspace() {
     attentionCount: files.filter(
       (file) => file.kind === "battery" && file.severity !== "ok",
     ).length,
-    guideUrl: getDocsUrl(
-      DocsPage.PlatformAiToolGuardrails,
-      "configure-with-the-agent",
-    ),
+    /** How a policy is written: OpenAPPA's own guide to its contracts. */
+    guideUrl: "https://www.openappa.com/contracts",
   };
 }
 

@@ -23,6 +23,44 @@ export const BATTERY_STATUS = {
 >;
 
 /**
+ * Why a battery's rules are not in force, for someone who has not read how
+ * batteries work, and what the way out is called. Nothing for one in force.
+ */
+export const BATTERY_PROBLEM = {
+  missing_credentials: {
+    text: "These rules are off. This battery looks things up with an API token to make its checks, and none is chosen yet.",
+    action: "Choose a credential",
+  },
+  server_missing: {
+    text: "These rules are off. This battery is not linked to any of your MCP servers, so it has no tool calls to check.",
+    action: "Link a server",
+  },
+  naming_conflict: {
+    text: "These rules are off. The battery cannot tell which MCP server's tools it should check.",
+    action: "See why",
+  },
+  unrouted: {
+    text: "These rules are not used. Nothing in your policy sends this battery's tools through them.",
+    action: "Open battery",
+  },
+  refused: {
+    text: "These rules are off. The policy that includes this battery was refused, so an earlier policy is still in force.",
+    action: "Open battery",
+  },
+  unavailable: {
+    text: "These rules are off. The battery's package is missing.",
+    action: "Open battery",
+  },
+  pending: {
+    text: "These rules are not live yet. An earlier version of the policy is still the one in force.",
+    action: "Open battery",
+  },
+} satisfies Record<
+  Exclude<EnforcedStatus, "active">,
+  { text: string; action: string }
+>;
+
+/**
  * What the Batteries table says about one battery: whether the policy includes
  * it and, when it does, what it still needs. A refusal or a pending revision is
  * a fact about the policy, not about one battery, so the table never shows it.

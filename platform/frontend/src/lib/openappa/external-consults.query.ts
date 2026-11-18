@@ -6,8 +6,11 @@ import { toast } from "sonner";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
-const { getOpenappaExternalConsult, getOpenappaExternalConsults } =
-  archestraApiSdk;
+const {
+  getOpenappaExternalConsult,
+  getOpenappaExternalConsults,
+  getOpenappaGuardrailEvents,
+} = archestraApiSdk;
 
 type ConsultsQuery = NonNullable<
   archestraApiTypes.GetOpenappaExternalConsultsData["query"]
@@ -46,6 +49,49 @@ export function useExternalConsults({
     },
   });
 }
+
+type GuardrailEventsQuery = NonNullable<
+  archestraApiTypes.GetOpenappaGuardrailEventsData["query"]
+>;
+export type GuardrailEvent =
+  archestraApiTypes.GetOpenappaGuardrailEventsResponses["200"]["data"][number];
+export type GuardrailEventFilters = Pick<
+  GuardrailEventsQuery,
+  "type" | "search" | "outcome" | "yellStatus" | "from" | "to"
+>;
+
+/**
+ * The Guardrails log: consults of external services and the yells agents
+ * raised, in one timeline, newest first.
+ */
+export function useGuardrailEvents({
+  filters,
+  limit = DEFAULT_TABLE_LIMIT,
+  cursor,
+}: {
+  filters: GuardrailEventFilters;
+  limit?: number;
+  cursor?: string;
+}) {
+  return useQuery({
+    // Under the yells' key too, so resolving a yell refreshes its row.
+    queryKey: [...GUARDRAIL_EVENTS_QUERY_KEY, { filters, limit, cursor }],
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const response = await getOpenappaGuardrailEvents({
+        query: { ...filters, limit, cursor },
+      });
+      throwOnApiError(response.error, { toastOnError: false });
+      return (
+        response.data ?? {
+          data: [],
+          pagination: { limit, nextCursor: null, hasNext: false },
+        }
+      );
+    },
+  });
+}
+const GUARDRAIL_EVENTS_QUERY_KEY = ["openappa-yells", "guardrail-events"];
 
 /**
  * One consult, with the LLM session and tool call it belongs to when those

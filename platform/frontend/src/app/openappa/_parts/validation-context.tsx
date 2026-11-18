@@ -1,6 +1,5 @@
 "use client";
 
-import { Info } from "lucide-react";
 import {
   createContext,
   type ReactNode,
@@ -9,9 +8,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { QueryLoadError } from "@/components/query-load-error";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   type PolicyTestCollection,
@@ -24,11 +20,15 @@ import {
   useSaveOpenAppaPolicyTests,
 } from "@/lib/openappa-policy-tests.query";
 
-import { reconcileValidationDraft } from "./validation-draft";
+export type ValidationSuite = ReturnType<typeof useSuite>;
+const ValidationContext = createContext<ValidationSuite | null>(null);
 
-type ValidationState = ReturnType<typeof useSuite>;
-const ValidationContext = createContext<ValidationState | null>(null);
-
+/**
+ * The organization's validation files with their runs, for the Policy page.
+ * It never stands in the page's way: `useValidationSuite` is null for a
+ * reader without the policy permission, while the files load, and when they
+ * fail to load.
+ */
 export function ValidationProvider({ children }: { children: ReactNode }) {
   const sessionQuery = useSession();
   const session = sessionQuery?.data;
@@ -38,32 +38,12 @@ export function ValidationProvider({ children }: { children: ReactNode }) {
     guardrailsPolicy: ["update"],
   });
   const source = useOpenAppaPolicyTests(canRead === true);
-  if (canRead === false)
-    return (
-      <InlineNotice>
-        <Info />
-        <span className="font-medium">Access required</span>
-        <InlineNoticeText>
-          You need policy read permission to view validation.
-        </InlineNoticeText>
-      </InlineNotice>
-    );
-  if (source.isLoading || canRead === undefined || sessionQuery?.isPending)
-    return <Skeleton className="h-80 w-full" />;
-  if (!source.data)
-    return (
-      <QueryLoadError
-        title="Could not load policy validation"
-        description={source.error?.message}
-        error={source.error}
-        onRetry={() => source.refetch()}
-      />
-    );
+  const collection = sessionQuery?.isPending ? undefined : source.data;
   return (
     <SuiteOwner
-      key={sessionKey}
       sessionKey={sessionKey}
-      collection={source.data}
+      collection={collection ?? EMPTY_COLLECTION}
+      ready={collection !== undefined}
       canWrite={canWrite === true}
       loadError={source.error}
     >
@@ -72,15 +52,31 @@ export function ValidationProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useValidation() {
-  const value = useContext(ValidationContext);
-  if (!value) throw new Error("Validation page requires its suite provider");
-  return value;
+/** The validation suite; null until its files are there to show. */
+export function useValidationSuite(): ValidationSuite | null {
+  return useContext(ValidationContext);
 }
 
-export function validationFileHref(path: string) {
-  return `/openappa/validation/file?${new URLSearchParams({ path })}`;
+/** The Policy page's entry for a validation file, as the URL carries it. */
+export function validationEntry(path: string) {
+  return `${VALIDATION_ENTRY_PREFIX}${path}`;
 }
+
+/** The validation file an entry names; null for a policy file's entry. */
+export function validationPathOf(entry: string | null) {
+  return entry?.startsWith(VALIDATION_ENTRY_PREFIX)
+    ? entry.slice(VALIDATION_ENTRY_PREFIX.length)
+    : null;
+}
+
+const VALIDATION_ENTRY_PREFIX = "validation:";
+
+// Typed as the loaded collection is, with nothing in it.
+const EMPTY_COLLECTION = {
+  source: "local",
+  files: [],
+  version: "",
+} as unknown as PolicyTestCollection;
 
 function SuiteOwner({
   children,
@@ -88,13 +84,14 @@ function SuiteOwner({
 }: {
   children: ReactNode;
   collection: PolicyTestCollection;
+  ready: boolean;
   canWrite: boolean;
   loadError: Error | null;
   sessionKey: string;
 }) {
   const suite = useSuite(props);
   return (
-    <ValidationContext.Provider value={suite}>
+    <ValidationContext.Provider value={props.ready ? suite : null}>
       {children}
     </ValidationContext.Provider>
   );
@@ -102,21 +99,31 @@ function SuiteOwner({
 
 function useSuite({
   collection,
+  ready,
   canWrite,
   loadError,
   sessionKey,
 }: {
   collection: PolicyTestCollection;
+  ready: boolean;
   canWrite: boolean;
   loadError: Error | null;
   sessionKey: string;
 }) {
   const [baseline, setBaseline] = useState(collection);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const history = useOpenAppaPolicyTestRuns(true);
-  const saveMutation = useSaveOpenAppaPolicyTests((next, submitted) => {
+  // A new session, and the files arriving, start the suite afresh. Done here
+  // rather than by remounting, which would reset the editor around it too.
+  const epoch = `${sessionKey}:${ready}`;
+  const [seenEpoch, setSeenEpoch] = useState(epoch);
+  if (seenEpoch !== epoch) {
+    setSeenEpoch(epoch);
+    setBaseline(collection);
+    setSelected(new Set());
+  }
+  const history = useOpenAppaPolicyTestRuns(ready);
+  const saveMutation = useSaveOpenAppaPolicyTests((next) => {
     if (next) {
-      reconcileValidationDraft(sessionKey, next, submitted.expectedVersion);
       setBaseline(next);
       setSelected(new Set());
     }
@@ -135,7 +142,7 @@ function useSuite({
     canWrite && !busy && files.length <= 32 && validPaths && available;
   const inspection = useValidationInspection(
     files,
-    available && validPaths && files.length <= 32,
+    ready && files.length > 0 && available && validPaths && files.length <= 32,
   );
   function save(
     path: string,
@@ -216,31 +223,6 @@ function useSuite({
     runMutation.isPending && runMutation.variables?.partial
       ? (runMutation.variables.files[0]?.path ?? null)
       : null;
-  function createFile(
-    file: PolicyTestCollection["files"][number],
-    expectedVersion: string,
-    onCreated: () => void,
-    onError: (error: Error) => void,
-  ) {
-    if (
-      github ||
-      !canWrite ||
-      busy ||
-      !available ||
-      expectedVersion !== baseline.version ||
-      baseline.files.length >= 32
-    )
-      return;
-    saveMutation.mutate(
-      { files: [...baseline.files, file], expectedVersion },
-      {
-        onSuccess: (next) => {
-          if (next) onCreated();
-        },
-        onError,
-      },
-    );
-  }
   function deleteFiles(paths: string[], onDeleted?: () => void) {
     if (github || !canWrite || busy || !available) return;
     saveMutation.mutate(
@@ -275,7 +257,6 @@ function useSuite({
     runningPath,
     runningAll: runMutation.isPending && !runMutation.variables?.partial,
     save,
-    createFile,
     deleteFiles,
     summaries: inspection.summaries,
     inspectionError: inspection.error,

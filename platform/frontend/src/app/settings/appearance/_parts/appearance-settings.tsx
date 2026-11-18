@@ -167,6 +167,7 @@ function AppearanceForm({
     const notificationChanged = !!(
       dirtyFields.notificationContent ||
       dirtyFields.notificationExpiresAt ||
+      dirtyFields.notificationDismissible ||
       dirtyFields.notificationDeleted
     );
     setSaving(true);
@@ -198,12 +199,14 @@ function AppearanceForm({
                   content,
                   expiresAt:
                     current.notificationExpiresAt?.toISOString() ?? null,
+                  dismissible: current.notificationDismissible,
                   isActive: true,
                 },
               })
             : await createNotification.mutateAsync({
                 content,
                 expiresAt: current.notificationExpiresAt?.toISOString(),
+                dismissible: current.notificationDismissible,
               });
           if (!result) return;
           savedNotification = result;

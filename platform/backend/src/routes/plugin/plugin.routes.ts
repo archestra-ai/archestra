@@ -304,7 +304,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { organizationId, user, body } = request;
-      await requirePluginAdmin({ organizationId, userId: user.id });
       const access = await resolvePluginImportAccess({
         ...body,
         organizationId,
@@ -342,7 +341,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { organizationId, user, body } = request;
-      await requirePluginAdmin({ organizationId, userId: user.id });
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -457,7 +455,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, body }, reply) => {
-      await requirePluginAdmin({ organizationId, userId: user.id });
       const access = await resolvePluginImportAccess({
         ...body,
         organizationId,
@@ -500,7 +497,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, body }, reply) => {
-      await requirePluginAdmin({ organizationId, userId: user.id });
       const access = await resolvePluginImportAccess({
         ...body,
         organizationId,
@@ -758,7 +754,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, body }, reply) => {
-      await requirePluginAdmin({ organizationId, userId: user.id });
       if (body.initialGrants?.length) {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -952,6 +947,12 @@ function pluginSourceRecord(params: {
   };
 }
 
+/**
+ * Reading a plugin's bytes and changing or removing an existing plugin take
+ * management of every plugin. Adding one does not: the routes that create or
+ * import a plugin need the role's `plugin:create` alone, which the route
+ * permission map enforces.
+ */
 async function requirePluginAdmin(params: {
   organizationId: string;
   userId: string;

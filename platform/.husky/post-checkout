@@ -4,10 +4,10 @@ case "${1:-}" in
   0000000000000000000000000000000000000000) ;;
   *) exit 0 ;;
 esac
-# With the dev VM (ARCHESTRA_DEV_MODE 1: edit in the VM, 2: one-way sync, see
-# platform/dev/vm/README.md) dependencies are installed in the VM, never here.
+# With the dev VM (ARCHESTRA_DEV_MODE=2, see platform/dev/vm/README.md)
+# dependencies are installed in the VM, never here.
 case "${ARCHESTRA_DEV_MODE:-0}" in
-  1 | 2)
+  2)
     echo "Archestra worktree bootstrap skipped: ARCHESTRA_DEV_MODE=$ARCHESTRA_DEV_MODE, dependencies are installed in the dev VM" >&2
     exit 0
     ;;

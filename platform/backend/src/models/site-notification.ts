@@ -77,6 +77,7 @@ class SiteNotificationModel {
       content: string;
       expiresAt?: Date;
       isActive?: boolean;
+      dismissible?: boolean;
     },
     tx?: Transaction,
   ) {
@@ -94,6 +95,7 @@ class SiteNotificationModel {
         content: data.content,
         expiresAt: data.expiresAt ?? null,
         isActive: data.isActive ?? true,
+        dismissible: data.dismissible ?? true,
         createdAt: now,
         updatedAt: now,
       })
@@ -107,6 +109,7 @@ class SiteNotificationModel {
       content?: string;
       expiresAt?: Date | null;
       isActive?: boolean;
+      dismissible?: boolean;
     },
   ) {
     logger.debug(

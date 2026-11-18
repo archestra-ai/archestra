@@ -554363,6 +554363,9 @@
                     },
                     "isActive": {
                       "type": "boolean"
+                    },
+                    "dismissible": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -554370,7 +554373,8 @@
                     "content",
                     "expiresAt",
                     "createdAt",
-                    "isActive"
+                    "isActive",
+                    "dismissible"
                   ],
                   "additionalProperties": false
                 }
@@ -554640,6 +554644,9 @@
                   },
                   "isActive": {
                     "type": "boolean"
+                  },
+                  "dismissible": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -554672,6 +554679,9 @@
                     },
                     "isActive": {
                       "type": "boolean"
+                    },
+                    "dismissible": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -554679,7 +554689,8 @@
                     "content",
                     "expiresAt",
                     "createdAt",
-                    "isActive"
+                    "isActive",
+                    "dismissible"
                   ],
                   "additionalProperties": false
                 }
@@ -554958,6 +554969,9 @@
                     },
                     "isActive": {
                       "type": "boolean"
+                    },
+                    "dismissible": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -554965,7 +554979,8 @@
                     "content",
                     "expiresAt",
                     "createdAt",
-                    "isActive"
+                    "isActive",
+                    "dismissible"
                   ],
                   "additionalProperties": false
                 }
@@ -555239,6 +555254,9 @@
                   },
                   "isActive": {
                     "type": "boolean"
+                  },
+                  "dismissible": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -555278,6 +555296,9 @@
                     },
                     "isActive": {
                       "type": "boolean"
+                    },
+                    "dismissible": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -555285,7 +555306,8 @@
                     "content",
                     "expiresAt",
                     "createdAt",
-                    "isActive"
+                    "isActive",
+                    "dismissible"
                   ],
                   "additionalProperties": false
                 }

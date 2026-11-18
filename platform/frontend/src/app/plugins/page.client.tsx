@@ -457,7 +457,7 @@ function PluginsList() {
           <div className="flex items-center gap-2">
             {!showEmptyState && !isInitialPluginsLoad && (
               <PermissionButton
-                permissions={{ plugin: ["create", "update"] }}
+                permissions={{ plugin: ["create"] }}
                 permissionScope="*"
                 size="sm"
                 asChild
@@ -836,7 +836,7 @@ function PluginsEmptyState() {
       description="Create a plugin for Claude Code, Claude Desktop, Codex, Copilot CLI, or Cursor."
       action={
         <PermissionButton
-          permissions={{ plugin: ["create", "update"] }}
+          permissions={{ plugin: ["create"] }}
           permissionScope="*"
           size="sm"
           asChild

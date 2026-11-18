@@ -665,14 +665,16 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   already says this agent starts a dedicated runtime. */}
             </PromptInputButton>
           </PopoverTrigger>
+          {/* Keep the panel steady as results change; shrink only the list
+              when the viewport limits the available space. */}
           <PopoverContent
             side="bottom"
             align="start"
             sideOffset={8}
             collisionPadding={12}
-            className="w-[calc(100vw-1.5rem)] rounded-xl p-0 sm:w-[360px]"
+            className="flex max-h-(--radix-popover-content-available-height) w-[calc(100vw-1.5rem)] flex-col rounded-xl p-0 sm:w-[360px]"
           >
-            <div className="px-2.5 pt-2.5 pb-1">
+            <div className="shrink-0 px-2.5 pt-2.5 pb-1">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                 <Input
@@ -745,7 +747,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               aria-busy={page.isFetching}
               role="listbox"
               aria-label="Agents"
-              className="max-h-[320px] overflow-y-auto px-1.5 pb-1.5"
+              className="h-[320px] min-h-0 overflow-y-auto px-1.5 pb-1.5"
             >
               {filteredAgents.length === 0 ? (
                 <div className="flex flex-col items-center gap-2.5 px-4 py-6 text-center">
@@ -816,7 +818,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                 ))
               )}
             </div>
-            <div className="flex items-center justify-between border-t px-1.5 py-1.5">
+            <div className="flex shrink-0 items-center justify-between border-t px-1.5 py-1.5">
               <Button asChild variant="ghost" size="sm">
                 <Link href={agentNewHref("agent")}>
                   <Plus />

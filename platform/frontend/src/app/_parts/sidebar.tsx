@@ -580,12 +580,7 @@ export function AppSidebar() {
             ) {
               // Without the Overview, the item opens what the reader has:
               // Yells, or the Policy page for their MCP servers' rules.
-              return {
-                ...item,
-                url: permissionMap["/openappa/yells"]
-                  ? "/openappa/yells"
-                  : "/openappa/policy",
-              };
+              return { ...item, url: "/openappa/policy" };
             }
             if (item.url === "/llm/costs") {
               return { ...item, url: getCostsNavigationUrl(permissionMap) };

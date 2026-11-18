@@ -17,9 +17,9 @@ export const OPENAPPA_SUGGESTED_LAUNCH_PROMPTS = {
 } as const;
 
 const POLICY_LAUNCH_PROMPTS = {
-  /** Validations page: same request as the overview's validate prompt. */
+  /** New validation: same request as the overview's validate prompt. */
   writeValidations: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.validatePolicy.prompt,
-  /** Validations page: explain what the saved checks protect. */
+  /** Explain what the saved validations protect. */
   explainValidations: "Explain my OpenAPPA validations.",
   /** Overview setup step: no policy has been saved yet. */
   setUpPolicy:

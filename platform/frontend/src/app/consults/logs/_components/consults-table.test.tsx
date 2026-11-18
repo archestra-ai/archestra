@@ -29,6 +29,16 @@ vi.mock("sonner");
 
 const origin = "http://localhost:9000";
 const consultsUrl = `${origin}/api/openappa/external-consults`;
+const eventsUrl = `${origin}/api/openappa/guardrail-events`;
+const events = (...consults: object[]) =>
+  HttpResponse.json({
+    data: consults.map((consult) =>
+      "message" in consult
+        ? { type: "yell", yell: consult }
+        : { type: "consult", consult },
+    ),
+    pagination: { limit: 20, nextCursor: null, hasNext: false },
+  });
 const server = setupServer();
 const requests: URL[] = [];
 const push = vi.fn();
@@ -65,6 +75,10 @@ beforeEach(() => {
         pagination: { limit: 20, nextCursor: null, hasNext: false },
       });
     }),
+    http.get(eventsUrl, ({ request }) => {
+      requests.push(new URL(request.url));
+      return events(CONSULT);
+    }),
   );
 });
 afterEach(() => {
@@ -92,20 +106,14 @@ it("lists consults for the URL filters with the tool name", async () => {
 
 it("shows every consult's outcome in the Status column", async () => {
   server.use(
-    http.get(consultsUrl, () =>
-      HttpResponse.json({
-        data: [
-          CONSULT,
-          {
-            ...CONSULT,
-            id: "01999999-0000-7000-8000-000000000002",
-            externalName: "egress-policy",
-            outcome: "timeout",
-            answer: null,
-            httpStatus: null,
-          },
-        ],
-        pagination: { limit: 20, nextCursor: null, hasNext: false },
+    http.get(eventsUrl, () =>
+      events(CONSULT, {
+        ...CONSULT,
+        id: "01999999-0000-7000-8000-000000000002",
+        externalName: "egress-policy",
+        outcome: "timeout",
+        answer: null,
+        httpStatus: null,
       }),
     ),
   );
@@ -116,11 +124,11 @@ it("shows every consult's outcome in the Status column", async () => {
   expect(within(table).getByText("Answered")).toBeInTheDocument();
 });
 
-it("exports JSONL with the current filters", async () => {
+it("exports consults as JSONL with the current filters", async () => {
   renderTable();
   await screen.findByText("fetch");
 
-  fireEvent.click(screen.getByRole("button", { name: /export jsonl/i }));
+  fireEvent.click(screen.getByRole("button", { name: /export consults/i }));
 
   await waitFor(() =>
     expect(
@@ -136,19 +144,46 @@ it("exports JSONL with the current filters", async () => {
 });
 
 it("opens a consult on its own page, which leads on to its session", async () => {
-  server.use(
-    http.get(consultsUrl, () =>
-      HttpResponse.json({
-        data: [CONSULT],
-        pagination: { limit: 20, nextCursor: null, hasNext: false },
-      }),
-    ),
-  );
   renderTable();
 
   fireEvent.click(await screen.findByText(CONSULT.externalName));
 
   expect(push).toHaveBeenCalledWith(`/consults/logs/${CONSULT.id}`);
+});
+
+it("lists a yell among the consults and opens it on its own page", async () => {
+  server.use(http.get(eventsUrl, () => events(YELL, CONSULT)));
+  renderTable();
+
+  fireEvent.click(await screen.findByText("Blocked reading the ledger"));
+
+  expect(screen.getByText("Unresolved")).toBeInTheDocument();
+  expect(screen.getByText(CONSULT.externalName)).toBeInTheDocument();
+  expect(push).toHaveBeenCalledWith(`/consults/logs/yells/${YELL.id}`);
+});
+
+it("asks for one kind of record when the type filter is set", async () => {
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams(
+      "type=yell&yellStatus=unresolved&outcome=answered",
+    ) as unknown as ReturnType<typeof useSearchParams>,
+  );
+  server.use(
+    http.get(eventsUrl, ({ request }) => {
+      requests.push(new URL(request.url));
+      return events(YELL);
+    }),
+  );
+  renderTable();
+
+  await screen.findByText("Blocked reading the ledger");
+  expect(requests[0].searchParams.get("type")).toBe("yell");
+  expect(requests[0].searchParams.get("yellStatus")).toBe("unresolved");
+  // An outcome belongs to consults, which this view leaves out.
+  expect(requests[0].searchParams.has("outcome")).toBe(false);
+  expect(
+    screen.getByRole("button", { name: /export consults/i }),
+  ).toBeDisabled();
 });
 
 it("shows a metadata-only consult without its withheld content", () => {
@@ -228,4 +263,23 @@ const CONSULT = {
   callId: null,
   offerId: null,
   callDigest: null,
+};
+
+const YELL = {
+  id: "01999999-0000-7000-8000-0000000000aa",
+  kind: "agent",
+  count: 1,
+  callerId: "user:u1",
+  caller: null,
+  callerApp: null,
+  sessionId: "user:u1|run-1",
+  toolCallId: "toolu_1",
+  message: "Blocked reading the ledger",
+  superyell: false,
+  hasArchive: false,
+  conversation: null,
+  trace: null,
+  createdAt: "2026-09-25T10:05:00.000Z",
+  resolvedAt: null,
+  resolvedBy: null,
 };

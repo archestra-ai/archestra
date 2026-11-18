@@ -65,7 +65,7 @@ export function useNavOnboarding() {
           // Same gate as the sidebar row: either page is enough.
           return (
             permissionMap["/openappa"] === true ||
-            permissionMap["/openappa/yells"] === true
+            permissionMap["/openappa/policy"] === true
           );
       }
     };

@@ -23,7 +23,7 @@ Open **Logs** in the sidebar to answer questions such as:
 | **LLM Proxy** | Session: agent, model, tokens, spend | The whole conversation. **Export JSON** saves it. |
 | **MCP Gateway** | Tool call: tool, gateway, account used, result | The arguments and the full result |
 | **Audit** | Change: who, what, when, and if it succeeded | The values before and after, the source IP, and any admin acting as someone else |
-| **Guardrails consult** | Request to a service used by [Guardrails](/docs/agents/guardrails): service, tool, outcome | The service request and reply |
+| **Guardrails** | Request to a service used by [Guardrails](/docs/agents/guardrails): service, tool, outcome. Or a [yell](/docs/agents/guardrails/policies#yells): the report, who sent it, and whether it is resolved | The service request and reply, or the whole report |
 | **Agent connections** | Calls grouped by user, agent, or gateway; setup and disconnect events under **Activity** | Drill into a group to see which agents and gateways it used |
 
 Open an **LLM Proxy** session to see every request and the MCP tool calls it triggered on one timeline; select a row for its timing, tokens, cost, conversation, and raw request and response. A tool call opened from the **MCP Gateway** tab shows where it sat in its session, or nearby calls from the same caller when it is not linked to one. Timing measures request processing before the log is saved, including the full stream for LLM requests. Older records may have no timing.
@@ -46,7 +46,7 @@ One permission shows your own logs. An admin permission shows everyone's.
 
 | Tab | Your own | Everyone's |
 | --- | --- | --- |
-| LLM Proxy, MCP Gateway, Guardrail consults | [`log:read`](/docs/reference/permissions#log:read) | [`log:admin`](/docs/reference/permissions#log:admin) |
+| LLM Proxy, MCP Gateway, Guardrails | [`log:read`](/docs/reference/permissions#log:read) | [`log:admin`](/docs/reference/permissions#log:admin) |
 | Audit | [`auditLog:read`](/docs/reference/permissions#auditLog:read) | [`auditLog:admin`](/docs/reference/permissions#auditLog:admin) |
 
 Sharing an agent or a gateway with someone does not let them read its logs.

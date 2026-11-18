@@ -1253,13 +1253,17 @@ test("without the permission to manage guardrails the controls are read-only", a
   ).not.toBeInTheDocument();
 });
 
-test("an alias no entry declares is listed without a control to remove it", async () => {
+test("an alias no entry declares is a warning beside the filters that leads to its line in the policy", async () => {
   declarations = emptyDeclarations({
     repositoryFiles: [],
     unusedAliases: [{ namespace: "stripe", servers: ["billing"], line: 9 }],
   });
   show();
-  await screen.findByText("stripe");
+  expect(
+    await screen.findByRole("link", {
+      name: "One alias in the policy names a battery it does not include: stripe.",
+    }),
+  ).toHaveAttribute("href", "/openappa/policy?line=9");
   expect(
     screen.queryByRole("button", { name: /stripe/i }),
   ).not.toBeInTheDocument();

@@ -1,9 +1,16 @@
 "use client";
 
-import { Download, Loader2 } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Download,
+  Layers,
+  Loader2,
+  Megaphone,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
+import { yellHref } from "@/app/openappa/_parts/yell-row";
 import {
   CollectionFilters,
   FilterBar,
@@ -15,18 +22,23 @@ import { TimeRangePicker } from "@/components/time-range-picker/time-range-picke
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import {
-  type ExternalConsultFilters,
   type ExternalConsultOutcome,
+  type GuardrailEventFilters,
   useExportExternalConsults,
-  useExternalConsults,
+  useGuardrailEvents,
 } from "@/lib/openappa/external-consults.query";
-import { buildConsultColumns } from "./consult-columns";
-import { type ConsultView, toConsultView } from "./consult-details";
+import { useResolveOpenAppaYell } from "@/lib/openappa-yells.query";
+import { toConsultView } from "./consult-details";
 import { ALL_OUTCOMES, OUTCOME_LABEL } from "./consult-outcome-badge";
+import {
+  buildGuardrailLogColumns,
+  type GuardrailLogRow,
+} from "./guardrail-log-columns";
 
 export function ConsultsTable() {
   const { searchParams, updateQueryParams: updateUrlParams } =
@@ -63,19 +75,36 @@ export function ConsultsTable() {
   );
   useLogsHeaderAction(timeRangePicker);
 
-  const filters: ExternalConsultFilters = {
+  const type = parseType(searchParams.get("type"));
+  const filters: GuardrailEventFilters = {
+    type: type === ALL_VALUE ? undefined : type,
     search: searchParams.get("search") || undefined,
-    outcome: parseOutcome(searchParams.get("outcome")),
+    // Each narrows the timeline to the kind it describes.
+    outcome:
+      type === "yell" ? undefined : parseOutcome(searchParams.get("outcome")),
+    yellStatus:
+      type === "consult"
+        ? undefined
+        : parseYellStatus(searchParams.get("yellStatus")),
     from: dateTimePicker.startDateParam,
     to: dateTimePicker.endDateParam,
   };
+  // The export is of consults, with the filters that apply to them.
+  const consultFilters = {
+    search: filters.search,
+    outcome: filters.outcome,
+    from: filters.from,
+    to: filters.to,
+  };
+  const { data: canResolve } = useHasPermissions({ log: ["read"] });
+  const resolve = useResolveOpenAppaYell();
 
   const {
     data: response,
     isFetching,
     isLoadingError,
     refetch,
-  } = useExternalConsults({
+  } = useGuardrailEvents({
     filters,
     limit: cursorPagination.pageSize,
     cursor: cursorPagination.cursor,
@@ -83,15 +112,35 @@ export function ConsultsTable() {
   const exportConsults = useExportExternalConsults();
 
   const rows = useMemo(
-    () => (response?.data ?? []).map(toConsultView),
+    () =>
+      (response?.data ?? []).map(
+        (event): GuardrailLogRow =>
+          event.type === "consult"
+            ? {
+                kind: "consult",
+                id: event.consult.id,
+                view: toConsultView(event.consult),
+              }
+            : { kind: "yell", id: event.yell.id, yell: event.yell },
+      ),
     [response],
   );
+  const { mutate: resolveYell, isPending: resolving } = resolve;
   const columns = useMemo(
     () =>
-      buildConsultColumns(
-        Math.max(1, ...rows.map((row) => row.consult.durationMs ?? 0)),
-      ),
-    [rows],
+      buildGuardrailLogColumns({
+        maxMs: Math.max(
+          1,
+          ...rows.map((row) =>
+            row.kind === "consult" ? (row.view.consult.durationMs ?? 0) : 0,
+          ),
+        ),
+        canResolve: canResolve === true,
+        resolving,
+        onResolve: (yell) =>
+          resolveYell({ id: yell.id, resolved: !yell.resolvedAt }),
+      }),
+    [rows, canResolve, resolving, resolveYell],
   );
   const paginationMeta = response?.pagination;
 
@@ -102,8 +151,10 @@ export function ConsultsTable() {
   const clearFilters = useCallback(() => {
     dateTimePicker.clearDateRange();
     updateUrlParams({
+      type: null,
       search: null,
       outcome: null,
+      yellStatus: null,
       startDate: null,
       endDate: null,
     });
@@ -112,7 +163,7 @@ export function ConsultsTable() {
   if (isLoadingError) {
     return (
       <QueryLoadError
-        title="Couldn't load Guardrails consults"
+        title="Couldn't load the Guardrails log"
         onRetry={() => refetch()}
       />
     );
@@ -127,7 +178,7 @@ export function ConsultsTable() {
           search={
             <SearchInput
               paramName="search"
-              placeholder="Service or session ID"
+              placeholder="Service, session ID or report"
               paginationMode="cursor"
               isLoading={isFetching}
             />
@@ -137,46 +188,96 @@ export function ConsultsTable() {
             <Button
               variant="outline"
               size="sm"
-              disabled={exportConsults.isPending}
-              onClick={() => exportConsults.mutate(filters)}
+              disabled={exportConsults.isPending || type === "yell"}
+              onClick={() => exportConsults.mutate(consultFilters)}
             >
               {exportConsults.isPending ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
                 <Download className="size-4" />
               )}
-              <span>Export JSONL</span>
+              <span>Export consults</span>
             </Button>
           }
         >
           <FilterSelect
-            value={filters.outcome ?? ALL_VALUE}
+            value={type}
             onValueChange={(value) => {
-              updateUrlParams({ outcome: value === ALL_VALUE ? null : value });
+              updateUrlParams({
+                type: value === ALL_VALUE ? null : value,
+                // A filter of the other kind would empty the list.
+                ...(value === "yell" ? { outcome: null } : {}),
+                ...(value === "consult" ? { yellStatus: null } : {}),
+              });
             }}
-            placeholder="Filter by outcome"
-            items={OUTCOME_OPTIONS}
+            ariaLabel="Record type"
+            placeholder="Filter by type"
+            showSearch={false}
+            items={TYPE_OPTIONS}
             inactiveValue={ALL_VALUE}
           />
+          {type !== "yell" && (
+            <FilterSelect
+              value={filters.outcome ?? ALL_VALUE}
+              onValueChange={(value) => {
+                updateUrlParams({
+                  outcome: value === ALL_VALUE ? null : value,
+                  yellStatus: null,
+                });
+              }}
+              placeholder="Filter by consult outcome"
+              items={OUTCOME_OPTIONS}
+              inactiveValue={ALL_VALUE}
+            />
+          )}
+          {type !== "consult" && (
+            <FilterSelect
+              value={filters.yellStatus ?? ALL_VALUE}
+              onValueChange={(value) => {
+                updateUrlParams({
+                  yellStatus: value === ALL_VALUE ? null : value,
+                  outcome: null,
+                });
+              }}
+              ariaLabel="Yell status"
+              placeholder="Filter by yell status"
+              showSearch={false}
+              items={YELL_STATUS_OPTIONS}
+              inactiveValue={ALL_VALUE}
+            />
+          )}
         </FilterBar>
       </CollectionFilters>
 
-      <DataTable<ConsultView, unknown>
+      <DataTable<GuardrailLogRow, unknown>
         columns={columns}
         fixedWidthColumnIds={["status", "latency", "time"]}
         flexibleColumnIds={["service", "tool"]}
         data={rows}
+        getRowId={(row) => `${row.kind}:${row.id}`}
         hideSelectedCount
         cursorPagination={cursorPagination.tableState(paginationMeta)}
         manualPagination
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
-        emptyMessage="No Guardrails consults recorded yet. Annotator and authority calls will appear here as they happen."
-        filteredEmptyMessage="No consults match your filters"
+        emptyMessage="Nothing recorded yet. Guardrails consults of external services and yells from agents appear here as they happen."
+        filteredEmptyMessage="Nothing matches your filters"
         onClearFilters={clearFilters}
         // A consult opens on its own page, which leads on to the session
         // trace it happened in when that session was logged.
-        onRowClick={(row) => router.push(`/consults/logs/${row.consult.id}`)}
+        onRowClick={(row, event) => {
+          // A yell's shortcuts and actions act on their own.
+          if (
+            row.kind === "yell" &&
+            (event.target as HTMLElement).closest("a, button")
+          )
+            return;
+          router.push(
+            row.kind === "consult"
+              ? `/consults/logs/${row.id}`
+              : yellHref(row.id),
+          );
+        }}
       />
     </div>
   );
@@ -187,12 +288,68 @@ export function ConsultsTable() {
 const ALL_VALUE = "all";
 
 const OUTCOME_OPTIONS = [
-  { value: ALL_VALUE, label: "All outcomes" },
+  { value: ALL_VALUE, label: "All consult outcomes" },
   ...ALL_OUTCOMES.map((outcome) => ({
     value: outcome,
     label: OUTCOME_LABEL[outcome],
   })),
 ];
+
+const TYPE_OPTIONS = [
+  {
+    value: ALL_VALUE,
+    label: "Consults and yells",
+    hint: "Everything Guardrails recorded",
+    icon: Layers,
+  },
+  {
+    value: "consult",
+    label: "Consults",
+    hint: "Requests to external services",
+    icon: ArrowLeftRight,
+  },
+  {
+    value: "yell",
+    label: "Yells",
+    hint: "Reports agents raised about blocks",
+    icon: Megaphone,
+  },
+].map(({ icon: Icon, hint, ...option }) => ({
+  ...option,
+  searchText: `${option.label} ${hint}`,
+  content: (
+    <span className="flex items-center gap-2.5">
+      <Icon className="size-4 shrink-0" />
+      <span className="min-w-0">
+        <span className="block">{option.label}</span>
+        <span className="block truncate text-xs text-muted-foreground">
+          {hint}
+        </span>
+      </span>
+    </span>
+  ),
+  // The trigger keeps to one line.
+  selectedContent: (
+    <span className="flex items-center gap-2">
+      <Icon className="size-4 shrink-0" />
+      <span>{option.label}</span>
+    </span>
+  ),
+}));
+
+const YELL_STATUS_OPTIONS = [
+  { value: ALL_VALUE, label: "All yell statuses" },
+  { value: "unresolved", label: "Unresolved yells" },
+  { value: "resolved", label: "Resolved yells" },
+];
+
+function parseType(value: string | null) {
+  return value === "consult" || value === "yell" ? value : ALL_VALUE;
+}
+
+function parseYellStatus(value: string | null) {
+  return value === "unresolved" || value === "resolved" ? value : undefined;
+}
 
 function parseOutcome(
   value: string | null,

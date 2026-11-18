@@ -162,7 +162,7 @@ describe("CompactToolGroup", () => {
     expect(screen.queryByText(/draft replay/)).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "View Validations" }),
-    ).toHaveAttribute("href", "/openappa/validation");
+    ).toHaveAttribute("href", "/openappa/policy");
     expect(
       screen.getByRole("button", {
         name: "update guardrails validation",

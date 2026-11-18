@@ -145,6 +145,22 @@ beforeEach(() => {
       HttpResponse.json({ enabled: true, source: null, hasPolicy: false }),
     ),
     http.get(declarationsUrl, () => HttpResponse.json(declarations)),
+    // No validations unless a test saves some.
+    http.get(`${origin}/api/openappa/policy-tests`, () =>
+      HttpResponse.json(validations([])),
+    ),
+    http.get(`${origin}/api/openappa/policy-tests/runs`, () =>
+      HttpResponse.json([]),
+    ),
+    http.post(`${origin}/api/openappa/policy-tests/inspect`, () =>
+      HttpResponse.json({ files: [] }),
+    ),
+    http.get(`${origin}/api/openappa/github-sync/protection`, () =>
+      HttpResponse.json(null),
+    ),
+    http.get(`${origin}/api/bootstrap`, () =>
+      HttpResponse.json(null, { status: 401 }),
+    ),
     http.get(effectiveUrl, () => {
       effectiveRequests += 1;
       return HttpResponse.json(effective);
@@ -159,6 +175,18 @@ afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
 });
+function validations(files: { path: string; content: string }[]) {
+  return {
+    source: "local",
+    files,
+    version: "v1",
+    sourceCommit: null,
+    directory: "tests",
+    activeDirectory: "tests",
+    error: null,
+  };
+}
+
 function mount(query = "") {
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams(query) as unknown as ReturnType<typeof useSearchParams>,
@@ -401,7 +429,7 @@ test("the explorer lists the repository's files in their folders, and a file ope
   const explorer = screen.getByRole("navigation", { name: "Policy files" });
   expect(
     await within(explorer).findByRole("button", {
-      name: /^Repository files\s*2$/,
+      name: /^Included files\s*2$/,
     }),
   ).toBeVisible();
   expect(within(explorer).getByRole("button", { name: "mcp" })).toBeVisible();
@@ -648,7 +676,7 @@ test("the effective policy is fetched only once its view is selected", async () 
   ).toHaveAttribute("readonly");
 });
 
-test("the composed view names the batteries that fold in as empty stubs", async () => {
+test("the composed view names the batteries whose rules are left out until they are set up", async () => {
   server.use(
     http.get(declarationsUrl, () =>
       HttpResponse.json({
@@ -829,4 +857,340 @@ test("a member with no Guardrails permission sees only their MCP servers' rules 
     screen.queryByRole("link", { name: "Edit Guardrails" }),
   ).not.toBeInTheDocument();
   expect(organizationReads).toBe(0);
+});
+
+const sendExternal = {
+  path: "mail/send-external.appa",
+  content:
+    '# Customer mail stays inside\n\nmcp/gmail/send_email {\n  to: "someone@outside.example"\n}\nexpect deny\n',
+};
+const smoke = {
+  path: "smoke.appa",
+  content:
+    '# Listing files is allowed\n\nmcp/files/list {\n  path: "/"\n}\nexpect allow\n',
+};
+function recordedRun(
+  id: string,
+  createdAt: string,
+  sendExternalFails: boolean,
+) {
+  return {
+    id,
+    createdBy: "Pat Morgan",
+    createdAt,
+    trigger: "manual",
+    source: "local",
+    sourceVersion: "v1",
+    sourceCommit: null,
+    definitionHash: "definition",
+    policyRevision: 1,
+    policyHash: "policy",
+    effectivePolicyHash: "effective",
+    engineVersion: "1.0.0",
+    draft: false,
+    validation: { valid: true, errors: [], warnings: [] },
+    files: [
+      {
+        path: sendExternal.path,
+        contentHash: "a",
+        assertionCount: 1,
+        status: sendExternalFails ? "failed" : "passed",
+        durationMs: 40,
+        steps: [
+          sendExternalFails
+            ? {
+                line: 3,
+                tool: "mcp/gmail/send_email",
+                expected: "deny",
+                actual: "allow",
+                status: "failed",
+                reasons: [
+                  "The catch-all for the mail server allowed the call.",
+                ],
+              }
+            : {
+                line: 3,
+                tool: "mcp/gmail/send_email",
+                expected: "deny",
+                actual: "deny",
+                status: "passed",
+              },
+        ],
+      },
+      {
+        path: smoke.path,
+        contentHash: "b",
+        assertionCount: 1,
+        status: "passed",
+        durationMs: 10,
+        steps: [
+          {
+            line: 3,
+            tool: "mcp/files/list",
+            expected: "allow",
+            actual: "allow",
+            status: "passed",
+          },
+        ],
+      },
+    ],
+  };
+}
+/** Two saved validations: one failed in the latest run, and passed in the run before. */
+function saveValidations() {
+  server.use(
+    http.get(`${origin}/api/openappa/policy-tests`, () =>
+      HttpResponse.json(validations([sendExternal, smoke])),
+    ),
+    http.get(`${origin}/api/openappa/policy-tests/runs`, () =>
+      HttpResponse.json([
+        recordedRun("run-2", "2026-01-02T10:00:00.000Z", true),
+        recordedRun("run-1", "2026-01-01T10:00:00.000Z", false),
+      ]),
+    ),
+    http.post(`${origin}/api/openappa/policy-tests/inspect`, () =>
+      HttpResponse.json({
+        files: [sendExternal, smoke].map((file) => ({
+          path: file.path,
+          error: null,
+        })),
+      }),
+    ),
+  );
+}
+
+test("the explorer lists the validations with how their last run went, and one opens from it", async () => {
+  saveValidations();
+  mount();
+  const explorer = screen.getByRole("navigation", { name: "Policy files" });
+
+  expect(
+    await within(explorer).findByRole("button", { name: /^Validations\s*2$/ }),
+  ).toBeVisible();
+  expect(
+    await within(explorer).findByRole("button", {
+      name: /send-external\.appa\s*Failed/,
+    }),
+  ).toBeVisible();
+  expect(
+    within(explorer).getByRole("button", { name: /smoke\.appa\s*Passed/ }),
+  ).toBeVisible();
+  expect(
+    within(explorer).getByRole("button", { name: "Run all validations" }),
+  ).toBeEnabled();
+
+  await userEvent.click(
+    within(explorer).getByRole("button", { name: /send-external\.appa/ }),
+  );
+  expect(lastUrl()).toBe(
+    `/openappa/policy?${entryQuery("validation:mail/send-external.appa")}`,
+  );
+});
+
+test("an open validation shows what its last run decided, under the step that failed", async () => {
+  saveValidations();
+  mount(entryQuery("validation:mail/send-external.appa"));
+
+  expect(
+    await screen.findByRole("textbox", {
+      name: "Policy validation mail/send-external.appa",
+    }),
+  ).toHaveValue(sendExternal.content);
+  await waitFor(() =>
+    expect(screen.getByTestId("validation-status")).toHaveTextContent("Failed"),
+  );
+  const outcome = within(screen.getByTestId("editor-zones"));
+  expect(await outcome.findByText("deny")).toBeVisible();
+  expect(outcome.getByText("allow")).toBeVisible();
+  expect(
+    outcome.getByText("The catch-all for the mail server allowed the call."),
+  ).toBeVisible();
+});
+
+test("a run's dot shows that run's result, and Back to latest returns", async () => {
+  saveValidations();
+  mount(entryQuery("validation:mail/send-external.appa"));
+  await waitFor(() =>
+    expect(screen.getByTestId("validation-status")).toHaveTextContent("Failed"),
+  );
+
+  const runs = screen.getByRole("list", { name: "This file's last runs" });
+  await userEvent.click(
+    within(runs).getByRole("button", { name: /: Passed$/ }),
+  );
+  expect(screen.getByTestId("validation-status")).toHaveTextContent("Passed");
+
+  await userEvent.click(screen.getByRole("button", { name: "Back to latest" }));
+  expect(screen.getByTestId("validation-status")).toHaveTextContent("Failed");
+});
+
+test("the problems panel lists each failure and opens it at its line", async () => {
+  saveValidations();
+  mount();
+  const problems = await screen.findByRole("region", {
+    name: "Validation problems",
+  });
+  // The panel is open until it is folded.
+  expect(
+    within(problems).getByRole("button", { name: "Hide problems" }),
+  ).toHaveAttribute("aria-expanded", "true");
+
+  await userEvent.click(
+    await within(problems).findByRole("button", {
+      name: /mcp\/gmail\/send_email.*expected deny, got allow/,
+    }),
+  );
+  const moved = new URL(String(lastUrl()), origin).searchParams;
+  expect(moved.get("entry")).toBe("validation:mail/send-external.appa");
+  expect(moved.get("line")).toBe("3");
+});
+
+test("an edited validation is tested as a draft, then saved", async () => {
+  saveValidations();
+  let previewed: unknown;
+  let saved: unknown;
+  server.use(
+    http.post(
+      `${origin}/api/openappa/policy-tests/preview`,
+      async ({ request }) => {
+        previewed = await request.json();
+        const run = recordedRun("draft", "2026-01-03T10:00:00.000Z", false);
+        return HttpResponse.json({
+          ...run,
+          draft: true,
+          files: [run.files[0]],
+        });
+      },
+    ),
+    http.put(`${origin}/api/openappa/policy-tests`, async ({ request }) => {
+      saved = await request.json();
+      return HttpResponse.json({
+        ...validations([sendExternal, smoke]),
+        version: "v2",
+      });
+    }),
+  );
+  mount(entryQuery("validation:mail/send-external.appa"));
+  const editor = await screen.findByRole("textbox", {
+    name: "Policy validation mail/send-external.appa",
+  });
+  await waitFor(() => expect(editor).not.toHaveAttribute("readonly"));
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+
+  await userEvent.type(editor, "# more");
+  const edited = `${sendExternal.content}# more`;
+  // The recorded result described the saved text, not this one.
+  expect(screen.getByTestId("validation-status")).toHaveTextContent("Not run");
+
+  await userEvent.click(screen.getByRole("button", { name: "Test draft" }));
+  await waitFor(() =>
+    expect(screen.getByTestId("validation-status")).toHaveTextContent("Passed"),
+  );
+  expect(previewed).toMatchObject({
+    files: [{ path: sendExternal.path, content: edited }],
+    sourceVersion: "v1",
+  });
+
+  await userEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() =>
+    expect(saved).toEqual({
+      files: [{ path: sendExternal.path, content: edited }, smoke],
+      expectedVersion: "v1",
+    }),
+  );
+});
+
+test("New validation opens the chat with the policy agent, on a request to write one", async () => {
+  saveValidations();
+  mount();
+
+  const link = await screen.findByRole("link", { name: "New validation" });
+  const href = new URL(link.getAttribute("href") ?? "", origin);
+  expect(href.pathname).toBe("/chat");
+  expect(href.searchParams.get("agentId")).toBe("appa-agent");
+  expect(href.searchParams.get("user_prompt")).toMatch(/validat/i);
+});
+
+test("validations kept in a repository are read-only", async () => {
+  saveValidations();
+  server.use(
+    http.get(`${origin}/api/openappa/policy-tests`, () =>
+      HttpResponse.json({
+        ...validations([sendExternal, smoke]),
+        source: "github",
+      }),
+    ),
+  );
+  mount(entryQuery("validation:mail/send-external.appa"));
+
+  expect(
+    await screen.findByRole("textbox", {
+      name: "Policy validation mail/send-external.appa",
+    }),
+  ).toHaveAttribute("readonly");
+  expect(
+    screen.queryByRole("button", { name: "Save" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("img", {
+      name: "Read-only. Change this validation in its repository.",
+    }),
+  ).toBeVisible();
+});
+
+test("a battery whose rules are off says why in plain words, and its settings open in place", async () => {
+  const notion = {
+    ...battery("notion", "missing_credentials", 3),
+    scope: "catalogs",
+  };
+  server.use(
+    http.get(declarationsUrl, () =>
+      HttpResponse.json({ ...declarations, batteries: [notion] }),
+    ),
+    http.get(`${origin}/api/openappa/battery-policy-source`, () =>
+      HttpResponse.json({
+        entry: notion.entry,
+        name: "notion",
+        kind: "battery",
+        content: "[notion]\n",
+      }),
+    ),
+    http.get(`${origin}/api/openappa/batteries`, () =>
+      HttpResponse.json([
+        {
+          name: "notion",
+          description: "Notion rules",
+          source: "bundled",
+          contentHash: null,
+          namespaces: ["notion"],
+          annotators: [],
+          scope: "catalogs",
+          helpers: [],
+          credentials: [],
+          setup: null,
+          installs: [],
+        },
+      ]),
+    ),
+    http.get(`${origin}/api/internal_mcp_catalog`, () => HttpResponse.json([])),
+    http.get(`${origin}/api/internal_mcp_catalog/registry/issue-index`, () =>
+      HttpResponse.json({ catalogItems: [], servers: [] }),
+    ),
+    http.get(`${origin}/api/credentials`, () => HttpResponse.json([])),
+  );
+  mount(entryQuery(notion.entry));
+
+  expect(
+    await screen.findByText(
+      /These rules are off\. This battery looks things up with an API token/,
+    ),
+  ).toBeVisible();
+  await userEvent.click(
+    screen.getByRole("button", { name: "Choose a credential" }),
+  );
+
+  const dialog = await screen.findByRole("dialog", { name: /notion/ });
+  expect(within(dialog).getByText("Notion rules")).toBeVisible();
+  // The reader stays on the file they were reading.
+  expect(pushState).not.toHaveBeenCalled();
 });

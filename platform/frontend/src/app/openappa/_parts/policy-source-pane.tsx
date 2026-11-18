@@ -1,7 +1,14 @@
 "use client";
 
 import type { Monaco, OnMount } from "@monaco-editor/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Editor } from "@/components/editor";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -63,6 +70,12 @@ export function PolicySourcePane({
   );
 }
 
+/**
+ * What the editor answers when someone types into a read-only file: where
+ * the file is changed instead, as Markdown. Null leaves the editor's own words.
+ */
+export const PolicyReadOnlyMessage = createContext<string | null>(null);
+
 /** A read-only policy document in an editor that fills its container. */
 export function PolicyPaneEditor({
   path,
@@ -83,6 +96,7 @@ export function PolicyPaneEditor({
   includeLinks?: { files: PolicyFile[]; onOpenEntry: (entry: string) => void };
   className?: string;
 }) {
+  const readOnlyMessage = useContext(PolicyReadOnlyMessage);
   const [mounted, setMounted] = useState<{
     editor: Parameters<OnMount>[0];
     monaco: Monaco;
@@ -172,6 +186,9 @@ export function PolicyPaneEditor({
             fontSize: 13,
             padding: { top: 8, bottom: 8 },
             readOnly: true,
+            readOnlyMessage: readOnlyMessage
+              ? { value: readOnlyMessage }
+              : undefined,
             ariaLabel,
             glyphMargin: declarations !== null,
           }}

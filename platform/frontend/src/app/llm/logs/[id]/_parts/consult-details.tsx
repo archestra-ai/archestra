@@ -24,7 +24,7 @@ import {
 /**
  * A guardrail consult in the session's details pane, laid out like a tool
  * call's: the facts on the left, what the policy asked the external and what
- * it answered on the right. The same record the Guardrail consults log
+ * it answered on the right. The same record the Guardrails log
  * shows, reached from the trace instead.
  */
 export function ConsultDetails({

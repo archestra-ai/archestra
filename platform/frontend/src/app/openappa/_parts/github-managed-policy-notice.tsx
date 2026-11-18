@@ -15,10 +15,13 @@ type AppaGithubSyncStatus = NonNullable<
 export function GithubManagedPolicyNotice({
   validationDirectory,
   hideHealthy = false,
+  healthyOnly = false,
 }: {
   validationDirectory?: string;
   /** The page links to the repository elsewhere; show only states that ask for something. */
   hideHealthy?: boolean;
+  /** Only the chip a healthy sync shows, to sit in a toolbar; whatever asks for something is shown elsewhere. */
+  healthyOnly?: boolean;
 } = {}) {
   const { data } = useAppaGithubSync();
   const pieces = useFinishSetupPieces();
@@ -30,7 +33,8 @@ export function GithubManagedPolicyNotice({
 
   // Setup still waits on something, a pull request to merge among it: the
   // one Finish setup notice, as on the Git sync settings.
-  if (!failed && pieces) return <FinishSetupNotice pieces={pieces} />;
+  if (!failed && pieces)
+    return healthyOnly ? null : <FinishSetupNotice pieces={pieces} />;
 
   // A healthy sync asks for nothing, so it is a chip, not a banner.
   if (!failed && !(validations && validationDirectory === "")) {
@@ -38,8 +42,16 @@ export function GithubManagedPolicyNotice({
     const content = (
       <>
         <LockKeyhole aria-hidden />
-        <span>{`Managed in ${git.label}`}</span>
-        {href && <ExternalLink aria-hidden />}
+        {/* In a toolbar on a phone the lock alone says it; its name stays for a screen reader. */}
+        <span className={healthyOnly ? "sr-only sm:not-sr-only" : undefined}>
+          {`Managed in ${git.label}`}
+        </span>
+        {href && (
+          <ExternalLink
+            aria-hidden
+            className={healthyOnly ? "hidden sm:block" : undefined}
+          />
+        )}
       </>
     );
     return (
@@ -60,6 +72,7 @@ export function GithubManagedPolicyNotice({
       </Badge>
     );
   }
+  if (healthyOnly) return null;
 
   return (
     <InlineNotice variant={failed ? "error" : "neutral"}>

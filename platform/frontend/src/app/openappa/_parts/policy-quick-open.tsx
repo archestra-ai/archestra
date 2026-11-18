@@ -22,6 +22,7 @@ import {
   PolicyStatusDot,
   policyFileIcon,
 } from "./policy-file-kind";
+import { VALIDATION_STATUS_LOOK } from "./policy-validation-pane";
 import type { PolicyWorkspace } from "./use-policy-workspace";
 
 /** A searchable palette of every policy file, grouped by kind. */
@@ -48,7 +49,8 @@ export function PolicyQuickOpen({
         <DialogHeader className="sr-only">
           <DialogTitle>Open a policy file</DialogTitle>
           <DialogDescription>
-            Search the organization policy, batteries and repository files.
+            Search the organization policy, batteries, included files and
+            validations.
           </DialogDescription>
         </DialogHeader>
         <Command>
@@ -66,7 +68,7 @@ export function PolicyQuickOpen({
                     <CommandItem
                       key={file.key}
                       // The status is searchable: "needs" finds what to fix.
-                      value={`${file.label} ${file.path} ${file.statusLabel ?? ""}`}
+                      value={`${file.label} ${file.path} ${file.statusLabel ?? ""} ${file.validation?.title ?? ""} ${file.validation ? VALIDATION_STATUS_LOOK[file.validation.status].label : ""}`}
                       disabled={file.disabled}
                       onSelect={() => {
                         workspace.open(file.entry);
@@ -82,13 +84,33 @@ export function PolicyQuickOpen({
                         aria-hidden
                       />
                       <span className="shrink-0">
-                        {file.kind === "repository" ? file.name : file.label}
+                        {file.kind === "repository"
+                          ? file.name
+                          : (file.validation?.title ?? file.label)}
                       </span>
                       <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">
                         {file.path}
                       </span>
                       <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
                         {file.mcpServerRules && <span>MCP server rules</span>}
+                        {file.validation && (
+                          <>
+                            <span>
+                              {
+                                VALIDATION_STATUS_LOOK[file.validation.status]
+                                  .label
+                              }
+                            </span>
+                            <span
+                              aria-hidden
+                              className={cn(
+                                "size-1.5 rounded-full",
+                                VALIDATION_STATUS_LOOK[file.validation.status]
+                                  .dot,
+                              )}
+                            />
+                          </>
+                        )}
                         {file.severity && (
                           <>
                             <span>{file.statusLabel}</span>

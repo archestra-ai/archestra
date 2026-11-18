@@ -2,16 +2,25 @@
 
 import {
   BookOpen,
+  FolderTree,
   GitBranch,
   LockKeyhole,
   MessageSquare,
+  PanelBottom,
   PanelLeft,
   PanelRight,
   Search,
   SquarePen,
   TriangleAlert,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   SERVER_RULES_LABEL,
   ServerRulesButton,
@@ -30,6 +39,8 @@ import {
   useEffectivePolicy,
 } from "@/lib/openappa-batteries.query";
 import { cn } from "@/lib/utils/tailwind";
+import { BatteryEditDialog } from "./_parts/batteries-panel";
+import { BATTERY_PROBLEM } from "./_parts/battery-status";
 import { compositionOf } from "./_parts/composition-view";
 import { EffectivePolicyView } from "./_parts/effective-policy-view";
 import { GithubManagedPolicyNotice } from "./_parts/github-managed-policy-notice";
@@ -41,15 +52,29 @@ import {
   policyFileIcon,
 } from "./_parts/policy-file-kind";
 import { PolicyOutline } from "./_parts/policy-outline";
+import {
+  PolicyProblemsPanel,
+  type ValidationProblem,
+  validationProblems,
+} from "./_parts/policy-problems-panel";
 import { PolicyQuickOpen } from "./_parts/policy-quick-open";
 import {
   PolicyPaneSkeleton,
+  PolicyReadOnlyMessage,
   PolicySourcePane,
 } from "./_parts/policy-source-pane";
+import {
+  POLICY_VALIDATION_CSS,
+  PolicyValidationPane,
+} from "./_parts/policy-validation-pane";
 import {
   type PolicyWorkspace,
   usePolicyWorkspace,
 } from "./_parts/use-policy-workspace";
+import {
+  ValidationProvider,
+  validationEntry,
+} from "./_parts/validation-context";
 
 /**
  * The Policy page, laid out as an editor: the policy's files in an explorer,
@@ -57,6 +82,14 @@ import {
  * top. It takes the height its page gives it.
  */
 export function GuardrailsPolicyEditor() {
+  return (
+    <ValidationProvider>
+      <PolicyEditor />
+    </ValidationProvider>
+  );
+}
+
+function PolicyEditor() {
   const workspace = usePolicyWorkspace();
   const [explorerOpen, setExplorerOpen] = useStoredFlag(
     "openappa-policy-explorer-open",
@@ -64,25 +97,90 @@ export function GuardrailsPolicyEditor() {
   const [outlineOpen, setOutlineOpen] = useStoredFlag(
     "openappa-policy-outline-open",
   );
+  const [problemsOpen, setProblemsOpen] = useStoredFlag(
+    "openappa-policy-problems-open",
+  );
   const [quickOpen, setQuickOpen] = useState(false);
+  // On a small screen the files open over the editor, and a picked file
+  // or Escape closes them.
+  const [filesPanel, setFilesPanel] = useState(false);
+  const activeKey = workspace.active.key;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: closes when the open file changes
+  useEffect(() => setFilesPanel(false), [activeKey]);
+  useEffect(() => {
+    if (!filesPanel) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFilesPanel(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [filesPanel]);
+  const [fixingBattery, setFixingBattery] = useState<string | null>(null);
 
-  // Cmd/Ctrl+P opens the file palette, as in an IDE. Capture phase, so the
-  // editor does not take the key first.
+  const batteryProblem =
+    workspace.active.kind === "battery" &&
+    workspace.active.status &&
+    workspace.active.status !== "active"
+      ? BATTERY_PROBLEM[workspace.active.status]
+      : null;
+  const suite = workspace.validations;
+  const problems = useMemo(
+    () => (suite ? validationProblems(suite) : []),
+    [suite],
+  );
+  const [activeProblemId, setActiveProblemId] = useState<string>();
+  const { open: openEntry } = workspace;
+  const pickProblem = useCallback(
+    (problem: ValidationProblem) => {
+      setActiveProblemId(problem.id);
+      openEntry(validationEntry(problem.path), problem.line);
+    },
+    [openEntry],
+  );
+  // F8 walks the problems, wrapping at either end.
+  const stepProblem = useCallback(
+    (direction: 1 | -1) => {
+      if (problems.length === 0) return;
+      const at = problems.findIndex((item) => item.id === activeProblemId);
+      const next =
+        at < 0
+          ? direction === 1
+            ? 0
+            : problems.length - 1
+          : (at + direction + problems.length) % problems.length;
+      pickProblem(problems[next]);
+    },
+    [problems, activeProblemId, pickProblem],
+  );
+  const keys = useRef({ stepProblem, problemsOpen, setProblemsOpen });
+  keys.current = { stepProblem, problemsOpen, setProblemsOpen };
+  const hasValidations = suite !== null;
+
+  // Cmd/Ctrl+P opens the file palette, Cmd/Ctrl+J folds the problems and F8
+  // walks them, as in an IDE. Capture phase, so the editor does not take the
+  // key first.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        !event.shiftKey &&
-        !event.altKey &&
-        event.key.toLowerCase() === "p"
-      ) {
+      const command = (event.metaKey || event.ctrlKey) && !event.altKey;
+      if (command && !event.shiftKey && event.key.toLowerCase() === "p") {
         event.preventDefault();
         setQuickOpen(true);
+      } else if (
+        hasValidations &&
+        command &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === "j"
+      ) {
+        event.preventDefault();
+        keys.current.setProblemsOpen(!keys.current.problemsOpen);
+      } else if (hasValidations && event.key === "F8") {
+        event.preventDefault();
+        keys.current.stepProblem(event.shiftKey ? -1 : 1);
       }
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, []);
+  }, [hasValidations]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -102,6 +200,10 @@ export function GuardrailsPolicyEditor() {
           outlineOpen={outlineOpen}
           onToggleOutline={() => setOutlineOpen(!outlineOpen)}
           onQuickOpen={() => setQuickOpen(true)}
+          filesPanelOpen={filesPanel}
+          onToggleFiles={() => setFilesPanel(!filesPanel)}
+          problemsOpen={suite ? problemsOpen : null}
+          onToggleProblems={() => setProblemsOpen(!problemsOpen)}
         />
         {workspace.notice && (
           <div
@@ -126,22 +228,98 @@ export function GuardrailsPolicyEditor() {
             </span>
           </div>
         )}
-        <TabsContent value="source" className="flex min-h-0">
+        <TabsContent value="source" className="relative flex min-h-0">
           {explorerOpen && <PolicyExplorer workspace={workspace} />}
-          {workspace.isPending || !workspace.active.key ? (
-            // Whose files these are is not known yet: nothing to read.
-            <PolicyPaneSkeleton className="min-w-0 flex-1" />
-          ) : (
-            <PolicySourcePane
-              className="min-w-0 flex-1"
-              file={workspace.active}
-              files={workspace.files}
-              focusLine={workspace.focusLine}
-              onOpenEntry={workspace.open}
-              serverRules={workspace.scoped}
-            />
+          {filesPanel && (
+            // On a small screen the files lie over the editor, inside the
+            // editor's own frame, and what is left of it closes them.
+            <div className="absolute inset-0 z-20 flex md:hidden">
+              <div className="flex w-64 max-w-[80%] flex-col border-r bg-background shadow-lg">
+                <PolicyExplorer workspace={workspace} overlay />
+              </div>
+              <UnstyledButton
+                aria-label="Close files"
+                onClick={() => setFilesPanel(false)}
+                className="flex-1 bg-background/70"
+              />
+            </div>
           )}
-          {outlineOpen && <PolicyOutline workspace={workspace} />}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1">
+              {workspace.isPending || !workspace.active.key ? (
+                // Whose files these are is not known yet: nothing to read.
+                <PolicyPaneSkeleton className="min-w-0 flex-1" />
+              ) : workspace.active.kind === "validation" ? (
+                <PolicyValidationPane
+                  className="min-w-0 flex-1"
+                  path={workspace.active.path}
+                  focusLine={workspace.focusLine}
+                  repositoryUrl={workspace.editUrl}
+                  onDeleted={() => workspace.open(null)}
+                />
+              ) : (
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                  {batteryProblem && (
+                    // What is wrong is in the battery's settings, not in this file.
+                    <p className="flex shrink-0 items-start gap-2 border-b bg-amber-500/10 px-3 py-1 text-xs text-amber-700 dark:text-amber-400">
+                      <TriangleAlert
+                        className="mt-0.5 size-3.5 shrink-0"
+                        aria-hidden
+                      />
+                      <span className="min-w-0">
+                        <span>{batteryProblem.text}</span>{" "}
+                        <UnstyledButton
+                          onClick={() =>
+                            setFixingBattery(
+                              workspace.active.batteryName ?? null,
+                            )
+                          }
+                          className="font-medium underline underline-offset-2 outline-none hover:text-foreground focus-visible:text-foreground"
+                        >
+                          {batteryProblem.action}
+                        </UnstyledButton>
+                      </span>
+                    </p>
+                  )}
+                  <PolicyReadOnlyMessage.Provider
+                    value={
+                      workspace.editUrl
+                        ? `Read-only. [Edit in ${workspace.gitLabel}](${workspace.editUrl})`
+                        : workspace.active.kind === "battery"
+                          ? "Read-only. A battery's rules come with the battery."
+                          : workspace.canChangeInChat
+                            ? "Read-only. Ask the configuration agent in chat to change it."
+                            : null
+                    }
+                  >
+                    <PolicySourcePane
+                      className="min-h-0 min-w-0 flex-1"
+                      file={workspace.active}
+                      files={workspace.files}
+                      focusLine={workspace.focusLine}
+                      onOpenEntry={workspace.open}
+                      serverRules={workspace.scoped}
+                    />
+                  </PolicyReadOnlyMessage.Provider>
+                </div>
+              )}
+              {outlineOpen && workspace.active.kind !== "validation" && (
+                <PolicyOutline workspace={workspace} />
+              )}
+            </div>
+            {suite && (
+              <PolicyProblemsPanel
+                suite={suite}
+                problems={problems}
+                open={problemsOpen}
+                onOpenChange={setProblemsOpen}
+                activeId={activeProblemId}
+                onPick={pickProblem}
+                onOpenFile={(path) => workspace.open(validationEntry(path))}
+                onStep={stepProblem}
+              />
+            )}
+          </div>
         </TabsContent>
         <TabsContent value="effective" className="flex min-h-0 flex-col">
           <EffectivePolicyView />
@@ -152,6 +330,13 @@ export function GuardrailsPolicyEditor() {
         open={quickOpen}
         onOpenChange={setQuickOpen}
       />
+      {fixingBattery && (
+        <BatteryEditDialog
+          name={fixingBattery}
+          onClose={() => setFixingBattery(null)}
+        />
+      )}
+      <style>{POLICY_VALIDATION_CSS}</style>
     </div>
   );
 }
@@ -163,7 +348,17 @@ function TopBar({
   outlineOpen,
   onToggleOutline,
   onQuickOpen,
+  filesPanelOpen,
+  onToggleFiles,
+  problemsOpen,
+  onToggleProblems,
 }: {
+  /** The file tree over the editor, where it has no column of its own. */
+  filesPanelOpen: boolean;
+  onToggleFiles: () => void;
+  /** Null when there are no validations to have problems. */
+  problemsOpen: boolean | null;
+  onToggleProblems: () => void;
   workspace: PolicyWorkspace;
   explorerOpen: boolean;
   onToggleExplorer: () => void;
@@ -184,17 +379,25 @@ function TopBar({
   const serverNames = (active.servers ?? [])
     .map((server) => server.name)
     .join(", ");
-  const readOnly = workspace.scoped
-    ? active.canEdit
-      ? `Read-only here. ${SERVER_RULES_LABEL} proposes a change as a pull request.`
-      : `Read-only. Changing these rules takes edit access to ${serverNames || "the server"} in the MCP registry.`
-    : workspace.managed
-      ? active.kind === "repository"
-        ? "Read-only. Change this file in its connected repository."
-        : "Read-only. Change this policy in its connected repository."
-      : workspace.canChangeInChat
-        ? "Read-only. Change this policy with the configuration agent in chat."
-        : "Read-only. Ask an administrator to change this policy.";
+  const validation = active.kind === "validation";
+  const suite = workspace.validations;
+  const readOnly = validation
+    ? suite?.github
+      ? "Read-only. Change this validation in "
+      : suite?.canWrite
+        ? null
+        : "Read-only. Ask an administrator to change this validation."
+    : workspace.scoped
+      ? active.canEdit
+        ? `Read-only here. ${SERVER_RULES_LABEL} proposes a change as a pull request.`
+        : `Read-only. Changing these rules takes edit access to ${serverNames || "the server"} in the MCP registry.`
+      : workspace.managed
+        ? active.kind === "repository"
+          ? "Read-only. Change this file in its connected repository."
+          : "Read-only. Change this policy in its connected repository."
+        : workspace.canChangeInChat
+          ? "Read-only. Change this policy with the configuration agent in chat."
+          : "Read-only. Ask an administrator to change this policy.";
   const managedIn = `Managed in ${workspace.gitLabel}`;
 
   return (
@@ -283,18 +486,60 @@ function TopBar({
       </UnstyledButton>
 
       <div className="flex w-full items-center justify-end gap-0.5 sm:w-auto">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span
-              role="img"
-              aria-label={readOnly}
-              className="flex size-6 items-center justify-center text-muted-foreground"
-            >
-              <LockKeyhole className="size-3.5" aria-hidden />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">{readOnly}</TooltipContent>
-        </Tooltip>
+        {isSource && (
+          <Button
+            variant="ghost"
+            size="xs"
+            aria-expanded={filesPanelOpen}
+            onClick={onToggleFiles}
+            className={cn(
+              "mr-auto h-6 gap-1 px-1.5 text-xs md:hidden",
+              filesPanelOpen ? "text-foreground" : "text-muted-foreground",
+            )}
+          >
+            <FolderTree className="size-3.5" aria-hidden />
+            <span>Files</span>
+          </Button>
+        )}
+        {readOnly && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                role="img"
+                aria-label={
+                  validation && suite?.github
+                    ? `${readOnly}its repository.`
+                    : readOnly
+                }
+                className="flex size-6 items-center justify-center text-muted-foreground"
+              >
+                <LockKeyhole className="size-3.5" aria-hidden />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="end" className="max-w-52">
+              {validation && suite?.github ? (
+                <>
+                  <span>{readOnly}</span>
+                  {workspace.editUrl ? (
+                    <a
+                      href={workspace.editUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium underline underline-offset-2"
+                    >
+                      its repository
+                    </a>
+                  ) : (
+                    <span>its repository</span>
+                  )}
+                  <span>.</span>
+                </>
+              ) : (
+                readOnly
+              )}
+            </TooltipContent>
+          </Tooltip>
+        )}
         {workspace.managed &&
           (workspace.repositoryUrl ? (
             <IconLink href={workspace.repositoryUrl} label={managedIn}>
@@ -333,7 +578,7 @@ function TopBar({
             <span className="sr-only xl:not-sr-only">{SERVER_RULES_LABEL}</span>
           </ServerRulesButton>
         )}
-        {workspace.canChangeInChat && (
+        {workspace.canChangeInChat && !validation && (
           <OpenAppaChatButton
             size="xs"
             variant="ghost"
@@ -354,7 +599,27 @@ function TopBar({
             </TabsTrigger>
           </TabsList>
         )}
-        {isSource && (
+        {isSource && problemsOpen !== null && (
+          <IconAction
+            label={problemsOpen ? "Hide problems (⌘J)" : "Show problems (⌘J)"}
+            className="hidden md:inline-flex"
+          >
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={problemsOpen ? "Hide problems" : "Show problems"}
+              aria-pressed={problemsOpen}
+              onClick={onToggleProblems}
+              className={cn(
+                "size-6",
+                problemsOpen ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              <PanelBottom className="size-3.5" />
+            </Button>
+          </IconAction>
+        )}
+        {isSource && !validation && (
           <IconAction
             label={outlineOpen ? "Hide rule outline" : "Show rule outline"}
             className="hidden lg:inline-flex"

@@ -67,6 +67,7 @@ type BedrockCommandContext = {
      * dropping it silently re-enables reasoning the caller disabled.
      */
     additionalModelRequestFields: Record<string, unknown> | undefined;
+    outputConfig: BedrockRequest["outputConfig"];
     toolConfig:
       | {
           tools:
@@ -1775,6 +1776,7 @@ function buildBedrockCommandContext(
       }),
       inferenceConfig: request.inferenceConfig,
       additionalModelRequestFields: request.additionalModelRequestFields,
+      outputConfig: request.outputConfig,
       toolConfig: request.toolConfig
         ? {
             tools: request.toolConfig.tools?.map((t) =>
@@ -1859,6 +1861,51 @@ function stripBedrockSamplingParams(
     ...commandInput,
     inferenceConfig: Object.keys(next).length > 0 ? next : undefined,
   };
+}
+
+// =============================================================================
+// HELPER: Structured-output fallback
+// =============================================================================
+
+/**
+ * Run a Converse call and, when the model rejects `outputConfig` because it has
+ * no structured output support, run it once more without the field. The answer
+ * is then unconstrained, which is what the caller got before the proxy forwarded
+ * the constraint. A schema error from a model that supports the field is not
+ * retried.
+ */
+async function withOutputConfigFallback<TResult>(
+  input: BedrockCommandInput,
+  run: (input: BedrockCommandInput) => Promise<TResult>,
+): Promise<TResult> {
+  try {
+    return await run(input);
+  } catch (error) {
+    if (!input.outputConfig || !isUnsupportedOutputConfigError(error)) {
+      throw error;
+    }
+    logger.warn(
+      { provider: "bedrock", modelId: input.modelId },
+      "[llm-proxy] model has no structured output support; retrying without outputConfig",
+    );
+    return run({ ...input, outputConfig: undefined });
+  }
+}
+
+/** Bedrock: "This model doesn't support the outputConfig field." */
+function isUnsupportedOutputConfigError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const { statusCode, message, responseBody } = error as {
+    statusCode?: number;
+    message?: string;
+    responseBody?: string;
+  };
+  if (statusCode !== 400) return false;
+  const text = `${message ?? ""} ${responseBody ?? ""}`;
+  return (
+    /outputConfig/i.test(text) &&
+    /doesn't support|does not support|not supported|unsupported/i.test(text)
+  );
 }
 
 // =============================================================================
@@ -1950,7 +1997,10 @@ export const bedrockAdapterFactory: LLMProvider<
       input: commandInput,
       strip: stripBedrockSamplingParams,
       logContext: { provider: "bedrock", modelId: commandInput.modelId },
-      run: (input) => bedrockClient.converse(request.modelId, input),
+      run: (input) =>
+        withOutputConfigFallback(input, (attempt) =>
+          bedrockClient.converse(request.modelId, attempt),
+        ),
     });
 
     // Convert response to our internal format with decoded tool names.
@@ -2033,7 +2083,10 @@ export const bedrockAdapterFactory: LLMProvider<
       input: commandInput,
       strip: stripBedrockSamplingParams,
       logContext: { provider: "bedrock", modelId: commandInput.modelId },
-      run: (input) => bedrockClient.converseStream(request.modelId, input),
+      run: (input) =>
+        withOutputConfigFallback(input, (attempt) =>
+          bedrockClient.converseStream(request.modelId, attempt),
+        ),
     });
   },
 

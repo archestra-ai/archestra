@@ -1243,6 +1243,96 @@ describe("Bedrock sampling-param fallback", () => {
   });
 });
 
+describe("Bedrock structured-output fallback", () => {
+  function makeBedrockError(messageText: string): Error {
+    const body = JSON.stringify({ message: messageText });
+    const error = new Error(
+      `Bedrock API error (400): ${messageText}`,
+    ) as Error & {
+      statusCode: number;
+      responseBody: string;
+    };
+    error.statusCode = 400;
+    error.responseBody = body;
+    return error;
+  }
+
+  const unsupported =
+    "This model doesn't support the outputConfig field. Remove outputConfig and try again.";
+  const outputConfig = {
+    textFormat: {
+      type: "json_schema",
+      structure: {
+        jsonSchema: { schema: '{"type":"object"}', name: "status_result" },
+      },
+    },
+  };
+
+  test("sends outputConfig, then retries once without it when the model has no support", async () => {
+    const request = createConverseRequest({
+      outputConfig,
+      inferenceConfig: { maxTokens: 100 },
+    });
+    const seen: Array<Record<string, unknown>> = [];
+    const client = {
+      converse: async (_modelId: string, input: Record<string, unknown>) => {
+        seen.push(input);
+        if (seen.length === 1) throw makeBedrockError(unsupported);
+        return {
+          $metadata: { requestId: "req_1" },
+          output: { message: { role: "assistant", content: [{ text: "ok" }] } },
+          stopReason: "end_turn",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+    };
+
+    const response = await bedrockAdapterFactory.execute(client, request);
+
+    expect(seen).toHaveLength(2);
+    expect(seen[0].outputConfig).toEqual(outputConfig);
+    expect(seen[1].outputConfig).toBeUndefined();
+    // Only the constraint is dropped.
+    expect(seen[1].inferenceConfig).toEqual({ maxTokens: 100 });
+    expect(seen[1].messages).toEqual(seen[0].messages);
+    expect(response.output?.message?.content?.[0]).toEqual({ text: "ok" });
+  });
+
+  test("streaming retries without outputConfig before yielding events", async () => {
+    const events = (async function* () {
+      yield { messageStop: { stopReason: "end_turn" } };
+    })();
+    const converseStream = vi
+      .fn()
+      .mockRejectedValueOnce(makeBedrockError(unsupported))
+      .mockResolvedValue(events);
+
+    const stream = await bedrockAdapterFactory.executeStream(
+      { converseStream },
+      createConverseRequest({ outputConfig }),
+    );
+
+    expect(stream).toBe(events);
+    expect(converseStream).toHaveBeenCalledTimes(2);
+    expect(converseStream.mock.calls[0][1].outputConfig).toEqual(outputConfig);
+    expect(converseStream.mock.calls[1][1].outputConfig).toBeUndefined();
+  });
+
+  test("a schema the model refuses is returned to the caller, not retried", async () => {
+    const invalid =
+      "The json schema definition at outputConfig.textFormat.structure.jsonSchema is invalid. Fix the schema definition and try again.";
+    const converse = vi.fn().mockRejectedValue(makeBedrockError(invalid));
+
+    await expect(
+      bedrockAdapterFactory.execute(
+        { converse },
+        createConverseRequest({ outputConfig }),
+      ),
+    ).rejects.toThrow(invalid);
+    expect(converse).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("Bedrock replayed tool-call ids", () => {
   test("fits a foreign call id after the result update looked it up", () => {
     const foreignCallId = "call.0:read";

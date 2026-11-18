@@ -6,8 +6,6 @@ import { useEffect, useId, useRef, useState } from "react";
 import { DiffEditor } from "@/components/diff-editor";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 
 /** Monaco renders only visible lines and keeps navigation within the review. */
@@ -24,7 +22,6 @@ export function PolicyDiffReview({
   const editorRef = useRef<Parameters<DiffOnMount>[0] | null>(null);
   const [ready, setReady] = useState(false);
   const [sideBySide, setSideBySide] = useState(false);
-  const [wrap, setWrap] = useState(false);
   const [showUnchanged, setShowUnchanged] = useState(false);
   const revealFrame = useRef<number | null>(null);
 
@@ -43,7 +40,7 @@ export function PolicyDiffReview({
       .getVisibleRanges()[0]?.startLineNumber;
     update();
     if (revealFrame.current !== null) cancelAnimationFrame(revealFrame.current);
-    // Folding and wrapping change scroll offsets. Keep the visible policy
+    // Folding and layout changes affect scroll offsets. Keep the visible policy
     // line in view after Monaco applies the new layout.
     if (line !== undefined) {
       revealFrame.current = requestAnimationFrame(() => {
@@ -56,74 +53,35 @@ export function PolicyDiffReview({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-3 border-b px-4 py-3">
         <div className="flex items-center gap-2">
-          <span
-            id={`${controlId}-layout`}
-            className="text-xs text-muted-foreground"
-          >
-            Layout
-          </span>
-          {/* Match Auto-routing's segmented radios: one choice, arrow-key
-              navigation, and a shared track distinct from feature switches. */}
-          <RadioGroup
-            value={sideBySide ? "split" : "unified"}
-            onValueChange={(value) =>
-              updateView(() => setSideBySide(value === "split"))
+          <Switch
+            id={`${controlId}-side-by-side`}
+            checked={sideBySide}
+            onCheckedChange={(checked) =>
+              updateView(() => setSideBySide(checked))
             }
-            orientation="horizontal"
-            aria-labelledby={`${controlId}-layout`}
-            className="inline-flex h-8 items-center gap-0.5 rounded-md border bg-muted p-px"
+          />
+          <Label
+            htmlFor={`${controlId}-side-by-side`}
+            className="cursor-pointer whitespace-nowrap font-normal"
           >
-            {[
-              { value: "unified", label: "Unified" },
-              { value: "split", label: "Side by side" },
-            ].map(({ value, label }) => (
-              <Label
-                key={value}
-                className="flex h-7 cursor-pointer items-center rounded-sm px-2.5 text-xs font-normal text-muted-foreground hover:text-foreground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[[data-state=checked]]:bg-raised has-[[data-state=checked]]:text-foreground has-[[data-state=checked]]:shadow-sm dark:has-[[data-state=checked]]:bg-accent"
-              >
-                <RadioGroupItem value={value} className="sr-only" />
-                <span>{label}</span>
-              </Label>
-            ))}
-          </RadioGroup>
+            Side by side
+          </Label>
         </div>
-        <Separator
-          orientation="vertical"
-          className="hidden data-[orientation=vertical]:h-6 lg:block"
-        />
-        <fieldset
-          className="flex flex-wrap items-center gap-x-5 gap-y-3"
-          aria-label="View options"
-        >
-          <div className="flex items-center gap-2">
-            <Switch
-              id={`${controlId}-wrap`}
-              checked={wrap}
-              onCheckedChange={(checked) => updateView(() => setWrap(checked))}
-            />
-            <Label
-              htmlFor={`${controlId}-wrap`}
-              className="cursor-pointer whitespace-nowrap font-normal"
-            >
-              Wrap lines
-            </Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch
-              id={`${controlId}-unchanged`}
-              checked={showUnchanged}
-              onCheckedChange={(checked) =>
-                updateView(() => setShowUnchanged(checked))
-              }
-            />
-            <Label
-              htmlFor={`${controlId}-unchanged`}
-              className="cursor-pointer whitespace-nowrap font-normal"
-            >
-              Show unchanged
-            </Label>
-          </div>
-        </fieldset>
+        <div className="flex items-center gap-2">
+          <Switch
+            id={`${controlId}-unchanged`}
+            checked={showUnchanged}
+            onCheckedChange={(checked) =>
+              updateView(() => setShowUnchanged(checked))
+            }
+          />
+          <Label
+            htmlFor={`${controlId}-unchanged`}
+            className="cursor-pointer whitespace-nowrap font-normal"
+          >
+            Show unchanged
+          </Label>
+        </div>
         <div className="ml-auto flex items-center gap-1">
           <Button
             size="sm"
@@ -188,9 +146,12 @@ export function PolicyDiffReview({
           }}
           options={{
             automaticLayout: true,
+            // Large policy rewrites can exceed Monaco's five-second default
+            // and fall back to treating the entire file as changed.
+            maxComputationTime: 30_000,
             renderSideBySide: sideBySide,
             useInlineViewWhenSpaceIsLimited: false,
-            diffWordWrap: wrap ? "on" : "off",
+            diffWordWrap: "off",
             hideUnchangedRegions: {
               enabled: !showUnchanged,
               contextLineCount: 3,

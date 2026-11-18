@@ -23,6 +23,39 @@ works, for people: `platform/dev/vm/README.md`.
    it: `I work in the dev VM with the one-way Mutagen sync. Use the
    archestra-dev-vm skill.` Git ignores the file, so each checkout needs its own.
 
+## Scenarios
+
+The sync and the VM copy are named after the checkout's folder, so every
+checkout needs a different folder name.
+
+**A fresh checkout** (a new clone on the Mac):
+
+1. `cd <checkout>/platform && scripts/dev-vm-sync.py start`. It writes a new
+   `platform/.env`; the user adds their own keys to it on the Mac.
+2. `scripts/dev-vm-sync.py run 'pnpm install --frozen-lockfile'`.
+3. Offer the `CLAUDE_LOCAL.md` line from Start.
+4. Start Tilt (Background tasks) if the user wants the app.
+
+**A new branch in a synced checkout:** just `git switch -c <branch>` on the
+Mac. The sync carries the changed files over by itself. If the switch changed
+`pnpm-lock.yaml`, run `pnpm install --frozen-lockfile` through `run`; a running
+Tilt picks up the rest.
+
+**A new worktree:**
+
+1. `git worktree add ../<folder> -b <branch>` on the Mac.
+2. `cd ../<folder>/platform && scripts/dev-vm-sync.py start`. The worktree
+   gets its own new `.env`: keys from the main checkout are not copied.
+3. `scripts/dev-vm-sync.py run 'pnpm install --frozen-lockfile'`. The pnpm
+   store and the Rust build folder are shared, so this and Tilt's first run
+   are fast.
+4. Copy `platform/CLAUDE_LOCAL.md` from the main checkout if it has one.
+5. For the app: stop the running Tilt
+   (`ssh lima-archestra-dev 'tmux kill-session -t tilt'`), then start it here.
+6. When the user removes the worktree, first
+   `mutagen sync terminate <folder>` and
+   `ssh lima-archestra-dev 'rm -rf ~/sync/<folder>'`.
+
 ## Commands
 
 Run them on the Mac, inside the checkout. `dev-vm-sync.py` is

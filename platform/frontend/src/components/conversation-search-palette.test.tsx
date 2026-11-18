@@ -70,6 +70,9 @@ vi.mock("@/lib/auth/auth.hook", () => ({
 }));
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/openappa-github-sync.query", () => ({
+  useServerRulesAccess: () => ({ scoped: false, files: [] }),
+}));
 // Read only when a grant on one credential might open Settings.
 vi.mock("@/lib/runtime-credentials.query", () => ({
   useRuntimeCredentials: () => ({ data: [], isPending: false }),

@@ -1718,6 +1718,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // Whoever may open the MCP registry learns whether its servers' editors
   // change their own rules: the registry shows the action only then.
   [RouteId.GetAppaSelfService]: { mcpRegistry: ["read"] },
+  // A server's own rules take no Guardrails permission: the handlers list and
+  // return only the files of servers the caller may open in the MCP registry.
+  [RouteId.GetOpenappaServerRulesFiles]: { mcpRegistry: ["read"] },
+  [RouteId.GetOpenappaServerRulesSource]: { mcpRegistry: ["read"] },
   [RouteId.ConfigureAppaGithubSync]: { organizationSettings: ["update"] },
   [RouteId.CreateAppaGithubRepository]: { organizationSettings: ["update"] },
   [RouteId.StartAppaGithubApp]: { organizationSettings: ["update"] },
@@ -2070,6 +2074,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/gateways/new": { mcpGateway: ["create"] },
 
   "/openappa": { guardrailsPolicy: ["read"] },
+  // Also open to a member who may read some MCP server's rules file: the
+  // page then lists only those files (`useServerRulesAccess`).
   "/openappa/policy": { guardrailsPolicy: ["read"] },
   "/openappa/batteries": { guardrailsPolicy: ["read"] },
   "/openappa/yells": { log: ["read"] },

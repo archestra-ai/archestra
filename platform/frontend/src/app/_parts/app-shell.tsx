@@ -107,7 +107,9 @@ export function AppShell({
   // scroll, so we only bound the chain for these to avoid clipping content.
   const isChat = pathname === "/chat" || pathname.startsWith("/chat/");
   const isProjectDetail = /^\/projects\/[^/]+/.test(pathname);
-  const isViewportLocked = isChat || isProjectDetail;
+  // The policy source fills the viewport like an editor, above the version line.
+  const isPolicySource = pathname === "/openappa/policy";
+  const isViewportLocked = isChat || isProjectDetail || isPolicySource;
   const [sidebarOpen, setSidebarOpen] = useSidebarOpenState(initialSidebarOpen);
   const sidebarWidth = useSidebarWidthState();
   // Every signed-in user sees the active banner.

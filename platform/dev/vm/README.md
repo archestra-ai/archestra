@@ -9,9 +9,10 @@ is not changed.
 ```
  Mac                                   Lima VM (Ubuntu, own disk)
  ───────────────────────               ─────────────────────────────────
- browser  localhost:13000  ──────────▶ :3000  frontend (next dev)
-          localhost:19000  ──────────▶ :9000  backend
-          localhost:20350  ──────────▶ :10350 Tilt UI
+ browser  localhost:13000  ──────────▶ :3000  frontend (next dev)  ┐ first
+          localhost:19000  ──────────▶ :9000  backend              │ checkout's
+          localhost:20350  ──────────▶ :10350 Tilt UI              ┘ stack
+          localhost:13001… ──────────▶ :13001… next checkouts' stacks, same ports
  checkout ── Mutagen, one way ───────▶ ~/sync/<folder> (no .git)
           ◀── pull: code only ───────
                                        docker ─ kind "archestra"
@@ -55,7 +56,7 @@ ssh lima-archestra-dev                     # a shell in the VM itself: docker, s
 The checkout in it:
 
 ```sh
-dev-vm-sync.py start                       # sync this checkout into the VM
+dev-vm-sync.py start                       # sync this checkout into the VM; prints its app and Tilt URLs
 dev-vm-sync.py run                         # a shell in the VM copy, in the folder you are in
 dev-vm-sync.py run 'pnpm test'             # one command there
 dev-vm-sync.py pull 'pnpm db:generate'     # a command that writes source files: bring them back
@@ -81,8 +82,8 @@ It checks, and prints a fix for each failure:
 - Edit on the Mac, commit on the Mac. Don't run `pnpm` or `cargo` there.
 - Before a commit, run `pnpm lint` and `pnpm type-check` with `run`: the
   pre-commit check is skipped in this setup.
-- For each new worktree, run `dev-vm-sync.py start` in it. One Tilt at a time
-  in the VM: stop the running one first.
+- For each new worktree, run `dev-vm-sync.py start` in it. It gets its own
+  stack: its own ports, database and logins, next to the others.
 - After a Node or Rust version bump in the repo, run `dev-vm.sh create` again.
 
 ## How it works
@@ -94,21 +95,22 @@ Made by `dev-vm.sh create` from `archestra-dev.yaml` and `setup-vm.sh`.
 - Ubuntu, on its own disk. No Mac folders, no SSH agent, no credentials.
 - It can't reach your Mac's `localhost`. Lima enforces this on the Mac side,
   so even root in the VM can't undo it.
-- Only three ports come out, shifted by 10000 so they don't clash with a stack
-  on the Mac: app 13000, API 19000, Tilt 20350.
+- Only the app, API and Tilt ports come out (see Several stacks at once).
+  None of them clash with a stack on the Mac.
 - Tools: Node at CI's version, Rust at `rust-toolchain.toml`'s, plus kind,
   kubectl, helm and Tilt. Every download is pinned and checksummed.
 - Docker runs inside the VM, and kind runs on it.
 - Agent Runtime pods in kind call the backend through a service in the VM,
-  `archestra-kind-backend-bridge`. The backend listens only on the VM's
-  `127.0.0.1:9000`, which pods can't reach; the service forwards the kind
-  network's address (`172.18.0.1:9000`, the Agent Runtime URL in `.env`) to
-  it. On the Mac setup, Docker Desktop's `host.docker.internal` does this.
+  `archestra-kind-backend-bridge`. A backend listens only on the VM's
+  `127.0.0.1` (port 9000, or 19001 to 19004), which pods can't reach; the
+  service forwards the kind network's address on those ports
+  (`172.18.0.1:9000` and so on, the Agent Runtime URL in `.env`) to it. On
+  the Mac setup, Docker Desktop's `host.docker.internal` does this.
 - `create` is safe to run again, also while Tilt runs: it skips what is done.
-- Default size: 6 CPUs, 12 GiB memory, 100 GiB disk. To change it, set
+- Default size: 10 CPUs, 24 GiB memory, 100 GiB disk. To change it, set
   `ARCHESTRA_DEV_VM_CPUS`, `ARCHESTRA_DEV_VM_MEMORY` or `ARCHESTRA_DEV_VM_DISK`
-  before the first `create`. An Agent Runtime run of tier M needs about
-  10 CPUs and 16 GiB.
+  before the first `create`. A VM made with other ports or size gets the new
+  ones only by `dev-vm.sh delete` and `create`.
 
 ### The sync
 
@@ -125,12 +127,35 @@ Started by `dev-vm-sync.py start`, done by [Mutagen](https://mutagen.io).
 
 ### Settings (`platform/.env`)
 
-- If the checkout has none, `start` writes it: `.env.example` plus the VM's
-  ports, `ARCHESTRA_BETA=true`, the Agent Runtime URL and no warm Agent
-  Runtime pod.
+- If the checkout has none, `start` writes it: `.env.example` plus this
+  checkout's ports, `ARCHESTRA_BETA=true`, the Agent Runtime URL and no warm
+  Agent Runtime pod.
 - After that it's your file. Edit it on the Mac; the VM gets it, with
   anything you add, keys too.
 - A `.env` that is a link isn't copied.
+
+### Several stacks at once
+
+Each synced checkout runs its own stack, as `scripts/dev-stack.sh` does on
+the Mac. Up to 5 at once. Two idle stacks use about 5 GiB of the VM's 24.
+
+| Stack | App | API | Tilt |
+|---|---|---|---|
+| first | 13000 | 19000 | 20350 |
+| next ones | 13001 to 13004 | 19001 to 19004 | 20351 to 20354 |
+
+- `start` gives a new checkout the first free stack: it looks at the other
+  synced checkouts' `.env` on the Mac.
+- It writes that stack's settings into the new `.env`, the same keys
+  `dev-stack.sh` writes: ports, a Kubernetes namespace named after the folder
+  (its own database, MCP servers and Agent Runtime pods) and its own login
+  cookies, so logging in to one doesn't log you out of another.
+- A stack after the first uses the same port numbers in the VM and on the Mac.
+- `run` points `tilt` at the checkout's own Tilt (`TILT_PORT`).
+- An existing `.env` is never changed. Don't copy one between checkouts:
+  their stacks would share ports.
+- When you remove a worktree, also delete its namespace:
+  `ssh lima-archestra-dev 'kubectl delete namespace <ARCHESTRA_K8S_NAMESPACE from its .env>'`.
 
 ### Bringing files back (`pull`)
 

@@ -1,6 +1,6 @@
 ---
 name: archestra-dev-vm
-description: Run Archestra's dev stack, pnpm, cargo, tests, Tilt and kubectl in the dev VM (Lima VM "archestra-dev") while editing a Mac checkout that Mutagen syncs into it. Use when `ARCHESTRA_DEV_MODE=2` is set, the user says they work in the dev VM, or a task names localhost:13000, :19000 or :20350. Not for the Mac setup (ports 3000, 9000, 10350).
+description: Run Archestra's dev stack, pnpm, cargo, tests, Tilt and kubectl in the dev VM (Lima VM "archestra-dev") while editing a Mac checkout that Mutagen syncs into it. Use when `ARCHESTRA_DEV_MODE=2` is set, the user says they work in the dev VM, or a task names localhost:13000-13004, :19000-19004 or :20350-20354. Not for the Mac setup (ports 3000, 9000, 10350).
 ---
 
 # archestra-dev-vm
@@ -23,12 +23,14 @@ works, for people: `platform/dev/vm/README.md`.
 ## Scenarios
 
 The sync and the VM copy are named after the checkout's folder, so every
-checkout needs a different folder name.
+checkout needs a different folder name. Each synced checkout runs its own
+stack, with its own ports, database and logins; `start` prints its URLs.
 
 **A fresh checkout** (a new clone on the Mac):
 
 1. `cd <checkout>/platform && scripts/dev-vm-sync.py start`. It writes a new
-   `platform/.env`; the user adds their own keys to it on the Mac.
+   `platform/.env` with this stack's ports; the user adds their own keys to it
+   on the Mac.
 2. `scripts/dev-vm-sync.py run 'pnpm install --frozen-lockfile'`.
 3. Start Tilt (Background tasks) if the user wants the app.
 
@@ -41,17 +43,18 @@ Tilt picks up the rest.
 
 1. `git worktree add ../<folder> -b <branch>` on the Mac.
 2. `cd ../<folder>/platform && scripts/dev-vm-sync.py start`. The worktree
-   gets its own new `.env`: keys from the main checkout are not copied.
+   gets its own new `.env` with its own ports. Don't copy the main checkout's
+   `.env` over it: the two stacks would share ports. Keys the user wants here
+   go in by hand.
 3. `scripts/dev-vm-sync.py run 'pnpm install --frozen-lockfile'`. The pnpm
    store and the Rust build folder are shared, so this and Tilt's first run
    are fast.
-4. For the app, Tilt must run here. Only one Tilt can run in the VM: all
-   copies share its ports (3000, 9000, 10350), its kind cluster and the
-   `archestra-dev` database. If one runs for another checkout, tell the user
-   and stop it only when they agree.
-5. When the user removes the worktree, first
-   `mutagen sync terminate <folder>` and
-   `ssh lima-archestra-dev 'rm -rf ~/sync/<folder>'`.
+4. Start its Tilt (Background tasks) if the user wants the app. It runs next
+   to the other checkouts' stacks; up to 5 at once.
+5. When the user removes the worktree, first stop its Tilt, then
+   `mutagen sync terminate <folder>`,
+   `ssh lima-archestra-dev 'rm -rf ~/sync/<folder>'` and
+   `ssh lima-archestra-dev 'kubectl delete namespace <ARCHESTRA_K8S_NAMESPACE from its .env>'`.
 
 ## Commands
 
@@ -92,21 +95,23 @@ the login settings, so `cargo` is missing or rebuilds everything from scratch.
 ## Background tasks
 
 Long-lived processes go in a tmux session in the VM, so they outlive your
-command. From `platform/`:
+command. One session per checkout, `tilt-<folder>`. From `platform/`:
 
 ```sh
-dev-vm-sync.py run 'tmux new-session -d -s tilt -c "$PWD" "bash -lc \"tilt up\""'
-dev-vm-sync.py run 'tilt get uiresources'            # Tilt state
-dev-vm-sync.py run 'tilt logs pnpm-dev-backend'      # a resource's logs
-dev-vm-sync.py run 'tilt trigger pnpm-dev-backend'   # rebuild a resource
-ssh lima-archestra-dev 'tmux ls'                     # what runs
-ssh lima-archestra-dev 'tmux kill-session -t tilt'   # stop Tilt
+dev-vm-sync.py run 'tmux new-session -d -s tilt-<folder> -e TILT_PORT=$TILT_PORT -c "$PWD" "bash -lc \"tilt up\""'
+dev-vm-sync.py run 'tilt get uiresources'                   # Tilt state
+dev-vm-sync.py run 'tilt logs pnpm-dev-backend'             # a resource's logs
+dev-vm-sync.py run 'tilt trigger pnpm-dev-backend'          # rebuild a resource
+ssh lima-archestra-dev 'tmux ls'                            # what runs
+ssh lima-archestra-dev 'tmux kill-session -t tilt-<folder>' # stop this checkout's Tilt
 ```
 
-- Before starting Tilt, check `tmux ls` and `pgrep -af "tilt up"` over `ssh`:
-  one Tilt at a time in the VM, across all synced checkouts (shared ports,
-  cluster and database). If one runs, ask the user before stopping it; it may
-  be theirs, in their own terminal.
+- `run` sets `TILT_PORT` from the checkout's `.env`, so `tilt` commands reach
+  this checkout's Tilt, not another one.
+- Before starting Tilt, check `tmux ls`. The user may also run it in their own
+  terminal: `run 'tilt get uiresources'` answers when this checkout's Tilt is
+  up.
+- Never stop another checkout's Tilt.
 - For a long job you wait on (a test suite), run `dev-vm-sync.py run` as a
   background shell command instead.
 
@@ -116,8 +121,10 @@ ssh lima-archestra-dev 'tmux kill-session -t tilt'   # stop Tilt
   `node_modules` there, on purpose; don't install them.
 - Before a commit, run `pnpm lint` and `pnpm type-check` through `run`: the
   pre-commit hook skips the check in this setup.
-- The app is http://localhost:13000 (admin@example.com / password), the API
-  :19000, Tilt :20350. Ports 3000, 9000 and 10350 are the Mac stack.
+- The first synced checkout's app is http://localhost:13000, API :19000,
+  Tilt :20350; the next ones 13001, 19001, 20351 and so on. `start` prints a
+  checkout's URLs. Login: admin@example.com / password. Ports 3000, 9000 and
+  10350 are the Mac stack.
 - `platform/.env` on the Mac is the VM's settings file; edit it on the Mac.
 - Each new worktree needs its own `dev-vm-sync.py start`.
 - Backend tests fail with `Unable to load @archestra/<name>-rs` when that Rust

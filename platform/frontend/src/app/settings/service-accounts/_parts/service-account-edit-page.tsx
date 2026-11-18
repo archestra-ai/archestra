@@ -64,6 +64,7 @@ export function ServiceAccountEditPage({
     values: account
       ? {
           name: account.name,
+          description: account.description ?? "",
           icon: account.icon ?? null,
           role: account.role,
           teamId: account.teamId,
@@ -126,6 +127,7 @@ export function ServiceAccountEditPage({
         id: account.id,
         body: {
           name: values.name.trim(),
+          description: values.description.trim() || null,
           icon: values.icon,
           role: values.role,
           // Only when changed: linking is checked against team admin rights,

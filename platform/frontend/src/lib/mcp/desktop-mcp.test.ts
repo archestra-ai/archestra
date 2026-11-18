@@ -3,7 +3,6 @@ import {
   addDesktopMcpServer,
   desktopArgumentsProgramNotice,
   desktopArgumentsSaveIsFollowed,
-  desktopHostingOffered,
   desktopMcpArgumentsError,
   desktopMcpCommandOf,
   desktopMcpTargetError,
@@ -567,25 +566,5 @@ describe("desktopServerErrorSentence", () => {
     expect(sentence("the program has no stdin or stdout pipe")).toBe(
       "the program has no stdin or stdout pipe",
     );
-  });
-});
-
-describe("desktopHostingOffered", () => {
-  it("offers Desktop hosting only with the beta flag, as it is in alpha", () => {
-    expect(
-      desktopHostingOffered({ betaEnabled: true, current: "remote" }),
-    ).toBe(true);
-    expect(
-      desktopHostingOffered({ betaEnabled: false, current: "remote" }),
-    ).toBe(false);
-    expect(
-      desktopHostingOffered({ betaEnabled: false, current: undefined }),
-    ).toBe(false);
-  });
-
-  it("keeps Desktop for an item that already is one", () => {
-    expect(
-      desktopHostingOffered({ betaEnabled: false, current: "desktop_mcp" }),
-    ).toBe(true);
   });
 });

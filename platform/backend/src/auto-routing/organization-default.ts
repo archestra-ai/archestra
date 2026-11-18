@@ -1,4 +1,3 @@
-import config from "@/config";
 import { ModelModel, OrganizationModel } from "@/models";
 import AutoRouterModel from "@/models/auto-router";
 import type { GatewayAgent, Model } from "@/types";
@@ -22,7 +21,7 @@ export async function agentAutoRouterId(
   >,
   organizationId: string,
 ): Promise<string | null> {
-  if (!config.autoRouting.enabled || agent.runtime !== null) return null;
+  if (agent.runtime !== null) return null;
   if (agent.autoRouterId) return agent.autoRouterId;
   if (
     agent.llmApiKeyId !== null ||
@@ -45,9 +44,7 @@ export async function describeOrganizationDefaultModel(
   organizationId: string,
 ): Promise<OrganizationDefaultModel> {
   const organization = await OrganizationModel.getById(organizationId);
-  const routers = config.autoRouting.enabled
-    ? await AutoRouterModel.list(organizationId)
-    : [];
+  const routers = await AutoRouterModel.list(organizationId);
   const autoRouters: OrganizationDefaultModel["autoRouters"] = [];
   for (const router of routers) {
     const loaded = router.enabled ? await loadTrio(router) : null;

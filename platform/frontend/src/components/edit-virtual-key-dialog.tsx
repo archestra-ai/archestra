@@ -38,7 +38,6 @@ import {
   useScopedCapabilities,
 } from "@/lib/auth/auth.query";
 import { useAvailableAutoRouters } from "@/lib/auto-routing.query";
-import { useFeature } from "@/lib/config/config.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useModelPools } from "@/lib/model-pools.query";
 import { useMyTeams } from "@/lib/teams/team.query";
@@ -76,7 +75,6 @@ export function EditVirtualKeyDialog({
   // Undefined until edited, so the pools this key already reaches show
   // through once they load.
   const [modelPoolIds, setModelPoolIds] = useState<string[]>();
-  const modelPoolsEnabled = useFeature("llmModelPoolsEnabled") === true;
   const canSetModelPools = useCanSetModelPools();
   const { data: pools } = useModelPools({ enabled: canSetModelPools });
   const grantedPoolIds = useMemo(
@@ -233,14 +231,13 @@ export function EditVirtualKeyDialog({
 
   if (!virtualKey) return null;
   const hasModelPools =
-    modelPoolsEnabled &&
-    ((modelPoolIds ?? grantedPoolIds).length > 0 ||
-      // A key owner need not be a pool manager. Keep metadata edits possible
-      // without fetching its pools; the server validates the retained grants.
-      (!canSetModelPools &&
-        modelPoolIds === undefined &&
-        !virtualKey.includeFutureProviders &&
-        virtualKey.providerApiKeys.length === 0));
+    (modelPoolIds ?? grantedPoolIds).length > 0 ||
+    // A key owner need not be a pool manager. Keep metadata edits possible
+    // without fetching its pools; the server validates the retained grants.
+    (!canSetModelPools &&
+      modelPoolIds === undefined &&
+      !virtualKey.includeFutureProviders &&
+      virtualKey.providerApiKeys.length === 0);
   const standardReady =
     includeFutureProviders || providerApiKeyIds.length > 0 || hasModelPools;
   const canSubmit =

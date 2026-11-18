@@ -226,6 +226,9 @@ export const handlers: HttpHandler[] = [
   // Git sync's self-service reads: off, with no protection or App to show,
   // as a deployment that never set it up answers.
   ...getJson("/api/openappa/github-sync/self-service", { enabled: false }),
+  // A reader without the Guardrails permission asks which MCP servers' rules
+  // files they may open: none, so the Policy page stays closed to them.
+  ...getJson("/api/openappa/server-rules/files", { files: [] }),
   ...getJson("/api/openappa/github-sync/protection", null),
   ...getJson("/api/openappa/github-sync/app-grants", null),
   ...notFound("/api/openappa/credential-bindings/:variable"),
@@ -306,11 +309,26 @@ export const handlers: HttpHandler[] = [
       { date: "2026-10-08", blocked: 1, approved: 2, cleaned: 2 },
     ],
   }),
+  // The Policy page lists the validations with its other files; none by default.
+  ...getJson("/api/openappa/policy-tests", {
+    source: "local",
+    files: [],
+    version: "v1",
+    sourceCommit: null,
+    directory: "tests",
+    activeDirectory: "tests",
+    error: null,
+  }),
   ...getJson("/api/openappa/policy-tests/runs", []),
   // A session trace reads its guardrail checks and label history; none by default.
   ...getJson("/api/openappa/external-consults", {
     data: [],
     pagination: { limit: 100, hasNext: false, nextCursor: null },
+  }),
+  // The Guardrails log: consults and yells in one timeline; empty by default.
+  ...getJson("/api/openappa/guardrail-events", {
+    data: [],
+    pagination: { limit: 20, hasNext: false, nextCursor: null },
   }),
   ...getJson("/api/openappa/label-changes", { data: [] }),
   ...getJson("/api/openappa/yells/summary", { unresolved: 0 }),
@@ -681,6 +699,11 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/agents/:id", makeAgent()),
   ...getJson("/api/agents/:id/export", {}),
   ...getJson("/api/agents/:id/tools", []),
+  ...getJson("/api/agents/:id/skills", {
+    accessAllSkills: false,
+    skillIds: [],
+    skills: [],
+  }),
   ...getJson("/api/agent-tools", {
     data: [],
     pagination: {
@@ -710,6 +733,18 @@ export const handlers: HttpHandler[] = [
   }),
   // Agent forms and the chat model menu name the organization default.
   ...getJson("/api/organization/default-model", organizationDefaultModelSeed),
+  // Model pickers, key forms and the connect steps list pools and auto
+  // routers on every deployment. The seeded organization has none, with auto
+  // routing off.
+  ...getJson("/api/model-pools", []),
+  ...getJson("/api/model-pools/available", []),
+  ...getJson("/api/auto-routing/routers", []),
+  ...getJson("/api/auto-routing/routers/available", []),
+  ...getJson("/api/auto-routing/state", {
+    enabled: false,
+    eligibleApiKeyIds: [],
+    decisionProviders: [],
+  }),
   ...getJson("/api/organization/agent-runtime-tiers", agentRuntimeTiersSeed),
   // The agent settings page checks which runtime agents run on the default.
   ...getJson("/api/organization/agent-settings/default-model-dependents", {
@@ -779,6 +814,7 @@ export const handlers: HttpHandler[] = [
   // Skills (list page, the "new skill" chooser, and the GitHub import dialog)
   ...getJson("/api/skills", skillsListSeed),
   ...getJson("/api/skills/plugins", []),
+  ...getJson("/api/skills/external", []),
   ...getJson("/api/plugins", []),
   ...paths("/api/skills/:id").map((url) =>
     http.get(url, ({ params }) =>

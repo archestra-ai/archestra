@@ -2547,13 +2547,17 @@ export class McpServerRuntimeManager {
           // Priority & Fairness throttling (429s).
           deployments,
           K8S_API_FANOUT_CONCURRENCY,
-          async ([, deployment]) => {
+          async ([mcpServerId, deployment]) => {
             // SPDX-SnippetBegin
             // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
             // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
             const before = deployment.statusSummary;
             // SPDX-SnippetEnd
             await deployment.refreshState();
+            await this.reloadIfReplacedByAnotherProcess(
+              mcpServerId,
+              deployment,
+            );
             // SPDX-SnippetBegin
             // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
             // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -4597,6 +4601,30 @@ export class McpServerRuntimeManager {
     );
     timer.unref?.();
     this.watchStreamRestartTimers.set(key, timer);
+  }
+
+  /**
+   * Another process restarted this install: the Deployment under its name is
+   * a new one. The cached object still holds the catalog row, install row and
+   * endpoint it was built from, so rebuild it from the current rows — the same
+   * load a process does the first time it meets an install.
+   */
+  private async reloadIfReplacedByAnotherProcess(
+    mcpServerId: string,
+    deployment: K8sDeployment,
+  ): Promise<void> {
+    if (
+      !deployment.wasReplacedByAnotherProcess ||
+      this.mcpServerIdToDeploymentMap.get(mcpServerId) !== deployment
+    ) {
+      return;
+    }
+    logger.info(
+      { mcpServerId },
+      "MCP server deployment was replaced by another process; reloading it",
+    );
+    this.mcpServerIdToDeploymentMap.delete(mcpServerId);
+    await this.getOrLoadDeployment(mcpServerId);
   }
 
   /**

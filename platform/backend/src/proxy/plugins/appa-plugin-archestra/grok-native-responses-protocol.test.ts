@@ -2603,10 +2603,10 @@ for (const [background, chat] of [
         // this history. Its spawn may already be closed when the fixed host
         // sees the retained rejection; recovery must not require reopening it.
         if (!background)
-          await endTurn(
+          await endTurn({
             session,
-            `turn_end:synthetic-rejection-recovery-${rejectionKind}`,
-          );
+            operationId: `turn_end:synthetic-rejection-recovery-${rejectionKind}`,
+          });
         let canonicalFailure = "";
         for (const output of [
           rejectedResult.output,

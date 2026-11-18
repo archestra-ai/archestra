@@ -125,6 +125,27 @@ describe("composing an organization's declarations", () => {
     ]);
   });
 
+  test("the shipped default leaves no battery annotator to a model this deployment cannot ask", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+    const effective =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+
+    const composed = parsePolicyToml(effective.content)?.policy as
+      | { annotator?: { name: string; builtin?: string }[] }
+      | undefined;
+    const builtins = (composed?.annotator ?? []).flatMap(({ name, builtin }) =>
+      builtin === undefined ? [] : [{ name, builtin }],
+    );
+    expect(builtins.length).toBeGreaterThan(0);
+    expect(builtins.filter(({ builtin }) => builtin !== "archestra")).toEqual(
+      [],
+    );
+  });
+
   test("recompiles a cached revision-zero policy when the shipped default changes", async ({
     makeOrganization,
   }) => {

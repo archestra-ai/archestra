@@ -17,15 +17,12 @@ import {
   applyAgentModelPool,
   resolveChatModelPool,
 } from "@/services/chat-model-pools";
-import { beforeEach, expect, test } from "@/test";
+import { expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import { resolveRunLlmSelection } from "./llm-selection";
 
-beforeEach(() => {
-  config.llmProxy.modelPoolsEnabled = true;
-});
 setupTestCacheManager();
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
 const server = useMswServer();
@@ -411,41 +408,6 @@ poolTest(
       modelPoolId: agent.modelPoolId,
     });
     expect(client.chatApiKeyId).toBe(keyless.id);
-  },
-);
-
-poolTest(
-  "disabled model pools retain the agent's direct-provider selection",
-  async ({ pooledAgent }) => {
-    config.llmProxy.modelPoolsEnabled = false;
-    const { agent, organizationId, ownerId, callerId } = pooledAgent;
-    for (const userId of [ownerId, callerId]) {
-      const selection = await resolveRunLlmSelection({
-        agent,
-        organizationId,
-        userId,
-      });
-      expect(selection).toMatchObject({
-        modelId: agent.modelId,
-        selectedProvider: "github-copilot",
-      });
-      const client = createLLMModelForAgent({
-        organizationId,
-        userId,
-        agentId: pooledAgent.agentId,
-        model: selection.selectedModel,
-        provider: selection.selectedProvider,
-        agentLlmApiKeyId: selection.chatApiKeyId ?? agent.llmApiKeyId,
-        modelPoolId: agent.modelPoolId,
-      });
-      if (userId === ownerId) {
-        expect((await client).chatApiKeyId).toBe(agent.llmApiKeyId);
-      } else {
-        await expect(client).rejects.toBeInstanceOf(
-          LlmProviderAuthRequiredError,
-        );
-      }
-    }
   },
 );
 

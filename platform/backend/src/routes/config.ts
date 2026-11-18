@@ -90,7 +90,6 @@ export const ConfigResponseSchema = z.strictObject({
     communicate: z.boolean(),
   }),
   features: z.strictObject({
-    betaEnabled: z.boolean(),
     orchestratorK8sRuntime: z.boolean(),
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -178,7 +177,6 @@ export const ConfigResponseSchema = z.strictObject({
     /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
     kbMfilesConnectorEnabled: z.boolean(),
     /** BETA: the Model Pools page and pool routing. */
-    llmModelPoolsEnabled: z.boolean(),
     kbMfilesOauthEnabled: z.boolean(),
     /**
      * The BM25 tuning constants an organization inherits until it
@@ -203,15 +201,8 @@ export const ConfigResponseSchema = z.strictObject({
       configured: z.boolean(),
       redirectUri: z.string(),
     }),
-    /**
-     * BETA: publish local Skills over gateways and project Skills
-     * discovered from installed MCP servers.
-     */
-    mcpGatewaySkillsEnabled: z.boolean(),
     /** Internal UI feedback overlay; on only where its Slack channel is set. */
     devFeedbackEnabled: z.boolean(),
-    /** ALPHA: the Unified Model API's "auto" model and its settings. */
-    autoRoutingEnabled: z.boolean(),
   }),
   providerBaseUrls: z.record(SupportedProvidersSchema, z.string().nullable()),
 });
@@ -234,7 +225,6 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       communicate: tier.communicate,
     },
     features: {
-      betaEnabled: config.beta,
       orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -290,7 +280,6 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       agentHooksEnabled: config.hooks.enabled,
       chatopsTelegramEnabled: config.chatops.telegramEnabled,
       kbMfilesConnectorEnabled: config.kb.mfilesConnectorEnabled,
-      llmModelPoolsEnabled: config.llmProxy.modelPoolsEnabled,
       kbMfilesOauthEnabled: config.kb.mfilesOauthEnabled,
       kbBm25DefaultK1: config.kb.bm25K1,
       kbBm25DefaultB: config.kb.bm25B,
@@ -301,9 +290,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
         configured: isGoogleDriveOAuthConfigured(),
         redirectUri: getGoogleDriveOAuthRedirectUri(),
       },
-      mcpGatewaySkillsEnabled: config.mcpGateway.skillsEnabled,
       devFeedbackEnabled: devFeedbackService.isAvailable,
-      autoRoutingEnabled: config.autoRouting.enabled,
     },
     providerBaseUrls: {
       openai: config.llm.openai.baseUrl || null,

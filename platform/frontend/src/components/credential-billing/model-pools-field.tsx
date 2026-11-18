@@ -22,21 +22,19 @@ import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { type ModelPool, useModelPools } from "@/lib/model-pools.query";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
- * Whether a virtual key form shows {@link ModelPoolsField}: the feature is on
- * and the caller may change which keys reach a pool.
+ * Whether a virtual key form shows {@link ModelPoolsField}: the caller may
+ * change which keys reach a pool.
  */
 export function useCanSetModelPools(): boolean {
-  const enabled = useFeature("llmModelPoolsEnabled") === true;
   const { data: canUpdateModels } = useHasPermissions({
     llmModel: ["update"],
   });
-  return enabled && canUpdateModels === true;
+  return canUpdateModels === true;
 }
 
 /**

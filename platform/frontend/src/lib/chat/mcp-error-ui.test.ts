@@ -5,7 +5,6 @@ import {
   extractCatalogIdFromInstallUrl,
   extractIdsFromReauthUrl,
   hasToolPartsWithAuthErrors,
-  isAuthInstructionText,
   isInstallAuthAction,
   isInstallAuthResolved,
   isNoDeviceError,
@@ -544,28 +543,6 @@ describe("hasToolPartsWithAuthErrors", () => {
         },
       ]),
     ).toBe(false);
-  });
-});
-
-describe("isAuthInstructionText", () => {
-  it("returns true for auth install instructions", () => {
-    expect(
-      isAuthInstructionText(
-        'Authentication required for "github-remote". Visit this URL: http://localhost:3000/mcp/registry?install=cat_abc',
-      ),
-    ).toBe(true);
-  });
-
-  it("returns false for unrelated text", () => {
-    expect(isAuthInstructionText("hello world")).toBe(false);
-  });
-
-  it("returns true for credential-assignment guidance", () => {
-    expect(
-      isAuthInstructionText(
-        'Expired / Invalid Authentication: credentials for "github" have expired or are invalid. Re-authenticate to continue using this tool. Ask the agent owner or an admin to re-authenticate.',
-      ),
-    ).toBe(true);
   });
 });
 

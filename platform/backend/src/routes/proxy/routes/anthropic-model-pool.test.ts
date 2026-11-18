@@ -7,7 +7,6 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { HttpResponse, http } from "msw";
-import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
   LlmOauthClientModel,
@@ -15,15 +14,10 @@ import {
   OAuthAccessTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { beforeEach, expect, test } from "@/test";
+import { expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import anthropicProxyRoutes from "./anthropic";
-
-// Model pools are a beta feature; these tests run with it on.
-beforeEach(() => {
-  config.llmProxy.modelPoolsEnabled = true;
-});
 
 // Claude Code asks for a pool's name on Anthropic's wire; the pool's only
 // member is Z.ai on the OpenAI wire. The credential maps no Anthropic key:

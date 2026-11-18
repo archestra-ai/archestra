@@ -7,7 +7,6 @@ import {
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
-import config from "@/config";
 import db, { schema } from "@/database";
 import {
   AgentPinModel,
@@ -829,7 +828,6 @@ describe("GET /api/agent-catalog", () => {
     await makeMember(ctx.user.id, ctx.organizationId, {
       role: ADMIN_ROLE_NAME,
     });
-    config.mcpGateway.skillsEnabled = true;
     const suffix = crypto.randomUUID().slice(0, 8);
     // includeTools=false hides explicit assignments, so the count is driven by
     // the agent's dynamic load_skill availability.

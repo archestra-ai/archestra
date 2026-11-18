@@ -13,11 +13,10 @@
 import { eq } from "drizzle-orm";
 import type { LightMyRequestResponse } from "fastify";
 import { HttpResponse, http } from "msw";
-import config from "@/config";
 import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ModelModel, ModelPoolModel, VirtualApiKeyModel } from "@/models";
-import { accessGrants, beforeEach, expect, test } from "@/test";
+import { accessGrants, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import anthropicRoutes from "./anthropic";
@@ -26,9 +25,6 @@ import modelRouterRoutes from "./model-router";
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper
 const server = useMswServer();
 setupTestCacheManager();
-beforeEach(() => {
-  config.llmProxy.modelPoolsEnabled = true;
-});
 
 const origin = "https://xai.pool.test";
 const xaiUsage = {

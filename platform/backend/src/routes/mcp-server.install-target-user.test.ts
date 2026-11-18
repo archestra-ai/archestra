@@ -400,4 +400,35 @@ describe("MCP Server Install - explicit target user", () => {
       expect(second.json().ownerId).toBe(caller.id);
     });
   });
+
+  describe("installing as a service account", () => {
+    test("an organization install succeeds although the installer has no personal gateway", async ({
+      makeUser,
+      makeMember,
+      makeServiceAccount,
+      makeInternalMcpCatalog,
+    }) => {
+      const author = await makeUser();
+      await makeMember(author.id, organizationId);
+      const account = await makeServiceAccount(organizationId, {
+        role: "admin",
+      });
+      const catalog = await makeOrgCatalog(makeInternalMcpCatalog, author.id);
+      connectAndGetToolsMock.mockResolvedValue([
+        {
+          name: "post_message",
+          description: "",
+          inputSchema: { type: "object" },
+        },
+      ]);
+
+      currentUser = { ...author, id: `service-account:${account.id}` };
+      const res = await install({ catalogId: catalog.id, scope: "org" });
+
+      expect(res.statusCode).toBe(200);
+      const installed = await McpServerModel.findById(res.json().id);
+      expect(installed?.localInstallationStatus).toBe("success");
+      expect(installed?.localInstallationError).toBeNull();
+    });
+  });
 });

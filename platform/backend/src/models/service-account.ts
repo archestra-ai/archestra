@@ -269,6 +269,7 @@ class ServiceAccountModel {
       id: serviceAccount.id,
       organizationId: serviceAccount.organizationId,
       name: serviceAccount.name,
+      description: serviceAccount.description,
       icon: serviceAccount.icon,
       role: serviceAccount.role,
       teamId: serviceAccount.teamId,
@@ -282,6 +283,7 @@ class ServiceAccountModel {
   static async create(params: {
     organizationId: string;
     name: string;
+    description?: string | null;
     icon?: string | null;
     role: string;
     teamId?: string | null;
@@ -306,6 +308,7 @@ class ServiceAccountModel {
             data: {
               organizationId: params.organizationId,
               name: params.name,
+              description: params.description ?? null,
               icon: params.icon,
               role: params.role,
               teamId: params.teamId ?? null,
@@ -361,7 +364,7 @@ class ServiceAccountModel {
     data: Partial<
       Pick<
         SelectServiceAccount,
-        "name" | "icon" | "role" | "disabled" | "teamId"
+        "name" | "description" | "icon" | "role" | "disabled" | "teamId"
       >
     > & {
       labels?: LabelWithDetails[];
@@ -802,6 +805,7 @@ function normalizeServiceAccount(
     id: serviceAccount.id,
     organizationId: serviceAccount.organizationId,
     name: serviceAccount.name,
+    description: serviceAccount.description,
     icon: serviceAccount.icon,
     role: serviceAccount.role,
     teamId: serviceAccount.teamId,

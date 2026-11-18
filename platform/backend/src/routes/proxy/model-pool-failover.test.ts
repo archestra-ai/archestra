@@ -1,7 +1,6 @@
 import { vi } from "vitest";
-import config from "@/config";
 import { ModelPoolModel } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { ApiError } from "@/types";
 import {
@@ -15,11 +14,6 @@ import {
   withMemberHealth,
 } from "./model-pool-failover";
 import type { MemberTransport } from "./model-pool-transport";
-
-// Model pools are a beta feature; these tests run with it on.
-beforeEach(() => {
-  config.llmProxy.modelPoolsEnabled = true;
-});
 
 setupTestCacheManager();
 
@@ -1113,7 +1107,6 @@ test("an explicitly selected pool excludes disabled members and cannot disappear
   makeOrganization,
   makeLlmProviderApiKey,
 }) => {
-  config.llmProxy.modelPoolsEnabled = true;
   const org = await makeOrganization();
   const gemini = await makeLlmProviderApiKey(org.id, null, {
     provider: "gemini",

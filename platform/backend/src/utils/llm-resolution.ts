@@ -194,7 +194,6 @@ export async function resolveAutoModelSelection(
   organizationId: string,
   routerId: string,
 ): Promise<ConversationLlmSelection | null> {
-  if (!config.autoRouting.enabled) return null;
   const settings = await AutoRouterModel.findInOrganization(
     organizationId,
     routerId,

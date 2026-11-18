@@ -425,18 +425,6 @@ describe("isDynamicallyAvailableArchestraTool", () => {
     });
   });
 
-  test("plugin tools remain dynamically available with beta disabled", async () => {
-    config.beta = false;
-    expect(
-      await isDynamicallyAvailableArchestraTool({
-        toolName: TOOL_LIST_PLUGINS_FULL_NAME,
-        agentId: agent.id,
-        userId,
-        organizationId,
-      }),
-    ).toBe(true);
-  });
-
   describe("sandbox built-ins", () => {
     const originalSandboxEnabled = config.skillsSandbox.enabled;
     beforeEach(() => {

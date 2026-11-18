@@ -9381,6 +9381,28 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(events.filter((event) => event.event === "tool_call")).toEqual([]);
   });
 
+  test.for([
+    { source: "chat", lifecycle: ["prompt", "turn_end"] },
+    { source: "chat:compaction", lifecycle: [] },
+    { source: "a2a:compaction", lifecycle: [] },
+  ])("a $source reply without tool calls notes the turn: $lifecycle", async ({
+    source,
+    lifecycle,
+  }) => {
+    // A summary taken mid-turn must leave the conversation's turn open.
+    options = { includeToolUse: false };
+    const response = await post(payload(false), {
+      "x-archestra-source": source,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      events
+        .map((event) => event.event)
+        .filter((name) => name === "prompt" || name === "turn_end"),
+    ).toEqual(lifecycle);
+  });
+
   test("rejects a Chat APPA root bound to another profile", async ({
     makeAgent,
     makeConversation,

@@ -285,9 +285,12 @@ type AppaPluginBinding = {
   sideRequest: ClaudeSideRequest | undefined;
   /** True on internal loopback Chat requests. */
   chat: boolean;
+  /**
+   * A compaction request: a client's own, or the platform's summary request.
+   * It never opens or ends a turn, never returns a child's result, and makes
+   * no tool calls.
+   */
   compaction: boolean;
-  /** The platform's own summary request: its tools are read-only context, never calls. */
-  summaryRequest: boolean;
   requestHeaders: IncomingHttpHeaders;
   /** No person is there to answer this request's approvals. */
   unattended: boolean;
@@ -455,8 +458,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           })
         : undefined,
       chat,
-      compaction: trustedContext.compaction === true,
-      summaryRequest: trustedContext.summaryRequest === true,
+      compaction:
+        trustedContext.compaction === true || isSummaryRequest(trustedContext),
       threadContinue: trustedContext.thread === "continue",
       requestHeaders: context.headers,
       unattended:
@@ -1612,6 +1615,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   private async guardedToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    const trusted = getTrustedContext(context.resources);
+    // Rejected before an observer records the call as the session's.
+    if (trusted && isSummaryRequest(trusted) && context.toolCalls.length > 0) {
+      throw new ApiError(
+        503,
+        "OpenAPPA rejected tool calls from a compaction response",
+      );
+    }
     const observer = this.observers.get(context.resources);
     if (observer) {
       // A call is signed only once the record that this session made it
@@ -1622,10 +1633,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
     enterCapturedGuardrailsActivation("active");
-    if (
-      (binding.compaction || binding.summaryRequest) &&
-      context.toolCalls.length > 0
-    ) {
+    if (binding.compaction && context.toolCalls.length > 0) {
       throw new ApiError(
         503,
         "OpenAPPA rejected tool calls from a compaction response",
@@ -6083,6 +6091,11 @@ function isCompactionOnlyResponse(value: unknown): boolean {
           item && typeof item === "object" && item.type === "compaction",
       ))
   );
+}
+
+/** The platform's own summary request: its tools are read-only context. */
+function isSummaryRequest(trusted: AppaTrustedContext): boolean {
+  return trusted.summaryRequest === true;
 }
 
 function getTrustedContext(

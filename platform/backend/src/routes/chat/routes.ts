@@ -1612,7 +1612,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           tools: turnTools,
                         })
                       : 0,
-                    replyTokens: streamTextConfig.maxOutputTokens,
+                    // OpenAI chat-completions carries the cap in providerOptions.
+                    replyTokens:
+                      streamTextConfig.maxOutputTokens ?? maxOutputTokens,
                     abortSignal: chatAbortController.signal,
                     logContext: { conversationId },
                     promptCache: stepPromptCache,

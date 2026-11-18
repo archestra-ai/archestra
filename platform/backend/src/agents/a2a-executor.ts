@@ -607,7 +607,6 @@ export async function executeA2AMessage(
       model,
       contextLength,
       systemPrompt,
-      replyTokens: maxOutputTokens,
       abortSignal,
       logContext: { agentId: agent.id, sessionId },
       transcriptToolOutput: compactionTranscriptToolOutput,

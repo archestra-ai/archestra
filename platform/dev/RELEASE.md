@@ -186,19 +186,35 @@ This is a complete cutover. Once the new stable release publishes, it becomes th
    - Derive settings from the live rulesets. Do not hard-code ruleset IDs, check names, integration IDs, reviewer IDs, or queue parameters.
 6. [ ] Open a PR to `release/1.4` configuring `.github/release-please/release-please-config.json` with the **Stable cut** settings below. Merge it through the new queue.
 7. [ ] Inventory open `release/1.3` PRs. Recreate still-required fixes that already landed on `main` as `cherry-pick -x` backports to `release/1.4`, merge them, and wait for the release PR to update.
-8. [ ] Verify the generated `1.4.0` release PR and its required checks. Complete qualification before merging: publication will run automatically after successful builds.
-9. [ ] Before merging that release PR, retire the previous stable line under the stable-cut approval:
+8. [ ] Write the upgrade guide and merge it to `release/1.4`. See **Write The Upgrade Guide** below. The `Release Freeze Check` on the `1.4.0` release PR fails until it exists.
+9. [ ] Verify the generated `1.4.0` release PR and its required checks. Complete qualification before merging: publication will run automatically after successful builds.
+10. [ ] Before merging that release PR, retire the previous stable line under the stable-cut approval:
    - Confirm no `release/1.3` release workflow is running or waiting for approval, then close its remaining PRs with an EOL explanation.
    - Delete its exact merge-queue ruleset.
    - Add an exact active EOL ruleset that blocks updates to `release/1.3`, has no bypass actors, and sets `update_allows_fetch_and_merge: false`.
    - Keep its branch, tags, releases, images, and charts for reproducibility.
-10. [ ] Verify the old line rejects updates, merge the `1.4.0` release PR through the queue, and complete **Verify Stable Publication**. The stable-cut approval covers this planned merge and its automatic publication.
-11. [ ] Open and merge a PR that removes `release-as` from `release/1.4`. Future patches become `1.4.1`, `1.4.2`, etc.
-12. [ ] Get separate explicit approval to cut `1.5.0-rc.1`. State the current `main` SHA and the configuration and release PRs that will be merged.
-13. [ ] On `main`, open and merge a PR setting the **Next RC** configuration below. Merge the generated `1.5.0-rc.1` release PR through the queue.
-14. [ ] Confirm the RC published and moved only `archestra/platform:latest`, then open and merge a PR removing `release-as` from `main`. Confirm rolling RC PRs resume.
+11. [ ] Verify the old line rejects updates, merge the `1.4.0` release PR through the queue, and complete **Verify Stable Publication**. The stable-cut approval covers this planned merge and its automatic publication.
+12. [ ] Open and merge a PR that removes `release-as` from `release/1.4`. Future patches become `1.4.1`, `1.4.2`, etc.
+13. [ ] Get separate explicit approval to cut `1.5.0-rc.1`. State the current `main` SHA and the configuration and release PRs that will be merged.
+14. [ ] On `main`, open and merge a PR setting the **Next RC** configuration below. Merge the generated `1.5.0-rc.1` release PR through the queue.
+15. [ ] Confirm the RC published and moved only `archestra/platform:latest`, then open and merge a PR removing `release-as` from `main`. Confirm rolling RC PRs resume.
 
 The operator or release agent must create, queue, monitor, and verify these PRs and settings directly. Human actions are limited to the two explicit cut approvals, reviewer selection when it cannot be derived safely, and exceptional recovery decisions.
+
+### Write The Upgrade Guide
+
+Every new stable line ships a page that tells operators how to upgrade from the previous line, for example [Upgrade from v1.3 to v1.4](../../docs/pages/admin/upgrade-v1-3-to-v1-4.md). Operators read it before they upgrade, so it must be on `release/X.Y` before `X.Y.0` publishes, and it then appears in the `vX.Y` docs.
+
+1. Name it `docs/pages/admin/upgrade-vA-B-to-vX-Y.md`, where `A.B` is the previous stable line. The release check matches `upgrade-v*-to-vX-Y.md`.
+2. Find what operators must act on, from the previous line's branch point to `release/X.Y`:
+   - commits marked breaking (`feat!:`, `fix!:`, `BREAKING`) and data that a migration drops instead of converting;
+   - removed or renamed Helm values (`platform/helm/archestra/values.yaml`) and environment variables (`platform/backend/src/config.ts`);
+   - migrations that need the old pods stopped, or that run long on large tables;
+   - removed API routes, MCP tools, and settings pages.
+3. Use the v1.4 page's shape: Before You Upgrade, Upgrade, After You Upgrade, Breaking Changes, Helm Values, Environment Variables, Roll Back. Follow the `archestra-docs-writer` skill.
+4. Link it from **Release Channels And Upgrades** in `docs/pages/admin/deployment.md`, and merge it through the `release/X.Y` queue.
+
+Keep it current: when a later `X.Y.Z` patch adds an operator action, update the page in the same backport.
 
 ### Release Please Configuration
 

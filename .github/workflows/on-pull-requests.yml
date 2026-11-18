@@ -24,8 +24,10 @@ jobs:
     # non-release-please PRs and merge queue runs.
     # The failing check blocks the merge. Toggle Release Freeze also posts a
     # change-request review on open release PRs when the freeze turns on.
+    # It also blocks a new stable line (X.Y.0) that ships without its upgrade guide.
     runs-on: ubuntu-latest
-    permissions: {}
+    permissions:
+      contents: read
     steps:
       - name: Check if this requires freeze validation
         id: check-context
@@ -66,6 +68,20 @@ jobs:
         run: |
           echo "::error::❄️ Release freeze is active. Merging release-please PRs is blocked."
           exit 1
+
+      - name: Checkout release PR
+        if: steps.check-context.outputs.should_check == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/release-please
+            .github/scripts/check-release-upgrade-guide.py
+            docs/pages/admin
+
+      - name: Require an upgrade guide for a new stable line
+        if: steps.check-context.outputs.should_check == 'true'
+        run: python3 .github/scripts/check-release-upgrade-guide.py
 
   license-compliance-check:
     name: License Compliance Check

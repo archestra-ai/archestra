@@ -198,8 +198,9 @@ function TopBar({
   const managedIn = `Managed in ${workspace.gitLabel}`;
 
   return (
-    <div className="grid h-8 shrink-0 grid-cols-[1fr_minmax(0,30rem)_1fr] items-center gap-2 border-b bg-muted/40 px-1">
-      <div className="flex items-center">
+    // On a phone the actions take the first row and the file the second.
+    <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b bg-muted/40 p-1 sm:grid sm:h-8 sm:grid-cols-[1fr_minmax(0,30rem)_1fr] sm:py-0">
+      <div className="hidden items-center sm:flex">
         {isSource && (
           <IconAction
             label={explorerOpen ? "Hide files" : "Show files"}
@@ -225,7 +226,7 @@ function TopBar({
       <UnstyledButton
         onClick={onQuickOpen}
         aria-label="Open a policy file"
-        className="group flex h-6 min-w-0 items-center gap-2 rounded-md border bg-background px-2 text-xs outline-none transition-colors hover:border-ring/60 hover:bg-accent/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className="group order-last flex h-6 w-full min-w-0 items-center gap-2 rounded-md border sm:order-none sm:w-auto bg-background px-2 text-xs outline-none transition-colors hover:border-ring/60 hover:bg-accent/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
         <Search className="size-3 shrink-0 text-muted-foreground" aria-hidden />
         {isSource ? (
@@ -281,7 +282,7 @@ function TopBar({
         </span>
       </UnstyledButton>
 
-      <div className="flex items-center justify-end gap-0.5">
+      <div className="flex w-full items-center justify-end gap-0.5 sm:w-auto">
         <Tooltip>
           <TooltipTrigger asChild>
             <span

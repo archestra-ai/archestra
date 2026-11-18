@@ -170,6 +170,38 @@ describe("authPlugin integration", () => {
       expect(reply.status).not.toHaveBeenCalled();
     });
 
+    test("authenticates a service-account token without a session lookup", async ({
+      makeOrganization,
+      makeServiceAccountToken,
+    }) => {
+      const org = await makeOrganization();
+      const { serviceAccount, value } = await makeServiceAccountToken({
+        organizationId: org.id,
+      });
+      // What Better Auth's api-key hook does with a token that is not an API
+      // key: every such lookup would surface as an error span.
+      mockBetterAuth.api.getSession.mockClear();
+      mockBetterAuth.api.getSession.mockRejectedValue(
+        new Error("Invalid API key."),
+      );
+      mockHasPermission.mockResolvedValue({ success: true, error: null });
+
+      const request = {
+        url: "/api/agents",
+        method: "GET",
+        headers: { authorization: value },
+        routeOptions: { schema: { operationId: "getAgents" } },
+      } as unknown as FastifyRequest;
+      const reply = mockReply();
+
+      await authnz.handle(request, reply);
+
+      expect(reply.status).not.toHaveBeenCalled();
+      expect(request.authMethod).toBe("service_account");
+      expect(request.serviceAccount?.id).toBe(serviceAccount.id);
+      expect(mockBetterAuth.api.getSession).not.toHaveBeenCalled();
+    });
+
     test("should return 401 for invalid session", async () => {
       mockBetterAuth.api.getSession.mockResolvedValue(sessionResult(null));
 

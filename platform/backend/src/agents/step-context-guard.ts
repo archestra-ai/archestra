@@ -29,6 +29,8 @@ import {
 import { applyStepPromptCacheBreakpoint } from "@/routes/chat/normalization/apply-prompt-cache";
 import { TOKEN_ESTIMATE } from "@/routes/chat/normalization/estimate-message-tokens";
 import {
+  CONTEXT_COMPACTION_INSTRUCTION_TOKENS,
+  CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
   CONTEXT_COMPACTION_RECENT_KEEP_RATIO,
   type CompactionSummarizer,
   chooseRecentSuffixStart,
@@ -61,8 +63,10 @@ export function createStepContextGuard(params: {
   model?: LLMModel;
   contextLength: number | null;
   systemPrompt?: string;
-  /** Tokens the request spends outside its messages: tool definitions, the reply. */
-  reservedTokens?: number;
+  /** Tokens the step spends on tool definitions, which a summary request repeats. */
+  toolTokens?: number;
+  /** The step's own reply cap; a summary request reserves its own instead. */
+  replyTokens?: number;
   abortSignal?: AbortSignal;
   logContext?: Record<string, unknown>;
   summarizeMessages?: StepMessagesSummarizer;
@@ -137,10 +141,11 @@ export function createStepContextGuard(params: {
     );
     if (!contextLength) return withStepBreakpoint(capped);
 
-    const reservedTokens = params.reservedTokens ?? 0;
+    const toolTokens = params.toolTokens ?? 0;
     const budgetTokens = Math.max(
       Math.floor(contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD) -
-        reservedTokens,
+        toolTokens -
+        (params.replyTokens ?? 0),
       0,
     );
     // Rough char accounting on both sides: message sizes are JSON content
@@ -170,7 +175,11 @@ export function createStepContextGuard(params: {
             minIndex,
             boundary,
             windowChars: Math.max(
-              (contextLength - reservedTokens) * TOKEN_ESTIMATE.charsPerToken -
+              (contextLength -
+                toolTokens -
+                CONTEXT_COMPACTION_INSTRUCTION_TOKENS -
+                CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS) *
+                TOKEN_ESTIMATE.charsPerToken -
                 (systemPrompt?.length ?? 0),
               0,
             ),
@@ -261,14 +270,12 @@ function chooseCompactionBoundary(params: {
     minIndex,
   });
 
-  // keep tool-call/tool-result pairs on the same side of the boundary
-  while (
-    boundary < messages.length - 1 &&
-    messages[boundary]?.role === "tool"
-  ) {
-    boundary++;
+  // keep tool-call/tool-result pairs on the same side of the boundary: a cut
+  // inside a tool round moves back to the assistant message that made the calls
+  while (boundary > minIndex && messages[boundary]?.role === "tool") {
+    boundary--;
   }
-  return messages[boundary]?.role === "tool" ? minIndex : boundary;
+  return boundary;
 }
 
 function transcriptEntries(message: ModelMessage): TranscriptEntry[] {

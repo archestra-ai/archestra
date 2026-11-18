@@ -126,8 +126,8 @@ export function parseContextLengthError(
 
 /**
  * Trim messages to fit within a token limit.
- * Drop order: middle exchanges (oldest first) → system → the newest
- * exchange's oversized content. A message goes together with the tool results
+ * Drop order: middle exchanges (oldest first, the newest user request last)
+ * → system → the newest exchange's oversized content. A message goes together with the tool results
  * after it, so a trimmed history never splits a tool call from its results,
  * and it still opens with a user turn.
  *
@@ -168,15 +168,24 @@ export function trimMessagesToTokenLimit(params: {
     nonSystem.findLastIndex((m) => m.role !== "tool"),
     0,
   );
-  const middle = nonSystem.slice(0, tailStart);
   let tail: ModelMessage[] = nonSystem.slice(tailStart);
+  // Mid-turn the newest exchange is a tool round; the user request it serves
+  // is dropped only after every other middle exchange.
+  const requestIndex = tail.some((m) => m.role === "user")
+    ? -1
+    : nonSystem.slice(0, tailStart).findLastIndex((m) => m.role === "user");
+  const before = nonSystem.slice(0, Math.max(requestIndex, 0));
+  const request = requestIndex >= 0 ? [nonSystem[requestIndex]] : [];
+  const after = nonSystem.slice(requestIndex + 1, tailStart);
 
   // 1. Drop middle exchanges from oldest
-  while (total > trimBudget && middle.length > 0) {
-    do {
-      const dropped = middle.shift();
-      if (dropped) total -= chars(dropped);
-    } while (middle[0]?.role === "tool");
+  for (const exchanges of [before, after, request]) {
+    while (total > trimBudget && exchanges.length > 0) {
+      do {
+        const dropped = exchanges.shift();
+        if (dropped) total -= chars(dropped);
+      } while (exchanges[0]?.role === "tool");
+    }
   }
 
   // 2. Drop system messages from oldest
@@ -197,7 +206,7 @@ export function trimMessagesToTokenLimit(params: {
   }
 
   const kept = dropUnpairedToolParts({
-    kept: [...middle, ...tail],
+    kept: [...before, ...request, ...after, ...tail],
     original: nonSystem,
   });
   // Bedrock and Gemini reject a history that opens with an assistant turn, so
@@ -271,7 +280,10 @@ export function capToolResultOutputs(
       return {
         ...part,
         output: {
-          type: "text" as const,
+          // A failed call stays a failure on the wire (e.g. Anthropic is_error).
+          type: isErrorOutput(part.output.type)
+            ? ("error-text" as const)
+            : ("text" as const),
           value: `${sliceUtf8(serialized, maxBytes)}\n[tool result truncated: ${size} bytes exceeded the ${maxBytes}-byte limit for model context]`,
         },
       };
@@ -389,6 +401,10 @@ function dataByteLength(data: DataContent | URL): number {
   if (data instanceof URL) return 0;
   if (typeof data === "string") return Math.ceil((data.length * 3) / 4);
   return data.byteLength;
+}
+
+function isErrorOutput(type: string): boolean {
+  return type === "error-text" || type === "error-json";
 }
 
 const TRIM_NOTICE =

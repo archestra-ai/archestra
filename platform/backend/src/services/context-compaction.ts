@@ -31,6 +31,9 @@ import {
 
 export const CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS = 8_192;
 
+/** An in-context summary's instruction turn (or correction turn) and its framing. */
+export const CONTEXT_COMPACTION_INSTRUCTION_TOKENS = 2_000;
+
 export const CONTEXT_COMPACTION_SUMMARY_TAG = "summary";
 
 /** Share of the budget preserved verbatim as the recent suffix. */
@@ -239,9 +242,14 @@ async function summarizeCompactionTranscript(params: {
       maxOutputTokens: CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
       abortSignal: params.abortSignal,
     });
-    const summary =
-      extractTaggedText(result.text, CONTEXT_COMPACTION_SUMMARY_TAG) ??
-      result.text.trim();
+    const tagged = extractTaggedText(
+      result.text,
+      CONTEXT_COMPACTION_SUMMARY_TAG,
+    );
+    if (tagged) return tagged;
+    // A reply cut at the output cap is a partial checkpoint, not a summary.
+    if (result.finishReason === "length") return null;
+    const summary = result.text.trim();
     return summary.length > 0 ? summary : null;
   }
 

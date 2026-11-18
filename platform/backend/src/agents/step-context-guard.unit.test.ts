@@ -41,6 +41,12 @@ const overBudgetMessages = (): ModelMessage[] => [
   { role: "user", content: "c".repeat(300) },
 ];
 
+const largeStepMessages = (): ModelMessage[] => [
+  { role: "user", content: "a".repeat(65_000) },
+  { role: "assistant", content: "b".repeat(65_000) },
+  { role: "user", content: "c".repeat(65_000) },
+];
+
 describe("createStepContextGuard — tool result capping", () => {
   test("caps an oversized tool result and keeps its toolCallId pairing", async () => {
     const guard = createStepContextGuard({ contextLength: null });
@@ -112,6 +118,27 @@ describe("createStepContextGuard — summarization compaction", () => {
     expect(result[result.length - 1].content).toBe("c".repeat(300));
     // the summarized turns are gone from the step payload
     expect(result.some((m) => m.content === "a".repeat(300))).toBe(false);
+  });
+
+  test("cuts before the newest tool round when its results fill the recent suffix", async () => {
+    const summarize = vi.fn(
+      async (_p: SummarizeParams): Promise<string | null> => "older work",
+    );
+    const guard = createStepContextGuard({
+      contextLength: 200,
+      summarizeTranscript: summarize,
+    });
+    const round = [assistantToolCall(), toolResultMessage("r".repeat(300))];
+    const { messages: result } = await guard({
+      messages: [
+        { role: "user", content: "a".repeat(300) },
+        { role: "assistant", content: "b".repeat(300) },
+        ...round,
+      ],
+    });
+
+    expect(summarize).toHaveBeenCalledOnce();
+    expect(result.slice(1)).toEqual(round);
   });
 
   test("memoizes the summary across steps and re-summarizes on further growth", async () => {
@@ -380,15 +407,12 @@ describe("createStepContextGuard — in-context summaries", () => {
     const summarizeMessages = vi.fn(
       async (_p: InContextParams): Promise<string | null> => "in context",
     );
-    // budget 960 chars, window 1200: the 1200-char view is over the budget
-    // but still fits the window with the instruction appended.
-    const messages: ModelMessage[] = [
-      { role: "user", content: "a".repeat(400) },
-      { role: "assistant", content: "b".repeat(400) },
-      { role: "user", content: "c".repeat(400) },
-    ];
+    // budget 192k chars; the window left after the summary request's
+    // instruction and reply is 199,232 chars: the 195k-char view is over the
+    // budget but still fits the window.
+    const messages = largeStepMessages();
     const guard = createStepContextGuard({
-      contextLength: 300,
+      contextLength: 60_000,
       summarizeMessages,
     });
     const { messages: result } = await guard({ messages });
@@ -399,8 +423,25 @@ describe("createStepContextGuard — in-context summaries", () => {
     });
     expect(result.map((m) => m.content)).toEqual([
       expect.stringContaining("in context"),
-      "c".repeat(400),
+      "c".repeat(65_000),
     ]);
+  });
+
+  test("sends the prefix when the summary request's tools leave no room for the view", async () => {
+    const summarizeMessages = vi.fn(
+      async (_p: InContextParams): Promise<string | null> => "in context",
+    );
+    const messages = largeStepMessages();
+    const guard = createStepContextGuard({
+      contextLength: 60_000,
+      toolTokens: 2_000,
+      summarizeMessages,
+    });
+    await guard({ messages });
+
+    expect(summarizeMessages.mock.calls[0][0].messages).toEqual(
+      messages.slice(0, 2),
+    );
   });
 
   test("sends only the summarized prefix when the whole view would not fit", async () => {
@@ -491,7 +532,8 @@ describe("createStepContextGuard — budget", () => {
 
     const reserved = createStepContextGuard({
       contextLength: 1_000,
-      reservedTokens: 700,
+      toolTokens: 300,
+      replyTokens: 400,
       summarizeTranscript: summarize,
     });
     await reserved({ messages });

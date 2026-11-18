@@ -1,6 +1,7 @@
 import type { ModelMessage } from "ai";
 import { describe, expect, test } from "vitest";
 import {
+  capToolResultOutputs,
   parseContextLengthError,
   shouldProbeTextStreamForContextTrimRetry,
   trimMessagesToTokenLimit,
@@ -344,9 +345,7 @@ describe("trimMessagesToTokenLimit", () => {
   });
 
   test("drops an exchange whole and opens the kept history with a user turn", () => {
-    // An agent run: the task, two tool round trips, the newest results last.
     const messages = [
-      msg("user", "task"),
       toolCall("call_1", "x".repeat(400)),
       toolResultMessage("call_1", "r1"),
       toolCall("call_2", "y"),
@@ -356,6 +355,50 @@ describe("trimMessagesToTokenLimit", () => {
 
     expect(result.map((m) => m.role)).toEqual(["user", "assistant", "tool"]);
     expect(toolCallIds(result)).toEqual(["call_2", "call_2"]);
+  });
+
+  test("keeps the task a mid-turn tool round serves, dropping older rounds first", () => {
+    const task = msg("user", "task");
+    const messages = [
+      msg("user", "o".repeat(400)),
+      msg("assistant", "done"),
+      task,
+      toolCall("call_1", "x".repeat(400)),
+      toolResultMessage("call_1", "r1"),
+      toolCall("call_2", "y"),
+      toolResultMessage("call_2", "r2"),
+    ];
+    const result = trimMessagesToTokenLimit({ messages, maxTokens: 120 });
+
+    expect(result.map((m) => m.role)).toEqual([
+      "system",
+      "user",
+      "assistant",
+      "tool",
+    ]);
+    expect(result[1]).toBe(task);
+    expect(toolCallIds(result)).toEqual(["call_2", "call_2"]);
+  });
+
+  test("marks a truncated failed tool result as an error", () => {
+    const failed = {
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: "call_1",
+          toolName: "search",
+          output: { type: "error-text", value: "e".repeat(400) },
+        },
+      ],
+    } as ModelMessage;
+    const [capped] = capToolResultOutputs([failed], 100);
+
+    expect(capped.content).toEqual([
+      expect.objectContaining({
+        output: expect.objectContaining({ type: "error-text" }),
+      }),
+    ]);
   });
 
   test("shrinks the newest tool results instead of orphaning their call", () => {

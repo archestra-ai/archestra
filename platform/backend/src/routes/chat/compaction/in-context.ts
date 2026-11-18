@@ -15,6 +15,7 @@ import logger from "@/logging";
 import { ModelModel } from "@/models";
 import {
   CONTEXT_COMPACTION_CARRY_FORWARD_RULES,
+  CONTEXT_COMPACTION_INSTRUCTION_TOKENS,
   CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
   CONTEXT_COMPACTION_SUMMARY_TAG,
 } from "@/services/context-compaction";
@@ -129,7 +130,7 @@ export async function summarizeInContext(params: {
         tools: params.tools,
         messages: turnHistory,
       }) +
-        INSTRUCTION_TOKENS +
+        CONTEXT_COMPACTION_INSTRUCTION_TOKENS +
         CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS <=
         contextLength
         ? turnHistory
@@ -252,7 +253,7 @@ export async function generateInContextSummary(params: {
     (inputTokens !== undefined &&
       inputTokens +
         (outputTokens ?? CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS) +
-        INSTRUCTION_TOKENS +
+        CONTEXT_COMPACTION_INSTRUCTION_TOKENS +
         CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS <=
         params.contextLength);
   if (!canRetry) {
@@ -306,6 +307,3 @@ Use these canonical compaction instructions:
 ${CONTEXT_COMPACTION_SYSTEM_PROMPT}
 
 Output contract: return EXACTLY ONE tagged block starting with <summary> and ending with </summary>. Put the structured summary inside the tags. Do not include text outside the tags.`;
-
-// The instruction turn (or the correction turn) and its framing.
-const INSTRUCTION_TOKENS = 2_000;

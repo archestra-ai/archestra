@@ -9341,12 +9341,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
   });
 
-  test.each([
-    "chat:tool_call_repair",
-    "chat:compaction",
-  ])("binds authenticated Chat %s calls to the conversation root", async (source) => {
+  test("binds authenticated Chat tool-call repair calls to the conversation root", async () => {
     const response = await post(payload(false), {
-      "x-archestra-source": source,
+      "x-archestra-source": "chat:tool_call_repair",
     });
 
     expect(response.statusCode, response.body).toBe(200);
@@ -9357,6 +9354,23 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         tool: "get_weather",
       }),
     );
+  });
+
+  test("rejects a Chat summary's tool call before recording it", async () => {
+    // The summary request carries the turn's tools only so the cached prefix
+    // matches; a call it makes is never the conversation's.
+    const response = await post(payload(false), {
+      "x-archestra-source": "chat:compaction",
+    });
+
+    expect(response.statusCode, response.body).toBe(503);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: sessionId,
+      }),
+    );
+    expect(events.filter((event) => event.event === "tool_call")).toEqual([]);
   });
 
   test("rejects a Chat APPA root bound to another profile", async ({
@@ -9388,6 +9402,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const compactionAgent = await makeAgent({
       organizationId: agent.organizationId,
     });
+    options = { includeToolUse: false };
 
     const response = await app.inject({
       method: "POST",
@@ -10138,10 +10153,16 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   test("Chat compaction stays on the conversation root and a new conversation opens a fresh root", async ({
     makeConversation,
   }) => {
+    options = { includeToolUse: false };
     const compact = await post(payload(false), {
       "x-archestra-source": "chat:compaction",
     });
     expect(compact.statusCode, compact.body).toBe(200);
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      nonStreamingToolUse: { name: "get_weather", input: { location: "SF" } },
+    };
     expect(events).toContainEqual(
       expect.objectContaining({
         event: "session_start",

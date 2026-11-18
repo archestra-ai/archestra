@@ -286,6 +286,8 @@ type AppaPluginBinding = {
   /** True on internal loopback Chat requests. */
   chat: boolean;
   compaction: boolean;
+  /** Chat's own summary request: its tools are read-only context, never calls. */
+  chatCompaction: boolean;
   requestHeaders: IncomingHttpHeaders;
   /** No person is there to answer this request's approvals. */
   unattended: boolean;
@@ -454,6 +456,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         : undefined,
       chat,
       compaction: trustedContext.compaction === true,
+      chatCompaction: trustedContext.chatSource === "chat:compaction",
       threadContinue: trustedContext.thread === "continue",
       requestHeaders: context.headers,
       unattended:
@@ -1619,7 +1622,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
     enterCapturedGuardrailsActivation("active");
-    if (binding.compaction && context.toolCalls.length > 0) {
+    if (
+      (binding.compaction || binding.chatCompaction) &&
+      context.toolCalls.length > 0
+    ) {
       throw new ApiError(
         503,
         "OpenAPPA rejected tool calls from a compaction response",

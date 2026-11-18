@@ -1605,14 +1605,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   return createStepContextGuard({
                     contextLength,
                     systemPrompt,
-                    reservedTokens:
-                      (turnTools
-                        ? estimateToolsTokens({
-                            provider,
-                            model: selectedModel,
-                            tools: turnTools,
-                          })
-                        : 0) + (streamTextConfig.maxOutputTokens ?? 0),
+                    toolTokens: turnTools
+                      ? estimateToolsTokens({
+                          provider,
+                          model: selectedModel,
+                          tools: turnTools,
+                        })
+                      : 0,
+                    replyTokens: streamTextConfig.maxOutputTokens,
                     abortSignal: chatAbortController.signal,
                     logContext: { conversationId },
                     promptCache: stepPromptCache,

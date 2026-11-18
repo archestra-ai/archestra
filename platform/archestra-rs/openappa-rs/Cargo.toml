@@ -66,11 +66,12 @@ crate-type = ["cdylib"]
 # answer still runs (#936); then v0.44.0, shared policy publication (#938),
 # reused SQLite snapshots (#939), and shell annotations inspecting every
 # pipeline stage, chained command and substitution, with separate result and
-# send labels (#940).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2578af6b25f9bd54e015067f9cec0d204b683d2e", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2578af6b25f9bd54e015067f9cec0d204b683d2e" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2578af6b25f9bd54e015067f9cec0d204b683d2e", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2578af6b25f9bd54e015067f9cec0d204b683d2e" }
+# send labels (#940); then a spawn's tool call carrying the return it
+# declares (#947).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "39a5677c050643528def274e1199b16be8b9899f", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "39a5677c050643528def274e1199b16be8b9899f" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "39a5677c050643528def274e1199b16be8b9899f", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "39a5677c050643528def274e1199b16be8b9899f" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

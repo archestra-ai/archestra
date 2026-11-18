@@ -13,7 +13,6 @@ import {
   hasPermission,
   userHasPermission,
 } from "@/auth";
-import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -54,7 +53,6 @@ describe("agent skills routes", () => {
   let user: User;
   let organizationId: string;
   let requireMock: Mock;
-  const originalSkillsEnabled = config.mcpGateway.skillsEnabled;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
@@ -111,7 +109,6 @@ describe("agent skills routes", () => {
   });
 
   afterEach(async () => {
-    config.mcpGateway.skillsEnabled = originalSkillsEnabled;
     vi.restoreAllMocks();
     await app.close();
   });
@@ -144,15 +141,13 @@ describe("agent skills routes", () => {
    * recorded activation, plus spies on both usage summaries. Activation and
    * count paths must list these skills without aggregating that usage.
    *
-   * Side effects for the rest of the test: turns `config.mcpGateway.skillsEnabled`
-   * on and makes `userHasPermission` resolve true; `afterEach` restores the
-   * flag and the mocks.
+   * Side effect for the rest of the test: makes `userHasPermission` resolve
+   * true; `afterEach` restores the mocks.
    */
   async function seedUsedPluginAndExternalSkills(params: {
     catalogId: string;
     mcpServerId: string;
   }) {
-    config.mcpGateway.skillsEnabled = true;
     vi.mocked(userHasPermission).mockResolvedValue(true);
     const plugin = await PluginModel.create({
       organizationId,

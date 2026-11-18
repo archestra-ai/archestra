@@ -63,7 +63,6 @@ for (const scenario of [
     makeMember,
   }) => {
     const baseUrl = "https://vllm-pricing.example.test/v1";
-    config.autoRouting.enabled = true;
     config.llm.vllm.enabled = true;
     config.llm.vllm.baseUrl = baseUrl;
     const agent = await makeAgent({ agentType: "agent" });
@@ -188,7 +187,6 @@ for (const pool of [false, true]) {
     makeAgent,
     makeLlmProviderApiKey,
   }) => {
-    config.llmProxy.modelPoolsEnabled = true;
     const agent = await makeAgent({ agentType: "agent" });
     const baseUrl = "https://vllm-instance.example.test/v1";
     const key = await makeLlmProviderApiKey(agent.organizationId, null, {

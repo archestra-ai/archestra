@@ -1,5 +1,4 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
-import config from "@/config";
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
@@ -23,7 +22,6 @@ describe("POST /api/internal_mcp_catalog/:id/transfer-ownership", () => {
       makeMember,
       makeInternalMcpCatalog,
     }) => {
-      config.beta = false;
       organizationId = (await makeOrganization()).id;
       user = await makeUser();
       recipient = await makeUser();

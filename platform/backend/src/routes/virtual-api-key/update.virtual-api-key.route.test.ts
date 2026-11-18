@@ -1,5 +1,4 @@
 import { eq } from "drizzle-orm";
-import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -129,118 +128,110 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
   }) => {
     grantEverywhere(["llmVirtualKey"]);
     registerAuditLogHook(app);
-    config.llmProxy.modelPoolsEnabled = true;
-    try {
-      const zai = await makeLlmProviderApiKey(organizationId, null, {
-        provider: "zhipuai",
-      });
-      const openai = await makeLlmProviderApiKey(organizationId, null, {
-        provider: "openai",
-      });
-      const pool = await ModelPoolModel.create({
-        organizationId,
-        input: {
-          name: "glm-5",
-          members: [
-            {
-              providerApiKeyId: zai.id,
-              modelId: "glm-5",
-              priority: 1,
-              weight: 1,
-              enabled: true,
-            },
-          ],
-        },
-      });
-      const providerApiKeys = [
-        { provider: "openai", providerApiKeyId: openai.id },
-      ];
-      const created = await app.inject({
-        method: "POST",
-        url: "/api/llm-virtual-keys",
-        payload: { name: "pool key", providerApiKeys, modelPoolIds: [pool.id] },
-      });
-      expect(created.statusCode, created.body).toBe(200);
-      const id = created.json().id;
-      const grantedKeys = async () =>
-        (await ModelPoolModel.findById({ organizationId, id: pool.id }))
-          ?.virtualApiKeyIds;
-      expect(await grantedKeys()).toEqual([id]);
+    const zai = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "zhipuai",
+    });
+    const openai = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "openai",
+    });
+    const pool = await ModelPoolModel.create({
+      organizationId,
+      input: {
+        name: "glm-5",
+        members: [
+          {
+            providerApiKeyId: zai.id,
+            modelId: "glm-5",
+            priority: 1,
+            weight: 1,
+            enabled: true,
+          },
+        ],
+      },
+    });
+    const providerApiKeys = [
+      { provider: "openai", providerApiKeyId: openai.id },
+    ];
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: { name: "pool key", providerApiKeys, modelPoolIds: [pool.id] },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const id = created.json().id;
+    const grantedKeys = async () =>
+      (await ModelPoolModel.findById({ organizationId, id: pool.id }))
+        ?.virtualApiKeyIds;
+    expect(await grantedKeys()).toEqual([id]);
 
-      const update = (payload: Record<string, unknown>) =>
-        app.inject({
-          method: "PATCH",
-          url: `/api/llm-virtual-keys/${id}`,
-          payload: { name: "pool key", providerApiKeys, ...payload },
-        });
-      expect((await update({})).statusCode).toBe(200);
-      expect(await grantedKeys()).toEqual([id]);
-      const poolOnly = await update({
-        name: "pool-only key",
-        providerApiKeys: [],
-      });
-      expect(poolOnly.statusCode, poolOnly.body).toBe(200);
-      expect(poolOnly.json()).toMatchObject({
-        authorId: user.id,
-        providerApiKeys: [],
-      });
-      expect(poolOnly.json()).not.toHaveProperty("value");
-      expect(await grantedKeys()).toEqual([id]);
-      const audits = await db
-        .select()
-        .from(schema.auditLogsTable)
-        .where(eq(schema.auditLogsTable.resourceId, id));
-      expect(audits).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            action: "virtualApiKey.updated",
-            before: expect.objectContaining({
-              name: "pool key",
-              providerApiKeyIds: [openai.id],
-            }),
-            after: expect.objectContaining({
-              name: "pool-only key",
-              providerApiKeyIds: [],
-            }),
-          }),
-        ]),
-      );
-      expect(
-        (await update({ name: "renamed pool-only key", providerApiKeys: [] }))
-          .statusCode,
-      ).toBe(200);
-      expect(
-        (await update({ providerApiKeys: [], modelPoolIds: [] })).statusCode,
-      ).toBe(400);
-      expect(await grantedKeys()).toEqual([id]);
-      config.llmProxy.modelPoolsEnabled = false;
-      expect((await update({ providerApiKeys: [] })).statusCode).toBe(400);
-      config.llmProxy.modelPoolsEnabled = true;
-      expect(
-        (await update({ modelPoolIds: [crypto.randomUUID()] })).statusCode,
-      ).toBe(400);
-      expect((await update({ modelPoolIds: [] })).statusCode).toBe(200);
-      expect(await grantedKeys()).toEqual([]);
-      expect((await update({ providerApiKeys: [] })).statusCode).toBe(400);
-      const passthrough = await app.inject({
-        method: "POST",
-        url: "/api/llm-virtual-keys",
-        payload: { name: "passthrough key", keyType: "passthrough" },
-      });
-      expect(passthrough.statusCode, passthrough.body).toBe(200);
-      const passthroughUpdate = await app.inject({
+    const update = (payload: Record<string, unknown>) =>
+      app.inject({
         method: "PATCH",
-        url: `/api/llm-virtual-keys/${passthrough.json().id}`,
-        payload: {
-          name: "passthrough key",
-          keyType: "passthrough",
-          modelPoolIds: [pool.id],
-        },
+        url: `/api/llm-virtual-keys/${id}`,
+        payload: { name: "pool key", providerApiKeys, ...payload },
       });
-      expect(passthroughUpdate.statusCode).toBe(400);
-    } finally {
-      config.llmProxy.modelPoolsEnabled = false;
-    }
+    expect((await update({})).statusCode).toBe(200);
+    expect(await grantedKeys()).toEqual([id]);
+    const poolOnly = await update({
+      name: "pool-only key",
+      providerApiKeys: [],
+    });
+    expect(poolOnly.statusCode, poolOnly.body).toBe(200);
+    expect(poolOnly.json()).toMatchObject({
+      authorId: user.id,
+      providerApiKeys: [],
+    });
+    expect(poolOnly.json()).not.toHaveProperty("value");
+    expect(await grantedKeys()).toEqual([id]);
+    const audits = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(eq(schema.auditLogsTable.resourceId, id));
+    expect(audits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: "virtualApiKey.updated",
+          before: expect.objectContaining({
+            name: "pool key",
+            providerApiKeyIds: [openai.id],
+          }),
+          after: expect.objectContaining({
+            name: "pool-only key",
+            providerApiKeyIds: [],
+          }),
+        }),
+      ]),
+    );
+    expect(
+      (await update({ name: "renamed pool-only key", providerApiKeys: [] }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await update({ providerApiKeys: [], modelPoolIds: [] })).statusCode,
+    ).toBe(400);
+    expect(await grantedKeys()).toEqual([id]);
+    expect(
+      (await update({ modelPoolIds: [crypto.randomUUID()] })).statusCode,
+    ).toBe(400);
+    expect((await update({ modelPoolIds: [] })).statusCode).toBe(200);
+    expect(await grantedKeys()).toEqual([]);
+    expect((await update({ providerApiKeys: [] })).statusCode).toBe(400);
+    const passthrough = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: { name: "passthrough key", keyType: "passthrough" },
+    });
+    expect(passthrough.statusCode, passthrough.body).toBe(200);
+    const passthroughUpdate = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-virtual-keys/${passthrough.json().id}`,
+      payload: {
+        name: "passthrough key",
+        keyType: "passthrough",
+        modelPoolIds: [pool.id],
+      },
+    });
+    expect(passthroughUpdate.statusCode).toBe(400);
   });
 
   test("PATCH /api/llm-virtual-keys/:id updates the name and provider mappings without re-exposing the token", async ({

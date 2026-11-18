@@ -40,8 +40,7 @@ import { GUARDRAILS_BETA_TOOLTIP } from "@/lib/openappa-maturity";
  * all, so it offered pages the reader could not open.
  */
 
-/** Shown only while the deployment enables auto routing. */
-export const AUTO_ROUTING_URL = "/llm/auto-routing";
+const AUTO_ROUTING_URL = "/llm/auto-routing";
 
 export interface NavSubItem {
   title: string;
@@ -254,7 +253,6 @@ export const contentNavGroups: NavGroup[] = [
         icon: Layers,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/llm/model-pools"),
-        // Shown only while ARCHESTRA_LLM_MODEL_POOLS_ENABLED is on (sidebar).
         beta: true,
         badgeLabel: "Beta",
       },

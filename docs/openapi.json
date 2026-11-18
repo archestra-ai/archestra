@@ -167544,9 +167544,6 @@
                         "features": {
                           "type": "object",
                           "properties": {
-                            "betaEnabled": {
-                              "type": "boolean"
-                            },
                             "orchestratorK8sRuntime": {
                               "type": "boolean"
                             },
@@ -167723,9 +167720,6 @@
                             "kbMfilesConnectorEnabled": {
                               "type": "boolean"
                             },
-                            "llmModelPoolsEnabled": {
-                              "type": "boolean"
-                            },
                             "kbMfilesOauthEnabled": {
                               "type": "boolean"
                             },
@@ -167754,18 +167748,11 @@
                               ],
                               "additionalProperties": false
                             },
-                            "mcpGatewaySkillsEnabled": {
-                              "type": "boolean"
-                            },
                             "devFeedbackEnabled": {
-                              "type": "boolean"
-                            },
-                            "autoRoutingEnabled": {
                               "type": "boolean"
                             }
                           },
                           "required": [
-                            "betaEnabled",
                             "orchestratorK8sRuntime",
                             "agentIdentitySpiffe",
                             "sandbox",
@@ -167797,15 +167784,12 @@
                             "agentHooksEnabled",
                             "chatopsTelegramEnabled",
                             "kbMfilesConnectorEnabled",
-                            "llmModelPoolsEnabled",
                             "kbMfilesOauthEnabled",
                             "kbBm25DefaultK1",
                             "kbBm25DefaultB",
                             "kbContextualRetrievalDefaultMode",
                             "kbGoogleDriveOAuth",
-                            "mcpGatewaySkillsEnabled",
-                            "devFeedbackEnabled",
-                            "autoRoutingEnabled"
+                            "devFeedbackEnabled"
                           ],
                           "additionalProperties": false
                         },
@@ -205634,9 +205618,6 @@
                     "features": {
                       "type": "object",
                       "properties": {
-                        "betaEnabled": {
-                          "type": "boolean"
-                        },
                         "orchestratorK8sRuntime": {
                           "type": "boolean"
                         },
@@ -205813,9 +205794,6 @@
                         "kbMfilesConnectorEnabled": {
                           "type": "boolean"
                         },
-                        "llmModelPoolsEnabled": {
-                          "type": "boolean"
-                        },
                         "kbMfilesOauthEnabled": {
                           "type": "boolean"
                         },
@@ -205844,18 +205822,11 @@
                           ],
                           "additionalProperties": false
                         },
-                        "mcpGatewaySkillsEnabled": {
-                          "type": "boolean"
-                        },
                         "devFeedbackEnabled": {
-                          "type": "boolean"
-                        },
-                        "autoRoutingEnabled": {
                           "type": "boolean"
                         }
                       },
                       "required": [
-                        "betaEnabled",
                         "orchestratorK8sRuntime",
                         "agentIdentitySpiffe",
                         "sandbox",
@@ -205887,15 +205858,12 @@
                         "agentHooksEnabled",
                         "chatopsTelegramEnabled",
                         "kbMfilesConnectorEnabled",
-                        "llmModelPoolsEnabled",
                         "kbMfilesOauthEnabled",
                         "kbBm25DefaultK1",
                         "kbBm25DefaultB",
                         "kbContextualRetrievalDefaultMode",
                         "kbGoogleDriveOAuth",
-                        "mcpGatewaySkillsEnabled",
-                        "devFeedbackEnabled",
-                        "autoRoutingEnabled"
+                        "devFeedbackEnabled"
                       ],
                       "additionalProperties": false
                     },

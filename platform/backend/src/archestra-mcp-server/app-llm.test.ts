@@ -7,8 +7,7 @@ import {
 } from "@archestra/shared";
 import { APICallError, generateText } from "ai";
 import { eq } from "drizzle-orm";
-import { onTestFinished, vi } from "vitest";
-import config from "@/config";
+import { vi } from "vitest";
 import db, { schema } from "@/database";
 import {
   LlmProviderApiKeyModelLinkModel,
@@ -117,11 +116,6 @@ describe("app llm completion", () => {
   });
 
   test("asks the proxy to auto route the completion while the organization default is auto", async () => {
-    const deployed = config.autoRouting.enabled;
-    config.autoRouting.enabled = true;
-    onTestFinished(() => {
-      config.autoRouting.enabled = deployed;
-    });
     const { organizationId } = context;
     if (!organizationId) throw new Error("context has no organization");
     const router = await ensureAutoRouter(organizationId);

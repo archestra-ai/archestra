@@ -1127,9 +1127,7 @@ export function AgentForm({
   // surface only: publishing is what an MCP gateway is for, while an agent
   // reaches skills through `load_skill` in its own runtime and has no client
   // to serve `skill://` resources to. Legacy `profile` rows are gateways under
-  // an older name, so they keep the control. Shown only where the deployment
-  // has enabled the draft extension; the API enforces the same split.
-  const mcpGatewaySkillsEnabled = useFeature("mcpGatewaySkillsEnabled");
+  // an older name, so they keep the control. The API enforces the same split.
   // `skill:read` is the API's floor on these endpoints — publishing a skill
   // hands its body to every holder of the gateway's token, so it is not
   // something gateway permission alone buys. Hiding the section for a caller
@@ -1137,7 +1135,6 @@ export function AgentForm({
   // and one that 403s when they save.
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
   const showSkills =
-    mcpGatewaySkillsEnabled === true &&
     !!canReadSkills &&
     !agent?.builtIn &&
     (agentType === "mcp_gateway" || agentType === "profile");

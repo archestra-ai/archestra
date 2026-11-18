@@ -638,20 +638,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // before model/provider and attachment selection, never on the owner's
       // stored personal credential. Only the current agent's configured pool
       // inherits its shared-key access; other pools need the caller's own grant.
-      const poolAgent =
-        config.llmProxy.modelPoolsEnabled && conversation.modelPoolId
-          ? await AgentModel.findLlmSelectionFieldsById(conversation.agentId)
-          : null;
-      const poolSelection =
-        config.llmProxy.modelPoolsEnabled && conversation.modelPoolId
-          ? await (conversation.modelPoolId === poolAgent?.modelPoolId
-              ? resolveAgentModelPool
-              : resolveChatModelPool)({
-              organizationId,
-              userId: user.id,
-              modelPoolId: conversation.modelPoolId,
-            })
-          : null;
+      const poolAgent = conversation.modelPoolId
+        ? await AgentModel.findLlmSelectionFieldsById(conversation.agentId)
+        : null;
+      const poolSelection = conversation.modelPoolId
+        ? await (conversation.modelPoolId === poolAgent?.modelPoolId
+            ? resolveAgentModelPool
+            : resolveChatModelPool)({
+            organizationId,
+            userId: user.id,
+            modelPoolId: conversation.modelPoolId,
+          })
+        : null;
       if (poolSelection) {
         conversation.modelId = poolSelection.modelId;
         conversation.chatApiKeyId = poolSelection.chatApiKeyId;
@@ -3253,11 +3251,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const effectiveModelPoolId =
         modelPoolId ??
-        (config.llmProxy.modelPoolsEnabled &&
-        modelPoolId === undefined &&
-        !modelId &&
-        !chatApiKeyId &&
-        !autoRouterId
+        (modelPoolId === undefined && !modelId && !chatApiKeyId && !autoRouterId
           ? agent.modelPoolId
           : null);
 
@@ -3414,7 +3408,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // The agent picker sends only agentId. Its configured pool comes with
       // it unless the request deliberately chooses a key, model or router.
       if (
-        config.llmProxy.modelPoolsEnabled &&
         nextAgent?.modelPoolId &&
         body.modelPoolId === undefined &&
         body.autoRouterId === undefined &&

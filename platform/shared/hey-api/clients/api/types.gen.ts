@@ -44884,7 +44884,6 @@ export type GetBootstrapResponses = {
                 communicate: boolean;
             };
             features: {
-                betaEnabled: boolean;
                 orchestratorK8sRuntime: boolean;
                 agentIdentitySpiffe: {
                     trustDomain: string;
@@ -44940,7 +44939,6 @@ export type GetBootstrapResponses = {
                 agentHooksEnabled: boolean;
                 chatopsTelegramEnabled: boolean;
                 kbMfilesConnectorEnabled: boolean;
-                llmModelPoolsEnabled: boolean;
                 kbMfilesOauthEnabled: boolean;
                 kbBm25DefaultK1: number;
                 kbBm25DefaultB: number;
@@ -44949,9 +44947,7 @@ export type GetBootstrapResponses = {
                     configured: boolean;
                     redirectUri: string;
                 };
-                mcpGatewaySkillsEnabled: boolean;
                 devFeedbackEnabled: boolean;
-                autoRoutingEnabled: boolean;
             };
             providerBaseUrls: {
                 [key: string]: string | null;
@@ -54724,7 +54720,6 @@ export type GetConfigResponses = {
             communicate: boolean;
         };
         features: {
-            betaEnabled: boolean;
             orchestratorK8sRuntime: boolean;
             agentIdentitySpiffe: {
                 trustDomain: string;
@@ -54780,7 +54775,6 @@ export type GetConfigResponses = {
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
             kbMfilesConnectorEnabled: boolean;
-            llmModelPoolsEnabled: boolean;
             kbMfilesOauthEnabled: boolean;
             kbBm25DefaultK1: number;
             kbBm25DefaultB: number;
@@ -54789,9 +54783,7 @@ export type GetConfigResponses = {
                 configured: boolean;
                 redirectUri: string;
             };
-            mcpGatewaySkillsEnabled: boolean;
             devFeedbackEnabled: boolean;
-            autoRoutingEnabled: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;

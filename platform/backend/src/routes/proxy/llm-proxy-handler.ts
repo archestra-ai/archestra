@@ -757,7 +757,6 @@ async function handleObservedLLMProxy<
     utils.gatewayToolDeclarations.extractGatewayToolDeclarations(body);
   const requestAdapter = provider.createRequestAdapter(body);
   telemetry.setStreaming(requestAdapter.isStreaming());
-  assertNotAutoOnNativeRoute(requestAdapter.getModel());
   const streamAdapter = provider.createStreamAdapter(body);
   const providerMessages = requestAdapter.getProviderMessages();
   const messagesCount = getProviderMessagesCount(providerMessages);
@@ -801,6 +800,10 @@ async function handleObservedLLMProxy<
   const resolvedAgent =
     authenticationSnapshot?.agent ?? (await resolveAgent(agentId));
   const resolvedAgentId = resolvedAgent.id;
+  await assertNotAutoOnNativeRoute({
+    model: requestAdapter.getModel(),
+    organizationId: resolvedAgent.organizationId,
+  });
   // Pre-call reads shared within this request only; never stored or reused.
   logger.debug(
     { resolvedAgentId, agentName: resolvedAgent.name, wasExplicit: !!agentId },
@@ -1604,7 +1607,6 @@ async function handleObservedLLMProxy<
         : null;
     const autoRouteWire =
       internalCall &&
-      config.autoRouting.enabled &&
       autoRouterId !== null &&
       resolvedAgent.runtime === null &&
       !modelPoolPlan

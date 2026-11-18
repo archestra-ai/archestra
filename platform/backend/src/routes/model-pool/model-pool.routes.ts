@@ -2,7 +2,6 @@ import { RouteId, SupportedProvidersSchema } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { AUTO_MODEL, isAutoModel } from "@/auto-routing/router";
-import config from "@/config";
 import { LlmProviderApiKeyModel, ModelPoolModel } from "@/models";
 import { listChatModelPools } from "@/services/chat-model-pools";
 import {
@@ -31,7 +30,6 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId }, reply) => {
-      assertModelPoolsEnabled();
       return reply.send(
         await withMemberHealth(await ModelPoolModel.list(organizationId)),
       );
@@ -74,7 +72,6 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, body }, reply) => {
-      assertModelPoolsEnabled();
       assertNameNotReserved(body);
       await assertValidMembers({
         organizationId,
@@ -101,7 +98,6 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, params, body }, reply) => {
-      assertModelPoolsEnabled();
       assertNameNotReserved(body);
       const existing = await ModelPoolModel.findById({
         organizationId,
@@ -141,7 +137,6 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, params }, reply) => {
-      assertModelPoolsEnabled();
       const deleted = await ModelPoolModel.delete({
         organizationId,
         id: params.id,
@@ -151,13 +146,6 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
-
-/** Model pools are a beta feature: while off, their API is not there. */
-function assertModelPoolsEnabled(): void {
-  if (!config.llmProxy.modelPoolsEnabled) {
-    throw new ApiError(404, "Not found");
-  }
-}
 
 /** "auto" and "auto:<name>" name auto routers, which a pool must not shadow. */
 function assertNameNotReserved(input: ModelPoolInput): void {

@@ -929,13 +929,7 @@ describe("ConversationSearchPalette", () => {
     }
   });
 
-  it.each([
-    true,
-    false,
-  ])("offers Auto Routing only while the alpha is enabled: %s", (enabled) => {
-    vi.mocked(useFeature).mockImplementation(
-      (feature) => feature === "autoRoutingEnabled" && enabled,
-    );
+  it("offers Auto Routing", () => {
     mockUseConversations.mockReturnValue({
       data: [],
       isLoading: false,
@@ -945,12 +939,8 @@ describe("ConversationSearchPalette", () => {
     fireEvent.change(screen.getByTestId("command-input"), {
       target: { value: "auto routing" },
     });
-    if (enabled) {
-      fireEvent.click(screen.getByText("Auto Routing"));
-      expect(mockRouterPush).toHaveBeenCalledWith("/llm/auto-routing");
-    } else {
-      expect(screen.queryByText("Auto Routing")).not.toBeInTheDocument();
-    }
+    fireEvent.click(screen.getByText("Auto Routing"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/llm/auto-routing");
   });
 
   it("searches pages by their visible labels and navigates to a match", () => {

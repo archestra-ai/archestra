@@ -12,8 +12,8 @@
  * Anthropic Messages API. A stack with one backend process cannot show a
  * publish by another pod; the native suite covers that case.
  *
- * This spec requires a stack booted with `ARCHESTRA_BETA=true` and lives in
- * the `openappa` Playwright project for that reason.
+ * This spec turns deployment-wide enforcement on and lives in the `openappa`
+ * Playwright project for that reason.
  */
 import { randomUUID } from "node:crypto";
 import type { APIRequestContext } from "@playwright/test";
@@ -78,7 +78,7 @@ test("a policy saved while a chat is open decides that chat's next call", async 
     ).json()) as { enabled: boolean; featureEnabled: boolean };
     expect(
       deployment.featureEnabled,
-      "the openappa Playwright project needs a stack booted with ARCHESTRA_BETA=true",
+      "OpenAPPA is not active on this stack — the openappa Playwright project requires it",
     ).toBe(true);
     deploymentWasEnabled = deployment.enabled;
     if (!deployment.enabled) {

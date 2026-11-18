@@ -64,7 +64,6 @@ import type {
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useAutoRouters } from "@/lib/auto-routing.query";
-import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -183,10 +182,8 @@ export function LlmConnectSteps({
   const callsPool = (key: { id: string }, target: ModelPool) =>
     target.virtualApiKeyIds.includes(key.id);
   // Pools are asked for by name on the Unified Model API.
-  const poolsEnabled = useFeature("llmModelPoolsEnabled") === true;
   const { data: canReadPools } = useHasPermissions({ llmModel: ["read"] });
   const offersPools =
-    poolsEnabled &&
     canReadPools === true &&
     (auth === "standard" || auth === "oauth") &&
     isRouter;
@@ -205,10 +202,8 @@ export function LlmConnectSteps({
       : [];
   // Auto routers are asked for by name on the Unified Model API too, and
   // answer on their own provider keys.
-  const autoRoutingEnabled = useFeature("autoRoutingEnabled") === true;
   const offersRouters =
     offerAutoModel &&
-    autoRoutingEnabled &&
     (auth === "standard" || auth === "oauth") &&
     isRouter &&
     !pool;
@@ -439,9 +434,13 @@ export function LlmConnectSteps({
     offersPools &&
     hasProviderKey &&
     (pickedKey ? (
-      <KeyPools key={pickedKey.id} pools={pickedPools} noun="key" />
+      <KeyPools key={`pools-${pickedKey.id}`} pools={pickedPools} noun="key" />
     ) : pickedClient && takesPools(pickedClient) ? (
-      <KeyPools key={pickedClient.id} pools={pickedPools} noun="client" />
+      <KeyPools
+        key={`pools-${pickedClient.id}`}
+        pools={pickedPools}
+        noun="client"
+      />
     ) : null);
 
   // Only a client calling as the app takes auto routers, like pools.
@@ -451,10 +450,13 @@ export function LlmConnectSteps({
     offersRouters &&
     hasProviderKey &&
     (pickedKey ? (
-      <KeyAutoRouters key={pickedKey.id} virtualApiKeyId={pickedKey.id} />
+      <KeyAutoRouters
+        key={`routers-${pickedKey.id}`}
+        virtualApiKeyId={pickedKey.id}
+      />
     ) : routerClient ? (
       <KeyAutoRouters
-        key={routerClient.id}
+        key={`routers-${routerClient.id}`}
         routerIds={routerClient.autoRouterIds}
         noun="client"
       />

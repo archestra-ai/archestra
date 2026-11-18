@@ -156,9 +156,6 @@ describe("PATCH /api/chat/conversations/:id API key when switching agent", () =>
   });
 });
 
-beforeEach(() => {
-  config.llmProxy.modelPoolsEnabled = true;
-});
 setupTestCacheManager();
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
 const server = useMswServer();
@@ -493,24 +490,6 @@ poolTest(
       },
     });
     expect(direct.statusCode, direct.body).toBe(403);
-  },
-);
-
-poolTest(
-  "disabled pools leave implicit Chat creation on the prior direct-provider path",
-  async ({ pooled }) => {
-    config.llmProxy.modelPoolsEnabled = false;
-    const response = await pooled.app.inject({
-      method: "POST",
-      url: "/api/chat/conversations",
-      payload: { agentId: pooled.agent.id },
-    });
-    expect(response.statusCode, response.body).toBe(200);
-    expect(response.json()).toMatchObject({
-      modelPoolId: null,
-      modelId: pooled.copilotModelId,
-      chatApiKeyId: null,
-    });
   },
 );
 

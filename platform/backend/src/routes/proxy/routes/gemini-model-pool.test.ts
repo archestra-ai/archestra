@@ -36,7 +36,6 @@ import xaiRoutes from "./xai";
 const server = useMswServer();
 setupTestCacheManager();
 beforeEach(() => {
-  config.llmProxy.modelPoolsEnabled = true;
   config.llm.gemini.vertexAi.enabled = false;
 });
 const origin = "https://gemini.pool.test";

@@ -11,30 +11,38 @@ Upgrading to v1.4 takes Archestra offline while the database migrates, and delet
 
 ## What Changes for Your Deployment
 
-Each change below needs something from you. Do the "Before" items while v1.3 still runs.
+Each change below needs something from you. Handle the deleted data while v1.3 still runs.
 
-| In v1.4 | What you do |
-| --- | --- |
-| Your v1.3 guardrails are deleted: the Tool Call Policies and Tool Result Policies on the **Guardrails** page. The new [Guardrails](/docs/agents/guardrails) starts off, so no tool-call rules apply until you write a policy. | Before: record your policies. After: rebuild them. |
-| Cost limits applied to an LLM Proxy are deleted. Organization, team, user, agent, and virtual key limits are kept. | Before: record them. After: recreate them as [organization limits](/docs/llm-proxy/costs-and-limits#set-a-budget). |
-| Custom roles lose the per-area settings, agent trigger, site notification, secret, and scheduled task permissions. They are removed, not converted. | Before: note each custom role under **Settings → Roles**. After: grant [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), or Projects actions for schedules, where the role needs them. |
-| The LLM Proxy rejects a request that carries only a provider key, with `401`. | Give each client an [Archestra credential](/docs/llm-proxy/authentication), such as a virtual key, or turn on [Allow requests without a virtual key](/docs/llm-proxy/authentication#allow-requests-without-a-virtual-key). |
-| Agents and MCP gateways in **Manual** tool mode get [Progressive tool loading](/docs/mcp/gateway): clients see [`search_tools`](/docs/reference/archestra-mcp-server#search_tools) and [`run_tool`](/docs/reference/archestra-mcp-server#run_tool) instead of the full tool list. | Turn it off where a client needs every tool up front. |
-| Only your default LLM Proxy remains. Requests to another proxy's ID get `404`. | Point those clients at the default proxy. |
-| Sharing becomes [permission grants](/docs/admin/access-control#granular-access-control). The API rejects `scope`, `teams`, `users`, `visibility`, `teamIds`, and `restricted` with `400`. | Update scripts that set them. Review who can use each agent, gateway, and MCP server. |
-| Team and organization MCP gateway tokens become service accounts with the same token value. The organization token reaches only gateways shared with the whole organization. | Check them under **Settings → Service Accounts**. Grant access where a client lost it. |
-| Terraform provider 2.x does not work with v1.4, and provider 3.x does not work with v1.3. | After the upgrade, move to provider 3.x and follow its [migration guide](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/MIGRATION-v3.md). |
-| The OAuth token endpoint allows 100 requests per minute per client IP. Behind an ingress, every client shares one IP. | Set [`ARCHESTRA_TRUST_PROXY`](/docs/reference/configuration#ARCHESTRA_TRUST_PROXY) to your load balancer's addresses. |
-| MCP servers on a `:latest` or untagged image restart onto the new build when the tag moves, checked every 15 minutes. | Pin image tags, or set [`ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES=0`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES). |
-| [`GET /api/agents/options`](/docs/reference/api#/Agents/getAgentOptions) and [`GET /api/projects`](/docs/reference/api#/Projects/getProjects) return pages: `{ data, pagination }`. `/api/tokens` is removed. | Update API clients. |
-| The task MCP tools are renamed: `start_task` is [`start_run`](/docs/reference/archestra-mcp-server#start_run), and the other `*_task` tools follow. | Update prompts and clients that call them. |
-| The Code Sandbox runs Python 3.14, up from 3.12. | Fix commands that use modules removed since 3.12, such as `cgi`, or packages without 3.14 wheels. |
-| Agent Runtime needs the Agent Sandbox controller. | If you use Agent Runtime, install it. See [Cluster Prerequisites](/docs/agents/runtime/setup#cluster-prerequisites). |
-| Companion and agent images publish to `ghcr.io/archestra-ai`. The platform image stays at `archestra/platform`. | Update image mirrors and registry overrides. |
+### Deleted in v1.4
+
+v1.4 deletes these instead of converting them. Record them before you upgrade, and recreate them after.
+
+- **Guardrail policies.** The Tool Call Policies and Tool Result Policies on the v1.3 **Guardrails** page are deleted. The new [Guardrails](/docs/agents/guardrails) starts off, so no tool-call rules apply until you go to **Guardrails**, click **Create my policy**, and rebuild them.
+- **LLM Proxy cost limits.** Cost limits applied to an LLM Proxy are deleted. Organization, team, user, agent, and virtual key limits are kept. Recreate the deleted ones as [organization limits](/docs/llm-proxy/costs-and-limits#set-a-budget).
+- **Custom role permissions.** Custom roles lose their per-area settings, agent trigger, site notification, secret, and scheduled task permissions. Note each role under **Settings → Roles**, then grant [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), or Projects actions for schedules, where a role needs them.
+
+### Clients That Stop Working
+
+- **Provider-key-only LLM requests** get `401`. Give each client an [Archestra credential](/docs/llm-proxy/authentication), such as a virtual key, or turn on [Allow requests without a virtual key](/docs/llm-proxy/authentication#allow-requests-without-a-virtual-key).
+- **Extra LLM Proxies** are removed: only your default proxy remains. Requests to another proxy's ID get `404`, so point those clients at the default proxy.
+- **Sharing fields in the API** are rejected with `400`: `scope`, `teams`, `users`, `visibility`, `teamIds`, and `restricted`. Sharing is now [permission grants](/docs/admin/access-control#granular-access-control). Update scripts that set these fields, and review who can use each agent, gateway, and MCP server.
+- **Team and organization gateway tokens** become service accounts with the same token value. The organization token reaches only gateways shared with the whole organization. Check them under **Settings → Service Accounts**, and grant access where a client lost it.
+- **Terraform provider 2.x** does not work with v1.4, and 3.x does not work with v1.3. After the upgrade, move to 3.x with its [migration guide](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/MIGRATION-v3.md).
+- **API clients** of [`GET /api/agents/options`](/docs/reference/api#/Agents/getAgentOptions) and [`GET /api/projects`](/docs/reference/api#/Projects/getProjects) now get pages: `{ data, pagination }`. `/api/tokens` is removed.
+- **Task MCP tools** are renamed: `start_task` is [`start_run`](/docs/reference/archestra-mcp-server#start_run), and the other `*_task` tools follow. Update prompts and clients that call them.
+
+### Behavior Changes
+
+- **OAuth token rate limit.** The token endpoint allows 100 requests per minute per client IP. Behind an ingress, every client shares one IP: set [`ARCHESTRA_TRUST_PROXY`](/docs/reference/configuration#ARCHESTRA_TRUST_PROXY) to your load balancer's addresses.
+- **MCP server image updates.** Servers on a `:latest` or untagged image restart onto the new build when the tag moves, checked every 15 minutes. Pin image tags, or set [`ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES=0`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES).
+- **Manual tool mode.** Agents and MCP gateways in **Manual** mode get [Progressive tool loading](/docs/mcp/gateway): clients see [`search_tools`](/docs/reference/archestra-mcp-server#search_tools) and [`run_tool`](/docs/reference/archestra-mcp-server#run_tool) instead of the full list. Turn it off where a client needs every tool up front.
+- **Code Sandbox Python.** Sandboxes run Python 3.14, up from 3.12. Fix commands that use modules removed since 3.12, such as `cgi`, or packages without 3.14 wheels.
+- **Agent Runtime.** It needs the Agent Sandbox controller in your cluster. If you use Agent Runtime, see [Cluster Prerequisites](/docs/agents/runtime/setup#cluster-prerequisites).
+- **Image registry.** Companion and agent images publish to `ghcr.io/archestra-ai`; the platform image stays at `archestra/platform`. Update image mirrors and registry overrides.
 
 ## Before You Upgrade
 
-1. Do every "Before" item in [What Changes for Your Deployment](#what-changes-for-your-deployment).
+1. Record everything under [Deleted in v1.4](#deleted-in-v14).
 2. Pick the latest v1.4 release from [GitHub Releases](https://github.com/archestra-ai/archestra/releases). Use v1.4.33 or later: it fixes access that earlier v1.4 releases got wrong after the conversion.
 3. With Helm, update `values.yaml`. See [Helm Values](#helm-values).
 4. Update your environment variables. See [Environment Variables](#environment-variables).
@@ -86,7 +94,7 @@ These commands assume the release `archestra-platform` in the namespace `archest
 
    With autoscaling on, scale the web Deployment to your `minReplicas`: the autoscaler does not start it from zero. On its first start, v1.4 converts v1.3 sharing into permission grants and reports not ready until it finishes. The worker starts after the web pod is ready.
 
-5. Sign in, then do every "After" item in [What Changes for Your Deployment](#what-changes-for-your-deployment).
+5. Sign in, then recreate what you recorded under [Deleted in v1.4](#deleted-in-v14).
 
 If a migration fails, Helm deletes the migration Job and its logs. To keep them, follow the logs from a second terminal during the upgrade: `kubectl logs -n archestra -f job/archestra-platform-migrate`. Never start v1.3 against the migrated database: [roll back](#roll-back) instead.
 
@@ -117,7 +125,7 @@ The v1.4 container migrates the database when it starts. It also rebuilds its em
      archestra/platform:1.4.35 # x-release-please-version
    ```
 
-3. Open <http://localhost:3000>, sign in, then do every "After" item in [What Changes for Your Deployment](#what-changes-for-your-deployment).
+3. Open <http://localhost:3000>, sign in, then recreate what you recorded under [Deleted in v1.4](#deleted-in-v14).
 
 ## Helm Values
 

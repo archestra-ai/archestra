@@ -242,6 +242,54 @@ describe("McpElicitationCard", () => {
     });
   });
 
+  it("keeps a grouped skill review pending when copying the original request", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText");
+    const onRespond = vi.fn().mockResolvedValue(true);
+    const raw = JSON.stringify({
+      content:
+        "---\nname: example-skill\ndescription: Review changes.\n---\nCheck the proposed changes.",
+    });
+    render(
+      <McpElicitationCard
+        requests={[
+          singleChoice({
+            id: "q-visibility",
+            message: "Who should see the skill?",
+            options: ["Only me", "My team"],
+          }),
+          {
+            ...openappaReview(),
+            reviewedTool: "archestra__create_skill",
+            reviewedArguments: raw,
+          },
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    await user.click(screen.getByRole("radio", { name: "Only me" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
+    await user.click(screen.getByRole("button", { name: "Approve" }));
+    expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
+    expect(onRespond).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Original request" }));
+    await user.click(
+      screen.getByRole("button", { name: "Copy original request" }),
+    );
+    expect(writeText).toHaveBeenCalledWith(raw);
+    expect(onRespond).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    expect(onRespond).toHaveBeenCalledTimes(2);
+    expect(onRespond).toHaveBeenCalledWith({
+      id: "review-1",
+      action: "accept",
+      content: { action: "approve" },
+    });
+  });
+
   it.each([
     { name: "empty", input: {}, expected: "{}" },
     {

@@ -75,7 +75,10 @@ export function SkillApprovalInput({ skill }: { skill: SkillApprovalView }) {
             language="json"
             wrapLongLines
           >
-            <CodeBlockCopyButton aria-label="Copy original request" />
+            <CodeBlockCopyButton
+              type="button"
+              aria-label="Copy original request"
+            />
           </CodeBlock>
         </CollapsibleContent>
       </Collapsible>

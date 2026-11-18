@@ -189,7 +189,7 @@ describe("authPlugin integration", () => {
       const request = {
         url: "/api/agents",
         method: "GET",
-        headers: { authorization: `Bearer ${value}` },
+        headers: { authorization: value },
         routeOptions: { schema: { operationId: "getAgents" } },
       } as unknown as FastifyRequest;
       const reply = mockReply();

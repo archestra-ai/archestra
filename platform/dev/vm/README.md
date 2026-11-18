@@ -39,10 +39,16 @@ Open http://localhost:13000 (admin@example.com / password). The first
 addons exist only for linux x64, so on Apple Silicon every Rust addon compiles
 from source.
 
-`create` is safe to run again; it skips what is done. It pushes this repo's
-`main` (or `create <ref>`) into the VM, and writes the VM's settings into
-`~/archestra/platform/.env`: the forwarded frontend and API URLs,
+`create` is safe to run again, also while Tilt runs; it skips what is done. It
+pushes this repo's `main` (or `create <ref>`) into the VM, and writes the VM's
+settings into `~/archestra/platform/.env`: the forwarded frontend and API URLs,
 `ARCHESTRA_BETA=true`, the Agent Runtime URL, and no warm Agent Runtime pod.
+
+It also copies the macOS SDK of the Mac's Command Line Tools
+(`xcode-select --install`) into the VM, about 300 MB of headers and library
+stubs. With it, Tilt's `archestra-cli-build` builds the `archestra` program
+for the Mac as well as for the VM, so the install command on the Connect page
+works on the Mac with the program of your checkout.
 
 Resources: 6 CPUs, 12 GiB, 100 GiB disk by default; set
 `ARCHESTRA_DEV_VM_CPUS`, `ARCHESTRA_DEV_VM_MEMORY`, `ARCHESTRA_DEV_VM_DISK`

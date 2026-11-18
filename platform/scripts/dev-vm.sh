@@ -45,6 +45,25 @@ push_to_vm() {
     git -C "$repo" push --no-verify --quiet "lima-$vm:archestra" "$@"
 }
 
+# The macOS SDK of the Mac's Command Line Tools, into ~/.local/share/macos-sdk
+# in the VM: Tilt's archestra-cli-build builds the archestra program for the
+# Mac with it (dev/build-archestra-cli-dev.sh). Headers and library stubs only.
+copy_macos_sdk() {
+  local sdk
+  if in_vm "test -d ~/.local/share/macos-sdk/MacOSX.sdk"; then return; fi
+  sdk="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null)" || sdk=""
+  if [ -z "$sdk" ]; then
+    echo "No macOS SDK (xcode-select --install): the VM won't build the archestra program for this Mac."
+    return
+  fi
+  # MacOSX.sdk is a link to the versioned folder; the folder keeps its own links.
+  sdk="$(cd "$sdk" && pwd -P)"
+  echo "Copying the macOS SDK $(basename "$sdk") into the VM..."
+  tar -C "$(dirname "$sdk")" -cf - "$(basename "$sdk")" 2>/dev/null |
+    vm_shell sh -c "mkdir -p ~/.local/share/macos-sdk && tar -C ~/.local/share/macos-sdk -xf - 2>/dev/null && ln -sfn $(printf %q "$(basename "$sdk")") ~/.local/share/macos-sdk/MacOSX.sdk" ||
+    die "copying the macOS SDK into the VM failed"
+}
+
 cmd_create() {
   local ref="${1:-main}" commit node_version name email
   command -v limactl >/dev/null || die "install Lima first: brew install lima"
@@ -66,8 +85,13 @@ cmd_create() {
 
   limactl copy "$platform/dev/vm/setup-vm.sh" "$platform/dev/vm/setup-checkout.sh" "$vm:/tmp/"
   vm_shell sudo bash /tmp/setup-vm.sh "$node_version" </dev/null
-  # A new SSH session, so the docker group from setup-vm.sh applies.
-  limactl shell --reconnect --workdir / "$vm" -- true </dev/null
+  # A new SSH session, so the docker group from setup-vm.sh applies. Only when
+  # it doesn't yet: --reconnect closes the shared SSH connection, and with it
+  # every session on it, a running `tilt up` too.
+  if ! vm_shell id -nG </dev/null | grep -qw docker; then
+    limactl shell --reconnect --workdir / "$vm" -- true </dev/null
+  fi
+  copy_macos_sdk
 
   if in_vm "test ! -e ~/archestra"; then
     # shallowUpdate: this repo may be a shallow clone. updateInstead: a push

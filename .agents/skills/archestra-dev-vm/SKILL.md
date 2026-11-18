@@ -112,7 +112,8 @@ dev-vm-sync.py run 'tilt trigger pnpm-dev-backend'   # rebuild a resource
 - A stack whose checkout exists is not garbage. Stop it only when the user
   asks; never stop another checkout's Tilt.
 - Run `prune` after removing a worktree, or when `status` shows a checkout as
-  gone or lists leftovers.
+  gone or lists leftovers. It also removes VM copies, `tilt-*` sessions and
+  `archestra-dev-*` namespaces that belong to no sync: check `status` first.
 - `run` sets `TILT_PORT` from the checkout's `.env`, so `tilt` commands reach
   this checkout's Tilt, not another one.
 - Never `tilt trigger uncategorized`: Tilt deletes everything in it first,

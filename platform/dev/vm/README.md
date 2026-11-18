@@ -161,8 +161,9 @@ the Mac. Up to 5 at once. Two idle stacks use about 5 GiB of the VM's 24.
   twice does nothing.
 - A stack stays until you stop it, as a Tilt on the Mac does. After you
   remove a worktree, `dev-vm-sync.py prune` removes its stack: Tilt, sync,
-  VM copy and namespace, its database included. `status` shows what's left
-  over.
+  VM copy and namespace, its database included. It also removes VM copies,
+  `tilt-*` tmux sessions and `archestra-dev-*` namespaces that belong to no
+  sync, never the first stack's `archestra-dev`. `status` lists them first.
 
 ### Bringing files back (`pull`)
 

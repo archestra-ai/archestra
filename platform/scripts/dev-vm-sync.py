@@ -12,7 +12,7 @@ Usage, from inside the checkout:
       with ports of its own, so its stack runs next to the other checkouts'.
   dev-vm-sync.py run [<command>]
       Run a command in the VM copy, in the same subfolder you are in; without
-      a command, open a shell there (pnpm install, tilt up).
+      a command, open a shell there.
   dev-vm-sync.py pull '<command>'
       Like run, for a command that writes source files (pnpm db:generate,
       pnpm add, pnpm codegen, pnpm lint:fix): copies the files it changed back
@@ -31,8 +31,10 @@ Usage, from anywhere:
       Every synced checkout: its URLs, whether its Tilt runs, whether the
       checkout still exists. Also what is left over without a sync.
   dev-vm-sync.py prune
-      Remove what belongs to checkouts that no longer exist: their Tilt,
-      sync, VM copy and Kubernetes namespace (their database too).
+      Remove the stacks of checkouts that no longer exist: their Tilt, sync,
+      VM copy and Kubernetes namespace (their database too). Also removes
+      VM copies, tilt-* tmux sessions and archestra-dev-* namespaces that
+      belong to no sync. Never the first stack's namespace, archestra-dev.
 
 Env: ARCHESTRA_DEV_VM (VM name, default archestra-dev).
 """
@@ -173,10 +175,15 @@ def stack_of(top):
 
 
 def syncs():
-    """The Mutagen sessions into this VM: {name: Mac checkout}."""
-    out = subprocess.run(["mutagen", "sync", "list", "--template",
-                          '{{range .}}{{.Name}}\t{{.Beta.Host}}\t{{.Alpha.Path}}{{"\\n"}}{{end}}'],
-                         stdout=subprocess.PIPE, text=True).stdout
+    """The Mutagen sessions into this VM: {name: Mac checkout}. Dies when
+    Mutagen can't list them: an empty list would make every stack look
+    unused."""
+    listed = subprocess.run(["mutagen", "sync", "list", "--template",
+                             '{{range .}}{{.Name}}\t{{.Beta.Host}}\t{{.Alpha.Path}}{{"\\n"}}{{end}}'],
+                            stdout=subprocess.PIPE, text=True)
+    if listed.returncode != 0:
+        die("mutagen sync list failed; is the Mutagen daemon running? (mutagen daemon start)")
+    out = listed.stdout
     found = {}
     for line in out.splitlines():
         name, host, top = (line.split("\t") + ["", ""])[:3]
@@ -317,7 +324,7 @@ def start():
         # Mutagen uses your own ssh: `dev-vm.sh create` adds the VM to ~/.ssh/config.
         run(["mutagen", "sync", "create", "--name", NAME, "-c", f.name, TOP, "%s:%s" % (HOST, VM_DIR)])
     mutagen("flush", NAME)
-    print("Syncing %s -> %s:~/%s. Next, from platform/: dev-vm-sync.py run, then pnpm install and tilt up." % (TOP, VM, VM_DIR))
+    print("Syncing %s -> %s:~/%s. Next: dev-vm-sync.py tilt starts its stack." % (TOP, VM, VM_DIR))
     print_urls()
 
 
@@ -372,12 +379,24 @@ def status():
             print("  " + line)
 
 
+def used_namespaces(found):
+    """Namespaces synced checkouts use: the one from the folder name, and the
+    one their .env names."""
+    used = set()
+    for name, top in found.items():
+        used.add(namespace(name))
+        ns = read_env(os.path.join(top, "platform", ".env"), "ARCHESTRA_K8S_NAMESPACE")
+        if ns:
+            used.add(ns)
+    return used
+
+
 def leftovers(state, found):
     known = set(found)
     return (["copy ~/sync/%s" % c for c in sorted(state["copies"] - known)]
             + ["tmux session %s" % s for s in sorted(state["sessions"])
                if s.startswith("tilt-") and s not in {session(n) for n in known}]
-            + ["namespace %s" % n for n in sorted(state["namespaces"] - {namespace(k) for k in known})])
+            + ["namespace %s" % n for n in sorted(state["namespaces"] - used_namespaces(found))])
 
 
 def prune():
@@ -405,7 +424,7 @@ def prune():
         if s.startswith("tilt-") and s not in {session(n) for n in live | set(names)}:
             ssh("tmux kill-session -t =%s" % s)
             removed.append("tmux session %s" % s)
-    for ns in sorted(state["namespaces"] - {namespace(n) for n in live}):
+    for ns in sorted(state["namespaces"] - used_namespaces({n: found[n] for n in live})):
         ssh("kubectl delete namespace %s --wait=false >/dev/null" % ns)
         removed.append("namespace %s (with its database)" % ns)
     print("Removed:\n  " + "\n  ".join(removed) if removed else "Nothing to remove.")

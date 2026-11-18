@@ -3963,6 +3963,33 @@ describe("asking through the client's own question tool", () => {
           decision: "refuse",
           refusal: { reason: "openappa_hitl_not_approved" },
         });
+        // The soft-block override never turns a person's rejection into a
+        // waiver that runs the reviewed call.
+        const overrides = config.openappa.breakTheGlassOverrides;
+        config.openappa.breakTheGlassOverrides = {
+          ...overrides,
+          unapprovableBlockMode: "allow",
+        };
+        try {
+          await expect(
+            plugin.onPrepareToolCalls({
+              ...context,
+              toolCalls: [
+                {
+                  id: "soft-block-retry",
+                  name: "archestra__whoami",
+                  arguments: "{}",
+                },
+              ],
+            }),
+          ).resolves.toMatchObject({
+            decision: "refuse",
+            refusal: { reason: "openappa_hitl_not_approved" },
+          });
+          expect(await isUnenforcedSession(trusted.session)).toBe(false);
+        } finally {
+          config.openappa.breakTheGlassOverrides = overrides;
+        }
         const independentCalls = [
           {
             id: "public-followup",

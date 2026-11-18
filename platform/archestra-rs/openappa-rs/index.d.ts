@@ -365,11 +365,6 @@ export interface ReportingOptions {
   hostname?: string
 }
 
-/**
- * Reads an offer's original refusal from authenticated, host-scoped journal
- * records, including encrypted and escaped decisions. Executes no remedy.
- */
-
 export declare function sendPeerMessage(input: string, policy: DispatchPolicy): Promise<string>
 
 export interface ServerAliasDeclaration {

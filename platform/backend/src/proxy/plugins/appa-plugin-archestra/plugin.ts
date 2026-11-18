@@ -1350,6 +1350,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           }
         });
       });
+      // A person's ruling is an authority's: none of the refusals below may be
+      // waived into running the reviewed call.
+      binding.authorityRulingSeen = true;
       if (rejectedCall) {
         const message =
           "The human did not approve this OpenAPPA review. Keep the dependent tool call blocked.";
@@ -2850,6 +2853,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       "onPrepareToolCalls",
       async () => {
         const result = await this.guardedPrepareToolCalls(context);
+        if (isUnwaivable(this.bindings.get(context.resources))) return result;
         if (result?.decision === "refuse")
           await refuseSoftBlock(result.refusal.refusalMessage, [
             result.refusal.blockedToolName,

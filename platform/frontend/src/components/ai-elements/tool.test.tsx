@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -58,6 +58,17 @@ describe("Tool copy actions", () => {
 
     render(<ToolInput input={{ command: "echo hi\necho bye", cwd: "/tmp" }} />);
 
+    // Field names must stay attached to values when a multiline argument
+    // switches the request away from its ordinary JSON representation.
+    const fields = screen.getAllByRole("term");
+    expect(fields.map((field) => field.textContent)).toEqual([
+      "command",
+      "cwd",
+    ]);
+    const values = screen.getAllByRole("definition");
+    expect(values[0]).toHaveTextContent("echo hi");
+    expect(values[1]).toHaveTextContent("/tmp");
+
     // The raw multiline value is present immediately, even before the lazy
     // highlighter loads and splits the text into separate line elements.
     const command = screen.getAllByRole("region", {
@@ -69,12 +80,15 @@ describe("Tool copy actions", () => {
     expect(screen.queryByText(/\\n/)).not.toBeInTheDocument();
 
     // the field copy button copies the raw string, not JSON
-    const copyButtons = screen.getAllByRole("button", {
-      name: "Copy to clipboard",
-    });
-    await user.click(copyButtons[0]);
+    await user.click(
+      within(values[0]).getByRole("button", { name: "Copy to clipboard" }),
+    );
 
     expect(writeText).toHaveBeenCalledWith("echo hi\necho bye");
+    await user.click(
+      within(values[1]).getByRole("button", { name: "Copy to clipboard" }),
+    );
+    expect(writeText).toHaveBeenLastCalledWith("/tmp");
   });
 
   it("renders MCP tool output using content instead of dumping rawContent metadata", async () => {

@@ -821,6 +821,9 @@ importers:
       import-in-the-middle:
         specifier: 3.0.0
         version: 3.0.0
+      js-yaml:
+        specifier: '>=4.3.2 <5'
+        version: 4.3.2
       jszip:
         specifier: ^3.10.1
         version: 3.10.1
@@ -945,6 +948,9 @@ importers:
       '@types/d3-dsv':
         specifier: 3.0.7
         version: 3.0.7
+      '@types/js-yaml':
+        specifier: ^4.0.9
+        version: 4.0.9
       '@types/lodash-es':
         specifier: ^4.17.12
         version: 4.17.12

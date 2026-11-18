@@ -1,3 +1,11 @@
+# With the dev VM (ARCHESTRA_DEV_MODE 1: edit in the VM, 2: one-way sync, see
+# platform/dev/vm/README.md) this machine has no node_modules to check with.
+case "${ARCHESTRA_DEV_MODE:-0}" in
+  1 | 2)
+    echo "pre-commit: ARCHESTRA_DEV_MODE=$ARCHESTRA_DEV_MODE, checks run in the VM (for example: platform/scripts/dev-vm-sync.py run 'pnpm lint')" >&2
+    exit 0
+    ;;
+esac
 cd platform
 if ! pnpm commit:check; then
   echo ""

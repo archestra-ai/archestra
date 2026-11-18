@@ -92,6 +92,26 @@ If the request is unclear, ask with one \`archestra__ask_user\` question what th
 
 Use \`human-approval\` for potentially destructive actions or publishing/sharing outside the company, not every tool call. Scope it with argument selectors or annotators when only some calls need review. The default \`human-approval\` authority covers this and every other attention mark but \`blocked\`, data below \`trusted\`, and a missing \`public\` audience; preserve the saved policy's reviewer permissions unless the operator explicitly requests a change, overriding shared battery-support advice to expand them.
 
+## Separate result labels from call requirements
+
+Translate the operator's goal into rules from what each tool returns and where it sends information.
+
+- \`delta\` labels returned data and can narrow the session's audience or lower its trust after the result is received.
+- \`requires\` sets conditions checked before the call, including the trust and audience of outgoing information.
+
+A tool can need both. Choose each independently and preserve unrelated restrictions. Infer the intended behavior from context; if unclear, ask what should be allowed or restricted in plain language. Do not ask the operator to choose policy fields.
+
+## Check automatic approval coverage
+
+Before previewing any new or changed tool rule, including server rules, check the effective authorities and their implementations. Load \`references/contracts/sanitizers-authorities.md\` when needed. An authority named \`rollout\` is automatic only when its implementation says so; its name or hint proves nothing.
+
+- For \`builtin = "approve"\`, compare each changed rule's requirements with \`permits.trust_below\`, \`audience_missing\`, \`effects_containing\`, and \`attention\`. Check \`tags\` and \`except_tags\` for trust, audience, and effect routing; attention routes through \`permits.attention\` regardless of tags.
+- New rules need no registration when the existing authority covers their requirements. Coverage of \`human-approval\` does not cover other attention marks. No authority can approve \`blocked\`.
+- Automatic approval permits an exact call; it does not remove a read's \`delta\` or restore the session's audience or trust. Accepting a narrower session can still need a remedy.
+- Preserve the current approval scope. Never add permits, remove exclusions, or change a hard denial merely to make a new rule automatically approved. If the requested restriction conflicts with automatic approval, explain the conflict and ask which behavior the operator wants.
+
+In the proposal, state whether the relevant checks are automatically approved, need a person, or have no approval path. For server rules, use \`organizationHelpers\`; do not require access to the organization policy. If implementation or enforcement details are unavailable, state that automatic approval is unverified. When enforcement settings are returned, check for waived human reviews, including unattended sessions; distinguish those settings from policy authority coverage. Do not promise that a rule blocks a call when the current settings approve it.
+
 ## Approval in Archestra
 
 These rules replace the shared rules on ending a turn with the proposal: in Archestra the \`archestra__ask_user\` card ends the turn, and its answer is the later message that approves.

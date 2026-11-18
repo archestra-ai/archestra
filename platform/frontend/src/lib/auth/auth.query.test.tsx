@@ -8,6 +8,7 @@ import {
   useHasPagePermissions,
   useHasPermissions,
   usePermissionMap,
+  usePermissionsRevalidatingOnMount,
   useSession,
 } from "@/lib/auth/auth.query";
 import * as authUtils from "@/lib/auth/auth.utils";
@@ -451,6 +452,71 @@ describe("useHasPermissions", () => {
     // But getUserPermissions should only have been called once
     expect(authClient.getSession).toHaveBeenCalledTimes(1);
     expect(archestraApiSdk.getUserPermissions).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("usePermissionsRevalidatingOnMount", () => {
+  const renderWithCachedMap = (fetchedAt: number) => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(
+      authQueryKeys.session(),
+      {
+        user: { id: "test-user", email: "test@example.com" },
+        session: { id: "test-session", activeOrganizationId: "org-1" },
+      },
+      { updatedAt: fetchedAt },
+    );
+    queryClient.setQueryData(
+      authQueryKeys.userPermissions(),
+      { agent: ["read"] },
+      { updatedAt: fetchedAt },
+    );
+    return renderHook(
+      () => ({
+        isRevalidating: usePermissionsRevalidatingOnMount(),
+        canCreateAgent: useHasPermissions({ agent: ["create"] }).data,
+      }),
+      {
+        wrapper: ({ children }: { children: React.ReactNode }) => (
+          <QueryClientProvider client={queryClient}>
+            {children}
+          </QueryClientProvider>
+        ),
+      },
+    );
+  };
+
+  it("asks again for a map the tab has held since before this screen opened", async () => {
+    const grantedNow: Permissions = { agent: ["read", "create"] };
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: grantedNow,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+
+    const { result } = renderWithCachedMap(Date.now() - 60_000);
+
+    // Known from the first render, so no refusal is drawn in between.
+    expect(result.current).toEqual({
+      isRevalidating: true,
+      canCreateAgent: false,
+    });
+    await waitFor(() =>
+      expect(result.current).toEqual({
+        isRevalidating: false,
+        canCreateAgent: true,
+      }),
+    );
+  });
+
+  it("does not ask again for the map a page load has just received", async () => {
+    const { result } = renderWithCachedMap(Date.now());
+
+    expect(result.current.isRevalidating).toBe(false);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(archestraApiSdk.getUserPermissions).not.toHaveBeenCalled();
   });
 });
 

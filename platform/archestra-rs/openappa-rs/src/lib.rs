@@ -72,7 +72,7 @@ use appa_runtime::{
 };
 use appa_runtime_api::{
     Actor, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnKind, SpawnRef,
-    ToolOutcome, TrajectoryId,
+    ToolOutcome, TrajectoryId, WireDecision,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -1226,7 +1226,12 @@ impl State {
         .await;
         let decision = outcome.decision;
         if cancelled && !matches!(decision, HookDecision::Ack) {
-            return Err(invariant("OpenAPPA could not settle a withheld tool call"));
+            let answered =
+                serde_json::to_string(&WireDecision::of(&decision)).map_err(invariant)?;
+            let withheld = if call.spawn { "spawn" } else { "call" };
+            return Err(invariant(format!(
+                "OpenAPPA could not settle a withheld tool call: the runtime answered the cancelled {withheld} with {answered}"
+            )));
         }
         let approved = match &decision {
             HookDecision::Ack

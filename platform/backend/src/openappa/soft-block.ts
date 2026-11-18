@@ -75,6 +75,25 @@ export function isHardBlock(message: string): boolean {
   return /requires attention: [^\n]*\b(?:blocked|hard-block)\b/.test(message);
 }
 
+/**
+ * A denial the runtime recorded, or one that offers a remedy, is answered by
+ * the policy's authorities and the per-call Break the glass waiver. The soft
+ * block never waives it: that would skip the review and unenforce the session.
+ */
+export function isAuthorityRuling(decision: {
+  kind: string;
+  recorded?: true;
+  offers?: readonly unknown[];
+  review?: readonly unknown[];
+}): boolean {
+  return (
+    decision.kind === "deny" &&
+    (decision.recorded === true ||
+      Boolean(decision.offers?.length) ||
+      Boolean(decision.review?.length))
+  );
+}
+
 /** Called only at a governed boundary, after platform authentication. */
 export async function waiveSoftBlock(
   session: OpenAppaSession,

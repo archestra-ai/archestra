@@ -7347,6 +7347,29 @@ describe("rendering runtime text for this client", () => {
       }
     });
 
+    test("the soft-block override leaves an attended approval waiting and the session enforced", async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      const overrides = config.openappa.breakTheGlassOverrides;
+      config.openappa.breakTheGlassOverrides = {
+        ...overrides,
+        unapprovableBlockMode: "allow",
+      };
+      const { run, restore } = await harness(organizationId, {
+        breakTheGlassEnabled: false,
+      });
+      try {
+        expect(await run("attended-soft", "attended")).toMatchObject(waiting);
+        expect(
+          await isUnenforcedSession(session(organizationId, "attended-soft")),
+        ).toBe(false);
+      } finally {
+        config.openappa.breakTheGlassOverrides = overrides;
+        restore();
+      }
+    });
+
     test("a batch whose only denial is a runtime call still notes the session, and an attended batch withdraws the note", async ({
       makeOrganization,
     }) => {

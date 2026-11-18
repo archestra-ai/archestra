@@ -82,6 +82,7 @@ import { argumentSpellingConflict } from "./command-normalization";
 import { policyArguments, previewAppToolTarget } from "./policy-arguments";
 import { policyView } from "./result-view";
 import {
+  isAuthorityRuling,
   isHardBlock,
   softBlockReason,
   softBlocksAllowed,
@@ -1712,7 +1713,13 @@ function isJson(text: string): boolean {
 
 type AppaHostedCallDecision =
   | { kind: "release" }
-  | { kind: "hold"; feedback: string; diagnostic?: string };
+  | {
+      kind: "hold";
+      feedback: string;
+      diagnostic?: string;
+      /** Held by a call ruling an authority answers; see `isAuthorityRuling`. */
+      authorityRuling?: true;
+    };
 
 /**
  * Rules on calls the provider ran inside the inference call. Nothing can stop
@@ -1756,6 +1763,9 @@ export async function evaluateHostedToolCalls(
             kind: "hold",
             feedback: decision.feedback,
             ...(decision.diagnostic ? { diagnostic: decision.diagnostic } : {}),
+            ...(isAuthorityRuling(decision)
+              ? { authorityRuling: true as const }
+              : {}),
           }
         : { kind: "release" },
     );
@@ -2601,37 +2611,6 @@ async function governedReadPeerMessage(params: {
     isError: true,
     content: [{ type: "text", text: decisionMessage(decision) }],
   };
-}
-
-/**
- * Opens an authenticated session's retained offer refusal, including encrypted
- * and plaintext-escaped receipts, without executing or consuming the offer.
- */
-export async function loadRetainedOfferRefusal(
-  params: Parameters<typeof OpenAppaSessionModel.recordedOfferDecisions>[0],
-): Promise<string | null> {
-  const records = await OpenAppaSessionModel.recordedOfferDecisions(params);
-  if (records.length === 0) return null;
-  // This pure decoder needs no runtime initialization or database connection:
-  // the model has already verified the receipt's authenticated session scope.
-  const module = await import("@archestra/openappa-rs");
-  return withOpenappaContentEncryption(
-    params.organizationId,
-    params.sessionId,
-    async (encryption) =>
-      module.retainedOfferRefusal(
-        JSON.stringify({
-          organization_id: params.organizationId,
-          session_id: params.sessionId,
-          offer_id: params.offerId,
-          records: records.map((row) => ({
-            operation_id: row.operationId,
-            decision: row.decision,
-          })),
-        }),
-        encryption,
-      ),
-  );
 }
 
 /**

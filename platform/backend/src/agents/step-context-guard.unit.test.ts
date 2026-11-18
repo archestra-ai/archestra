@@ -329,6 +329,40 @@ describe("createStepContextGuard — summarization compaction", () => {
   });
 });
 
+describe("createStepContextGuard — transcript tool outputs", () => {
+  test.for([
+    { mode: undefined, carriesOutput: false },
+    { mode: "withheld" as const, carriesOutput: false },
+    { mode: "included" as const, carriesOutput: true },
+  ])("a $mode transcript carries the tool output: $carriesOutput", async ({
+    mode,
+    carriesOutput,
+  }) => {
+    const summarizeTranscript = vi.fn(
+      async (_p: SummarizeParams): Promise<string | null> => "summary",
+    );
+    const guard = createStepContextGuard({
+      contextLength: 200,
+      summarizeTranscript,
+      ...(mode && { transcriptToolOutput: async () => mode }),
+    });
+    await guard({
+      messages: [
+        { role: "user", content: "u".repeat(600) },
+        assistantToolCall(),
+        toolResultMessage("run 7 failed on step deploy"),
+        { role: "user", content: "v".repeat(300) },
+      ],
+    });
+
+    const { transcript } = summarizeTranscript.mock.calls[0][0];
+    expect(transcript).toContain('"repo":"archestra"');
+    expect(transcript.includes("run 7 failed on step deploy")).toBe(
+      carriesOutput,
+    );
+  });
+});
+
 describe("createStepContextGuard — prompt cache breakpoint", () => {
   const promptCache = {
     provider: "anthropic",
@@ -473,6 +507,34 @@ describe("createStepContextGuard — in-context summaries", () => {
     });
 
     expect(result.some((m) => m.content === "a".repeat(300))).toBe(false);
+    expect(result.at(-1)?.content).toBe("c".repeat(300));
+  });
+
+  test.for([
+    { failure: "returns no summary", summary: async () => null },
+    {
+      failure: "throws",
+      summary: async (): Promise<string | null> => {
+        throw new Error("provider rejected the tool history");
+      },
+    },
+  ])("summarizes a transcript when the in-context summary $failure", async ({
+    summary,
+  }) => {
+    const summarizeTranscript = vi.fn(
+      async (_p: SummarizeParams): Promise<string | null> => "from transcript",
+    );
+    const guard = createStepContextGuard({
+      contextLength: 200,
+      summarizeMessages: summary,
+      summarizeTranscript,
+    });
+    const { messages: result } = await guard({
+      messages: overBudgetMessages(),
+    });
+
+    expect(summarizeTranscript).toHaveBeenCalledOnce();
+    expect(result[0].content).toContain("from transcript");
     expect(result.at(-1)?.content).toBe("c".repeat(300));
   });
 

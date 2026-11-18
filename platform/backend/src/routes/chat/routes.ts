@@ -148,6 +148,7 @@ import {
   resolveAgentModelPool,
   resolveChatModelPool,
 } from "@/services/chat-model-pools";
+import { generateInContextSummary } from "@/services/context-compaction";
 import { conversationFilesService } from "@/services/conversation-files";
 import {
   getGuardrailsDeployment,
@@ -201,7 +202,6 @@ import {
 import { buildBedrockThinkingOptions } from "./bedrock-provider-options";
 import { buildChatContext } from "./build-chat-context";
 import { compactMessagesForChat } from "./compaction/compact-messages";
-import { generateInContextSummary } from "./compaction/in-context";
 import {
   buildContextWindowBreakdown,
   estimateEachToolTokens,

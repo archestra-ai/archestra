@@ -5,7 +5,10 @@ import {
 import type { ToolSet } from "ai";
 import logger from "@/logging";
 import { ConversationCompactionModel, ModelModel } from "@/models";
-import { resolveCompactionLlm } from "@/services/compaction-llm";
+import {
+  compactionTranscriptToolOutput,
+  resolveCompactionLlm,
+} from "@/services/compaction-llm";
 import {
   chooseRecentSuffixStart,
   createCompactionSummarizer,
@@ -380,6 +383,7 @@ async function createConversationCompaction(
       salvageUntagged: true,
     }),
     ...transcript,
+    toolOutput: await compactionTranscriptToolOutput(),
     previousSummary: params.previousSummary,
     contextLength: compactionLlm.contextLength,
     abortSignal: params.abortSignal,

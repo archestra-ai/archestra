@@ -9,9 +9,25 @@ import {
   isApiKeyRequired,
   type LLMModel,
 } from "@/clients/llm-client";
+import logger from "@/logging";
 import { AgentModel, ModelModel } from "@/models";
+import type { TranscriptToolOutput } from "@/services/context-compaction";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { renderSystemPrompt } from "@/templating";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
+
+/** Compaction transcripts carry tool outputs only while OpenAPPA reads off. */
+export async function compactionTranscriptToolOutput(): Promise<TranscriptToolOutput> {
+  try {
+    return (await isGuardrailsV2Active()) ? "withheld" : "included";
+  } catch (error) {
+    logger.warn(
+      { error },
+      "[ContextCompaction] could not read the OpenAPPA switch; withholding tool output from the transcript",
+    );
+    return "withheld";
+  }
+}
 
 /**
  * Resolve the built-in context-compaction agent into a ready summarizer model

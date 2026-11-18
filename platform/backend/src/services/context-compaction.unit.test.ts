@@ -4,6 +4,7 @@ import {
   chooseRecentSuffixStart,
   summarizeTranscriptEntries,
   type TranscriptEntry,
+  type TranscriptToolOutput,
   uiMessageTranscriptEntries,
 } from "./context-compaction";
 
@@ -223,6 +224,7 @@ async function summarizeRecorded(params: {
   preamble?: string;
   contextLength?: number;
   failOnCall?: number;
+  toolOutput?: TranscriptToolOutput;
   abortSignal?: AbortSignal;
 }) {
   const calls: Parameters<CompactionSummarizer>[0][] = [];
@@ -236,6 +238,7 @@ async function summarizeRecorded(params: {
     contextLength: params.contextLength ?? null,
     preamble: params.preamble,
     abortSignal: params.abortSignal,
+    toolOutput: params.toolOutput ?? "included",
   });
   return { summary, calls };
 }

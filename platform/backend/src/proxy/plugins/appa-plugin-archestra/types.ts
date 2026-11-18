@@ -76,6 +76,8 @@ export type AppaTrustedContext = {
   agentRuntimeRun?: true;
   /** Present only for the proxy's loopback Chat call path. */
   chatSource?: AppaChatSource;
+  /** The platform's own compaction summary: its tools are read-only context, never calls. */
+  summaryRequest?: true;
   /**
    * Activation captured for this request. Later phases must not re-read the
    * switch, so a change between requests does not land mid-stream.

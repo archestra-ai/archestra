@@ -23,7 +23,10 @@ import { authorizeA2AModel } from "@/agents/a2a/oauth-model";
 import logger from "@/logging";
 import { A2AContextCompactionModel, ModelModel } from "@/models";
 import { TOKEN_ESTIMATE } from "@/routes/chat/normalization/estimate-message-tokens";
-import { resolveCompactionLlm } from "@/services/compaction-llm";
+import {
+  compactionTranscriptToolOutput,
+  resolveCompactionLlm,
+} from "@/services/compaction-llm";
 import {
   CONTEXT_COMPACTION_RECENT_KEEP_RATIO,
   type CompactionSummarizer,
@@ -144,6 +147,7 @@ export async function applyA2AContextCompaction(params: {
     const summary = await summarizeTranscriptEntries({
       ...summarizer,
       entries: split.compactable.flatMap(transcriptEntries),
+      toolOutput: await compactionTranscriptToolOutput(),
       previousSummary: applied.summary,
       abortSignal,
     });

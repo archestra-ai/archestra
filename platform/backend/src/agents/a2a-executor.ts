@@ -39,7 +39,7 @@ import { subagentRunTracker } from "@/agents/subagent-run-tracker";
 import { canUseAgent } from "@/auth/permission-gated";
 import { agentAutoRouterId } from "@/auto-routing/organization-default";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
-import { createLLMModelForAgent } from "@/clients/llm-client";
+import { createLLMModelForAgent, type LLMModel } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import {
@@ -73,6 +73,8 @@ import {
   authorizeA2AOAuthExecution,
 } from "@/routes/mcp-gateway/utils";
 import { assertCallerMayStartTurn } from "@/services/agent-credential-readiness";
+import { compactionTranscriptToolOutput } from "@/services/compaction-llm";
+import { generateInContextSummary } from "@/services/context-compaction";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
@@ -597,14 +599,47 @@ export async function executeA2AMessage(
         openAiReasoningSummaryKey,
       ));
 
+    const contextLength = modelRow
+      ? ModelModel.resolveEffectiveContextLength(modelRow)
+      : null;
+    let compactionModel: Promise<LLMModel> | undefined;
     const stepContextGuard = createStepContextGuard({
       model,
-      contextLength: modelRow
-        ? ModelModel.resolveEffectiveContextLength(modelRow)
-        : null,
+      contextLength,
       systemPrompt,
+      replyTokens: maxOutputTokens,
       abortSignal,
       logContext: { agentId: agent.id, sessionId },
+      transcriptToolOutput: compactionTranscriptToolOutput,
+      // In the run's own session, so the proxy governs the tool results it
+      // repeats; the transcript summary is the fallback.
+      summarizeMessages: async ({ messages, hasPreviousSummary }) => {
+        compactionModel ??= createLLMModelForAgent({
+          organizationId,
+          userId,
+          agentId: agent.id,
+          model: selectedModel,
+          provider,
+          sessionId,
+          source: "a2a:compaction",
+          externalAgentId: delegationChain,
+          agentLlmApiKeyId: llmApiKeyId,
+          modelPoolId,
+          autoRouterId,
+          appaSubagentToken: params.appaSubagent?.token,
+          unattended: scheduleTriggerRunId !== undefined,
+        }).then((created) => authorizeModel(created.model));
+        return generateInContextSummary({
+          model: await compactionModel,
+          systemPrompt,
+          messages,
+          tools: mcpTools,
+          hasPreviousSummary,
+          contextLength,
+          abortSignal,
+          logFields: { agentId: agent.id, sessionId, provider },
+        });
+      },
       ...(usesStepPromptCache({ provider, anthropicNativeEndpoint }) && {
         promptCache: {
           provider,

@@ -193,6 +193,8 @@ async function governedAdmission(params: {
   deployment: OpenappaDeployment;
   /** Set for the proxy's loopback Chat call path. */
   chatSource: AppaChatSource | undefined;
+  /** The request is a platform compaction summary (chat or A2A). */
+  summaryRequest?: boolean;
   externalAgentId: string | undefined;
   /** A call this process proved it made itself (in-process or guardrail proof). */
   inProcessRequest: boolean;
@@ -376,6 +378,7 @@ async function governedAdmission(params: {
     ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
     ...(runtimeSession ? { agentRuntimeRun: true as const } : {}),
     ...(chatSource ? { chatSource } : {}),
+    ...(params.summaryRequest ? { summaryRequest: true as const } : {}),
   };
   // Enforcement rejects conflicts above; observing and setup-bypass paths
   // must also avoid adopting the conflicting workspace's authority.
@@ -769,6 +772,7 @@ type AdmissionFacts = Pick<
   | "runtimeTaskId"
   | "agentRuntimeRun"
   | "chatSource"
+  | "summaryRequest"
 >;
 
 type OpenappaPrincipal = {

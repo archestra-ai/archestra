@@ -38,6 +38,7 @@ import {
   createCompactionSummarizer,
   summarizeTranscriptEntries,
   type TranscriptEntry,
+  type TranscriptToolOutput,
 } from "@/services/context-compaction";
 import { MAX_TOOL_RESULT_CONTEXT_BYTES } from "@/utils/tool-result-cap";
 
@@ -55,9 +56,10 @@ export type StepMessagesSummarizer = (params: {
  * Create a `prepareStep` guard bound to one agent run. State (the memoized
  * summary and its boundary) lives for the run only.
  *
- * Summaries come from `summarizeMessages` when given, else from a transcript
- * summarizer (`summarizeTranscript`, or one bound to `model`). With none of
- * them, summarization is disabled and the guard degrades to cap + trim.
+ * Summaries come from `summarizeMessages` when given, else (or when it gives
+ * none) from a transcript summarizer (`summarizeTranscript`, or one bound to
+ * `model`). With none of them, summarization is disabled and the guard
+ * degrades to cap + trim.
  */
 export function createStepContextGuard(params: {
   model?: LLMModel;
@@ -71,6 +73,8 @@ export function createStepContextGuard(params: {
   logContext?: Record<string, unknown>;
   summarizeMessages?: StepMessagesSummarizer;
   summarizeTranscript?: CompactionSummarizer;
+  /** Read when a transcript is summarized; withheld unless it says otherwise. */
+  transcriptToolOutput?: () => Promise<TranscriptToolOutput>;
   /** The provider and model whose cache breakpoint moves with each step. */
   promptCache?: {
     provider: string;
@@ -117,10 +121,19 @@ export function createStepContextGuard(params: {
       const prefix = applySummary(input.capped.slice(0, input.boundary), state);
       const messages =
         charSize(input.view) <= input.windowChars ? input.view : prefix;
-      return params.summarizeMessages({
-        messages: withStepBreakpoint(messages).messages,
-        hasPreviousSummary: state !== null,
-      });
+      try {
+        const summary = await params.summarizeMessages({
+          messages: withStepBreakpoint(messages).messages,
+          hasPreviousSummary: state !== null,
+        });
+        if (summary || !summarizeTranscript) return summary;
+      } catch (error) {
+        if (abortSignal?.aborted || !summarizeTranscript) throw error;
+        logger.warn(
+          { ...logContext, error },
+          "[StepContextGuard] in-context summary failed; summarizing a transcript instead",
+        );
+      }
     }
     if (!summarizeTranscript) return null;
     return summarizeTranscriptEntries({
@@ -128,6 +141,9 @@ export function createStepContextGuard(params: {
       entries: input.capped
         .slice(input.minIndex, input.boundary)
         .flatMap(transcriptEntries),
+      toolOutput: params.transcriptToolOutput
+        ? await params.transcriptToolOutput()
+        : "withheld",
       previousSummary: state?.summary ?? null,
       contextLength,
       abortSignal,

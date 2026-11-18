@@ -9356,18 +9356,26 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     );
   });
 
-  test("rejects a Chat summary's tool call before recording it", async () => {
+  test.for([
+    "chat:compaction",
+    "a2a:compaction",
+  ])("rejects a %s summary's tool call before recording it", async (source) => {
     // The summary request carries the turn's tools only so the cached prefix
     // matches; a call it makes is never the conversation's.
     const response = await post(payload(false), {
-      "x-archestra-source": "chat:compaction",
+      "x-archestra-source": source,
     });
 
     expect(response.statusCode, response.body).toBe(503);
+    expect(response.json().error.message).toBe(
+      "OpenAPPA rejected tool calls from a compaction response",
+    );
+    // Governed in the run's session: Chat's is the conversation, an A2A run's
+    // is scoped to its caller.
     expect(events).toContainEqual(
       expect.objectContaining({
         event: "session_start",
-        session_id: sessionId,
+        session_id: expect.stringMatching(new RegExp(`(^|\\|)${sessionId}$`)),
       }),
     );
     expect(events.filter((event) => event.event === "tool_call")).toEqual([]);

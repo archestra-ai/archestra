@@ -1918,6 +1918,9 @@ async function handleObservedLLMProxy<
           unsupportedClientAction,
         },
         chatSource: isInternalChat ? source : undefined,
+        // Only narrows what the response may do, so the source needs no proof.
+        summaryRequest:
+          source === "chat:compaction" || source === "a2a:compaction",
         externalAgentId,
         inProcessRequest: internalCall,
         internalCall: proof.guardrail,

@@ -286,8 +286,8 @@ type AppaPluginBinding = {
   /** True on internal loopback Chat requests. */
   chat: boolean;
   compaction: boolean;
-  /** Chat's own summary request: its tools are read-only context, never calls. */
-  chatCompaction: boolean;
+  /** The platform's own summary request: its tools are read-only context, never calls. */
+  summaryRequest: boolean;
   requestHeaders: IncomingHttpHeaders;
   /** No person is there to answer this request's approvals. */
   unattended: boolean;
@@ -456,7 +456,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         : undefined,
       chat,
       compaction: trustedContext.compaction === true,
-      chatCompaction: trustedContext.chatSource === "chat:compaction",
+      summaryRequest: trustedContext.summaryRequest === true,
       threadContinue: trustedContext.thread === "continue",
       requestHeaders: context.headers,
       unattended:
@@ -1623,7 +1623,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (!binding) return;
     enterCapturedGuardrailsActivation("active");
     if (
-      (binding.compaction || binding.chatCompaction) &&
+      (binding.compaction || binding.summaryRequest) &&
       context.toolCalls.length > 0
     ) {
       throw new ApiError(

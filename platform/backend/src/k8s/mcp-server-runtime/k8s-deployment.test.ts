@@ -7749,6 +7749,54 @@ describe("K8sDeployment selector self-heal (multitenant drift)", () => {
     });
   });
 
+  // Other backend processes read the transport from the Deployment, not from
+  // their own copy of the catalog row, so creation has to record it.
+  test.each([
+    { needsHttp: false, transport: "stdio" },
+    { needsHttp: true, transport: "streamable-http" },
+  ])("records the $transport transport on a created deployment", async ({
+    needsHttp,
+    transport,
+  }) => {
+    const createNamespacedDeployment = vi.fn().mockResolvedValue({});
+    const deployment = makeDeployment({
+      readNamespacedPod: vi.fn().mockRejectedValue(notFound),
+      readNamespacedDeployment: vi.fn().mockRejectedValue(notFound),
+      createNamespacedDeployment,
+    });
+    vi.spyOn(
+      deployment as unknown as { getCatalogItem: () => unknown },
+      "getCatalogItem",
+    ).mockResolvedValue({ localConfig: { dockerImage: "img" } });
+    vi.spyOn(
+      deployment as unknown as { needsHttpPort: () => unknown },
+      "needsHttpPort",
+    ).mockResolvedValue(needsHttp);
+    vi.spyOn(deployment, "generateDeploymentSpec").mockReturnValue({
+      metadata: { name: "mcp-test-server", annotations: { kept: "yes" } },
+    } as k8s.V1Deployment);
+    vi.spyOn(deployment, "applyK8sNetworkPolicy").mockResolvedValue(undefined);
+    vi.spyOn(
+      deployment as unknown as { ensureHttpServerConfigured: () => unknown },
+      "ensureHttpServerConfigured",
+    ).mockResolvedValue(undefined);
+
+    await deployment.startOrCreateDeployment();
+
+    expect(createNamespacedDeployment).toHaveBeenCalledWith({
+      namespace: "default",
+      body: expect.objectContaining({
+        metadata: expect.objectContaining({
+          annotations: {
+            kept: "yes",
+            "archestra.ai/mcp-transport": transport,
+          },
+        }),
+      }),
+    });
+    expect(await deployment.usesStreamableHttp()).toBe(needsHttp);
+  });
+
   // A concurrent reconcile (another orchestrator replica) can create the Deployment
   // between our 404 read and our create call. The resulting 409 must re-enter the
   // reconcile (re-read + validate the now-existing deployment), not blindly assume

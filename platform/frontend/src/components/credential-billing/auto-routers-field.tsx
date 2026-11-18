@@ -8,16 +8,14 @@ import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAvailableAutoRouters } from "@/lib/auto-routing.query";
-import { useFeature } from "@/lib/config/config.query";
 
 /**
- * Whether a virtual key or OAuth client form shows {@link AutoRoutersField}: the feature is on
- * and the caller may change which credentials reach an auto router.
+ * Whether a virtual key or OAuth client form shows {@link AutoRoutersField}:
+ * the caller may change which credentials reach an auto router.
  */
 export function useCanSetAutoRouters(): boolean {
-  const enabled = useFeature("autoRoutingEnabled") === true;
   const { data: canUpdate } = useHasPermissions({ llmProxy: ["update"] });
-  return enabled && canUpdate === true;
+  return canUpdate === true;
 }
 
 /**

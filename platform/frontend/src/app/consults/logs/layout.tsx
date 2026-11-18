@@ -10,7 +10,7 @@ export default function ConsultLogsLayout({
   return (
     <LogsSectionLayout
       listPath="/consults/logs"
-      description="Logs Guardrails requests to external services, such as labeling models or audience lookups, before a tool call is allowed or blocked."
+      description="What Guardrails recorded: its requests to external services, such as labeling models or audience lookups, and the yells agents raised about blocks they could not get past."
     >
       {children}
     </LogsSectionLayout>

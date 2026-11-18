@@ -103,7 +103,9 @@ export function SmallTeamTierBanner({
   }
 
   return (
-    <div className="mb-6 rounded-md border border-border/60 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+    // The margin matches the gap between a page's filter bar and its table,
+    // so the banner, the filters and the table sit at one rhythm.
+    <div className="mb-3 rounded-md border border-border/60 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
       <p className="leading-relaxed">
         {copy} {links}
       </p>

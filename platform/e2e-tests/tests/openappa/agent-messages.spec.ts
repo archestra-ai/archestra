@@ -65,7 +65,7 @@ test.beforeAll(async ({ request, makeApiRequest, createAgent, syncModels }) => {
   ).json()) as { enabled: boolean; featureEnabled: boolean };
   expect(
     deployment.featureEnabled,
-    "the stack was booted without ARCHESTRA_BETA=true — the openappa Playwright project requires it",
+    "OpenAPPA is not active on this stack — the openappa Playwright project requires it",
   ).toBe(true);
 
   const { apiKeyId, runtimeModel } = await ensureWireMockAnthropicChatProvider({

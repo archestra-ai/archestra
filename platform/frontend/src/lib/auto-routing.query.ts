@@ -81,13 +81,8 @@ export function useAutoRouterId(): string | null {
 }
 
 /** The organization switch, and what a router may be built from. */
-export function useAutoRoutingState({
-  enabled = true,
-}: {
-  enabled?: boolean;
-} = {}) {
+export function useAutoRoutingState() {
   return useQuery({
-    enabled,
     queryKey: autoRoutingKeys.state(),
     queryFn: async () => {
       const { data, error } = await getAutoRoutingState();

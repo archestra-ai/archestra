@@ -17,9 +17,15 @@ log="${RUNNER_TEMP:?}/staging-api-tunnel.log"
 gcloud compute start-iap-tunnel staging-vpn 8443 \
   --project=friendly-path-465518-r6 --zone=us-central1-a \
   --local-host-port="127.0.0.1:${port}" --quiet >"$log" 2>&1 &
+tunnel_pid=$!
 
-for _ in $(seq 1 60); do
+# Up to 90 seconds: gcloud tests the connection before it listens, and that
+# has taken longer than 30 seconds. Stop waiting as soon as gcloud exits.
+for _ in $(seq 1 180); do
   if (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null; then
+    break
+  fi
+  if ! kill -0 "$tunnel_pid" 2>/dev/null; then
     break
   fi
   sleep 0.5

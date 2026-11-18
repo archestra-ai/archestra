@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auto-routing.query");
 vi.mock("@/lib/auth/auth.query");
-vi.mock("@/lib/config/config.query");
 
 import {
   useHasPermissions,
@@ -14,7 +13,6 @@ import {
   useAutoRoutingState,
   useUpdateAutoRoutingState,
 } from "@/lib/auto-routing.query";
-import { useFeature } from "@/lib/config/config.query";
 import { AutoRoutingSection } from "./auto-routing-section";
 
 const mutateAsync = vi.fn();
@@ -24,7 +22,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   mutateAsync.mockResolvedValue({});
   mockState = { enabled: false };
-  vi.mocked(useFeature).mockReturnValue(true);
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
     isPending: false,
@@ -78,12 +75,5 @@ describe("AutoRoutingSection", () => {
 
     expect(toggle).not.toBeChecked();
     expect(mutateAsync).not.toHaveBeenCalled();
-  });
-
-  it("renders nothing where the alpha is off", () => {
-    vi.mocked(useFeature).mockReturnValue(false);
-    render(<AutoRoutingSection />);
-
-    expect(screen.queryByRole("switch")).toBeNull();
   });
 });

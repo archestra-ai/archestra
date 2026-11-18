@@ -1868,6 +1868,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // Whoever may open the MCP registry learns whether its servers' editors
   // change their own rules: the registry shows the action only then.
   [RouteId.GetAppaSelfService]: { mcpRegistry: ["read"] },
+  // A server's own rules take no Guardrails permission: the handlers list and
+  // return only the files of servers the caller may open in the MCP registry.
+  [RouteId.GetOpenappaServerRulesFiles]: { mcpRegistry: ["read"] },
+  [RouteId.GetOpenappaServerRulesSource]: { mcpRegistry: ["read"] },
   [RouteId.ConfigureAppaGithubSync]: { organizationSettings: ["update"] },
   [RouteId.CreateAppaGithubRepository]: { organizationSettings: ["update"] },
   [RouteId.StartAppaGithubApp]: { organizationSettings: ["update"] },
@@ -1931,6 +1935,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOpenAppaYell]: { log: ["read"] },
   [RouteId.UpdateOpenAppaYell]: { log: ["read"] },
   [RouteId.GetOpenappaExternalConsults]: { log: ["read"] },
+  // Consults and yells in one timeline, each scoped as its own list is.
+  [RouteId.GetOpenappaGuardrailEvents]: { log: ["read"] },
   [RouteId.GetOpenappaExternalConsult]: { log: ["read"] },
   [RouteId.GetOpenappaLabelChanges]: { log: ["read"] },
   // Read-only views of what the policy covers; nothing here changes state.
@@ -2257,9 +2263,10 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/gateways/new": { mcpGateway: ["create"] },
 
   "/openappa": { guardrailsPolicy: ["read"] },
+  // Also open to a member who may read some MCP server's rules file: the
+  // page then lists only those files (`useServerRulesAccess`).
   "/openappa/policy": { guardrailsPolicy: ["read"] },
   "/openappa/batteries": { guardrailsPolicy: ["read"] },
-  "/openappa/yells": { log: ["read"] },
 
   // Logs
   "/llm/logs": { log: ["read"] },
@@ -2267,6 +2274,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/audit/logs": { auditLog: ["read"] },
   "/consults/logs": { log: ["read"] },
   "/consults/logs/[id]": { log: ["read"] },
+  "/consults/logs/yells/[id]": { log: ["read"] },
   "/connections/logs": { log: ["admin"], member: ["read"] },
 
   // Knowledge

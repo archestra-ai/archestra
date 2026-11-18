@@ -12,6 +12,7 @@ import {
   findExternalConsult,
   listExternalConsults,
 } from "@/services/openappa-external-consults";
+import { listGuardrailEvents } from "@/services/openappa-guardrail-events";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
   type ExternalConsult,
@@ -20,6 +21,7 @@ import {
   ExternalConsultRoleSchema,
   ExternalConsultSchema,
 } from "@/types/openappa-external-consults";
+import { OpenAppaYellSchema } from "@/types/openappa-yell";
 
 const JSONL_ROW_CAP = 10_000;
 const ExportFormatSchema = z.enum(["json", "jsonl"]);
@@ -60,7 +62,81 @@ const QuerySchema = z
   })
   .merge(CursorQuerySchema);
 
+const EventsQuerySchema = z
+  .object({
+    type: z
+      .enum(["all", "consult", "yell"])
+      .default("all")
+      .describe("Which records: consults, yells, or both in one timeline"),
+    search: z
+      .string()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe(
+        "Case-insensitive substring of a consult's external name or session ID, or of a yell's report",
+      ),
+    from: z.iso
+      .datetime()
+      .optional()
+      .describe("Recorded on or after this time (ISO 8601)"),
+    to: z.iso
+      .datetime()
+      .optional()
+      .describe("Recorded on or before this time (ISO 8601)"),
+    outcome: ExternalConsultOutcomeSchema.optional().describe(
+      "Only consults with this outcome; leaves yells out",
+    ),
+    yellStatus: z
+      .enum(["all", "unresolved", "resolved"])
+      .default("all")
+      .describe("Only yells in this state; leaves consults out unless `all`"),
+  })
+  .merge(CursorQuerySchema);
+
+const GuardrailEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("consult"), consult: ExternalConsultSchema }),
+  z.object({ type: z.literal("yell"), yell: OpenAppaYellSchema }),
+]);
+
 const routes: FastifyPluginAsyncZod = async (app) => {
+  app.get(
+    "/api/openappa/guardrail-events",
+    {
+      schema: {
+        operationId: RouteId.GetOpenappaGuardrailEvents,
+        description:
+          "What Guardrails recorded in the active organization, newest first: its consults of external services and the yells agents raised, in one timeline. `log:read` returns the records of the caller's own sessions. `log:admin` returns every record in the organization. A consult is served as the consults export serves it.",
+        tags: ["OpenAPPA"],
+        querystring: EventsQuerySchema,
+        response: constructResponseSchema(
+          createCursorPaginatedResponseSchema(GuardrailEventSchema),
+        ),
+      },
+    },
+    async ({ query, user, organizationId }, reply) => {
+      const { limit, cursor, from, to, ...rest } = query;
+      const page = await listGuardrailEvents({
+        organizationId,
+        userId: user.id,
+        query: {
+          ...rest,
+          from: from ? new Date(from) : undefined,
+          to: to ? new Date(to) : undefined,
+        },
+        limit,
+        cursor,
+      });
+      return reply.send({
+        data: page.data.map((event) =>
+          event.type === "consult"
+            ? { type: event.type, consult: toExport(event.consult) }
+            : event,
+        ),
+        pagination: page.pagination,
+      });
+    },
+  );
   app.get(
     "/api/openappa/external-consults",
     {

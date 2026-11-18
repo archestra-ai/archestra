@@ -26,7 +26,8 @@ import {
   OPENCLAW_MARK,
 } from "@/components/client-marks";
 
-const [ANTHROPIC_BASE_URL_KEY] = CLAUDE_CODE_PROXY_ENV_KEYS.anthropic;
+const [ANTHROPIC_BASE_URL_KEY, , GATEWAY_HINT_KEY] =
+  CLAUDE_CODE_PROXY_ENV_KEYS.anthropic;
 const [CLAUDE_USE_BEDROCK_KEY, AWS_REGION_KEY, BEDROCK_BASE_URL_KEY] =
   CLAUDE_CODE_PROXY_ENV_KEYS.bedrock;
 
@@ -388,6 +389,7 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
                       [CLAUDE_USE_BEDROCK_KEY]: "1",
                       [AWS_REGION_KEY]: "us-east-1",
                       [BEDROCK_BASE_URL_KEY]: url,
+                      [GATEWAY_HINT_KEY]: "1",
                     },
                   },
                   null,
@@ -416,7 +418,12 @@ claude`,
               body: "Merge the snippet below into the file (keep your existing keys). Your Claude subscription keeps working as-is.",
               language: "json",
               code: JSON.stringify(
-                { env: { [ANTHROPIC_BASE_URL_KEY]: url } },
+                {
+                  env: {
+                    [ANTHROPIC_BASE_URL_KEY]: url,
+                    [GATEWAY_HINT_KEY]: "1",
+                  },
+                },
                 null,
                 2,
               ),

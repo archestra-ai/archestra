@@ -369,7 +369,7 @@ export function getValidationSaveResult(output: unknown): SaveResult | null {
     detail: "not run yet",
     action: {
       label: "View Validations",
-      href: "/openappa/validation",
+      href: "/openappa/policy",
       external: false,
     },
     local: true,

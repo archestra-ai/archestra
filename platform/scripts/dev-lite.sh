@@ -91,8 +91,6 @@
 #       one line shown in the UI banner
 #   ARCHESTRA_DEV_AUTO_LOGIN_EMAIL
 #       dev auto-login (default admin@example.com; empty disables)
-#   ARCHESTRA_BETA
-#       written when .env is first created (default true)
 #   ARCHESTRA_FRONTEND_PORT
 #       frontend port (3000); the backend stays on 9000
 
@@ -202,7 +200,6 @@ ensure_env() {
   fi
   if [ ! -f "$ENV_FILE" ]; then
     cp "$PLATFORM_DIR/.env.example" "$ENV_FILE"
-    printf '\n# Lite dev stack (scripts/dev-lite.sh)\nARCHESTRA_BETA=%s\n' "${ARCHESTRA_BETA:-true}" >> "$ENV_FILE"
     log "created .env from .env.example"
   fi
   set_env_kv ARCHESTRA_DATABASE_URL "$(database_url)"
@@ -258,12 +255,9 @@ apply_e2e_env() {
     value="${value//http:\/\/e2e-tests-wiremock:8080/http://127.0.0.1:$WIREMOCK_PORT}"
     set_env_kv "$key" "$value"
   done < "$SCRIPT_DIR/e2e-lite-platform.env"
-  # The lite suite runs with the beta switch off: with it on, the LLM proxy
-  # refuses tool-declaring requests that omit the OpenAPPA tools. The specs
-  # sign in themselves, so the dev auto-login must stay off too.
-  set_env_kv ARCHESTRA_BETA false
+  # The specs sign in themselves, so the dev auto-login must stay off.
   unset_env_key ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL
-  log "applied the e2e-lite platform environment (ARCHESTRA_BETA=false, providers → WireMock on :$WIREMOCK_PORT)"
+  log "applied the e2e-lite platform environment (providers → WireMock on :$WIREMOCK_PORT)"
 }
 
 # --- processes -------------------------------------------------------------

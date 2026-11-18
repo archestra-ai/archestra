@@ -28,7 +28,7 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 import { ConnectivityProvider } from "@/lib/config/connectivity";
 import { makeAgent } from "@/mocks/data/agents";
 import { makeSession, makeUserPermissions } from "@/mocks/data/auth";
-import { configSeed, makeConfig } from "@/mocks/data/config";
+import { configSeed } from "@/mocks/data/config";
 import { makeLlmProviderApiKey } from "@/mocks/data/llm-keys";
 import {
   appearanceSettingsSeed,
@@ -392,11 +392,9 @@ const pooledAgent = {
 
 async function renderPoolChat({
   existing = false,
-  enabled = true,
   pooled = true,
 }: {
   existing?: boolean;
-  enabled?: boolean;
   pooled?: boolean;
 } = {}) {
   const selectedAgent = {
@@ -412,13 +410,8 @@ async function renderPoolChat({
     modelPoolId: selectedAgent.modelPoolId,
   };
   server.use(
-    http.get("/api/config", () =>
-      HttpResponse.json(
-        makeConfig({ features: { llmModelPoolsEnabled: enabled } }),
-      ),
-    ),
     http.get("/api/llm-provider-api-keys", () =>
-      HttpResponse.json(enabled && pooled ? [] : [makeLlmProviderApiKey()]),
+      HttpResponse.json(pooled ? [] : [makeLlmProviderApiKey()]),
     ),
     http.get("/api/llm-provider-api-keys/available", ({ request }) =>
       HttpResponse.json(
@@ -530,9 +523,6 @@ test("an existing pooled chat retains its inherited shared selection without dir
   expect(screen.queryByText("Connect an LLM provider")).not.toBeInTheDocument();
 });
 
-test.each([
-  { pooled: false, enabled: true },
-  { pooled: true, enabled: false },
-])("a direct or disabled-pool subscription still requires the caller to connect (%j)", async (settings) => {
-  expect(await renderPoolChat(settings)).toBeDisabled();
+test("a direct subscription still requires the caller to connect", async () => {
+  expect(await renderPoolChat({ pooled: false })).toBeDisabled();
 });

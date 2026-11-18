@@ -1,5 +1,4 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
-import config from "@/config";
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
@@ -18,7 +17,6 @@ describe("POST /api/projects/:id/transfer-ownership", () => {
   let organizationId: string;
   let create: (ownerId?: string, name?: string) => Promise<{ id: string }>;
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
-    config.beta = false;
     organizationId = (await makeOrganization()).id;
     user = await makeUser();
     recipient = await makeUser();

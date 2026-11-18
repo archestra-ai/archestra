@@ -3,6 +3,7 @@ use crate::{
     operations::{YellArguments, proposed, required_arguments},
 };
 use appa_runtime::api::ExecuteRemedyPlanArgs;
+use appa_runtime_api::OpenCalls;
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 
@@ -166,11 +167,30 @@ pub(crate) struct Input {
     /// rows keep no content.
     #[serde(default)]
     pub(crate) withhold_consult_content: bool,
+    /// On a stop: the raw tool-call ids whose results the stopping request
+    /// carried. Present, the stop is held while a call it would close is not
+    /// answered; absent, it closes every such call as unreported.
+    #[serde(default)]
+    pub(crate) answered_call_ids: Option<Vec<String>>,
 }
 
 /// Maximum byte length for precheck refusal text.
 /// Refusal text is recorded and replayed verbatim as the remedy result.
 const MAX_PRECHECK_REFUSAL_BYTES: usize = 64 * 1024;
+
+/// Maximum number of answered tool-call ids one stop carries.
+const MAX_ANSWERED_CALL_IDS: usize = 10_000;
+
+/// What a stop does with the calls still open at it. A tool call is
+/// recorded under `call:<tool-call-id>`, so an answered id is named the same.
+pub(crate) fn open_calls(input: &Input) -> OpenCalls {
+    match &input.answered_call_ids {
+        None => OpenCalls::Abandon,
+        Some(answered) => OpenCalls::Hold {
+            answered: answered.iter().map(|id| format!("call:{id}")).collect(),
+        },
+    }
+}
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -281,6 +301,21 @@ pub(crate) fn validate(input: &Input) -> napi::Result<()> {
         && (yell.is_empty() || yell.len() > 1024 || yell.chars().any(char::is_control))
     {
         return Err(invalid_input("invalid yell tool presentation"));
+    }
+    if let Some(answered) = &input.answered_call_ids {
+        if !matches!(
+            input.event,
+            HookEventKind::TurnEnd | HookEventKind::ChildTurnEnd | HookEventKind::ChildEnd
+        ) {
+            return Err(invalid_input("only a stop carries answered_call_ids"));
+        }
+        if answered.len() > MAX_ANSWERED_CALL_IDS
+            || answered
+                .iter()
+                .any(|id| id.is_empty() || id.len() > 1024 || id.chars().any(char::is_control))
+        {
+            return Err(invalid_input("invalid answered_call_ids"));
+        }
     }
     for (name, value) in [
         ("tool spelling", &input.spelling),

@@ -991,6 +991,59 @@ mod runtime_child_tests {
             "a later call still runs after the crossing, got {later:?}"
         );
     }
+
+    #[tokio::test]
+    async fn a_child_end_is_held_until_the_host_answers_the_call_by_its_raw_id() {
+        let delegate = crate::operations::canonical_tool("delegate").unwrap();
+        let read = crate::operations::canonical_tool("read").unwrap();
+        let runtime = open_runtime(&delegate, &read);
+        let root = TrajectoryId("archestra:parent-root".into());
+        let child = child_of(&root);
+        opened_child(&runtime, &root, &child, &delegate).await;
+        let opened = hooks::handle(
+            &runtime,
+            tool_call(&root, Some(&child), &read, Some("call:read-1"), false),
+        )
+        .await;
+        assert!(
+            matches!(opened, HookDecision::AllowCall { .. }),
+            "{opened:?}"
+        );
+
+        let end = |answered: Value| {
+            let input = event_input("child_end", json!({ "answered_call_ids": answered }));
+            validate(&input).unwrap();
+            HookEvent::ChildEnd {
+                root: root.clone(),
+                child: child.clone(),
+                value: input.output.clone(),
+                open_calls: crate::input::open_calls(&input),
+            }
+        };
+        assert_eq!(
+            hooks::handle(&runtime, end(json!(["other"]))).await,
+            HookDecision::Held {
+                running: vec!["call:read-1".into()]
+            }
+        );
+        let ended = hooks::handle(&runtime, end(json!(["read-1"]))).await;
+        assert!(
+            !matches!(ended, HookDecision::Held { .. }),
+            "the answered call must not hold the end, got {ended:?}"
+        );
+    }
+
+    #[test]
+    fn only_a_stop_carries_answered_call_ids() {
+        let answered = json!({ "answered_call_ids": ["read-1"] });
+        assert!(validate(&event_input("child_end", answered.clone())).is_ok());
+        assert_eq!(
+            crate::errors::rejected_input(
+                validate(&event_input("child_return", answered)).unwrap_err()
+            ),
+            "only a stop carries answered_call_ids"
+        );
+    }
 }
 
 #[cfg(test)]

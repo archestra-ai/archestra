@@ -4568,10 +4568,7 @@ class McpClient {
           // A Skills-only server may intentionally expose neither tools/list
           // nor resources/list. Its declared extension is enough to keep the
           // installation; the companion metadata pass will call skills/list.
-          if (
-            config.mcpGateway.skillsEnabled &&
-            Object.hasOwn(serverExtensions(), MCP_SKILLS_EXTENSION_ID)
-          ) {
+          if (Object.hasOwn(serverExtensions(), MCP_SKILLS_EXTENSION_ID)) {
             tools = [];
           } else {
             throw error;
@@ -6917,9 +6914,7 @@ function mcpClientExtensionCapabilities() {
   return {
     ...MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
     ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-    ...(config.mcpGateway.skillsEnabled
-      ? MCP_SKILLS_CLIENT_EXTENSION_CAPABILITIES
-      : {}),
+    ...MCP_SKILLS_CLIENT_EXTENSION_CAPABILITIES,
   } as const;
 }
 

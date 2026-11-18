@@ -12,6 +12,7 @@ import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
 import { hasAnyAgentTypeAdminPermission } from "@/auth/agent-type-permissions";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import mcpClient, {
   McpServerConnectionTimeoutError,
   McpServerNotReadyError,
@@ -1104,12 +1105,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   if (toolIds.length > 0) {
                     const targetAgentIds: string[] = [];
                     if (!mcpServer.teamId) {
-                      const personalGateway =
-                        await AgentModel.ensurePersonalMcpGateway({
+                      const personalGatewayId =
+                        await installerPersonalGatewayId({
                           userId: targetUserId,
                           organizationId,
                         });
-                      targetAgentIds.push(personalGateway.id);
+                      if (personalGatewayId) {
+                        targetAgentIds.push(personalGatewayId);
+                      }
                     }
                     if (agentIds && agentIds.length > 0) {
                       targetAgentIds.push(...agentIds);
@@ -1288,13 +1291,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (toolIds.length > 0) {
             const targetAgentIds: string[] = [];
             if (!mcpServer.teamId) {
-              const personalGateway = await AgentModel.ensurePersonalMcpGateway(
-                {
-                  userId: targetUserId,
-                  organizationId,
-                },
-              );
-              targetAgentIds.push(personalGateway.id);
+              const personalGatewayId = await installerPersonalGatewayId({
+                userId: targetUserId,
+                organizationId,
+              });
+              if (personalGatewayId) {
+                targetAgentIds.push(personalGatewayId);
+              }
             }
             if (agentIds && agentIds.length > 0) {
               targetAgentIds.push(...agentIds);
@@ -3954,4 +3957,18 @@ async function validateScopeAndAuthorization(params: {
       );
     }
   }
+}
+
+/**
+ * The gateway an installer's newly discovered tools are added to, or null when
+ * the installer is a service account: it has no personal gateway, and asking
+ * for one fails the install after the server has already started.
+ */
+async function installerPersonalGatewayId(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<string | null> {
+  if (isServiceAccountUserId(params.userId)) return null;
+  const gateway = await AgentModel.ensurePersonalMcpGateway(params);
+  return gateway.id;
 }

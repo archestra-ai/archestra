@@ -13,7 +13,7 @@ export function useLogsLayoutConfig() {
       { label: "LLM Proxy", href: "/llm/logs" },
       { label: "MCP Gateway", href: "/mcp/logs" },
       ...(openappaEnabled && permissionMap?.["/consults/logs"]
-        ? [{ label: "Guardrail consults", href: "/consults/logs" }]
+        ? [{ label: "Guardrails", href: "/consults/logs" }]
         : []),
       ...(permissionMap?.["/connections/logs"]
         ? [{ label: "Agent connections", href: "/connections/logs" }]

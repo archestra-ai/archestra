@@ -324,7 +324,7 @@ describe("MCP gateway tools/list query budget", () => {
     // them differently (per-installation descriptions). Seven fewer since a
     // listing shares caller lookups between authentication and the listing.
     // Live credential validation adds one token lookup and one conditional
-    // last-used update. Keep the original budget for the rest of the listing.
+    // last-used update. Six more for the gateway's skills, now always listed.
     const credentialQueries = statements.filter(
       (query) =>
         query.includes('from "user_token"') ||
@@ -332,7 +332,7 @@ describe("MCP gateway tools/list query budget", () => {
     );
     expect(credentialQueries).toHaveLength(2);
     expect(statements.length - credentialQueries.length).toBeLessThanOrEqual(
-      54,
+      60,
     );
     // Listing several installations must batch catalog metadata and labels,
     // reuse caller teams, and avoid enriching each server with its users.
@@ -354,9 +354,11 @@ describe("MCP gateway tools/list query budget", () => {
           query.includes("subject_teams"),
       ),
     ).toHaveLength(1);
+    // Servers are not enriched with their users; the two lookups are the
+    // caller's personal servers, read for the gateway's skills.
     expect(
       statements.filter((query) => query.includes('from "mcp_server_user"')),
-    ).toHaveLength(0);
+    ).toHaveLength(2);
     expect(
       statements.filter(
         (query) =>

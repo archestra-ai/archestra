@@ -4,7 +4,6 @@ import {
   TOOL_LOAD_SKILL_FULL_NAME,
 } from "@archestra/shared";
 import type { ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
-import config from "@/config";
 import {
   AgentActivationSkillRuleModel,
   AgentExcludedToolModel,
@@ -214,8 +213,6 @@ test("previews effective native precedence and collision-safe plugin/MCP names",
   makeMcpServer,
   makeSkill,
 }) => {
-  config.beta = false;
-  config.mcpGateway.skillsEnabled = true;
   const org = await makeOrganization();
   const user = await makeUser();
   await makeMember(user.id, org.id, { role: "admin" });

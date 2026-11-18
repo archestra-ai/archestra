@@ -137,7 +137,7 @@ Started by `dev-vm-sync.py start`, done by [Mutagen](https://mutagen.io).
 ### Several stacks at once
 
 Each synced checkout runs its own stack, as `scripts/dev-stack.sh` does on
-the Mac. Up to 5 at once.
+the Mac. Up to 5 at once. Two idle stacks use about 5 GiB of the VM's 24.
 
 | Stack | App | API | Tilt |
 |---|---|---|---|

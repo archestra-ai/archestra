@@ -116,7 +116,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "admin",
       );
 
-      fastify.log.info(
+      fastify.log.debug(
         {
           userId: user.id,
           email: user.email,
@@ -149,7 +149,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       );
 
-      fastify.log.info(
+      fastify.log.debug(
         {
           resultCount: result.data.length,
           hasNext: result.pagination.hasNext,
@@ -322,7 +322,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "admin",
       );
 
-      fastify.log.info(
+      fastify.log.debug(
         {
           userId: user.id,
           email: user.email,
@@ -355,7 +355,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       );
 
-      fastify.log.info(
+      fastify.log.debug(
         {
           resultCount: result.data.length,
           hasNext: result.pagination.hasNext,

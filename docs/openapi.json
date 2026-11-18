@@ -151738,6 +151738,48 @@
                       "type": "string"
                     }
                   },
+                  "outputConfig": {
+                    "type": "object",
+                    "properties": {
+                      "textFormat": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "structure": {
+                            "type": "object",
+                            "properties": {
+                              "jsonSchema": {
+                                "type": "object",
+                                "properties": {
+                                  "schema": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "schema"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "jsonSchema"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "structure"
+                        ]
+                      }
+                    }
+                  },
                   "promptVariables": {
                     "type": "object",
                     "additionalProperties": {
@@ -153194,6 +153236,48 @@
                     "type": "array",
                     "items": {
                       "type": "string"
+                    }
+                  },
+                  "outputConfig": {
+                    "type": "object",
+                    "properties": {
+                      "textFormat": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "structure": {
+                            "type": "object",
+                            "properties": {
+                              "jsonSchema": {
+                                "type": "object",
+                                "properties": {
+                                  "schema": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "schema"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "jsonSchema"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "structure"
+                        ]
+                      }
                     }
                   },
                   "promptVariables": {
@@ -154664,6 +154748,48 @@
                       "type": "string"
                     }
                   },
+                  "outputConfig": {
+                    "type": "object",
+                    "properties": {
+                      "textFormat": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "structure": {
+                            "type": "object",
+                            "properties": {
+                              "jsonSchema": {
+                                "type": "object",
+                                "properties": {
+                                  "schema": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "schema"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "jsonSchema"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "structure"
+                        ]
+                      }
+                    }
+                  },
                   "promptVariables": {
                     "type": "object",
                     "additionalProperties": {
@@ -155577,6 +155703,48 @@
                     "type": "array",
                     "items": {
                       "type": "string"
+                    }
+                  },
+                  "outputConfig": {
+                    "type": "object",
+                    "properties": {
+                      "textFormat": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "structure": {
+                            "type": "object",
+                            "properties": {
+                              "jsonSchema": {
+                                "type": "object",
+                                "properties": {
+                                  "schema": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "schema"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "jsonSchema"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "structure"
+                        ]
+                      }
                     }
                   },
                   "promptVariables": {
@@ -156502,6 +156670,48 @@
                     "type": "array",
                     "items": {
                       "type": "string"
+                    }
+                  },
+                  "outputConfig": {
+                    "type": "object",
+                    "properties": {
+                      "textFormat": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "structure": {
+                            "type": "object",
+                            "properties": {
+                              "jsonSchema": {
+                                "type": "object",
+                                "properties": {
+                                  "schema": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "schema"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "jsonSchema"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "structure"
+                        ]
+                      }
                     }
                   },
                   "promptVariables": {
@@ -157975,6 +158185,48 @@
                     "type": "array",
                     "items": {
                       "type": "string"
+                    }
+                  },
+                  "outputConfig": {
+                    "type": "object",
+                    "properties": {
+                      "textFormat": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "structure": {
+                            "type": "object",
+                            "properties": {
+                              "jsonSchema": {
+                                "type": "object",
+                                "properties": {
+                                  "schema": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "schema"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "jsonSchema"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "structure"
+                        ]
+                      }
                     }
                   },
                   "promptVariables": {
@@ -257528,6 +257780,52 @@
                                           "type": "string"
                                         }
                                       },
+                                      "outputConfig": {
+                                        "type": "object",
+                                        "properties": {
+                                          "textFormat": {
+                                            "type": "object",
+                                            "properties": {
+                                              "type": {
+                                                "type": "string"
+                                              },
+                                              "structure": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "jsonSchema": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "schema": {
+                                                        "type": "string"
+                                                      },
+                                                      "name": {
+                                                        "type": "string"
+                                                      },
+                                                      "description": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "schema"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "jsonSchema"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "required": [
+                                              "type",
+                                              "structure"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
                                       "promptVariables": {
                                         "type": "object",
                                         "additionalProperties": {
@@ -258451,6 +258749,52 @@
                                         "items": {
                                           "type": "string"
                                         }
+                                      },
+                                      "outputConfig": {
+                                        "type": "object",
+                                        "properties": {
+                                          "textFormat": {
+                                            "type": "object",
+                                            "properties": {
+                                              "type": {
+                                                "type": "string"
+                                              },
+                                              "structure": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "jsonSchema": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "schema": {
+                                                        "type": "string"
+                                                      },
+                                                      "name": {
+                                                        "type": "string"
+                                                      },
+                                                      "description": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "schema"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "jsonSchema"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "required": [
+                                              "type",
+                                              "structure"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "additionalProperties": false
                                       },
                                       "promptVariables": {
                                         "type": "object",
@@ -314523,6 +314867,52 @@
                                     "type": "string"
                                   }
                                 },
+                                "outputConfig": {
+                                  "type": "object",
+                                  "properties": {
+                                    "textFormat": {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string"
+                                        },
+                                        "structure": {
+                                          "type": "object",
+                                          "properties": {
+                                            "jsonSchema": {
+                                              "type": "object",
+                                              "properties": {
+                                                "schema": {
+                                                  "type": "string"
+                                                },
+                                                "name": {
+                                                  "type": "string"
+                                                },
+                                                "description": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "schema"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": [
+                                            "jsonSchema"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "structure"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
                                 "promptVariables": {
                                   "type": "object",
                                   "additionalProperties": {
@@ -315446,6 +315836,52 @@
                                   "items": {
                                     "type": "string"
                                   }
+                                },
+                                "outputConfig": {
+                                  "type": "object",
+                                  "properties": {
+                                    "textFormat": {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string"
+                                        },
+                                        "structure": {
+                                          "type": "object",
+                                          "properties": {
+                                            "jsonSchema": {
+                                              "type": "object",
+                                              "properties": {
+                                                "schema": {
+                                                  "type": "string"
+                                                },
+                                                "name": {
+                                                  "type": "string"
+                                                },
+                                                "description": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "schema"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": [
+                                            "jsonSchema"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "structure"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "additionalProperties": false
                                 },
                                 "promptVariables": {
                                   "type": "object",

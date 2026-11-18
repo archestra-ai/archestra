@@ -267,17 +267,17 @@ function memberTransportOnWire(params: {
     };
     return {
       async execute(request) {
-        const response = await adapter.execute(client, withModel(request));
+        const sent = withModel(request);
+        const response = await adapter.execute(client, sent);
+        keepDroppedOutputConfig(request, sent);
         if (target === "openai-responses")
           assertResponsesAttemptSucceeded(response);
         return response;
       },
       async executeStream(request, onAccepted) {
-        const stream = await adapter.executeStream(
-          client,
-          withModel(request),
-          onAccepted,
-        );
+        const sent = withModel(request);
+        const stream = await adapter.executeStream(client, sent, onAccepted);
+        keepDroppedOutputConfig(request, sent);
         return target === "openai-responses"
           ? bufferResponsesPreamble(stream)
           : stream;
@@ -871,4 +871,23 @@ function sseToChunks(bytes: Uint8Array | string | null): unknown[] {
     .map((event) => event.trim())
     .filter((event) => event.startsWith("data: ") && event !== "data: [DONE]")
     .map((event) => JSON.parse(event.slice("data: ".length)));
+}
+
+/**
+ * A Bedrock member without structured output support answers after its adapter
+ * removed `outputConfig` from the copy it was sent. Remove the field from the
+ * pool's request too: the handler stores that object as the request sent to the
+ * model.
+ */
+function keepDroppedOutputConfig(request: unknown, sent: unknown): void {
+  if (
+    request &&
+    typeof request === "object" &&
+    "outputConfig" in request &&
+    sent &&
+    typeof sent === "object" &&
+    !("outputConfig" in sent)
+  ) {
+    delete (request as { outputConfig?: unknown }).outputConfig;
+  }
 }

@@ -463,6 +463,51 @@ describe("openaiToConverse — tools + tool_choice", () => {
   });
 });
 
+describe("openaiToConverse — response_format", () => {
+  const schema = {
+    type: "object",
+    properties: { status: { type: "string", enum: ["ready"] } },
+    required: ["status"],
+    additionalProperties: false,
+  };
+
+  test("json_schema becomes the Converse structured output constraint", () => {
+    const { converseBody } = openaiToConverse(
+      req({
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "status_result",
+            description: "The service status",
+            strict: true,
+            schema,
+          },
+        },
+      }),
+    );
+    const jsonSchema =
+      converseBody.outputConfig?.textFormat?.structure.jsonSchema;
+    expect(converseBody.outputConfig?.textFormat?.type).toBe("json_schema");
+    expect(jsonSchema?.name).toBe("status_result");
+    expect(jsonSchema?.description).toBe("The service status");
+    // Converse takes the schema as a string; every keyword must survive.
+    expect(JSON.parse(jsonSchema?.schema ?? "")).toEqual(schema);
+  });
+
+  test.each([
+    { type: "json_object" as const },
+    { type: "text" as const },
+    // A format that names no schema has nothing for Converse to enforce.
+    { type: "json_schema" as const, json_schema: { name: "status_result" } },
+  ])("$type without a schema is accepted and sets no constraint", (response_format) => {
+    const { converseBody } = openaiToConverse(req({ response_format }));
+    expect(converseBody.outputConfig).toBeUndefined();
+    expect(converseBody.messages).toEqual([
+      { role: "user", content: [{ text: "hello" }] },
+    ]);
+  });
+});
+
 describe("openaiToConverse — inference config", () => {
   test("maps temperature, top_p, max_tokens, stop to inferenceConfig", () => {
     const { converseBody } = openaiToConverse(

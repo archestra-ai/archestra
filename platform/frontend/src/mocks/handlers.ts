@@ -309,11 +309,26 @@ export const handlers: HttpHandler[] = [
       { date: "2026-10-08", blocked: 1, approved: 2, cleaned: 2 },
     ],
   }),
+  // The Policy page lists the validations with its other files; none by default.
+  ...getJson("/api/openappa/policy-tests", {
+    source: "local",
+    files: [],
+    version: "v1",
+    sourceCommit: null,
+    directory: "tests",
+    activeDirectory: "tests",
+    error: null,
+  }),
   ...getJson("/api/openappa/policy-tests/runs", []),
   // A session trace reads its guardrail checks and label history; none by default.
   ...getJson("/api/openappa/external-consults", {
     data: [],
     pagination: { limit: 100, hasNext: false, nextCursor: null },
+  }),
+  // The Guardrails log: consults and yells in one timeline; empty by default.
+  ...getJson("/api/openappa/guardrail-events", {
+    data: [],
+    pagination: { limit: 20, hasNext: false, nextCursor: null },
   }),
   ...getJson("/api/openappa/label-changes", { data: [] }),
   ...getJson("/api/openappa/yells/summary", { unresolved: 0 }),

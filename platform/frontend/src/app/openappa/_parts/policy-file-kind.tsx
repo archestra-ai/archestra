@@ -1,4 +1,10 @@
-import { FileCode2, Package, Server, ShieldCheck } from "lucide-react";
+import {
+  FileCode2,
+  FlaskConical,
+  Package,
+  Server,
+  ShieldCheck,
+} from "lucide-react";
 import { cn } from "@/lib/utils/tailwind";
 import type { PolicyFile } from "./policy-files";
 
@@ -18,18 +24,35 @@ export const POLICY_FILE_KIND = {
       "border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300",
   },
   repository: {
-    label: "Repository file",
-    section: "Repository files",
+    label: "Included file",
+    section: "Included files",
     iconClass: "text-sky-600 dark:text-sky-400",
     chipClass: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300",
   },
+  validation: {
+    label: "Validation",
+    section: "Validations",
+    iconClass: "text-teal-600 dark:text-teal-400",
+    chipClass:
+      "border-teal-500/30 bg-teal-500/10 text-teal-700 dark:text-teal-300",
+  },
 } as const;
 
-export const POLICY_FILE_KINDS = ["root", "battery", "repository"] as const;
+export const POLICY_FILE_KINDS = [
+  "root",
+  "battery",
+  "repository",
+  "validation",
+] as const;
+
+/** What the "Included files" are, for whoever wonders. */
+export const INCLUDED_FILES_HINT =
+  "Other policy files in your connected repository that the organization policy pulls in with include, such as one rules file per MCP server.";
 
 export function policyFileIcon(file: PolicyFile) {
   if (file.kind === "root") return ShieldCheck;
   if (file.kind === "battery") return Package;
+  if (file.kind === "validation") return FlaskConical;
   return file.mcpServerRules ? Server : FileCode2;
 }
 

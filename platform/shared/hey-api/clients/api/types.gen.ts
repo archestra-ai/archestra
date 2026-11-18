@@ -124391,6 +124391,189 @@ export type GetOpenappaCoverageSummaryResponses = {
 
 export type GetOpenappaCoverageSummaryResponse = GetOpenappaCoverageSummaryResponses[keyof GetOpenappaCoverageSummaryResponses];
 
+export type GetOpenappaGuardrailEventsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Which records: consults, yells, or both in one timeline
+         */
+        type?: 'all' | 'consult' | 'yell';
+        /**
+         * Case-insensitive substring of a consult's external name or session ID, or of a yell's report
+         */
+        search?: string;
+        /**
+         * Recorded on or after this time (ISO 8601)
+         */
+        from?: string;
+        /**
+         * Recorded on or before this time (ISO 8601)
+         */
+        to?: string;
+        /**
+         * Only consults with this outcome; leaves yells out
+         */
+        outcome?: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
+        /**
+         * Only yells in this state; leaves consults out unless `all`
+         */
+        yellStatus?: 'all' | 'unresolved' | 'resolved';
+        limit?: number;
+        cursor?: string;
+    };
+    url: '/api/openappa/guardrail-events';
+};
+
+export type GetOpenappaGuardrailEventsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaGuardrailEventsError = GetOpenappaGuardrailEventsErrors[keyof GetOpenappaGuardrailEventsErrors];
+
+export type GetOpenappaGuardrailEventsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            type: 'consult';
+            consult: {
+                id: string;
+                organizationId: string;
+                sessionId: string | null;
+                callerId: string | null;
+                createdAt: string;
+                startedAt: string;
+                durationMs: number;
+                role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input' | 'context_provider';
+                externalName: string;
+                backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl' | 'archestra' | 'stock';
+                request: unknown;
+                outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
+                answer: unknown;
+                rawResponse: string | null;
+                httpStatus: number | null;
+                diagnostics: string | null;
+                diagnosticsTruncated: boolean;
+                root: string;
+                trajectory: string;
+                callId: string | null;
+                offerId: string | null;
+                callDigest: string | null;
+            };
+        } | {
+            type: 'yell';
+            yell: {
+                id: string;
+                organizationId: string;
+                callerId: string;
+                sessionId: string;
+                toolCallId: string;
+                message: string;
+                withTrajectory: boolean;
+                superyell: boolean;
+                kind: 'agent' | 'approval_waived' | 'block_waived';
+                count: number;
+                createdAt: string;
+                reportedAt: string | null;
+                reportFailed: boolean;
+                resolvedAt: string | null;
+                resolvedBy: string | null;
+                hasArchive: boolean;
+                caller: {
+                    id: string;
+                    type?: 'user' | 'service_account';
+                    name: string | null;
+                    email: string | null;
+                } | null;
+                callerApp: {
+                    id: string;
+                    name: string;
+                } | null;
+                conversation: {
+                    id: string;
+                    title: string | null;
+                    createdAt: string;
+                } | null;
+                trace: {
+                    llmSessionId: string;
+                    mcpToolCallId: string | null;
+                } | null;
+            };
+        }>;
+        pagination: {
+            limit: number;
+            nextCursor: string | null;
+            hasNext: boolean;
+        };
+    };
+};
+
+export type GetOpenappaGuardrailEventsResponse = GetOpenappaGuardrailEventsResponses[keyof GetOpenappaGuardrailEventsResponses];
+
 export type GetOpenappaExternalConsultsData = {
     body?: never;
     path?: never;

@@ -173,7 +173,7 @@ describe("useNavOnboarding", () => {
     vi.mocked(usePermissionMap).mockReturnValue({
       ...allPermissions,
       "/openappa": false,
-      "/openappa/yells": true,
+      "/openappa/policy": true,
     });
     expect(
       renderHook(() => useNavOnboarding()).result.current.unseenKeys.has(
@@ -184,7 +184,7 @@ describe("useNavOnboarding", () => {
     vi.mocked(usePermissionMap).mockReturnValue({
       ...allPermissions,
       "/openappa": false,
-      "/openappa/yells": false,
+      "/openappa/policy": false,
     });
     expect(
       renderHook(() => useNavOnboarding()).result.current.unseenKeys.has(

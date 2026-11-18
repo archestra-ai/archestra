@@ -203,7 +203,7 @@ The operator or release agent must create, queue, monitor, and verify these PRs 
 
 ### Write The Upgrade Guide
 
-Every new stable line ships a page that tells operators how to upgrade from the previous line, for example [Upgrade from v1.3 to v1.4](../../docs/pages/admin/upgrade-v1-3-to-v1-4.md). Operators read it before they upgrade, so it must be on `release/X.Y` before `X.Y.0` publishes, and it then appears in the `vX.Y` docs.
+Every new stable line ships a page that tells operators how to upgrade from the previous line, for example `docs/pages/admin/upgrade-v1-3-to-v1-4.md` on `release/1.4`. Operators read it before they upgrade, so it must be on `release/X.Y` before `X.Y.0` publishes, and it then appears in the `vX.Y` docs.
 
 1. Name it `docs/pages/admin/upgrade-vA-B-to-vX-Y.md`, where `A.B` is the previous stable line. The release check matches `upgrade-v*-to-vX-Y.md`.
 2. Find what operators must act on, from the previous line's branch point to `release/X.Y`:

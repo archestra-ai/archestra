@@ -3,6 +3,7 @@ import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import { observeOpenappaYell } from "@/observability/metrics/openappa";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type { OpenAppaSession } from "./service";
 import { isUnenforcedSession, superyellSession } from "./unenforced";
@@ -89,6 +90,7 @@ export async function waiveSoftBlock(
         ].join("\n\n"),
         superyell: true,
       });
+      observeOpenappaYell({ kind: "block_waived", superyell: true });
     } catch (error) {
       logger.warn(
         { err: error },

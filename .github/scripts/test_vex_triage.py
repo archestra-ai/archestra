@@ -44,6 +44,7 @@ class VexTriageTest(unittest.TestCase):
         # Images are named at the release's version, in the registry each is published to.
         self.assertIn("- `docker.io/archestra/platform:1.4.35`", message)
         self.assertIn("- `ghcr.io/archestra-ai/mcp-server-base:1.4.35`", message)
+        self.assertIn("/archestra-public/agent-archestra:1.4.35`", message)
         self.assertIn(f"https://frontend.archestra.dev/chat/runs/{RUN}", summary)
 
     def test_rejects_anything_but_a_release_tag_before_any_request(self):

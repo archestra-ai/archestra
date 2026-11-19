@@ -180,6 +180,10 @@ workflows:
         - 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'
         - 'archestra-ai/.github@v1.25.2'
         - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
+    '.github/workflows/vex-triage.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'archestra-ai/.github@v1.25.2'
+        - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
     '.github/workflows/warm-e2e-image-caches.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'

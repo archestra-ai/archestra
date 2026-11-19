@@ -46,7 +46,7 @@ jobs:
       id-token: write # Sign in to Google Cloud (staging tunnel) and to Archestra.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -73,7 +73,7 @@ jobs:
       # The staging API is private. This account can open the IAP tunnel to
       # its TLS forwarder and nothing else.
       - name: Authenticate to Google Cloud
-        uses: archestra-ai/.github/actions/google-auth@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/google-auth@v1.25.2
         with:
           service_account: ${{ vars.VEX_TRIAGE_GCP_SERVICE_ACCOUNT }}
           workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

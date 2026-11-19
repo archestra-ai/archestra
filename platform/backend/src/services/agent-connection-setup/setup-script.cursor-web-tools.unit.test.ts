@@ -1,4 +1,5 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import {
   chmod,
   mkdir,
@@ -121,6 +122,11 @@ const path = require("path");
 const dir = ${JSON.stringify(fakeCli)};
 // The two account commands the sign-in helper uses.
 if (process.argv[2] === "status") {
+  // An agent that does not answer, for as long as a test says so.
+  if (fs.existsSync(path.join(dir, "status-hangs"))) {
+    const pause = new Int32Array(new SharedArrayBuffer(4));
+    for (let i = 0; i < 300 && fs.existsSync(path.join(dir, "status-hangs")); i++) Atomics.wait(pause, 0, 0, 100);
+  }
   console.log(JSON.stringify({ isAuthenticated: fs.existsSync(path.join(dir, "signed-in")) }, null, 2));
   process.exit(0);
 }
@@ -616,6 +622,33 @@ describe("Cursor web tools", () => {
     const call = patient.call(CURSOR_WEB_SETUP_TOOL, {});
     setTimeout(() => writeFile(path.join(fakeCli, "login-works"), ""), 500);
     expect((await call).text).toContain("Web search and fetch are ready.");
+  });
+
+  test("an agent that does not say whether it is signed in does not hold the setup tool, and no sign-in starts", async () => {
+    await install();
+    await installFakeCli([]);
+    await writeFile(path.join(fakeCli, "signed-in"), "");
+    await writeFile(path.join(fakeCli, "status-hangs"), "");
+    const tools = webTools({
+      ARCHESTRA_CURSOR_CLI: path.join(home, ".local", "bin", "cursor-agent"),
+      ARCHESTRA_CURSOR_WEB_SETUP_WAIT_MS: "300",
+      ARCHESTRA_CURSOR_STATUS_TIMEOUT_MS: "200",
+    });
+    const started = Date.now();
+    const stuck = await tools.call(CURSOR_WEB_SETUP_TOOL, {});
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(stuck.isError).toBe(false);
+    expect(stuck.text).toContain("did not say in time whether it is signed in");
+    expect(stuck.text).toContain(
+      "keep calling it until it says ready or failed",
+    );
+    expect(existsSync(path.join(fakeCli, "logins"))).toBe(false);
+
+    // Once the agent answers again, the next call finds it signed in.
+    await rm(path.join(fakeCli, "status-hangs"));
+    expect((await tools.call(CURSOR_WEB_SETUP_TOOL, {})).text).toContain(
+      "Web search and fetch are ready.",
+    );
   });
 
   test("the setup tool says what failed, and a web tool names it when the CLI is missing", async () => {

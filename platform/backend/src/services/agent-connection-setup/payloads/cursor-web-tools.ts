@@ -615,9 +615,15 @@ function findCli() {
 // The Windows launcher is a script, which only a shell starts.
 const cliCommand = (cli, args) => (windows ? { command: '"' + cli + '" ' + args.join(" "), args: [], shell: true } : { command: cli, args, shell: false });
 
+// How long the agent may take to say whether it is signed in. The web tools'
+// server runs this, and answers nothing else meanwhile. Tests shorten it.
+const STATUS_TIMEOUT_MS = Number(process.env.ARCHESTRA_CURSOR_STATUS_TIMEOUT_MS) || 10000;
+
+/** Whether the agent is signed in to Cursor. Undefined when it did not say in time. */
 function signedIn(cli) {
   const { command, args, shell } = cliCommand(cli, ["status", "--format", "json"]);
-  const result = spawnSync(command, args, { shell, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+  const result = spawnSync(command, args, { shell, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: STATUS_TIMEOUT_MS, windowsHide: true });
+  if (result.error || result.signal) return undefined;
   return /"isAuthenticated":\\s*true/.test(String(result.stdout || ""));
 }
 
@@ -671,7 +677,11 @@ function step() {
       : start("bash", ["-c", INSTALL], false);
     return { text: "Installing Cursor's command-line agent with Cursor's own installer. The web search and fetch tools run through it, on the Cursor plan." };
   }
-  if (signedIn(cli)) {
+  const account = signedIn(cli);
+  // No answer is not a signed-out agent: a sign-in started now could sign a
+  // working agent out of step with its own state. The next call asks again.
+  if (account === undefined) return { text: "Cursor's command-line agent did not say in time whether it is signed in." };
+  if (account) {
     const waiting = gatewayStep(cli);
     if (waiting) return waiting;
     stop();

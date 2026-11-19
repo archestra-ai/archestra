@@ -691,6 +691,7 @@ VOLUME /var/lib/postgresql/data /app/data
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 COPY docker/scripts/shutdown-budget.mjs /app/shutdown-budget.mjs
+COPY docker/scripts/start-backend.sh /app/start-backend.sh
 # slim Dagger Engine manifest applied into the embedded KinD cluster in quickstart
 # mode; backs the skill sandbox / code runtime (archestra__run_command and friends).
 # Real deployments provision engines in code instead — the quickstart runs this one
@@ -756,7 +757,7 @@ COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
 COPY --from=builder /app/frontend/.next/static /static-assets-source/
 
 RUN chmod +x /docker-entrypoint.sh
-RUN chmod +x /app/docker-banner.sh
+RUN chmod +x /app/docker-banner.sh /app/start-backend.sh
 
 # Expose ports
 EXPOSE 5432 9000 9050 3000

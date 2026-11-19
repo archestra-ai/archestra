@@ -87,7 +87,7 @@ jobs:
       # their difference is what this pull request changes, whatever landed on
       # the base branch since the pull request was opened.
       - name: Checkout pull request merge commit and its base
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 2
@@ -155,7 +155,7 @@ jobs:
       FILE: ${{ matrix.file }}
     steps:
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -238,7 +238,7 @@ jobs:
       tag: ${{ steps.release.outputs.tag }}
     steps:
       - name: Checkout release scripts
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -307,7 +307,7 @@ jobs:
       # gh attestation verify archestra-<os>-<arch> --repo archestra-ai/archestra
       - name: Attest the binaries
         if: steps.release.outputs.published == 'false'
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        uses: actions/attest-build-provenance@v4.2.2
         with:
           subject-path: dist/archestra-*
 
@@ -400,7 +400,7 @@ jobs:
       TAG: ${{ needs.publish.outputs.tag }}
     steps:
       - name: Checkout trusted main branch
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           ref: main
           fetch-depth: 0
@@ -431,7 +431,7 @@ jobs:
       - name: Generate releaser token
         id: token
         if: steps.current.outputs.proceed == 'true'
-        uses: archestra-ai/.github/actions/github-app-token@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/github-app-token@v1.16.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}

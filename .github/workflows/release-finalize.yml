@@ -89,7 +89,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -120,7 +120,7 @@ jobs:
       # release-publisher; an older line's patch keeps the newer line latest.
       - name: Publish GitHub release
         id: publish
-        uses: archestra-ai/.github/actions/release-finalize@0bd6a54bf206174fd0cebc3222def111651e91bb # v1.31.1
+        uses: archestra-ai/.github/actions/release-finalize@v1.31.1
         with:
           operation: publish
           token: ${{ github.token }}

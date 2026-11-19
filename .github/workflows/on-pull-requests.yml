@@ -71,7 +71,7 @@ jobs:
 
       - name: Checkout release PR
         if: steps.check-context.outputs.should_check == 'true'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           sparse-checkout: |
@@ -93,7 +93,7 @@ jobs:
         working-directory: ./platform
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -134,7 +134,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -151,7 +151,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -184,7 +184,7 @@ jobs:
       # API and references no local config file, so the (fetch-depth: 0) checkout
       # was ~74s of the job's ~89s for nothing.
       - name: Dependency review
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        uses: actions/dependency-review-action@v5.0.0
         with:
           fail-on-severity: high
           # NOTE: disable license check here because we are already doing it in the license-compliance-check job
@@ -242,7 +242,7 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
 
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -250,7 +250,7 @@ jobs:
       # Validate the same source as the generation coordinator, never a moving branch.
       - name: Pin release PR source
         if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
@@ -487,7 +487,7 @@ jobs:
           exit 1
 
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -508,7 +508,7 @@ jobs:
       # download against its pinned manifest and picks the right platform
       # (Linux runners and the mac mini).
       - name: Install cargo-deny
-        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        uses: taiki-e/install-action@v2.90.2
         with:
           tool: cargo-deny@0.20.2
 
@@ -582,7 +582,7 @@ jobs:
           --health-retries 20
     steps:
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -660,7 +660,7 @@ jobs:
         working-directory: ./ai-labs
     steps:
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -672,7 +672,7 @@ jobs:
       # credentials unpersisted and scope the read-only job token to this
       # pinned action via Git's runtime configuration.
       - name: Check new Cargo dependency release ages
-        uses: archestra-ai/.github/actions/cargo-release-age@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/cargo-release-age@v1.16.0
         env:
           GH_TOKEN: ${{ github.token }}
           GIT_CONFIG_COUNT: "2"
@@ -747,7 +747,7 @@ jobs:
       AWS_LC_SYS_PREBUILT_NASM: "1"
     steps:
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -777,7 +777,7 @@ jobs:
 
       - name: Check new Cargo dependency release ages
         if: runner.os == 'Linux' && steps.base-lockfile.outputs.present == 'true'
-        uses: archestra-ai/.github/actions/cargo-release-age@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/cargo-release-age@v1.16.0
         env:
           GH_TOKEN: ${{ github.token }}
           GIT_CONFIG_COUNT: "2"
@@ -833,7 +833,7 @@ jobs:
       archestra_cli: ${{ steps.diff.outputs.archestra_cli }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -893,7 +893,7 @@ jobs:
           --health-retries 20
     steps:
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -985,7 +985,7 @@ jobs:
         shard: [1, 2]
     steps:
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -1099,7 +1099,7 @@ jobs:
         working-directory: ./platform
     steps:
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -1293,7 +1293,7 @@ jobs:
       actions: write # Required to cancel this workflow run on failover.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -1303,7 +1303,7 @@ jobs:
       # variable (it has actions_variables:write).
       - name: Generate token for the kill switch
         id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+        uses: archestra-ai/.github/actions/github-app-token@v1.16.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}
@@ -1365,7 +1365,7 @@ jobs:
         working-directory: ./platform/helm/archestra
     steps:
       - name: Checkout project
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1

@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 import { ModelPoolModel } from "@/models";
 import ModelPoolUsageModel from "@/models/model-pool-usage";
-import { beforeEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { ApiError } from "@/types";
 import {

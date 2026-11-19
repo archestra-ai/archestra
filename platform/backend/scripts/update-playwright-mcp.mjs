@@ -59,6 +59,20 @@ async function request(url) {
     digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
   };
 }
+// Images built on the official Node image set NODE_VERSION in the runtime
+// env. Images that install Node on a plain OS base keep it only as a build
+// argument, which the config records in its layer history.
+function imageNodeVersion(config) {
+  const env = config.config?.Env?.find((entry) =>
+    entry.startsWith("NODE_VERSION="),
+  )?.slice(13);
+  if (env) return env;
+  return (config.history ?? [])
+    .map((entry) => entry.created_by?.match(buildArgNodeVersion)?.[1])
+    .filter(Boolean)
+    .at(-1);
+}
+const buildArgNodeVersion = /(?:^|\s)ARG NODE_VERSION=(\S+)$/;
 async function upstreamImage(version) {
   const base = `${(process.env.PLAYWRIGHT_MCR_REGISTRY || "https://mcr.microsoft.com").replace(/\/$/, "")}/v2/playwright/mcp`;
   let index;
@@ -92,9 +106,7 @@ async function upstreamImage(version) {
       config.json.architecture !== architecture
     )
       throw new Error("Image config digest/architecture mismatch");
-    const nodeVersion = config.json.config?.Env?.find((entry) =>
-      entry.startsWith("NODE_VERSION="),
-    )?.slice(13);
+    const nodeVersion = imageNodeVersion(config.json);
     if (!stable.test(nodeVersion))
       throw new Error(`Missing Node version for ${architecture}`);
     versions.push(nodeVersion);

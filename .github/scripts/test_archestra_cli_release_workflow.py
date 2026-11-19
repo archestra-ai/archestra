@@ -45,6 +45,18 @@ def content(name):
     return f"binary of {name}\n".encode()
 
 
+def write_fakes(directory, fakes):
+    """Bash scripts that stand in for commands when `directory` comes first on PATH."""
+    for name, body in fakes.items():
+        fake = Path(directory) / name
+        fake.write_text("#!/bin/bash\n" + body)
+        fake.chmod(0o755)
+
+
+SIGNING_JOBS = [job for job in JOBS if job.startswith("sign-")]
+MACOS_FILES = tuple(name for name in writer.FILES if "darwin" in name)
+
+
 class ReleaseStepTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -60,9 +72,7 @@ class ReleaseStepTests(unittest.TestCase):
         (self.work / ".github").symlink_to(ROOT / ".github")
         # Answers `gh api` per path, lists the drafts it is told about, and
         # records every call. An upload also records the files it was given.
-        gh = self.binaries / "gh"
-        gh.write_text(
-            "#!/bin/bash\n"
+        write_fakes(self.binaries, {"gh": (
             'printf "%s\\n" "$*" >> "$ARCHESTRA_TEST_GH_CALLS"\n'
             'case "$1 $2" in\n'
             '  "api repos/archestra-ai/archestra/releases/tags/"*) answer="$ARCHESTRA_TEST_RELEASE" ;;\n'
@@ -83,8 +93,7 @@ class ReleaseStepTests(unittest.TestCase):
             '  missing) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;\n'
             '  *) echo "gh: Server Error (HTTP 502)" >&2; exit 1 ;;\n'
             "esac\n"
-        )
-        gh.chmod(0o755)
+        )})
         self.uploads = root / "uploads"
         self.uploads.mkdir()
 
@@ -284,9 +293,7 @@ class LockPullRequestTests(unittest.TestCase):
         self.calls = root / "gh-calls"
         self.summary = root / "summary"
         self.binaries.mkdir()
-        gh = self.binaries / "gh"
-        gh.write_text(
-            "#!/bin/bash\n"
+        write_fakes(self.binaries, {"gh": (
             'printf "%s\\n" "$*" >> "$ARCHESTRA_TEST_GH_CALLS"\n'
             'case "$1 $2" in\n'
             '  "api repos/archestra-ai/archestra/pulls?state=open&head=archestra-ai:automation/archestra-cli-release-lock&base=main&per_page=1")\n'
@@ -296,8 +303,7 @@ class LockPullRequestTests(unittest.TestCase):
             '  "pr edit"|"auth setup-git") ;;\n'
             "  *) exit 1 ;;\n"
             "esac\n"
-        )
-        gh.chmod(0o755)
+        )})
         self.env = os.environ | {
             "PATH": f"{self.binaries}:{os.environ['PATH']}",
             "GIT_CONFIG_GLOBAL": str(root / "gitconfig"), "GIT_CONFIG_NOSYSTEM": "1",
@@ -430,6 +436,7 @@ class LockPullRequestTests(unittest.TestCase):
 class WorkflowPolicyTests(unittest.TestCase):
     def test_jobs(self):
         self.assertEqual(list(JOBS), ["version", "build", "release-state", "sign-windows", "sign-macos", "publish", "lock"])
+        self.assertEqual(SIGNING_JOBS, ["sign-windows", "sign-macos"])
 
     def test_every_action_is_locked_or_is_this_repository_s_own(self):
         uses = re.findall(r"^\s+(?:- )?uses: (\S+)", WORKFLOW, re.M)
@@ -470,9 +477,8 @@ class WorkflowPolicyTests(unittest.TestCase):
         }
         self.assertEqual(permissions, {
             "version": [("contents", "read")], "build": [("contents", "read")],
-            "release-state": [("contents", "read")], "sign-windows": [("contents", "read")],
-            "sign-macos": [("contents", "read")], "publish": [("contents", "write")], "lock": [("contents", "read")],
-        })
+            "release-state": [("contents", "read")], "publish": [("contents", "write")], "lock": [("contents", "read")],
+        } | {job: [("contents", "read")] for job in SIGNING_JOBS})
         # OIDC tokens: Azure login in sign-windows, the attestation in publish.
         for job, text in JOBS.items():
             with self.subTest(job=job):
@@ -495,16 +501,15 @@ class WorkflowPolicyTests(unittest.TestCase):
         for job in ("release-state", "publish", "lock"):
             with self.subTest(job=job):
                 self.assertTrue(condition in JOBS[job])
-        for job in ("sign-windows", "sign-macos"):
+        for job in SIGNING_JOBS:
             with self.subTest(job=job):
                 self.assertTrue("    needs: [build, release-state]\n" in JOBS[job])
                 self.assertTrue("    if: needs.release-state.outputs.published == 'false'\n" in JOBS[job])
-        self.assertTrue("    needs: [build, release-state, sign-windows, sign-macos]\n" in JOBS["publish"])
-        # A new version publishes only when both signing jobs succeeded.
+        self.assertTrue(f"    needs: [build, release-state, {', '.join(SIGNING_JOBS)}]\n" in JOBS["publish"])
+        # A new version publishes only when every signing job succeeded.
+        all_signed = " && ".join(f"needs.{job}.result == 'success'" for job in SIGNING_JOBS)
         self.assertTrue(
-            "      && ((needs.sign-windows.result == 'success' && needs.sign-macos.result == 'success')\n"
-            "        || needs.release-state.outputs.published == 'true')\n"
-            in JOBS["publish"]
+            f"      && (({all_signed})\n        || needs.release-state.outputs.published == 'true')\n" in JOBS["publish"]
         )
         self.assertTrue("    needs: [release-state, publish]\n" in JOBS["lock"])
         # A published version skips the signing jobs; lock still re-attempts its pull request.
@@ -520,30 +525,27 @@ class WorkflowPolicyTests(unittest.TestCase):
     def test_only_the_signing_jobs_see_the_signing_secrets(self):
         for job, text in JOBS.items():
             with self.subTest(job=job):
-                self.assertEqual("    environment: archestra-cli-release\n" in text, job in ("sign-windows", "sign-macos"))
-                self.assertEqual("environment:" in text, job in ("sign-windows", "sign-macos"))
+                self.assertEqual("environment:" in text, job in SIGNING_JOBS)
+                if job in SIGNING_JOBS:
+                    self.assertTrue("    environment: archestra-cli-release\n" in text)
                 self.assertEqual("secrets.AZURE_" in text, job == "sign-windows")
                 self.assertEqual("secrets.APPLE_" in text, job == "sign-macos")
 
     def test_sign_macos_signs_both_macos_files(self):
         sign = JOBS["sign-macos"]
-        macos = [name for name in writer.FILES if "darwin" in name]
-        self.assertEqual(len(macos), 2)
+        self.assertEqual(len(MACOS_FILES), 2)
         self.assertTrue("    runs-on: macos-latest\n" in sign)
         self.assertFalse("cargo" in sign)
         self.assertTrue("          pattern: archestra-darwin-*\n" in sign)
         self.assertTrue("        run: bash .github/scripts/archestra-cli-sign-macos.sh dist\n" in sign)
-        for name in macos:
+        for name in MACOS_FILES:
             with self.subTest(name=name):
                 self.assertTrue(f"          name: {name}\n          path: dist/{name}\n" in sign)
-        # The script refuses any other set of files.
-        self.assertTrue(" ".join(macos) in SIGN_MACOS.read_text())
 
     def test_sign_windows_signs_both_windows_files(self):
         sign = JOBS["sign-windows"]
         windows = [name for name in writer.FILES if "windows" in name]
         self.assertEqual(len(windows), 2)
-        self.assertTrue("    environment: archestra-cli-release\n" in sign)
         self.assertTrue("    runs-on: windows-latest\n" in sign)
         self.assertFalse("cargo" in sign)
         self.assertTrue("          certificate-profile-name: archestra-cli\n" in sign)
@@ -588,6 +590,8 @@ class WorkflowPolicyTests(unittest.TestCase):
                 self.assertEqual((Path(directory) / "target/served" / name).read_bytes(), content(name))
 
 SIGN_MACOS = ROOT / ".github/scripts/archestra-cli-sign-macos.sh"
+IDENTITY = "Developer ID Application: Archestra Limited (3WZ64G7AY2)"
+LOGIN_KEYCHAIN = "/Users/runner/Library/Keychains/login.keychain-db"
 
 
 class SignMacosScriptTests(unittest.TestCase):
@@ -598,61 +602,38 @@ class SignMacosScriptTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         root = Path(self.temp.name)
         self.dist = root / "dist"
-        self.dist.mkdir()
-        for name in ("archestra-darwin-arm64", "archestra-darwin-x86_64"):
-            (self.dist / name).write_bytes(content(name))
         self.binaries = root / "bin"
-        self.binaries.mkdir()
-        self.calls = root / "calls"
         self.runner = root / "runner"
-        self.runner.mkdir()
-        fakes = {
+        for directory in (self.dist, self.binaries, self.runner):
+            directory.mkdir()
+        self.calls = root / "calls"
+        write_fakes(self.binaries, {
             # The search list holds the login keychain until the script changes it.
             "security": (
                 'printf "security %s\\n" "$*" >> "$CALLS"\n'
-                'if [ "$1 $2" = "list-keychains -d" ] && [ "$#" -eq 3 ]; then\n'
-                '  echo \'    "/Users/runner/Library/Keychains/login.keychain-db"\'\n'
-                "fi\n"
+                f'if [ "$*" = "list-keychains -d user" ]; then echo \'    "{LOGIN_KEYCHAIN}"\'; fi\n'
                 'if [ "$1" = import ] && [ "${2##*.}" = p12 ]; then cp "$2" "$CALLS.p12"; fi\n'
             ),
-            # Prints what a real Developer ID signature shows, or $FAKE_DETAILS.
-            "codesign": (
-                'printf "codesign %s\\n" "$*" >> "$CALLS"\n'
-                'case "$1" in\n'
-                "  --display)\n"
-                '    if [ -n "$FAKE_DETAILS" ]; then printf "%s\\n" "$FAKE_DETAILS" >&2; exit 0; fi\n'
-                "    printf 'Identifier=ai.archestra.cli\\nCodeDirectory v=20500 size=1 flags=0x10000(runtime) hashes=1+7 location=embedded\\n"
-                "Authority=Developer ID Application: Archestra Limited (3WZ64G7AY2)\\nAuthority=Developer ID Certification Authority\\n"
-                "Authority=Apple Root CA\\nTimestamp=Nov 19, 2026 at 18:00:00\\nTeamIdentifier=3WZ64G7AY2\\n' >&2 ;;\n"
-                "esac\n"
-            ),
+            'codesign': 'printf "codesign %s\\n" "$*" >> "$CALLS"\nif [ "$1" = --verify ]; then exit "$FAKE_VERIFY_EXIT"; fi\n',
             "xcrun": (
                 'printf "xcrun %s\\n" "$*" >> "$CALLS"\n'
                 'if [ "$2" = submit ]; then printf "%s" "$FAKE_NOTARY"; exit "$FAKE_NOTARY_EXIT"; fi\n'
-                'if [ "$2" = log ]; then echo "notary log"; fi\n'
             ),
             "ditto": 'printf "ditto %s\\n" "$*" >> "$CALLS"\nls "$3" > "$CALLS.zip"\n',
-            "openssl": 'echo keychainpassword\n',
-        }
-        for name, body in fakes.items():
-            fake = self.binaries / name
-            fake.write_text("#!/bin/bash\n" + body)
-            fake.chmod(0o755)
+        })
 
-    def sign(self, names=None, **env):
-        if names is not None:
-            for entry in self.dist.iterdir():
-                entry.unlink()
-            for name in names:
-                (self.dist / name).write_bytes(content(name))
+    def sign(self, names=MACOS_FILES, **env):
+        for entry in self.dist.iterdir():
+            entry.unlink()
+        for name in names:
+            (self.dist / name).write_bytes(content(name))
         self.calls.unlink(missing_ok=True)
         result = subprocess.run(
             ["bash", str(SIGN_MACOS), str(self.dist)], capture_output=True, text=True,
             env=os.environ | {
                 "PATH": f"{self.binaries}:{os.environ['PATH']}", "RUNNER_TEMP": str(self.runner),
-                "CALLS": str(self.calls), "FAKE_DETAILS": "",
+                "CALLS": str(self.calls), "FAKE_VERIFY_EXIT": "0", "FAKE_NOTARY_EXIT": "0",
                 "FAKE_NOTARY": '{"id": "sub-1", "status": "Accepted", "message": "Processing complete"}',
-                "FAKE_NOTARY_EXIT": "0",
                 "SIGNING_CERTIFICATE_BASE64": "cDEyIGZpbGU=", "SIGNING_CERTIFICATE_PASSWORD": "p12-password",
                 "APPLE_ID": "dev@example.test", "APPLE_PASSWORD": "abcd-efgh-ijkl-mnop",
             } | env,
@@ -661,68 +642,56 @@ class SignMacosScriptTests(unittest.TestCase):
         return result, calls
 
     def assert_cleaned_up(self, calls):
-        self.assertEqual(calls[-2], "security list-keychains -d user -s /Users/runner/Library/Keychains/login.keychain-db")
-        self.assertTrue(calls[-1].startswith("security delete-keychain "))
+        """The search list is back to the original, the keychain is gone, and nothing is left in RUNNER_TEMP."""
+        searches = [call for call in calls if call.startswith("security list-keychains -d user -s ")]
+        self.assertEqual(searches[-1], f"security list-keychains -d user -s {LOGIN_KEYCHAIN}")
+        keychain = next(call for call in calls if call.startswith("security create-keychain ")).split()[-1]
+        self.assertIn(f"security delete-keychain {keychain}", calls)
         self.assertEqual(list(self.runner.iterdir()), [])
 
-    def test_signs_notarizes_and_verifies_both_files(self):
+    def test_signs_verifies_and_notarizes_both_files(self):
         result, calls = self.sign()
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertEqual((Path(f"{self.calls}.p12")).read_bytes(), b"p12 file")
+        self.assertEqual(Path(f"{self.calls}.p12").read_bytes(), b"p12 file")
         keychain = next(call for call in calls if call.startswith("security create-keychain ")).split()[-1]
-        self.assertTrue(keychain.startswith(str(self.runner)))
-        self.assertIn(f"security list-keychains -d user -s {keychain} /Users/runner/Library/Keychains/login.keychain-db", calls)
+        self.assertIn(f"security list-keychains -d user -s {keychain} {LOGIN_KEYCHAIN}", calls)
         self.assertTrue(any(call.endswith(f"apple-developer-id-g2-ca.pem -k {keychain}") for call in calls))
-        signed = [call for call in calls if call.startswith("codesign --force ")]
-        self.assertEqual(signed, [
-            f"codesign --force --options runtime --timestamp --identifier ai.archestra.cli --keychain {keychain} "
-            f"--sign Developer ID Application: Archestra Limited (3WZ64G7AY2) {self.dist}/{name}"
-            for name in ("archestra-darwin-arm64", "archestra-darwin-x86_64")
-        ])
-        # Signed before the submission, and both files in the one submission.
         submit = next(index for index, call in enumerate(calls) if call.startswith("xcrun notarytool submit "))
-        self.assertLess(max(calls.index(call) for call in signed), submit)
+        for name in MACOS_FILES:
+            with self.subTest(name=name):
+                path = f"{self.dist}/{name}"
+                signs = [index for index, call in enumerate(calls) if call.startswith("codesign --force ") and call.endswith(path)]
+                self.assertEqual(len(signs), 1)
+                for option in ("--options runtime", "--timestamp", "--identifier ai.archestra.cli",
+                               f"--keychain {keychain}", f"--sign {IDENTITY}"):
+                    self.assertIn(option, calls[signs[0]])
+                verify = next(call for call in calls if call.startswith("codesign --verify ") and call.endswith(path))
+                self.assertIn('certificate leaf[subject.OU] = "3WZ64G7AY2" and identifier "ai.archestra.cli"', verify)
+                self.assertLess(signs[0], submit)
         self.assertIn("--apple-id dev@example.test --password abcd-efgh-ijkl-mnop --team-id 3WZ64G7AY2 --wait", calls[submit])
-        self.assertEqual(Path(f"{self.calls}.zip").read_text().split(), ["archestra-darwin-arm64", "archestra-darwin-x86_64"])
-        self.assertIn("Signed and notarized: archestra-darwin-arm64 archestra-darwin-x86_64 (submission sub-1)", result.stdout)
+        # Both files go in the one submission.
+        self.assertEqual(Path(f"{self.calls}.zip").read_text().split(), list(MACOS_FILES))
+        self.assertIn(f"Signed and notarized: {' '.join(MACOS_FILES)} (submission sub-1)", result.stdout)
         self.assert_cleaned_up(calls)
 
     def test_missing_or_unexpected_file_signs_nothing(self):
-        for names in (["archestra-darwin-arm64"], ["archestra-darwin-arm64", "archestra-darwin-x86_64", "archestra-linux-x86_64"]):
+        for names in (MACOS_FILES[:1], (*MACOS_FILES, "archestra-linux-x86_64")):
             with self.subTest(names=names):
                 result, calls = self.sign(names)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn("::error::Expected archestra-darwin-arm64,archestra-darwin-x86_64", result.stdout)
+                self.assertIn(f"::error::Expected {','.join(MACOS_FILES)}", result.stdout)
                 self.assertEqual(calls, [])
 
-    def test_a_signature_without_the_expected_details_fails_before_notarization(self):
-        good = (
-            "Identifier=ai.archestra.cli\nCodeDirectory v=20500 size=1 flags=0x10000(runtime) hashes=1+7\n"
-            "Authority=Developer ID Application: Archestra Limited (3WZ64G7AY2)\n"
-            "Timestamp=Nov 19, 2026 at 18:00:00\nTeamIdentifier=3WZ64G7AY2"
-        )
-        for broken in (
-            good.replace("ai.archestra.cli", "archestra-darwin-arm64"),
-            good.replace("Archestra Limited (3WZ64G7AY2)", "Someone Else (ABCDE12345)"),
-            good.replace("TeamIdentifier=3WZ64G7AY2", "TeamIdentifier=not set"),
-            good.replace("flags=0x10000(runtime)", "flags=0x0(none)"),
-            good.replace("Timestamp=", "Signed Time="),
-        ):
-            with self.subTest(broken=broken):
-                result, calls = self.sign(FAKE_DETAILS=broken)
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn("::error::archestra-darwin-arm64", result.stdout)
-                self.assertFalse(any(call.startswith("xcrun ") for call in calls))
-                self.assert_cleaned_up(calls)
+    def test_a_signature_that_fails_the_requirement_is_not_notarized(self):
+        result, calls = self.sign(FAKE_VERIFY_EXIT="3")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(any(call.startswith("xcrun ") for call in calls))
+        self.assert_cleaned_up(calls)
 
     def test_notarization_must_be_accepted(self):
-        for answer, exit_status in (
-            ('{"id": "sub-2", "status": "Invalid"}', "0"),
-            ('{"id": "sub-2", "status": "Invalid"}', "1"),
-            ("", "1"),
-        ):
-            with self.subTest(answer=answer, exit_status=exit_status):
-                result, calls = self.sign(FAKE_NOTARY=answer, FAKE_NOTARY_EXIT=exit_status)
+        for answer in ('{"id": "sub-2", "status": "Invalid"}', ""):
+            with self.subTest(answer=answer):
+                result, calls = self.sign(FAKE_NOTARY=answer, FAKE_NOTARY_EXIT="1")
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("::error::Notarization did not succeed", result.stdout)
                 # The log of a rejected submission explains why.

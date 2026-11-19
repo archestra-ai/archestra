@@ -3,7 +3,6 @@ import { ApiError } from "@archestra/shared/types";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import type { Bedrock, OpenAi, StreamAccumulatorState } from "@/types";
 import { assertModelRouterCacheControls } from "../model-router-cache-controls";
-import { assertUnstructuredResponseFormat } from "../translated-response-format";
 import type { OpenAiStreamUsage } from "./openai-sse-chunk";
 import { parseJsonObject } from "./openai-translator-utils";
 
@@ -41,7 +40,6 @@ type Loose = any;
  * entire LLM-proxy pipeline sees Converse shapes.
  */
 export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
-  assertUnstructuredResponseFormat(req, "the Bedrock Converse translation");
   assertModelRouterCacheControls("bedrock", req);
   const loose = req as Loose;
   const system: NonNullable<BedrockRequest["system"]> = [];
@@ -112,6 +110,7 @@ export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
   const inferenceConfig = buildInferenceConfig(loose);
   const toolConfig = buildToolConfig(loose);
   const reasoningFields = buildReasoningFields(req);
+  const outputConfig = buildOutputConfig(req);
 
   const converseBody: BedrockRequest = {
     modelId: req.model,
@@ -124,6 +123,7 @@ export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
   if (reasoningFields) {
     converseBody.additionalModelRequestFields = reasoningFields;
   }
+  if (outputConfig) converseBody.outputConfig = outputConfig;
 
   const openaiContext: OpenaiContext = {
     chatcmplId: newChatcmplId(),
@@ -829,6 +829,31 @@ function buildToolConfig(
   }
 
   return cfg;
+}
+
+/**
+ * Converse enforces a JSON Schema but has no JSON mode. A `json_schema` format
+ * becomes the native constraint; `json_object` is sent without one, so the
+ * prompt alone asks for JSON.
+ */
+function buildOutputConfig(req: OpenAiRequest): BedrockRequest["outputConfig"] {
+  const format = req.response_format;
+  if (format?.type !== "json_schema" || !format.json_schema.schema) {
+    return undefined;
+  }
+  const { name, description, schema } = format.json_schema;
+  return {
+    textFormat: {
+      type: "json_schema",
+      structure: {
+        jsonSchema: {
+          schema: JSON.stringify(schema),
+          name,
+          ...(description ? { description } : {}),
+        },
+      },
+    },
+  };
 }
 
 /** Reject unverified dialects rather than silently dropping a caller's effort. */

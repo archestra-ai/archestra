@@ -62,6 +62,7 @@ import {
 } from "@/observability/session-summary";
 import { parseClaudeMetadataParentSessionId } from "@/routes/proxy/utils/headers/session-id";
 import type {
+  ConversationChatError,
   CopilotCredentialSource,
   InsertInteraction,
   Interaction,
@@ -83,6 +84,7 @@ import {
 import type { AttributionLabels } from "@/types/attribution-label";
 import type { InsertRoutingUsage } from "@/types/auto-routing";
 import {
+  InteractionErrorResponseSchema,
   type InteractionSessionPreview,
   InteractionSessionPreviewSchema,
 } from "@/types/interaction";
@@ -981,6 +983,7 @@ class InteractionModel {
           attempt: schema.interactionsTable.attempt,
           attemptOutcome: schema.interactionsTable.attemptOutcome,
           failureReason: schema.interactionsTable.failureReason,
+          failed: sql<boolean>`COALESCE(${schema.interactionsTable.failed}, false)`,
           source: schema.interactionsTable.source,
           autoRouted: sql<boolean>`EXISTS (
             SELECT 1 FROM ${schema.routingUsageTable}
@@ -1620,7 +1623,13 @@ class InteractionModel {
         { entityType: "virtual_key", entityId: interaction.virtualKeyId },
         {
           entityType: "llm_oauth_client",
-          entityId: interaction.authenticatedAppId,
+          // Audit app identity can accompany non-OAuth credentials. Only
+          // actual OAuth authentication accrues application-limit usage.
+          entityId:
+            interaction.authMethod === "oauth_client_credentials" ||
+            interaction.authMethod === "oauth_user"
+              ? interaction.authenticatedAppId
+              : undefined,
         },
         {
           entityType: "virtual_key",
@@ -1656,6 +1665,38 @@ class InteractionModel {
    * The previous approach used ARRAY_AGG with FILTER on request::text which was O(n) on JSON size
    * and caused 17+ second queries due to scanning megabytes of JSON per session.
    */
+  /**
+   * The errors Archestra Chat showed for a session's conversation (its id is
+   * the session id), oldest first. Empty when the caller cannot see the
+   * session or the session is no chat conversation. Encrypted-chat errors come
+   * back as the locked sentinel, as on the request detail endpoint.
+   */
+  static async findSessionChatErrors(params: {
+    sessionId: string;
+    organizationId: string;
+    /** Limits the check to this user's requests; omit for `log:admin`. */
+    userId?: string;
+  }): Promise<ConversationChatError[]> {
+    if (!isUuid(params.sessionId)) return [];
+    const access = await InteractionModel.buildSessionConditions(
+      undefined,
+      undefined,
+      {
+        organizationId: params.organizationId,
+        userId: params.userId,
+        sessionId: params.sessionId,
+      },
+    );
+    if (access === SESSION_ACCESS_DENIED) return [];
+    const [visible] = await db
+      .select({ id: schema.interactionsTable.id })
+      .from(schema.interactionsTable)
+      .where(access)
+      .limit(1);
+    if (!visible) return [];
+    return ConversationChatErrorModel.findByConversation(params.sessionId);
+  }
+
   static async getSessions(
     pagination: PaginationQuery,
     requestingUserId?: string,
@@ -2594,6 +2635,13 @@ class InteractionModel {
         interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
         requestCount: count(),
         failedOverCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.attemptOutcome} = 'failed_over')`,
+        // Failed-over attempts are counted above: a pool retried them, so the
+        // request itself did not fail.
+        failedRequestCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.failed} AND ${schema.interactionsTable.attemptOutcome} IS DISTINCT FROM 'failed_over')`,
+        // Errors the Archestra Chat showed for the conversation whose id is
+        // the session id, by the indexed conversation id (same uuid guard as
+        // conversationTitle below).
+        chatErrorCount: sql<number>`(SELECT COUNT(*) FROM ${schema.conversationChatErrorsTable} WHERE ${schema.conversationChatErrorsTable.conversationId} = CASE WHEN MAX(${schema.interactionsTable.sessionId}) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN MAX(${schema.interactionsTable.sessionId})::uuid END)`,
         totalDurationMs: sum(schema.interactionsTable.durationMs),
         totalInputTokens: sum(schema.interactionsTable.inputTokens),
         totalOutputTokens: sum(schema.interactionsTable.outputTokens),
@@ -2758,6 +2806,8 @@ class InteractionModel {
         interactionId: s.interactionId, // Only set for single interactions (null session)
         requestCount: Number(s.requestCount),
         failedOverCount: Number(s.failedOverCount),
+        failedRequestCount: Number(s.failedRequestCount),
+        chatErrorCount: Number(s.chatErrorCount),
         totalDurationMs:
           s.totalDurationMs === null ? null : Number(s.totalDurationMs),
         totalInputTokens: Number(s.totalInputTokens) || 0,
@@ -3656,6 +3706,10 @@ class InteractionModel {
     const sanitized = {
       ...record,
       environmentId,
+      // Read from the raw response: the stored one may be withheld or
+      // encrypted, and aggregates must not need the payload.
+      failed: InteractionErrorResponseSchema.safeParse(columns.response)
+        .success,
       request: stripUnstorableChars(record.request),
       processedRequest: stripUnstorableChars(record.processedRequest),
       response: stripUnstorableChars(record.response),

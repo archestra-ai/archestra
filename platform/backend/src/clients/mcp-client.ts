@@ -4406,12 +4406,15 @@ class McpClient {
               : Math.max(0, Math.round(performance.now() - params.startedAt)),
           toolCall: storedToolCall,
           toolResult: storedToolResult,
-          userId: authInfo?.userId ?? null,
+          userId: authInfo?.serviceAccountId
+            ? null
+            : (authInfo?.userId ?? null),
           runId: authInfo?.runId ?? null,
           sessionId: authInfo?.llmSessionId ?? null,
           llmToolCallId: authInfo?.llmToolCallId ?? null,
           authMethod: authInfo?.authMethod ?? null,
           oauthClientId: authInfo?.oauthClientId ?? null,
+          serviceAccountId: authInfo?.serviceAccountId ?? null,
           source: authInfo?.source ?? null,
           credentialClientId: authInfo?.credentialClientId ?? null,
           credentialClientType: authInfo?.credentialClientType ?? null,

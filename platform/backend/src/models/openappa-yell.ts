@@ -5,10 +5,12 @@ import {
   eq,
   exists,
   getTableColumns,
+  gte,
   ilike,
   inArray,
   isNotNull,
   isNull,
+  lte,
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
@@ -33,6 +35,9 @@ import { normalizeByteaField } from "@/utils/normalize-bytea";
  * (such as `user:<id>`) when `callerId` is set.
  */
 type YellScope = { organizationId: string; callerId?: string };
+
+/** A yell's creation time at the precision a cursor carries. */
+const CREATED_MS = sql`date_trunc('milliseconds', ${table.createdAt})`;
 
 export default class OpenAppaYellModel {
   static async findByIdForAudit(id: string, organizationId: string) {
@@ -67,7 +72,7 @@ export default class OpenAppaYellModel {
   /**
    * Records calls the platform let through under the Break the glass
    * settings. Repeats of the same tool and kind in a session add to one
-   * unresolved yell, so a looping agent does not flood the Yells tab; once
+   * unresolved yell, so a looping agent does not flood the Guardrails log; once
    * resolved, the next repeat raises it again as a new yell. `calls` is how
    * many distinct calls this record stands for; the caller counts a call once.
    */
@@ -107,7 +112,7 @@ export default class OpenAppaYellModel {
           table.toolCallId,
         ],
         // A resolved yell is raised again as a new one: its count and age
-        // start over, so the Yells tab lists it as new.
+        // start over, so the Guardrails log lists it as new.
         set: {
           count: sql`case when ${table.resolvedAt} is null then ${table.count} + ${calls} else ${calls} end`,
           createdAt: sql`case when ${table.resolvedAt} is null then ${table.createdAt} else now() end`,
@@ -207,7 +212,8 @@ export default class OpenAppaYellModel {
   }
 
   static async list(
-    params: OpenAppaYellQuery & YellScope & { sessionId?: string },
+    params: OpenAppaYellQuery &
+      YellScope & { sessionId?: string; from?: Date; to?: Date },
   ) {
     const position = decodeCursor(params.cursor);
     const validCursor =
@@ -227,6 +233,8 @@ export default class OpenAppaYellModel {
               ? isNotNull(table.resolvedAt)
               : undefined,
           params.sessionId ? eq(table.sessionId, params.sessionId) : undefined,
+          params.from ? gte(table.createdAt, params.from) : undefined,
+          params.to ? lte(table.createdAt, params.to) : undefined,
           // OpenAPPA's session id is the caller scope, `|`, then the client's
           // own session id, which is the LLM session id.
           params.llmSessionId
@@ -238,12 +246,16 @@ export default class OpenAppaYellModel {
                 `%${params.search.replace(/[\\%_]/g, "\\$&")}%`,
               )
             : undefined,
+          // The cursor carries milliseconds and the column microseconds:
+          // both sides are compared, and the rows ordered, at the cursor's
+          // precision, so a row sharing the last one's millisecond is not
+          // skipped.
           validCursor
-            ? sql`(${table.createdAt}, ${table.id}) < (${position.value}::timestamptz, ${position.id}::uuid)`
+            ? sql`(${CREATED_MS}, ${table.id}) < (${position.value}::timestamptz, ${position.id}::uuid)`
             : undefined,
         ),
       )
-      .orderBy(desc(table.createdAt), desc(table.id))
+      .orderBy(desc(CREATED_MS), desc(table.id))
       .limit(params.limit + 1);
     return createCursorPaginatedResult(rows, params, (row) => ({
       value: row.createdAt.toISOString(),

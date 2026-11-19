@@ -692,17 +692,19 @@ export const SHOTS: Shot[] = [
   },
   {
     asset: "automated_screenshots/platform-openappa_validations",
-    route: () => "/openappa/validation",
+    route: () => "/openappa/policy",
     prepare: async (page) => {
+      // The first validation, open in the editor with its last run's result.
       await page
-        .getByText("Slack data can't go into a public GitHub issue")
+        .getByRole("button", { name: /\.appa/ })
         .first()
-        .waitFor();
+        .click();
+      await page.getByTestId("validation-status").waitFor();
     },
   },
   {
     asset: "automated_screenshots/platform-openappa_yells",
-    route: () => "/openappa/yells",
+    route: () => "/consults/logs?type=yell",
     prepare: async (page) => {
       await page
         .getByText("Blocked from opening an issue in acme/sdk")

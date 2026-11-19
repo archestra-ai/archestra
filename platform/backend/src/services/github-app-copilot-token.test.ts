@@ -103,6 +103,7 @@ describe("createGithubCopilotFetch with a GitHub App credential", () => {
     const headers = new Headers(fetchMock.mock.calls[1]?.[1]?.headers);
     expect(headers.get("authorization")).toBe("Bearer ghs_installation");
     expect(headers.get("copilot-integration-id")).toBe("copilot-developer-cli");
+    expect(headers.get("x-github-api-version")).toBe("2026-08-01");
     expect(headers.has("editor-version")).toBe(false);
   });
 

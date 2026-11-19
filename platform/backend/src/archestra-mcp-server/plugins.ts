@@ -610,9 +610,10 @@ function requireUserContext(context: ArchestraContext): UserContext | null {
 
 /**
  * TOOL_PERMISSIONS applies the action-specific role permission. Plugins are
- * executable bytes, so every tool beyond the metadata listing also needs
- * `update` on every plugin — the grant at `*` the retired `plugin:admin` role
- * action became — matching the REST routes (plugin.routes.ts).
+ * executable bytes, so reading them and changing or removing an existing
+ * plugin also need `update` on every plugin — the grant at `*` the retired
+ * `plugin:admin` role action became. Creating one takes `plugin:create` alone.
+ * Both match the REST routes (plugin.routes.ts).
  */
 async function pluginActionError(
   ctx: UserContext,
@@ -620,13 +621,14 @@ async function pluginActionError(
 ) {
   const [allowed, isPluginAdmin] = await Promise.all([
     userHasPermission(ctx.userId, ctx.organizationId, "plugin", action),
-    ResourcePermissions.allows({
-      userId: ctx.userId,
-      organizationId: ctx.organizationId,
-      resource: "plugin",
-      scope: "*",
-      action: "update",
-    }),
+    action === "create" ||
+      ResourcePermissions.allows({
+        userId: ctx.userId,
+        organizationId: ctx.organizationId,
+        resource: "plugin",
+        scope: "*",
+        action: "update",
+      }),
   ]);
   if (!allowed)
     return errorResult(`This tool also requires plugin:${action} permission.`);

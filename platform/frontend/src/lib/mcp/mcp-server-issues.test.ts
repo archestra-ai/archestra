@@ -2,6 +2,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type McpDeploymentStatusEntry,
+  withSharedMultitenantStatuses,
 } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
@@ -13,6 +14,7 @@ import {
   canFixInstall,
   canReinstallInstall,
   computeMcpServerIssues,
+  describeMcpServerIssue,
   describeOtherConnectionsReauth,
   facetIssues,
   type InstalledServerForIssues,
@@ -199,6 +201,79 @@ describe("computeMcpServerIssues", () => {
         mutedReason: null,
       },
     ]);
+  });
+
+  it("raises nothing for a multi-tenant install the runtime has no entry for while the shared pod runs", () => {
+    // A backend process that never loaded the newer install reports it "not
+    // created", but it shares the pod the team install shows running.
+    const issues = computeMcpServerIssues({
+      items: [item({ id: "a", multitenant: true })],
+      servers: [
+        server({ id: "personal", catalogId: "a" }),
+        server({
+          id: "team",
+          catalogId: "a",
+          ownerId: OTHER,
+          scope: "team",
+          teamId: "t1",
+        }),
+      ],
+      deploymentStatuses: {
+        personal: entry({
+          state: "not_created",
+          message: "Deployment not created",
+        }),
+        team: entry({
+          state: "running",
+          podName: "mcp-mt-a-pod",
+          deploymentName: "mcp-mt-a",
+        }),
+      },
+      viewer: member,
+    });
+    expect(issues.size).toBe(0);
+  });
+
+  it("reports a multi-tenant deployment that no install has as missing, not crashing", () => {
+    const issues = computeMcpServerIssues({
+      items: [item({ id: "a", multitenant: true })],
+      servers: [
+        server({ id: "s1", catalogId: "a" }),
+        server({ id: "s2", catalogId: "a", ownerId: OTHER }),
+      ],
+      deploymentStatuses: {
+        s1: entry({ state: "not_created", message: "Deployment not created" }),
+        s2: entry({ state: "not_created", message: "Deployment not created" }),
+      },
+      viewer: member,
+    });
+    const reported = issues.get("a") ?? [];
+    expect(reported).toEqual([
+      expect.objectContaining({
+        kind: "not-running",
+        noDeployment: true,
+        detail: null,
+      }),
+    ]);
+    expect(describeMcpServerIssue(reported[0]).what).toBe(
+      "No pod is running for this server, although it installed successfully.",
+    );
+  });
+
+  it("still describes a crashing pod as crashing", () => {
+    const issues = computeMcpServerIssues({
+      items: [item({ id: "a" })],
+      servers: [server({ id: "s1", catalogId: "a" })],
+      deploymentStatuses: {
+        s1: entry({ state: "failed", error: "CrashLoopBackOff" }),
+      },
+      viewer: member,
+    });
+    const reported = issues.get("a") ?? [];
+    expect(reported[0]).not.toHaveProperty("noDeployment");
+    expect(describeMcpServerIssue(reported[0]).what).toBe(
+      "The server keeps crashing after a successful install.",
+    );
   });
 
   it("fingerprints shared install failures independently of sibling order", () => {
@@ -835,5 +910,32 @@ describe("canReinstallInstall", () => {
         viewer: admin,
       }),
     ).toBe(true);
+  });
+});
+
+describe("withSharedMultitenantStatuses", () => {
+  it("gives installs without an entry the shared deployment's entry, preferring a running one", () => {
+    const running = entry({ state: "running", podName: "mcp-mt-pod" });
+    const statuses = withSharedMultitenantStatuses({
+      serverIds: ["missing", "cold", "stale", "live"],
+      deploymentStatuses: {
+        cold: entry({ state: "not_created" }),
+        stale: entry({ state: "failed", podName: "mcp-mt-pod" }),
+        live: running,
+      },
+    });
+    expect(statuses.missing).toBe(running);
+    expect(statuses.cold).toBe(running);
+    expect(statuses.stale.state).toBe("failed");
+  });
+
+  it("leaves every entry as reported when no install has a deployment", () => {
+    const deploymentStatuses = { s1: entry({ state: "not_created" }) };
+    expect(
+      withSharedMultitenantStatuses({
+        serverIds: ["s1", "s2"],
+        deploymentStatuses,
+      }),
+    ).toBe(deploymentStatuses);
   });
 });

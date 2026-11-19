@@ -210,6 +210,7 @@ async function logHandshake(params: {
       runId: runId ?? null,
       authMethod: deriveAuthMethod(tokenAuthContext) ?? null,
       oauthClientId: tokenAuthContext?.oauthClientId ?? null,
+      serviceAccountId: tokenAuthContext?.serviceAccountId ?? null,
       source: tokenAuthContext?.source ?? null,
     });
     fastify.log.trace({ profileId, method }, "Saved handshake request");

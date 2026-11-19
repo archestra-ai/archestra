@@ -25,7 +25,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { AlphaBadge } from "@/components/alpha-badge";
+import { BetaBadge } from "@/components/beta-badge";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { OpenAppaIcon } from "@/components/openappa-icon";
 import type { OverviewFact } from "@/components/overview-summary";
@@ -633,7 +633,7 @@ function CatalogItemDetails({
       title={
         <span className="flex min-w-0 items-center gap-2">
           <span className="min-w-0 truncate">{item.name}</span>
-          {item.serverType === "desktop_mcp" && <AlphaBadge />}
+          {item.serverType === "desktop_mcp" && <BetaBadge />}
         </span>
       }
       status={

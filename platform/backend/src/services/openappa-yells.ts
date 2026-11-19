@@ -34,7 +34,13 @@ export async function openAppaYellScope(params: {
 }
 
 export async function listOpenAppaYells(
-  params: OpenAppaYellQuery & { organizationId: string; userId: string },
+  params: OpenAppaYellQuery & {
+    organizationId: string;
+    userId: string;
+    /** Raised on or after, and on or before, these times. */
+    from?: Date;
+    to?: Date;
+  },
 ) {
   const result = await OpenAppaYellModel.list({
     ...params,

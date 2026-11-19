@@ -656,6 +656,100 @@ for (const stream of [false, true]) {
     expect(request.model).toBe("reasoning-pool");
   });
 
+  test(`records that a native Converse pool member answered without the refused outputConfig (stream=${stream})`, async () => {
+    const bodies: Record<string, unknown>[] = [];
+    bedrockServer.use(
+      http.post(
+        "https://bedrock.pool.test/model/:model/:operation",
+        async ({ request }) => {
+          const body = (await request.json()) as Record<string, unknown>;
+          bodies.push(body);
+          if (body.outputConfig)
+            return HttpResponse.json(
+              {
+                message:
+                  "This model doesn't support the outputConfig field. Remove outputConfig and try again.",
+              },
+              { status: 400 },
+            );
+          if (!stream)
+            return HttpResponse.json({
+              output: {
+                message: { role: "assistant", content: [{ text: "answer" }] },
+              },
+              stopReason: "end_turn",
+              usage: { inputTokens: 2, outputTokens: 2, totalTokens: 4 },
+            });
+          const events = [
+            ["messageStart", { role: "assistant" }],
+            [
+              "contentBlockDelta",
+              { contentBlockIndex: 0, delta: { text: "answer" } },
+            ],
+            ["contentBlockStop", { contentBlockIndex: 0 }],
+            ["messageStop", { stopReason: "end_turn" }],
+          ] as const;
+          return new HttpResponse(
+            Buffer.concat(
+              events.map(([type, eventBody]) =>
+                new EventStreamCodec(toUtf8, fromUtf8).encode({
+                  headers: {
+                    ":message-type": { type: "string", value: "event" },
+                    ":event-type": { type: "string", value: type },
+                    ":content-type": {
+                      type: "string",
+                      value: "application/json",
+                    },
+                  },
+                  body: fromUtf8(JSON.stringify(eventBody)),
+                }),
+              ),
+            ),
+            {
+              headers: { "content-type": "application/vnd.amazon.eventstream" },
+            },
+          );
+        },
+      ),
+    );
+    const transport = memberTransport({
+      inbound: "bedrock-converse",
+      provider: "bedrock",
+      modelId: "us.amazon.nova-lite-v1:0",
+      client: new BedrockClient({
+        baseUrl: "https://bedrock.pool.test",
+        region: "us-east-2",
+        apiKey: "synthetic-key",
+      }),
+    });
+    // The handler stores this object as the request sent to the model.
+    const request: Record<string, unknown> = {
+      modelId: "structured-pool",
+      messages: [{ role: "user", content: [{ text: "Reply OK." }] }],
+      outputConfig: {
+        textFormat: {
+          type: "json_schema",
+          structure: {
+            jsonSchema: { schema: '{"type":"object"}', name: "status_result" },
+          },
+        },
+      },
+      _isStreaming: stream,
+    };
+
+    const results = stream
+      ? await collect(await transport.executeStream(request))
+      : [await transport.execute(request)];
+
+    expect(JSON.stringify(results)).toContain("answer");
+    expect(bodies.map((body) => Boolean(body.outputConfig))).toEqual([
+      true,
+      false,
+    ]);
+    expect(request).not.toHaveProperty("outputConfig");
+    expect(request.modelId).toBe("structured-pool");
+  });
+
   test(`rejects an unsupported selected member instead of trusting a Nova pool alias (stream=${stream})`, async () => {
     const transport = memberTransport({
       inbound: "openai-chat",

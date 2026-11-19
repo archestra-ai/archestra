@@ -201,37 +201,6 @@ for (const width of [320, 375]) {
       expect(viewPolicy.x).toBeGreaterThan(sectionBox.x + sectionBox.width);
     });
 
-    test("a selected overflow tab fits the tab row instead of scrolling it", async ({
-      page,
-    }) => {
-      // Wait for the debounced inspection so teardown checks its MSW coverage.
-      const inspection = page.waitForResponse(
-        (response) =>
-          response.request().method() === "POST" &&
-          response.url().endsWith("/api/openappa/policy-tests/inspect"),
-      );
-      await page.goto("/openappa/validation");
-      await inspection;
-      const trigger = page.getByRole("button", {
-        name: "Validations",
-        exact: true,
-      });
-      await expect(trigger).toBeVisible();
-      const row = await trigger.locator("..").evaluate((element) => ({
-        scrollWidth: element.scrollWidth,
-        clientWidth: element.clientWidth,
-      }));
-      expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
-
-      // At common phone widths the label fits whole; narrower rows truncate it.
-      if (width >= 375) {
-        const truncated = await trigger
-          .getByText("Validations", { exact: true })
-          .evaluate((element) => element.scrollWidth > element.clientWidth);
-        expect(truncated).toBe(false);
-      }
-    });
-
     test("the Policy file button takes its own full-width row", async ({
       page,
     }) => {
@@ -254,6 +223,153 @@ for (const width of [320, 375]) {
       expect(select.y).toBeGreaterThanOrEqual(toggle.y + toggle.height);
       expect(select.width).toBeGreaterThan(width - 100);
       expect(select.x + select.width).toBeLessThanOrEqual(width);
+    });
+
+    test("the file tree opens over the editor, inside its frame, and a picked file closes it", async ({
+      page,
+      mswControl,
+    }) => {
+      await mswControl.registerMany([
+        {
+          method: "get",
+          url: "/api/openappa/policy-tests",
+          body: {
+            source: "local",
+            files: [
+              {
+                path: "mail/send-external.appa",
+                content: "# Mail stays inside\n",
+              },
+            ],
+            version: "v1",
+            sourceCommit: null,
+            directory: "tests",
+            activeDirectory: "tests",
+            error: null,
+          },
+        },
+        {
+          method: "post",
+          url: "/api/openappa/policy-tests/inspect",
+          body: { files: [{ path: "mail/send-external.appa", error: null }] },
+        },
+      ]);
+      await page.goto("/openappa/policy");
+      // The column beside the editor has no room on a phone.
+      const tree = page.getByRole("navigation", { name: "Policy files" });
+      await expect(tree).toBeHidden();
+
+      await page.getByRole("button", { name: "Files" }).click();
+      const file = tree.getByRole("button", { name: /send-external\.appa/ });
+      await expect(file).toBeVisible();
+      // The files lie over the editor, inside its frame, not over the page.
+      const editor = await page
+        .getByRole("tabpanel", { name: "Source" })
+        .boundingBox();
+      const box = await tree.boundingBox();
+      if (!box || !editor) throw new Error("Missing files panel");
+      expect(box.x).toBeGreaterThanOrEqual(editor.x);
+      expect(box.y).toBeGreaterThanOrEqual(editor.y);
+      expect(box.x + box.width).toBeLessThan(editor.x + editor.width);
+      expect(box.y + box.height).toBeLessThanOrEqual(
+        editor.y + editor.height + 1,
+      );
+
+      await file.click();
+      await expect(tree).toBeHidden();
+      await expect(page).toHaveURL(
+        /entry=validation%3Amail%2Fsend-external\.appa/,
+      );
+      await expect(
+        page.getByRole("textbox", {
+          name: "Policy validation mail/send-external.appa",
+        }),
+      ).toBeAttached();
+    });
+
+    test("the run output takes the problems panel, instead of splitting it", async ({
+      page,
+      mswControl,
+    }) => {
+      const path = "mail/send-external.appa";
+      await mswControl.registerMany([
+        {
+          method: "get",
+          url: "/api/openappa/policy-tests",
+          body: {
+            source: "local",
+            files: [{ path, content: "# Mail stays inside\n" }],
+            version: "v1",
+            sourceCommit: null,
+            directory: "tests",
+            activeDirectory: "tests",
+            error: null,
+          },
+        },
+        {
+          method: "post",
+          url: "/api/openappa/policy-tests/inspect",
+          body: { files: [{ path, error: null }] },
+        },
+        {
+          method: "get",
+          url: "/api/openappa/policy-tests/runs",
+          body: [
+            {
+              id: "run-1",
+              createdBy: "Pat Morgan",
+              createdAt: "2026-01-02T10:00:00.000Z",
+              trigger: "manual",
+              source: "local",
+              sourceVersion: "v1",
+              sourceCommit: null,
+              definitionHash: "definition",
+              policyRevision: 3,
+              policyHash: "policy",
+              effectivePolicyHash: "effective",
+              engineVersion: "1.0.0",
+              draft: false,
+              validation: { valid: true, errors: [], warnings: [] },
+              files: [
+                {
+                  path,
+                  contentHash: "a",
+                  assertionCount: 1,
+                  status: "failed",
+                  durationMs: 40,
+                  steps: [
+                    {
+                      line: 3,
+                      tool: "mcp/gmail/send_email",
+                      expected: "deny",
+                      actual: "allow",
+                      status: "failed",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+      await page.goto("/openappa/policy");
+      const panel = page.getByRole("region", { name: "Validation problems" });
+      const problem = panel.getByRole("button", {
+        name: /expected deny, got allow/,
+      });
+      await expect(problem).toBeVisible();
+
+      await panel.getByRole("button", { name: "Show output" }).click();
+      const output = panel.getByText(/line 3: mcp\/gmail\/send_email/);
+      await expect(output).toBeVisible();
+      await expect(problem).toBeHidden();
+      const log = await panel.locator("pre").boundingBox();
+      const frame = await panel.boundingBox();
+      if (!log || !frame) throw new Error("Missing output");
+      expect(log.width).toBeGreaterThan(frame.width - 4);
+
+      await panel.getByRole("button", { name: "Hide output" }).click();
+      await expect(problem).toBeVisible();
     });
   });
 }

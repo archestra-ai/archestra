@@ -169,15 +169,18 @@ export function AppearanceEditor({
         <SiteAnnouncement
           content={draft.notificationContent}
           expiresAt={draft.notificationExpiresAt}
+          dismissible={draft.notificationDismissible}
           disabled={!canEdit}
-          onChange={(content, expiresAt) => {
+          onChange={({ content, expiresAt, dismissible }) => {
             change("notificationContent", content);
             change("notificationExpiresAt", expiresAt);
+            change("notificationDismissible", dismissible);
             change("notificationDeleted", false);
           }}
           onRemove={() => {
             change("notificationContent", "");
             change("notificationExpiresAt", null);
+            change("notificationDismissible", true);
             change("notificationDeleted", true);
           }}
         />

@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import AppModel from "./app";
 import McpToolCallModel from "./mcp-tool-call";
+import ServiceAccountModel from "./service-account";
 
 describe("McpToolCallModel", () => {
   let agentId: string;
@@ -41,6 +42,34 @@ describe("McpToolCallModel", () => {
       expect(mcpToolCall.agentId).toBe(agentId);
       expect(mcpToolCall.mcpServerName).toBe("test-server");
       expect(mcpToolCall.method).toBe("tools/call");
+    });
+  });
+
+  test("keeps the audit row when its service account is deleted", async ({
+    makeOrganization,
+    makeServiceAccount,
+  }) => {
+    const organization = await makeOrganization();
+    const account = await makeServiceAccount(organization.id);
+    const created = await McpToolCallModel.create({
+      agentId,
+      mcpServerName: "test-server",
+      method: "tools/call",
+      toolCall: { id: "account-call", name: "testTool", arguments: {} },
+      toolResult: { isError: false, content: "Success" },
+      serviceAccountId: account.id,
+      oauthClientId: "synthetic-a2a-client",
+    });
+    expect(
+      (await McpToolCallModel.findById(created.id))?.serviceAccountId,
+    ).toBe(account.id);
+
+    await ServiceAccountModel.delete(account.id, organization.id);
+
+    expect(await McpToolCallModel.findById(created.id)).toMatchObject({
+      id: created.id,
+      serviceAccountId: null,
+      oauthClientId: "synthetic-a2a-client",
     });
   });
 

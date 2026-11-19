@@ -43,21 +43,19 @@ export function reviveJsonStrings(value: unknown): unknown {
 
 export type ReviewDecision = "approve" | "deny";
 
-export const REVIEW_STATUS_DESCRIPTION =
-  "Review this tool call before it can continue.";
-
 export type ReviewCardView = {
   /** Present when the review names a tool or carries arguments. */
   toolCard?: { title?: string; input?: unknown };
-  /** Visible review text, including any additional approval scope. */
-  description: string;
+  /** Each additional consequence stays visible as a separate list item. */
+  coverage?: string[];
+  /** Original review text for requests without a structured tool or coverage. */
+  details?: string;
 };
 
 /**
  * What the approval card shows. A review with a structured tool gets the tool
- * card and the standard prompt, followed by what approving also accepts, or
- * by the review text when that is unknown. One without a tool falls back to
- * its own message.
+ * card followed by what approving also accepts, or by the review text when
+ * that is unknown. One without a tool falls back to its own message.
  */
 export function getReviewCardView({
   message,
@@ -77,26 +75,22 @@ export function getReviewCardView({
     ? parseJsonArguments(reviewedArguments)
     : undefined;
   if (!tool && input === undefined) {
-    return { description: message.trim() || REVIEW_STATUS_DESCRIPTION };
+    const details = message.trim();
+    return details ? { details } : {};
   }
   // No coverage and no text: a request from before the platform sent either,
   // whose message is the review itself.
-  const details = reviewedCoverage
-    ? reviewedCoverage.length
-      ? [
-          "Approving also accepts:",
-          ...reviewedCoverage.map((line) => `  - ${line}`),
-        ].join("\n")
-      : undefined
-    : (reviewedText ?? message).trim();
+  const details =
+    reviewedCoverage === undefined
+      ? (reviewedText ?? message).trim()
+      : undefined;
   return {
     toolCard: {
       ...(tool ? { title: tool } : {}),
       ...(input !== undefined ? { input } : {}),
     },
-    description: details
-      ? [REVIEW_STATUS_DESCRIPTION, details].join("\n\n")
-      : REVIEW_STATUS_DESCRIPTION,
+    ...(reviewedCoverage?.length ? { coverage: reviewedCoverage } : {}),
+    ...(details ? { details } : {}),
   };
 }
 

@@ -219,7 +219,9 @@ test("a policy saved while a chat is open decides that chat's next call", async 
     await goToPage(page, "/openappa/policy");
     await page.getByRole("tab", { name: "Effective" }).click();
     await expect(
-      page.getByText(`Runtime revision ${followed.policyRevision} · published`),
+      page.getByText(
+        `Runtime revision ${followed.policyRevision} · in force since`,
+      ),
     ).toBeVisible();
   } finally {
     for (const mappingId of wireMockMappingIds) {

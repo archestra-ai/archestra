@@ -1,7 +1,8 @@
 "use client";
 
-import { CheckCircleIcon, ClockIcon } from "lucide-react";
+import { CheckCircleIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { Response } from "@/components/ai-elements/response";
 import {
   Tool,
   ToolContent,
@@ -12,7 +13,10 @@ import {
   getReviewCardView,
   type ReviewDecision,
 } from "@/components/chat/openappa-review-presentation";
-import { ToolStatusRow } from "@/components/chat/tool-status-row";
+import { Button } from "@/components/ui/button";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
+import { SkillApprovalInput } from "./skill-approval-input";
+import { getSkillApprovalView } from "./skill-approval-presentation";
 
 /**
  * An OpenAPPA review shown like Chat's tool approval: the reviewed tool's
@@ -39,6 +43,7 @@ export function OpenappaReviewToolCard({
   secondaryText?: ReactNode;
   onDecide: (decision: ReviewDecision) => void;
 }) {
+  const { getToolShortName } = useArchestraMcpIdentity();
   const view = getReviewCardView({
     message,
     ...(reviewedTool ? { reviewedTool } : {}),
@@ -47,13 +52,13 @@ export function OpenappaReviewToolCard({
     ...(reviewedText ? { reviewedText } : {}),
   });
   const hasInput = view.toolCard?.input !== undefined;
+  const skill = getSkillApprovalView(
+    reviewedTool ? getToolShortName(reviewedTool) : null,
+    reviewedArguments,
+  );
 
   return (
-    <Tool
-      id={id}
-      defaultOpen={hasInput}
-      className={hasInput ? "mb-0 cursor-pointer" : "mb-0"}
-    >
+    <Tool id={id} defaultOpen={hasInput} className="mb-0">
       {view.toolCard ? (
         <ToolHeader
           type={`tool-${view.toolCard.title ?? "call"}`}
@@ -64,34 +69,67 @@ export function OpenappaReviewToolCard({
       ) : null}
       {hasInput ? (
         <ToolContent>
-          <ToolInput input={view.toolCard?.input} />
+          {skill ? (
+            <SkillApprovalInput skill={skill} />
+          ) : (
+            <ToolInput input={view.toolCard?.input} />
+          )}
         </ToolContent>
       ) : null}
-      <ToolStatusRow
-        icon={<ClockIcon className="size-4 text-amber-600" />}
-        title="Approval required"
-        description={
-          <span className="whitespace-pre-wrap [overflow-wrap:anywhere]">
-            {view.description}
-          </span>
-        }
-        secondaryText={secondaryText}
-        actions={[
-          {
-            label: "Approve",
-            variant: "secondary",
-            icon: <CheckCircleIcon className="size-4" />,
-            disabled,
-            onClick: () => onDecide("approve"),
-          },
-          {
-            label: "Deny",
-            variant: "outline",
-            disabled,
-            onClick: () => onDecide("deny"),
-          },
-        ]}
-      />
+      <div className="space-y-3 p-3">
+        {view.coverage ? (
+          <div className="space-y-2 text-xs">
+            <p className="font-medium">Approving also accepts:</p>
+            <ul
+              aria-label="Approval consequences"
+              className="list-disc space-y-2 pl-4 text-muted-foreground"
+            >
+              {view.coverage.map((line, index) => (
+                <li
+                  // biome-ignore lint/suspicious/noArrayIndexKey: coverage is an immutable review snapshot and may repeat a line
+                  key={index}
+                  className="pl-1 leading-relaxed [overflow-wrap:anywhere]"
+                >
+                  <Response preserveLineBreaks>{line}</Response>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {view.details ? (
+          <p className="whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+            {view.details}
+          </p>
+        ) : null}
+        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border/60 pt-3">
+          {secondaryText ? (
+            <p className="mr-auto min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+              {secondaryText}
+            </p>
+          ) : null}
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={disabled}
+              onClick={() => onDecide("approve")}
+            >
+              <CheckCircleIcon className="size-4" />
+              <span>Approve</span>
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={disabled}
+              onClick={() => onDecide("deny")}
+            >
+              Deny
+            </Button>
+          </div>
+        </div>
+      </div>
     </Tool>
   );
 }

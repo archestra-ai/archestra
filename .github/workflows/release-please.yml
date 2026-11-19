@@ -682,6 +682,19 @@ jobs:
           RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}
         run: bash .github/scripts/release-publication-policy.sh
 
+      # The release commit's VEX document: release-publish.yml attests each
+      # image's statements next to its SBOMs (vex/README.md).
+      - name: Check the VEX document
+        run: python3 .github/scripts/vex.py validate
+
+      - name: Save the VEX document
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: release-vex
+          path: vex/archestra.openvex.json
+          if-no-files-found: error
+          overwrite: true
+
       - name: Download saved image references
         uses: $/.github/actions/github-download-artifact
         with:
@@ -794,7 +807,7 @@ jobs:
       id-token: write # sign the image contents attestations (release-publish.yml)
       attestations: write # store them
       packages: read # pull the staged images to scan them
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@7e99001200cbd9510a90930f78fd79d6b79cb94c # v1.28.0
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@960ee6eebe1113b84f90174734e639b99346db72 # vex-artifact (release before merging)
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser
@@ -803,6 +816,7 @@ jobs:
       images: ${{ needs.release-subjects.outputs.images }}
       latest: ${{ needs.release-subjects.outputs.latest }}
       chart-artifact: release-helm-chart
+      vex-artifact: release-vex
       wait: false
     secrets:
       APP_ID: ${{ secrets.APP_ID }}

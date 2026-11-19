@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Gemini, OpenAi } from "@/types";
+import { decodeSignedToolCallId } from "../utils/tool-call-ids";
 import {
   createOpenaiToGeminiStreamTranslator,
   geminiResponseToOpenai,
@@ -331,6 +332,29 @@ describe("Gemini 3 thought signature round-trip", () => {
     createdUnix: 1,
     requestedModel: "gemini-3.7-flash",
   };
+
+  test("calls Gemini gave no id are told apart, signed or not", () => {
+    const call = { functionCall: { name: "read", args: {} } };
+    const response = geminiResponseToOpenai(
+      {
+        candidates: [
+          {
+            finishReason: "STOP",
+            content: {
+              role: "model",
+              parts: [{ ...call, thoughtSignature: "sig" }, call, call],
+            },
+          },
+        ],
+      } as Gemini.Types.GenerateContentResponse,
+      ctx,
+    );
+
+    const ids = (response.choices[0].message.tool_calls ?? []).map(
+      (toolCall) => decodeSignedToolCallId(toolCall.id).id,
+    );
+    expect(new Set(ids).size).toBe(3);
+  });
 
   test("a functionCall's thoughtSignature survives the OpenAI wire format", () => {
     const response = geminiResponseToOpenai(

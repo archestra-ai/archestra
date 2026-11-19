@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { encodeSignedToolCallId } from "../adapters/gemini-openai-translator";
 import {
+  encodeSignedToolCallId,
   withOpenAiChatToolCallIds,
   withOpenAiResponsesToolCallIds,
   wordToolCallId,

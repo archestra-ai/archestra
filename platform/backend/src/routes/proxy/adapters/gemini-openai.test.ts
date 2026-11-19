@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { Gemini } from "@/types";
+import { decodeSignedToolCallId } from "../utils/tool-call-ids";
 import { makeGeminiOpenaiAdapterFactory } from "./gemini-openai";
-import { decodeSignedToolCallId } from "./gemini-openai-translator";
 import { GeminiToolNameCodec } from "./gemini-tool-names";
 
 describe("GeminiOpenaiResponseAdapter", () => {

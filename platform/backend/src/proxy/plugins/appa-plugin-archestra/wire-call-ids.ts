@@ -18,7 +18,7 @@ type ToolCall = LlmProxyToolCallsContext["toolCalls"][number];
 export class WireCallIds {
   private readonly wireIds = new Map<string, string>();
 
-  /** No id here is too long: both sides name every call the same way. */
+  /** Every id here is its own policy id: both sides name each call the same way. */
   get same(): boolean {
     return this.wireIds.size === 0;
   }

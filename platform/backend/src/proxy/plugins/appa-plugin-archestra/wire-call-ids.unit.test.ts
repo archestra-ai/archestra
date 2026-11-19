@@ -1,9 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { policyCallId } from "@/openappa/call-id";
 import { WireCallIds } from "./wire-call-ids";
 
 const longId = `gemsig-${"s".repeat(2000)}.gemini-call-read-1`;
-const policyId = policyCallId(longId);
+const policyId = "gemini-call-read-1";
 const proof = {
   name: "read",
   action: "read",

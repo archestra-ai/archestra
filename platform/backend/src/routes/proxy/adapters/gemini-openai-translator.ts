@@ -7,6 +7,10 @@ import { ApiError } from "@archestra/shared/types";
 import type { Gemini, OpenAi, UsageView } from "@/types";
 import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
 import { assertUnstructuredResponseFormat } from "../translated-response-format";
+import {
+  decodeSignedToolCallId,
+  encodeSignedToolCallId,
+} from "../utils/tool-call-ids";
 import { sanitizeGeminiToolSchema } from "./gemini-schema";
 import type { OpenAiStreamUsage } from "./openai-sse-chunk";
 import {
@@ -413,6 +417,7 @@ export function geminiResponseToOpenai(
     function: { name: string; arguments: string };
   }> = [];
   let text = "";
+  const callIdSeed = Date.now();
 
   // Blocked candidates carry a `finishReason` but no `content`.
   for (const part of candidate?.content?.parts ?? []) {
@@ -423,7 +428,11 @@ export function geminiResponseToOpenai(
     if ("functionCall" in part && part.functionCall) {
       toolCalls.push({
         id: encodeSignedToolCallId({
-          id: part.functionCall.id,
+          // Unique within the response, as the Gemini adapter's own are: a
+          // call is known by this id whether or not a signature rides with it.
+          id:
+            part.functionCall.id ??
+            `gemini-call-${part.functionCall.name}-${callIdSeed + toolCalls.length}`,
           name: part.functionCall.name,
           thoughtSignature:
             "thoughtSignature" in part ? part.thoughtSignature : undefined,
@@ -490,54 +499,6 @@ export function mapGeminiFinishReason(
   if (reason && reason !== "STOP") return "content_filter";
   return "stop";
 }
-
-/**
- * Gemini 3 rejects conversation history whose functionCall parts lack the
- * thoughtSignature they were produced with. The OpenAI chat wire format has
- * no field to carry one, but clients echo tool-call ids verbatim — so the
- * signature rides inside the id on the way to the client and is unpacked
- * (and stripped) on the way back upstream.
- */
-export function encodeSignedToolCallId(params: {
-  id: string | undefined;
-  name: string | undefined;
-  thoughtSignature: string | undefined;
-}): string {
-  const base = params.id ?? `gemini-call-${params.name ?? "fn"}-${Date.now()}`;
-  if (!params.thoughtSignature) {
-    return base;
-  }
-  const encoded = Buffer.from(params.thoughtSignature, "utf8").toString(
-    "base64url",
-  );
-  return `${SIGNED_TOOL_CALL_ID_PREFIX}${encoded}.${base}`;
-}
-
-export function decodeSignedToolCallId(id: string | undefined): {
-  id: string | undefined;
-  thoughtSignature: string | undefined;
-} {
-  if (!id?.startsWith(SIGNED_TOOL_CALL_ID_PREFIX)) {
-    return { id, thoughtSignature: undefined };
-  }
-  const rest = id.slice(SIGNED_TOOL_CALL_ID_PREFIX.length);
-  const dot = rest.indexOf(".");
-  if (dot < 0) {
-    return { id, thoughtSignature: undefined };
-  }
-  try {
-    return {
-      id: rest.slice(dot + 1),
-      thoughtSignature: Buffer.from(rest.slice(0, dot), "base64url").toString(
-        "utf8",
-      ),
-    };
-  } catch {
-    return { id, thoughtSignature: undefined };
-  }
-}
-
-const SIGNED_TOOL_CALL_ID_PREFIX = "gemsig-";
 
 // Gemini rejects a generateContent request whose `contents` ends with a
 // `model` turn ("Requests ending with a model turn are not supported."), but

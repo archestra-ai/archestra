@@ -29,7 +29,7 @@ export type CollectedChildReturns = {
 export function underPolicyCallIds(
   childReturns: CollectedChildReturns,
 ): CollectedChildReturns {
-  // One envelope can hold many returns: its id is digested once.
+  // One envelope can hold many returns: its policy id is worked out once.
   const policyIds = new Map<string, string>();
   const policyId = (wireId: string): string => {
     const known = policyIds.get(wireId);
@@ -1182,7 +1182,7 @@ const NATIVE_METADATA = /^[A-Za-z0-9_.:@/-]{1,512}$/;
 /**
  * A tool-call id a client echoes in a notification: the characters of other
  * native metadata, with room for a trajectory stamp around an id that carries
- * a thought signature. Policy knows a long one by its digest.
+ * a thought signature. Policy knows the call by its policy id.
  */
 const WIRE_CALL_ID = /^[A-Za-z0-9_.:@/-]{1,16384}$/;
 /** Copilot CLI's tool that reads what a background agent returned. */

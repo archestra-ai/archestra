@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { encodeSignedToolCallId } from "@/routes/proxy/adapters/gemini-openai-translator";
-import { policyCallId } from "./call-id";
+import { encodeSignedToolCallId } from "@/routes/proxy/utils/tool-call-ids";
+import { policyCallId, recordedCallId, recordsCall } from "./call-id";
 import { stampToolCallId } from "./trajectory-stamp";
 
 // The id the Gemini translation hands a client: the call's thought signature
@@ -30,12 +30,31 @@ describe("policyCallId", () => {
     );
   });
 
-  test("names a longer id by the same digest on every turn", () => {
+  test("knows a Gemini call by Gemini's id, whatever signature rides with it", () => {
     expect(Buffer.byteLength(geminiId)).toBeGreaterThan(1024);
-    const policyId = policyCallId(geminiId);
-    expect(policyId).toMatch(/^call_[0-9a-f]{32}$/);
-    expect(policyCallId(geminiId)).toBe(policyId);
-    expect(policyCallId(`${geminiId}x`)).not.toBe(policyId);
+    expect(policyCallId(geminiId)).toBe("gemini-call-read-1");
+    expect(
+      policyCallId(
+        encodeSignedToolCallId({
+          id: "gemini-call-read-1",
+          name: "read",
+          thoughtSignature: "short",
+        }),
+      ),
+    ).toBe("gemini-call-read-1");
+    expect(policyCallId(stamped(geminiId))).toBe("gemini-call-read-1");
+  });
+
+  test("names any other id over the limit by its digest", () => {
+    expect(policyCallId("c".repeat(257))).toBe(
+      "call_a76381a76b5d3069cde3a22ac82239c9",
+    );
+    expect(policyCallId(stamped("c".repeat(257)))).toBe(
+      "call_a76381a76b5d3069cde3a22ac82239c9",
+    );
+    expect(policyCallId(`gemsig-c2ln.${"c".repeat(257)}`)).toBe(
+      "call_a76381a76b5d3069cde3a22ac82239c9",
+    );
   });
 
   test("measures bytes, not characters", () => {
@@ -43,11 +62,22 @@ describe("policyCallId", () => {
     expect(policyCallId("é".repeat(129))).toMatch(/^call_[0-9a-f]{32}$/);
   });
 
-  test("gives a stamped id the policy id of the call inside", () => {
-    expect(policyCallId(stamped(geminiId))).toBe(policyCallId(geminiId));
+  test("leaves a policy id as it is", () => {
+    for (const id of [geminiId, "c".repeat(257), `gemsig-YQ.${geminiId}`])
+      expect(policyCallId(policyCallId(id))).toBe(policyCallId(id));
+  });
+});
+
+describe("recordsCall", () => {
+  test("matches a record under the call's recorded id", () => {
+    expect(recordedCallId(stamped("call_abc"))).toBe("call_abc");
+    expect(recordsCall("call_abc", stamped("call_abc"))).toBe(true);
+    expect(recordsCall("gemini-call-read-1", stamped(geminiId))).toBe(true);
+    expect(recordsCall("gemini-call-read-2", geminiId)).toBe(false);
   });
 
-  test("leaves a policy id as it is", () => {
-    expect(policyCallId(policyCallId(geminiId))).toBe(policyCallId(geminiId));
+  test("matches a record an earlier release kept under the provider's whole id", () => {
+    expect(recordsCall("c".repeat(257), stamped("c".repeat(257)))).toBe(true);
+    expect(recordsCall(geminiId, geminiId)).toBe(true);
   });
 });

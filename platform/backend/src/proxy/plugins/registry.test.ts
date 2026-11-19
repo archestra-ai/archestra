@@ -1,6 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
 import config from "@/config";
-import { policyCallId } from "@/openappa/call-id";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import { mintDelegationMarker } from "@/openappa/delegation";
 import { signRuntimeToolProof } from "@/openappa/runtime-tool-claims";
@@ -991,7 +990,7 @@ describe("runtime proof attachments", () => {
     };
     const proof = signRuntimeToolProof({
       session,
-      toolCallId: policyCallId(entry.id),
+      toolCallId: entry.id,
       action: entry.action,
       arguments: args,
       spawn: false,
@@ -1064,7 +1063,10 @@ describe("runtime proof attachments", () => {
 
   test("releases a proof signed for the policy id of a call whose provider id is too long", async () => {
     await expect(
-      finalize({ id: `gemsig-${"s".repeat(2000)}.call-1` }),
+      finalize({
+        id: `gemsig-${"s".repeat(2000)}.call-1`,
+        sign: { toolCallId: "call-1" },
+      }),
     ).resolves.toMatchObject({ decision: "allow" });
   });
 

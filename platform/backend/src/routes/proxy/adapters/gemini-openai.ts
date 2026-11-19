@@ -8,9 +8,9 @@ import type {
   StreamAccumulatorState,
   UsageView,
 } from "@/types";
+import { encodeSignedToolCallId } from "../utils/tool-call-ids";
 import { geminiAdapterFactory } from "./gemini";
 import {
-  encodeSignedToolCallId,
   type GeminiOpenaiContext,
   geminiResponseToOpenai,
   geminiUsageViewToOpenai,

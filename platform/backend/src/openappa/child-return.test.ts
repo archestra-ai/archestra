@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import config from "@/config";
-import { policyCallId } from "./call-id";
 import {
   collectAndStripChildReturns,
   mintChildReturnMarker,
@@ -1072,9 +1071,8 @@ describe("OpenAPPA child-return markers", () => {
     const collected = collectAndStripChildReturns(notification(spawnCallId));
     expect(collected.completions).toMatchObject([{ spawnCallId }]);
     expect(underPolicyCallIds(collected).completions).toMatchObject([
-      { spawnCallId: policyCallId(spawnCallId) },
+      { spawnCallId: "gemini-call-task-1" },
     ]);
-    expect(policyCallId(spawnCallId)).toMatch(/^call_[0-9a-f]{32}$/);
     const subagentNotification = {
       content: `<subagent_notification>\n${JSON.stringify({ agent_id: "child", tool_use_id: spawnCallId, status: { completed: carrier(requiredMarker(RETURN)) } })}\n</subagent_notification>`,
     };

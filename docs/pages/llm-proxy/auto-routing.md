@@ -56,6 +56,8 @@ Use an auto router from Archestra agents and chats, or from your own apps over t
 - **Agents and chats:** pick a router in the agent form or chat model list, where `auto` shows as **Auto** and `auto:support` as **Auto · support**. To route everything without a model of its own, set a router as the **Default Model for Agents and New Chats** under **Settings → Agents**.
 - **Apps:** add the router under **Auto routers** on a [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) or an [OAuth client](/docs/llm-proxy/authentication#call-as-the-app). A credential can call only the routers granted to it and gets `403` for any other. Granted routers appear in `/v1/unified-model/models` and work on `/v1/unified-model/chat/completions` and `/v1/unified-model/responses`.
 
+:::tabs
+@tab curl
 ```bash
 curl "https://<archestra-host>/v1/unified-model/chat/completions" \
   -H "Authorization: Bearer $ARCHESTRA_VIRTUAL_KEY" \
@@ -66,6 +68,41 @@ curl "https://<archestra-host>/v1/unified-model/chat/completions" \
     "messages": [{"role": "user", "content": "Why did my invoice double this month?"}]
   }'
 ```
+
+@tab Python
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://<archestra-host>/v1/unified-model",
+    api_key="<virtual-key>",
+)
+
+response = client.chat.completions.create(
+    model="auto:support",
+    messages=[{"role": "user", "content": "Why did my invoice double this month?"}],
+    extra_headers={"X-Archestra-Session-Id": "support-ticket-4821"},
+)
+```
+
+@tab TypeScript
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://<archestra-host>/v1/unified-model",
+  apiKey: process.env.ARCHESTRA_VIRTUAL_KEY,
+});
+
+const response = await client.chat.completions.create(
+  {
+    model: "auto:support",
+    messages: [{ role: "user", content: "Why did my invoice double this month?" }],
+  },
+  { headers: { "X-Archestra-Session-Id": "support-ticket-4821" } },
+);
+```
+:::
 
 The request runs on the provider key of the tier the router picks, and the answer appears under **Logs → LLM Proxy** marked **auto→**.
 
@@ -84,15 +121,15 @@ Pick a preset and Archestra derives the budget from the router's recent traffic,
 - **Balanced:** halfway in cost between the two.
 - **Custom:** a fixed daily target in USD.
 
-Until a router has scored enough sessions for its first plan, every session runs on the normal model regardless of the budget. Once a router has history, **Configure** previews the estimated daily spend and fast/normal/smart tier split on today's traffic as you switch presets or edit a custom budget.
+Once a router has history, **Configure** previews the estimated daily spend and fast/normal/smart tier split on today's traffic as you switch presets or edit a custom budget.
 
 ### Decision Model
 
-The decision model reads the opening context of each session and scores how hard the task is. Each router chooses a decision-model provider, one of its organization-wide keys, and a model; Jev is the only supported provider today. Changing the decision model resets what that router has learned.
+Each router chooses a decision-model provider, one of its organization-wide keys, and a model; Jev is the only supported provider today. Changing the decision model resets what that router has learned.
 
 ### Each Router Learns on Its Own
 
-A router scores, plans, and learns only from its own sessions. A newly created router starts cold on its normal model until it collects enough scored sessions for a first plan. Changing one router's models, budget, or decision model never affects another router.
+A router scores, plans, and learns only from its own sessions. Changing one router's models, budget, or decision model never affects another router.
 
 ## How Sessions Stay Sticky
 
@@ -100,7 +137,7 @@ A session with an explicit session ID is routed once on its first request and st
 
 - **Sending a session ID:** pass `X-Archestra-Session-Id` from your own apps. This header is required when continuing a `/v1/unified-model/responses` conversation with `previous_response_id`; omitting it returns `400`. Archestra also reads session IDs automatically from `X-Archestra-Meta`, Open WebUI (`X-OpenWebUI-Chat-Id`), Codex (`client_metadata.thread_id`, `session_id`, or `session-id`), OpenCode (`x-session-id`, `x-session-affinity`, `x-opencode-session`, or `session-id`), Pi (`x-pi-session-id`), and Claude (`metadata.user_id`).
 - **Without a session ID:** Archestra derives identity from the virtual key, the first user message, initial system instructions, and the current tool-name list. Instructions added after the first user message, tool ordering, and cache markers do not change it, but changing the initial instructions or tool list can trigger a new scorer call and model choice.
-- **What the scorer reads:** the opening user message, a bounded excerpt of the system instructions, and the sorted list of tool names. It never receives tool descriptions, parameter schemas, or tool results. If tool names alone exceed 64 KiB, scoring fails instead of silently dropping tools.
+- **What gets sent to the scorer:** a clipped head-and-tail excerpt of the opening user message and system instructions, plus the sorted list of tool names. Common API keys, bearer tokens, and long opaque secrets are redacted before leaving Archestra. Tool descriptions, parameter schemas, tool results, and follow-up turns are never sent. If tool names alone exceed 64 KiB, scoring fails instead of silently dropping tools.
 
 A background job builds a versioned routing plan from each router's past sessions. Editing a router triggers a new plan within about a minute, and every router refits at least once a day.
 

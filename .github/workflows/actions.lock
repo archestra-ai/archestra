@@ -21,6 +21,8 @@ workflows:
         - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
         - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
         - 'archestra-ai/.github@v1.16.0'
+        - 'azure/artifact-signing-action@v2.0.0'
+        - 'azure/login@v3.1.0'
         - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
     '.github/workflows/build-base-mcp-server-docker-image.yml':
         - 'actions/checkout@v7.0.1'
@@ -202,6 +204,11 @@ dependencies:
         commit: 'sha1-55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
         owner_id: 44036562
         repo_id: 215566462
+    'actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7':
+        ref: 'v5.0.4'
+        commit: 'sha1-668228422ae6a00e4ad889ee87cd7109ec5666a7'
+        owner_id: 44036562
+        repo_id: 215566462
     'actions/cache@v6.1.0':
         ref: 'v6.1.0'
         commit: 'sha1-55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
@@ -300,6 +307,18 @@ dependencies:
         commit: 'sha1-68559e99cc807c1eb7e9238fd43a15bba460eec2'
         owner_id: 115962839
         repo_id: 846733598
+    'azure/artifact-signing-action@v2.0.0':
+        ref: 'v2.0.0'
+        commit: 'sha1-c7ab2a863ab5f9a846ddb8265964877ef296ee82'
+        owner_id: 6844498
+        repo_id: 771200572
+        uses:
+            - 'actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7'
+    'azure/login@v3.1.0':
+        ref: 'v3.1.0'
+        commit: 'sha1-a641126d1b8aa4d1fa005f4f92df94a3a4c4c906'
+        owner_id: 6844498
+        repo_id: 210798615
     'daun/playwright-report-summary@v4.1.1':
         ref: 'v4.1.1'
         commit: 'sha1-5359ae22f265fd2dfdb7744a0cc6614c5c3abde6'

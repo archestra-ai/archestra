@@ -36,7 +36,7 @@ Both families use closed label sets to keep cardinality bounded and never emit o
 
 | Label | Values |
 | --- | --- |
-| `hook` | `session_start`, `prompt`, `tool_call`, `tool_result`, `turn_end`, `cancel_call`, `child_address`, `child_end`, `child_return`, `yell`, or `other` for an unrecognized hook |
+| `hook` | `session_start`, `prompt`, `tool_call`, `tool_result`, `turn_end`, `cancel_call`, `child_address`, `child_end`, `child_return`, [`yell`](/docs/reference/archestra-mcp-server#yell), or `other` for an unrecognized hook |
 | `decision` | `ack`, `allow_call`, `pass_control`, `deny_call`, `block`, `replace_output`, `deliver_value`, `child_return`, `context`, `refuse`, `mcp_result`, `other` for an unrecognized decision, or `error` when the dispatch rejects |
 
 Related boundary counters on other pages track downstream effects: [`llm_blocked_tools_total`](/docs/admin/observability/metrics/llm#llm_blocked_tools_total) counts tool calls blocked at the LLM Proxy, and [`agent_runtime_crossing_refusals_total`](/docs/admin/observability/metrics/agent-runtime#agent_runtime_crossing_refusals_total) counts runtime boundary refusals.
@@ -65,7 +65,7 @@ histogram_quantile(
 
 ## Yell Metrics
 
-Alert on [yells](/docs/agents/guardrails/policies#yells) with `openappa_yells_total`. It counts what the Yells log records, including the calls Break the glass lets through, which never reach the `yell` hook and so are missing from `openappa_hook_dispatches_total{hook="yell"}`.
+Alert on [yells](/docs/agents/guardrails/policies#yells) with `openappa_yells_total`. It counts what the Yells log records, including the calls Break the glass lets through, which never reach the [`yell`](/docs/reference/archestra-mcp-server#yell) hook and so are missing from `openappa_hook_dispatches_total{hook="yell"}`.
 
 | Metric | Type | Labels | Measures |
 | --- | --- | --- | --- |
@@ -73,7 +73,7 @@ Alert on [yells](/docs/agents/guardrails/policies#yells) with `openappa_yells_to
 
 | Label | Values |
 | --- | --- |
-| `kind` | `agent` for a report (the agent's `yell` call, or a client that cannot receive remedies), `approval_waived` for a call that waited for human approval, `block_waived` for a call no remedy could lift |
+| `kind` | `agent` for a report (the agent's [`yell`](/docs/reference/archestra-mcp-server#yell) call, or a client that cannot receive remedies), `approval_waived` for a call that waited for human approval, `block_waived` for a call no remedy could lift |
 | `superyell` | `true` when the yell also turned Guardrails off for its session, otherwise `false` |
 
 Repeats of the same tool and kind merge into one row in the Yells log, but each waived call still counts here. The counter is recorded only while yells are enabled ([`ARCHESTRA_OPENAPPA_YELL_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED)).

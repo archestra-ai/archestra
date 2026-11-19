@@ -143,6 +143,10 @@ jobs:
         run: |
           python3 -m unittest discover -s .github/scripts -p "test_*.py"
 
+      # The rules each release applies when it attests these statements.
+      - name: Validate the VEX document
+        uses: archestra-ai/.github/actions/validate-vex@v1.33.0
+
   migration-kit-checks:
     name: Migration Kit Checks
     if: github.event_name == 'merge_group'

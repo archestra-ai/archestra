@@ -1,0 +1,109 @@
+{
+  "name": "docstar__remote-mcp",
+  "display_name": "DocStar",
+  "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAdZ0lEQVR4nO2deXxURdb3f1W3971JQlhkexJWgwsCCi5skgEJiMIgsigw4jivyrgh+owvgsvDi+M4osIjgrIFhsXw6kfEoIhsD3FFB2R3EOQFEkJCkk7Sne5773n/CH3p7vSWpDsJ87nfz6ch3V23qu49p05VnTpVDaioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioXPWw5q5AU5Genm52uVxWzrmDc26RZdlAPp+GMSZzpvNIXHJLklSh1+srysvLXQDE5q5zU/BvqQBOp9MuSVJXyHJfznkfYqwLY6wDETkBWBljOhA4EfnvXwKDCKCaiFyc8WJGdFaS6QQIPwo64YBGo/m1uLi4shlvKyn82yhAK2Ora3wa32BOuAuM38w4OgBMyxhAAIgIjAXfLhEpf4d+xy7/W5uGPASckiSpQBCELaIo7q2qqrqQ7HtqCq52BdDabLZhDGwSQNmM8XTGGAi1gvUL2C/cSO/jSROoIJIk/T8GfCYTramsrPwfAHKybjDZXK0KYLCZzeOYIDzCwG4DD38b8Qgz0nWBacJZD1ablShL0k5JEpdUut1bAPgadDfNyNWmANxisYzhnD/LGR/AmF+oLGF3EmgVgFplCVQAIgLzdxAMqO0mZEiyvFOSpNeqq6s/S0xNmoarRgGcZnNvifP5nPF7Alt8uNYZi3CWIJzg6wsRSbIs58my/FJVVdWhemfQDFwNCqC1W62PMc7/whhP8ffvfkJbJ9Bg4TX42kAYY5BluVgUxZeqqqreRQufTrZoBTAaje21Gs1bXBDujZQmWn/t/zvcZ+HyAcIrQEOsDABIkrRJFMUn3W732Xpf3ES0WAUw2oz9tdAuEzi/zt/NxyLcoC9eBYiVb7zXhKaVJOlnADNdLtfX9Sq0iWiRCmC1WnM44+9zgbcO7ZujzedjzfNjtfJAQhUnXPp6KEWx7JX/4HK7PonrgiaEN3cFQrGZbRM5Y//gnLUmIgT2+ZEeOmOsXp9HozGWIkqeaRotX+cwW6ckJMME0qIsgNNmmwTGlhNjxlDz7fP5IMt1/S3hBBbO9Ps/j0VoGs45NBoNOOd1ygm8JrC8iDMKmTwQ5UfKql2rYlakiWgxCmC323/PCCsZ4yY5wLEmyzJkWUZGRgZSU1Oh1WrBOYckSZAkSXnYsiyDiMA5V4QQavL9FiGcZeCcK8LWaDT+0TzKyspw5MgRVFZWQqvVxtUFhVMAGQQOBsjkJlmaWl5ZmZfAx9dgWoQC2EymEUyj3cAZtxFIqZUoirBYLJg7dy7uv/9+2Gw2pSUCCBKy/300sx34XbzmXRRFfPfdd3j88cdx6NAh6PX6qK08nJVhjIEuO604GCDJZSRL48urqr6MqxJJpNkVwG4y9WEazVbGeLqMKy3J35qXLVuGcePGNXMtgRMnTmDixIk4fPgw9Hp9ne9jKQAIIEYgMHAAJMtnZA8Nd3ldx5Jd92g06yCwtbl1Ogma9xnn6cSumGgigtfrxa233toihA8AXbt2RW5uLjIzM+H1eiNakMDuxo8ymCWAXbZajPMOXM+WpqWlWZrkBiLQnArAa4Sa1wVBuCHc0EySJHTv3r3JKxWNnj17Ys2aNWjfvj28Xm+j8+OcD6px17yUgKo1vA7NVbDdbn+AcTY5dOkWuGIJwpna5uaGG27A8uXLkZKSAlGs6+X130fgwDDcCwCIAUxgj1qt1pFNdwfBNIsCtHG06QTCq1BWVcOj1WqbqkpxQ0QYNGgQ3nvvPVgsFkiSVO/r/S8ZBMaYTgD7m8ViSUtSlaPSLApQI3v+N+e8XW3rp7ADJyKCIAhNX7kY+FvviBEj8Prrr0Oj0QQJNZRAi1Bn5kCXZy4C76kBfy75ta9LkyuA0+kcANBkEF2O1aqbJpFeuGRBRJgyZQpGjx7d6PEAAQDHTIfJdH1CKlcPNE1Z2IsvvsjfevPN54kxQ+iyLoA6c/pInju/gkiShJqamnrVgYgU55LfeRT6mVarRWpqatR8/AqakZER1kMZ6b4i5cM4t8qC8DyAifW6oUbSpAqweNGi24kwggJ6foawRgBA5AfHGEN+fj4WLFgAl8sVlD6a5QgUtt+L6O/DJUlSFEAQBEyYMAHz58+HTqeLek+xhB8vMgDG+NhWVuvNpS7XNwnJNA6aVAFEwqPgTIvAlh4mXbi5dCiLFy/Gnj17YDKZopZZH++gUk9RxPLly/HII4+gU6dOUfOPRTQHUdDnjIFzpicRswBMblSh9aDJxgApKSk9QDQyjvWYuLj99tuh0Wjg8/mivkRRVP4P9/J6vfD5fMr/oigqI/309PSY9YhngSkeCASZCGBslM2mz0xIpnHQZBZA8km/Z5xZACDWM4vnoT711FPo2rUrTp8+DUEQora0sFG9jCnXCYIArVarLAQ5nU4MHDgQBoMhZj18vuiBwPEqCCPURplyZueknwjUvBLXhY2kSRQgMzNTX3Lh4j2IM7InHjQaDe65557EZNYIPB5PQvJhuKwsjAEy7s0E/voLUL8RbgNoki6grLg4ixiu9a+IxaKlTwEBwO12Y8WKFfj6668T4rAi5X8CcZZVZLX2aXSmcdAkFsAnYRgXoKtvb9mSFeGFF17AokWLoNFoYDKZ4PP5EuO4IoAxpuWc/w5AQeMzjE4TWABiTGCD/fvz6kNLVYBffvkF69atg06nw/PPP4/8/HwMHDgw5nigXsg0FEDSXaFJtwBWq60ViGfVp++PV1G8Xi9KSkoA1J1uhbpgAx09gS+9Xo9OnToFBZrE4vPPP0dxcTGuvfZaPPXUU7BarXj55ZcxcuRI+Hy+euUVjtpYCHat02Bof8nj+a1RmcUg6Qqg0Wi6kSy3S9DsT+Ho0aN4/PHH8euvvwavsPnX2y+/93v7Inn/GGOYNGkSFi5cCI0m9uPw+XzYvHkzZFnGqFGjYLVaAQB9+vTBddddh2+++Sam8ygeCMwp63Q9cbUrgCzLPRhjQsy5XwDxmP4VK1Zg+/btsFhq4ykiBYXGyl8URaxZswZPPPEEOnToELPcY8eO4cCBAzCZTLjzzjuVzzUaDbKzs7Fv376YecQFA4Mk9wGwLTEZhifpYwAO3i2ir/cyoUGa0dYB/IwYMQIZGRkQBEF5cc4hCAI0Gg0EQYBOp4PRaITZbIbZbIbFYoHFYgn622azITs7GykpKXHdz0cffYSSkhJkZGTgpptuCvrurrvugs1mS5hziDGW9MWhpFsASZa6c4FHdvhHIFpMPxFhyJAh2LVrF06fPh3kjw+8RhAEGI1GxeETLj9BENC5c2fo9fqYbmOv14vPP/8cRITBgwfDbrcHfd+jRw/06NED+/fvT8jUkHP+H6iVUdL2FyZbAXQAYjrT4zHVoZ8TEdq3b4/27ds3qoLxlOdn//79OHjwIIxGI7Kzs+t8r9frMXr0aHz33XfQ6XSNsgREBBClOp1O86VLl8obnFEMktoF2O12MwdaJSPv5pgibtmyBRUVFejSpQtuvfXWsGmGDRsGs9msDDAbBWMOWZadjcskOklVAMaYDWC2RPWJiSKeMUZgWq/XiwsXLiA/Px8AcMstt8DhcIRNn5WVhd69e8Pn88WMA4i1SkkEs8/nS6oCJLUL4KJolrkQe0WlGWCMYc+ePfjoo49QWFgIt9sNURSDYvz8wq+qqkJlZSVOnz4NnU6HkSMjx3Dq9XoMHz4cBQUF9dqKFmG3kZbL3NygG4yTpCqAJAhGBtIyFmxoIu6eibJ7N/R6xhjOnDmD48ePK8EdgfN9IlIEKooitFotBg0ahNTUVDDGsHnzZsycORPl5bXdq3/QFm2TKWMMHTt2xMCBA6PWLzs7G4sWLYrpFPKX5d/3GJi29jtigkBJDY1OqgLoONeLsiTEagfRtnVHSv/VV1/hoYceQmFhYVAASaB5D8xHkiQMGjQIeXl50Ol0+Nvf/obKykp07NgRL7/8Mrp06RI1wtefl9PpRJs2baLWr0+fPvjiiy/g8XgUoYY6qwAo+xgLCwsxe/ZsZWn7SqGAjyipodFJVQCTSadzVXq43IBdubFYt24dTp48CbO51kIGKlGknbzff/89SkpKYLPZcPbsWTDG0LlzZ0yenNgAHEEQcP319ZvCL1q0CCdPnlQUIOB5JPUIuqQqgMFgYZWVsdfLI+6ni8KMGTNw4sQJFBUVRWz1gS1OEASMHz8e7du3hyzL6NKlC86dO4cffvgBCxYswJw5cxrtw28o77zzTiQXMnFZrk5m2Un2A/hqqFaDeTTXbDhiRQUPGDAA27dvR2VlZVgFCFUgjUYDm82mvP/rX/+K6dOn4/jx43jllVdw6tQpLFiwAK1aJWXWGlR3f/2qqqowb948vPvuu2CMhVFAEmXOr14F0JLGyxiTQdSgphVrA6ZGo4k4HYsGEaFv377YvHkzHnroIRQUFGDFihU4dOgQ3nzzTfTt27ch1Y0Lf90PHjyIp59+Grt371a2nIehRhTFpJ5PnFSb17pdu2pBEHxAy9vsIcsyunbtqiiB3W7HDz/8gLFjx+KDDz5IeHmB1mz16tXIycnBnj17YDAYoj2Xcp1OV5rwygSQVAXo0LZtKYjKAj+rjxIkq08ONLcpKSmYNWsW+vXrB0EQUF5ejlmzZmHWrFnKFDFRZZaWluLRRx/Fn/70J5SWliqbXyNNPQGUV1ZWXr0W4L7p0y/pdLoLAIFd3gFSn7F+siyGz+fDTz/9hAULFiA7OxtDhw7Fvn37lFVEQRCwdOlS3HPPPThw4ECjyvK3/G+//RajR4/G+++/D61WGzN8jAFghPNIcmBoUscAOTk5NZ2uaXsSHlwPImUrYDSxBg4WE20BTp48ia1btyIvLw8///wzKioqlJDw0ONjTCYTCgoKkJOTg1dffRVTp05tcLnr16/HU089hbKyMhiNRgB1t8EFlu1HkqXjqPc6av1IqgLIsgyLzf6vSxWuBt1FIiyAJEnYvXs31q1bh/z8fBQXF4NzDq1WqwgDgLJNTJIkpV/W6/U4f/488vPzG6UAK1asQElJCUwmU71mQoyxfza40DhJejyA0247ePYsg0gUvelfJlJrqC8ulwuffPIJVq9ejYKCAtTU1CgBIoFlyLIMn88HrVaLHj16oG/fvigsLMTevXshSRK0Wi1GjRrV4HowxtCvXz/s3LmzvtNgySuKPze44DhJugIMHHDziVOnTouXKis1TDloPT7iPXwhcIZRVlaGDRs2YNmyZTh8+DCAWj9/6C4f/5ax1q1b484778R9992HmpoarFq1Cnv37lW2iKWmpkZc+o2XkSNHYvHixfVaIiaZijQez/FGFRwHSVeAKb+f9Ou2/C/PX3JVdGBcqD0UIc4OIdwRLOFgjKG6uhobNmzA22+/jSNHjighYaH49wxmZGRg4sSJmDZtGnw+H95880384x//QFVVlTI69/l8GDBgADp27Bj/DYehT58+6N69Ow4ePBgxUqiOYpD8YyVwsVEFx0HSFeDa/v2LrunY/qeTZ07HjrgMId5tV9u2bcPChQtRUFAAznnYs/wkSVIEP2PGDMyYMQN2ux2LFy/GG2+8gfPnz0Ov19c5l2j06NGN6oqICEajEcOHD8ePP/4YV6gYIwBcsw1JHgACTRAUyhijG266aYfFbAZJctxBEpxzHDoU/TcXTp8+jZkzZ2LChAn4+uuvodfr64zogVpFSktLw7x587Bz5048/fTTOHr0KO68807Mnj0bJSUlMBqNQdfJsow2bdpg8ODBYcv238fx48excOFCZX9CuHsCgJycnLALV1cyrD00imoLr+KyuD3qzV9NfPXVV517Z/UqslotZLfblZfD4SCHwxH2vdVqpdatW9OOHTsoFFEUaeXKldStWzfS6/Vks9nC5ms0Gslms9HMmTPpl19+ISIit9tN8+bNo9TUVDIYDEp6/7X+vPR6PU2dOrVO2YFs3bqVevbs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",
+  "description": "DocStar turns your product's API into published docs that your users' AI assistants can read and call. Your AI assistant can document each endpoint from your code, publish the docs, and give you one link to share. Your users' assistants then look up any endpoint and call your API with the exact URLs, fields and auth from your docs, so they don't guess. Reading docs needs no account; changes need DocStar sign-in.",
+  "oauth_config": {
+    "name": "DocStar MCP",
+    "server_url": "https://mcp.docstar.io/mcp",
+    "client_id": "",
+    "redirect_uris": [
+      "http://localhost:8080/oauth/callback"
+    ],
+    "scopes": [],
+    "description": "DocStar MCP Server (dynamic registration)",
+    "default_scopes": [],
+    "supports_resource_metadata": true
+  },
+  "tools": [
+    {
+      "name": "search_docstar_docs",
+      "description": "Search DocStar's documentation and guides with a natural-language question, e.g. \"how do I add a custom domain to my docs?\" or \"how does sign-in work on my MCP server?\"."
+    },
+    {
+      "name": "get_docstar_api_docs",
+      "description": "Browse the DocStar API reference one level at a time, when no dedicated tool on this server does what the user needs."
+    },
+    {
+      "name": "call_any_api_of_docstar",
+      "description": "Send a POST, PUT, PATCH or DELETE request to any DocStar API endpoint for the signed-in user and return { status, ok, headers, data }."
+    },
+    {
+      "name": "call_any_read_api_of_docstar",
+      "description": "Read from any DocStar API endpoint with a GET request for the signed-in user and return { status, ok, headers, data }."
+    },
+    {
+      "name": "list_collections",
+      "description": "List the collections (docs sites) in an organization, with each one's id, name, type and the caller's permission (1 read, 2 read-write)."
+    },
+    {
+      "name": "get_mcp_server",
+      "description": "Get a collection's MCP server: the url end users connect to, ready-to-paste snippets (a Claude Code command and a JSON config), callbackUrls for the OAuth app, the sign-in setup and any custom domain."
+    },
+    {
+      "name": "create_collection",
+      "description": "Creates a new documentation collection in the organization together with its invisible root page (type 0), auto-assigns collection permissions to all org users based on their roles, and auto-provisions an MCP server for it in the background."
+    },
+    {
+      "name": "create_endpoint",
+      "description": "Creates a new API endpoint doc (page type 4, draft) as the last child of the given page."
+    },
+    {
+      "name": "update_endpoint",
+      "description": "Partially updates an API endpoint doc; send only fields to change (same fields as Create Endpoint)."
+    },
+    {
+      "name": "create_page",
+      "description": "Creates a new page as the last child of the page given in the path."
+    },
+    {
+      "name": "publish_pages",
+      "description": "Publishes many pages/endpoints at once: each page in pageIds gets a new default published version and state 2 (approved/published)."
+    },
+    {
+      "name": "list_collection_pages",
+      "description": "Returns all non-deleted pages of a collection (the full sidebar tree, flat) with id, name, urlName, type, parentId, child (ordered child ids), state, isPublished, meta, sharingMeta and the endpoint requestType for endpoint pages."
+    },
+    {
+      "name": "send_feedback_to_docstar",
+      "description": "Sends feedback straight to the DocStar team."
+    },
+    {
+      "name": "quickstart-docstar",
+      "description": "Document the user's API in DocStar, turn it into an MCP server for their product (always with a feedback tool), and keep it in sync with their code (GitHub Sync)."
+    }
+  ],
+  "prompts": [],
+  "keywords": [
+    "docstar",
+    "api docs",
+    "documentation",
+    "developer tools",
+    "openapi",
+    "mcp server"
+  ],
+  "user_config": {},
+  "readme": null,
+  "category": "Development",
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "author": {
+    "name": "Walkover",
+    "url": "https://walkover.in/"
+  },
+  "homepage": "https://docstar.io",
+  "documentation": "https://github.com/swayammaheshwari/docstar-mcp#readme",
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.docstar.io/mcp",
+    "docs_url": "https://github.com/swayammaheshwari/docstar-mcp#readme"
+  },
+  "github_info": null,
+  "programming_language": null
+}

@@ -198,7 +198,7 @@ export function MemberRow({
           </p>
         ) : null}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 @3xl:contents">
-          {shared ? (
+          {shared && form.watch("routingStrategy") !== "least-tokens" ? (
             <Label className="gap-1.5 text-xs font-normal text-muted-foreground">
               <span className="@3xl:sr-only">Weight</span>
               <Input
@@ -216,7 +216,7 @@ export function MemberRow({
           ) : (
             <span className="hidden @3xl:block" />
           )}
-          {shared ? (
+          {shared && form.watch("routingStrategy") !== "least-tokens" ? (
             <TrafficShare share={row.share} />
           ) : (
             <span className="hidden @3xl:block" />

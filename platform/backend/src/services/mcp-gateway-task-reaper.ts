@@ -2,6 +2,7 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { McpGatewayTaskModel } from "@/models";
 import LlmThroughputModel from "@/models/llm-throughput";
+import ModelPoolUsageModel from "@/models/model-pool-usage";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 
 /**
@@ -70,6 +71,10 @@ class McpGatewayTaskReaper {
         CacheKey.GitHubActionsTokenRateLimit,
       );
       await LlmThroughputModel.deleteExpired();
+      await ModelPoolUsageModel.deleteExpired().catch(() => {
+        // Routing hints must not prevent unrelated task/cache maintenance.
+        logger.warn("Unable to sweep model pool routing usage");
+      });
       await cacheManager.deleteExpiredByPrefix(
         CacheKey.OpenAppaHitlReviewHistory,
       );

@@ -517,15 +517,19 @@ input.on("line", async (line) => {
       // while for it, so a chat does not give up after a few quick checks.
       const until = Date.now() + SETUP_WAIT_MS;
       let outcome;
+      // The last thing a step had to say, apart from "checking".
+      let said;
       for (;;) {
         try {
           outcome = setup.step();
         } catch (error) {
           outcome = { failed: true, text: "The setup step could not run: " + String(error?.message ?? error) };
         }
+        if (!outcome.soon) said = outcome;
         const left = until - Date.now();
+        if (left <= 0 && outcome.soon && said) outcome = said;
         if (outcome.ready || outcome.failed || left <= 0) break;
-        await new Promise((resolve) => setTimeout(resolve, Math.min(2000, left)));
+        await new Promise((resolve) => setTimeout(resolve, Math.min(outcome.soon ? 100 : 2000, left)));
       }
       const next = outcome.ready || outcome.failed ? "" : " This can take the user a minute or two. Call this tool again now, and keep calling it until it says ready or failed.";
       return send({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: outcome.text + next }], isError: outcome.failed === true } });
@@ -615,47 +619,80 @@ function findCli() {
 // The Windows launcher is a script, which only a shell starts.
 const cliCommand = (cli, args) => (windows ? { command: '"' + cli + '" ' + args.join(" "), args: [], shell: true } : { command: cli, args, shell: false });
 
-// How long the agent may take to say whether it is signed in. The web tools'
-// server runs this, and answers nothing else meanwhile. Tests shorten it.
+// How long the agent may take to say whether it is signed in. Tests shorten it.
 const STATUS_TIMEOUT_MS = Number(process.env.ARCHESTRA_CURSOR_STATUS_TIMEOUT_MS) || 10000;
 
 /**
- * Asks the agent whether it is signed in to Cursor: { signedIn }, or
+ * Asks the agent whether it is signed in to Cursor, without holding this
+ * process: { pending } while it has not said, then { signedIn }, or
  * { timedOut } when it did not say in time, or { cause } when it could not
- * run at all, which no later call changes.
+ * run at all, which no later call changes. An agent that ran out of time is
+ * stopped with everything it started before it is asked again.
  */
 function account(cli) {
-  const { command, args, shell } = cliCommand(cli, ["status", "--format", "json"]);
-  const result = spawnSync(command, args, { shell, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: STATUS_TIMEOUT_MS, windowsHide: true });
-  if (result.error?.code === "ETIMEDOUT") return { timedOut: true };
-  if (result.error) return { cause: result.error.code || result.error.message };
-  if (result.signal) return { cause: "stopped by " + result.signal };
-  return { signedIn: /"isAuthenticated":\\s*true/.test(String(result.stdout || "")) };
+  if (!work.status) {
+    const { command, args, shell } = cliCommand(cli, ["status", "--format", "json"]);
+    work.status = start(command, args, shell, true);
+    work.status.since = Date.now();
+  }
+  const job = work.status;
+  if (!job.done) {
+    if (Date.now() - job.since < STATUS_TIMEOUT_MS) return { pending: true };
+    stopTree(job);
+    work.status = null;
+    return { timedOut: true };
+  }
+  work.status = null;
+  if (job.error) return { cause: job.error };
+  if (job.signal) return { cause: "stopped by " + job.signal };
+  return { signedIn: /"isAuthenticated":\\s*true/.test(job.output) };
 }
 
-// What is running: { child, done, output } for the install and the two sign-ins.
-const work = { install: null, login: null, gateway: null, gatewayDone: false, gatewayNote: "" };
+// What is running: { child, done, output } for the install, the status check and the two sign-ins.
+const work = { install: null, status: null, login: null, gateway: null, gatewayDone: false, gatewayNote: "" };
 const appName = (typeof SETUP === "object" && SETUP && SETUP.appName) || "the gateway's";
 const gateway = typeof SETUP === "object" && SETUP && typeof SETUP.gateway === "string" ? SETUP.gateway : null;
 const READY = "Cursor's command-line agent is installed and signed in. Web search and fetch are ready.";
 // How long the gateway sign-in may wait for the person. Tests shorten it.
 const GATEWAY_WAIT_MS = Number(process.env.ARCHESTRA_CURSOR_GATEWAY_SIGN_IN_WAIT_MS) || 180000;
 
-function start(command, args, shell) {
-  const job = { done: false, output: "" };
-  job.child = spawn(command, args, { shell, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+/**
+ * Starts a job. With \`group\`, it gets a process group of its own on macOS
+ * and Linux, where the agent's launcher is a script that starts the agent:
+ * stopTree then reaches both.
+ */
+function start(command, args, shell, group = false) {
+  const job = { done: false, output: "", error: "", signal: "", group: group && !windows };
+  job.child = spawn(command, args, { shell, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, detached: job.group });
   const keep = (chunk) => {
     job.output = (job.output + String(chunk)).slice(-4000);
   };
   job.child.stdout.on("data", keep);
   job.child.stderr.on("data", keep);
-  job.child.on("error", () => {
+  job.child.on("error", (error) => {
+    job.error = String(error?.code || error?.message || "error");
     job.done = true;
   });
-  job.child.on("close", () => {
+  job.child.on("close", (code, signal) => {
+    job.signal = signal || "";
     job.done = true;
   });
   return job;
+}
+
+/** Stops a job and everything it started, at once: it is asked again afterwards. */
+function stopTree(job) {
+  const pid = job.child.pid;
+  try {
+    if (!pid) return;
+    if (windows) spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", timeout: 5000, windowsHide: true });
+    else if (job.group) process.kill(-pid, "SIGKILL");
+  } catch {}
+  // A job this young has no group yet, and the group's end is not the job's
+  // on every system: the job itself is stopped as well.
+  try {
+    job.child.kill("SIGKILL");
+  } catch {}
 }
 
 /** The sign-in page's address, when the agent printed one. */
@@ -684,6 +721,8 @@ function step() {
     return { text: "Installing Cursor's command-line agent with Cursor's own installer. The web search and fetch tools run through it, on the Cursor plan." };
   }
   const answer = account(cli);
+  // The answer takes a moment; whoever runs the steps looks again at once.
+  if (answer.pending) return { soon: true, text: "Checking whether Cursor's command-line agent is signed in." };
   // No answer in time is not a signed-out agent, so no sign-in starts: the
   // next call asks again. An agent that cannot run will not run later either.
   if (answer.timedOut) return { text: "Cursor's command-line agent did not say in time whether it is signed in." };
@@ -759,6 +798,8 @@ function gatewayStep(cli) {
 }
 
 function stop() {
+  if (work.status && !work.status.done) stopTree(work.status);
+  work.status = null;
   for (const job of [work.install, work.login, work.gateway]) {
     try {
       if (job && !job.done) job.child.kill();
@@ -777,8 +818,9 @@ if (require.main === module) {
   let said = "";
   const turn = () => {
     const outcome = step();
-    if (outcome.text !== said) console.log(outcome.text);
-    said = outcome.text;
+    // A step that only checks something says nothing of its own.
+    if (!outcome.soon && outcome.text !== said) console.log(outcome.text);
+    if (!outcome.soon) said = outcome.text;
     if (outcome.ready) process.exit(0);
     if (outcome.failed) process.exit(1);
     if (Date.now() > until) {
@@ -786,7 +828,7 @@ if (require.main === module) {
       console.log("Stopped waiting. Run this again when you are ready: node ~/.cursor/archestra/web-sign-in.cjs");
       process.exit(1);
     }
-    setTimeout(turn, 2000);
+    setTimeout(turn, outcome.soon ? 100 : 2000);
   };
   turn();
 }

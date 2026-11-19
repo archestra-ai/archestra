@@ -234,6 +234,8 @@ function webTools(env: Record<string, string> = {}) {
     });
   return {
     request,
+    /** Closes the server the way Cursor does. */
+    close: () => child.stdin.end(),
     call: async (name: string, args: Record<string, unknown>) => {
       const result = await request<{
         content: Array<{ text: string }>;
@@ -648,6 +650,43 @@ describe("Cursor web tools", () => {
     await rm(path.join(fakeCli, "status-hangs"));
     expect((await tools.call(CURSOR_WEB_SETUP_TOOL, {})).text).toContain(
       "Web search and fetch are ready.",
+    );
+  });
+
+  test("an agent that hangs is stopped together with what it started, before it is asked again", async () => {
+    await install();
+    // The agent's launcher is a script that starts the agent and waits.
+    const bin = path.join(home, ".local", "bin");
+    await mkdir(bin, { recursive: true });
+    const beats = path.join(root, "beats");
+    const worker = path.join(root, "hung-agent.cjs");
+    await writeFile(
+      worker,
+      `const fs = require("fs");
+fs.appendFileSync(${JSON.stringify(beats)}, "start " + process.pid + "\\n");
+setInterval(() => fs.appendFileSync(${JSON.stringify(beats)}, "beat " + process.pid + "\\n"), 40);`,
+    );
+    const cli = path.join(bin, "cursor-agent");
+    await writeFile(cli, `#!/bin/sh\n"${process.execPath}" "${worker}"\n`);
+    await chmod(cli, 0o755);
+    const tools = webTools({
+      ARCHESTRA_CURSOR_CLI: cli,
+      ARCHESTRA_CURSOR_WEB_SETUP_WAIT_MS: "700",
+      ARCHESTRA_CURSOR_STATUS_TIMEOUT_MS: "200",
+    });
+    const stuck = await tools.call(CURSOR_WEB_SETUP_TOOL, {});
+    expect(stuck.text).toContain("did not say in time whether it is signed in");
+    // The agent asked last has had time to start.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    tools.close();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const lines = (await readFile(beats, "utf8")).trim().split("\n");
+    const startedAgents = lines.filter((line) => line.startsWith("start "));
+    // It was asked more than once, and no asked agent is left running.
+    expect(startedAgents.length).toBeGreaterThan(1);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect((await readFile(beats, "utf8")).trim().split("\n")).toHaveLength(
+      lines.length,
     );
   });
 

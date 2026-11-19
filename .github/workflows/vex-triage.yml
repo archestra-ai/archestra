@@ -1,20 +1,26 @@
 name: VEX Triage
-run-name: Triage the vulnerabilities of ${{ inputs.release_tag || 'the latest stable release' }}
+run-name: Triage the vulnerabilities of ${{ inputs.project || 'every project' }} ${{ inputs.release_tag || '(latest stable release)' }}
 
-# Starts the VEX Triage agent on staging for one platform release. The agent
+# Starts the VEX Triage agent on staging for a release of each project in
+# .github/scripts/vex-triage.py: archestra, OpenAPPA and
+# terraform-provider-archestra (with its Crossplane package). The agent
 # (archestra-ai/infra, archestra/automation) scans the release's public images,
 # decides for each finding whether it affects the image as shipped, and opens
-# or updates one pull request from automation/vex-triage that records those
-# decisions in vex/archestra.openvex.json (vex/README.md). It never merges: a
-# person reviews every statement. Each release then attests its images'
-# statements next to their SBOMs.
+# or updates one pull request from automation/vex-triage in that project's
+# repository, recording its decisions in vex/openvex.json. It never merges: a
+# person reviews every statement. Each project's releases then attest their
+# images' statements next to their SBOMs (archestra-ai/.github
+# release-publish.yml, vex-document).
 #
-# Weekly, for the latest stable release, because new advisories arrive for
-# images that did not change. Run it by hand for another release.
+# It runs from here for every project because the federated credential, the
+# Google account and the repository variables live here once.
+#
+# Weekly, for each project's latest stable release, because new advisories
+# arrive for images that did not change. Run it by hand for one release.
 #
 # The job holds no Archestra API key and no GitHub credential beyond reading
-# this repository. It trades its GitHub OIDC token for a one-hour token of an
-# Archestra service account that can only run that agent (workload identity
+# public repositories. It trades its GitHub OIDC token for a one-hour token of
+# an Archestra service account that can only run that agent (workload identity
 # federation). The agent's own GitHub App token never leaves Archestra.
 
 on:
@@ -22,28 +28,28 @@ on:
     - cron: "23 7 * * 1"
   workflow_dispatch:
     inputs:
+      project:
+        description: Project whose release to triage.
+        type: choice
+        options: [archestra, openappa, terraform-provider-archestra]
+        default: archestra
       release_tag:
-        description: "Published platform release, such as platform-v1.4.35. Empty: the latest stable release."
+        description: "Published release, such as platform-v1.4.35 or v0.44.0. Empty: the latest stable release."
         type: string
         default: ""
 
 permissions: {}
 
-concurrency:
-  group: vex-triage
-  cancel-in-progress: false
-
 jobs:
-  start:
-    name: Start the VEX Triage agent
-    # The Archestra service account and the Google account trust this file on
-    # main only; any other ref would be refused at sign-in.
+  plan:
+    name: Choose the projects
     if: github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     permissions:
-      contents: read # Check out the scripts and read the releases.
-      id-token: write # Sign in to Google Cloud (staging tunnel) and to Archestra.
+      contents: read # Check out the script.
+    outputs:
+      projects: ${{ steps.projects.outputs.projects }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
@@ -51,23 +57,64 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      # A draft is not a release yet: its images are not published.
+      - name: List the projects
+        id: projects
+        env:
+          PROJECT: ${{ inputs.project }}
+        run: |
+          set -euo pipefail
+          projects="$(python3 .github/scripts/vex-triage.py projects)"
+          if [ -n "$PROJECT" ]; then
+            projects="$(jq -c --arg project "$PROJECT" 'map(select(.project == $project))' <<<"$projects")"
+          fi
+          jq -e 'length > 0' <<<"$projects" > /dev/null
+          echo "projects=$projects" >> "$GITHUB_OUTPUT"
+
+  start:
+    name: Start the VEX Triage agent for ${{ matrix.project.project }}
+    needs: plan
+    # The Archestra service account and the Google account trust this file on
+    # main only; any other ref would be refused at sign-in.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # Check out the scripts and read the releases.
+      id-token: write # Sign in to Google Cloud (staging tunnel) and to Archestra.
+    strategy:
+      fail-fast: false
+      # One run at a time: each run trades its own token, and the agent's
+      # spend cap is per run.
+      max-parallel: 1
+      matrix:
+        project: ${{ fromJSON(needs.plan.outputs.projects) }}
+    concurrency:
+      group: vex-triage-${{ matrix.project.project }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # A draft is not a release yet: its images are not published. The
+      # script checks the tag against the project's release tags.
       - name: Choose the release
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+          GH_REPO: ${{ matrix.project.repository }}
+          STABLE_TAG: ${{ matrix.project.stable_tag }}
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
           if [ -z "$RELEASE_TAG" ]; then
             RELEASE_TAG="$(gh release list --exclude-drafts --exclude-pre-releases --limit 50 --json tagName \
-              --jq '[.[] | select(.tagName | test("^platform-v[0-9]+\\.[0-9]+\\.[0-9]+$"))][0].tagName // empty')"
+              | jq -r --arg stable "$STABLE_TAG" '[.[] | select(.tagName | test($stable))][0].tagName // empty')"
           fi
-          [[ "$RELEASE_TAG" =~ ^platform-v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] \
-            || { echo "::error::'$RELEASE_TAG' is not a platform release tag."; exit 1; }
+          [ -n "$RELEASE_TAG" ] || { echo "::error::No stable release of $GH_REPO."; exit 1; }
           draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)"
-          [ "$draft" = false ] || { echo "::error::$RELEASE_TAG is not published yet."; exit 1; }
+          [ "$draft" = false ] || { echo "::error::$RELEASE_TAG of $GH_REPO is not published yet."; exit 1; }
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
       # The staging API is private. This account can open the IAP tunnel to
@@ -86,6 +133,7 @@ jobs:
 
       - name: Start the agent run
         env:
+          PROJECT: ${{ matrix.project.project }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           BASE_URL: https://backend.archestra.dev
           PUBLIC_URL: https://frontend.archestra.dev

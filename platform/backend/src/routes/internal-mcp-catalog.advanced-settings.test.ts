@@ -252,6 +252,191 @@ describe("internal MCP catalog deployment YAML permission", () => {
     expect(persisted?.deploymentSpecYaml).toBe(DEPLOYMENT_YAML);
   });
 
+  test("runtime tiers persist through create/read/update and reject unknown tier names", async () => {
+    const runtimeTier = "S";
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload: {
+        name: "Resource settings",
+        serverType: "local",
+        localConfig: { command: "node", runtimeTier },
+      },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    expect(created.json().localConfig.runtimeTier).toEqual(runtimeTier);
+    const id = created.json().id;
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/internal_mcp_catalog/${id}`,
+    });
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.json().localConfig.runtimeTier).toEqual(runtimeTier);
+    const preview = await app.inject({
+      method: "GET",
+      url: `/api/internal_mcp_catalog/${id}/deployment-yaml-preview`,
+    });
+    expect(preview.statusCode, preview.body).toBe(200);
+    expect(preview.json().yaml).toContain("cpu: 100m");
+    expect(preview.json().yaml).toContain("memory: 128Mi");
+    for (const invalid of ["Missing", " "]) {
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${id}`,
+        payload: { localConfig: { command: "node", runtimeTier: invalid } },
+      });
+      expect(response.statusCode, response.body).toBe(400);
+      expect(
+        (await InternalMcpCatalogModel.findById(id))?.localConfig?.runtimeTier,
+      ).toEqual(runtimeTier);
+    }
+    const cleared = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${id}`,
+      payload: { localConfig: { command: "node" } },
+    });
+    expect(cleared.statusCode, cleared.body).toBe(200);
+    expect(cleared.json().localConfig.runtimeTier).toBeUndefined();
+  });
+
+  test("custom YAML cannot hide an invalid runtime tier reference on create or update", async () => {
+    const payload = {
+      name: "Custom YAML tier",
+      serverType: "local",
+      localConfig: { command: "node", runtimeTier: "Missing" },
+      deploymentSpecYaml: DEPLOYMENT_YAML,
+    };
+    const invalidCreate = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload,
+    });
+    expect(invalidCreate.statusCode, invalidCreate.body).toBe(400);
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload: {
+        ...payload,
+        localConfig: { command: "node", runtimeTier: "S" },
+      },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const id = created.json().id;
+    const invalidUpdate = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${id}`,
+      payload: { localConfig: payload.localConfig },
+    });
+    expect(invalidUpdate.statusCode, invalidUpdate.body).toBe(400);
+    expect(
+      (await InternalMcpCatalogModel.findById(id))?.localConfig?.runtimeTier,
+    ).toBe("S");
+  });
+
+  for (const serverType of ["remote", "desktop_mcp"] as const) {
+    test(`${serverType} servers cannot acquire hidden runtime tier references`, async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const invalid = await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "Invalid tier",
+          serverType,
+          localConfig: { command: "node", runtimeTier: "S" },
+        },
+      });
+      expect(invalid.statusCode, invalid.body).toBe(400);
+      expect(invalid.body).toContain("Runtime tiers are only supported");
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        authorId: admin.id,
+        serverType,
+        localConfig: { command: "node" },
+      });
+      const assignment = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${catalog.id}`,
+        payload: { localConfig: { command: "node", runtimeTier: "S" } },
+      });
+      expect(assignment.statusCode, assignment.body).toBe(400);
+      expect(
+        (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
+          ?.runtimeTier,
+      ).toBeUndefined();
+      await expect(
+        InternalMcpCatalogModel.create(
+          {
+            name: "Invalid model tier",
+            serverType,
+            localConfig: { runtimeTier: "S" },
+          },
+          { organizationId },
+        ),
+      ).rejects.toThrow("Runtime tiers are only supported");
+      const local = await makeInternalMcpCatalog({
+        organizationId,
+        authorId: admin.id,
+        serverType: "local",
+        localConfig: { command: "node", runtimeTier: "S" },
+      });
+      const switchType = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${local.id}`,
+        payload: { serverType },
+      });
+      expect(switchType.statusCode, switchType.body).toBe(400);
+      await expect(
+        InternalMcpCatalogModel.update(local.id, { serverType }),
+      ).rejects.toThrow("Runtime tiers are only supported");
+      expect(await InternalMcpCatalogModel.findById(local.id)).toMatchObject({
+        serverType: "local",
+        localConfig: { runtimeTier: "S" },
+      });
+      const cleared = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${local.id}`,
+        payload: { serverType, localConfig: { command: "node" } },
+      });
+      expect(cleared.statusCode, cleared.body).toBe(200);
+    });
+  }
+
+  test("an editor cannot add, change or remove runtime tiers", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const runtimeTier = "S";
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: admin.id,
+      serverType: "local",
+      localConfig: { command: "node", runtimeTier },
+    });
+    currentUser = editor;
+    for (const next of [undefined, "M"]) {
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${catalog.id}`,
+        payload: { localConfig: { command: "node", runtimeTier: next } },
+      });
+      expect(response.statusCode, response.body).toBe(403);
+      expect(
+        (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
+          ?.runtimeTier,
+      ).toEqual(runtimeTier);
+    }
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload: {
+        name: "Unauthorized runtimeTier",
+        serverType: "local",
+        localConfig: { command: "node", runtimeTier },
+      },
+    });
+    expect(created.statusCode, created.body).toBe(403);
+  });
+
   test("an editor cannot add, replace or remove Kubernetes Secret references", async ({
     makeInternalMcpCatalog,
   }) => {

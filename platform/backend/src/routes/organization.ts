@@ -6,9 +6,12 @@ import {
   createCursorPaginatedResponseSchema,
   getArchestraMcpServerName,
   isModelSelectionComplete,
+  McpRuntimeTierSettingsSchema,
   providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
+  ResolvedMcpRuntimeTiersSchema,
   RouteId,
+  resolveMcpRuntimeTiers,
   type StoredAgentRuntimeTierSettings,
 } from "@archestra/shared";
 import {
@@ -67,6 +70,10 @@ import { prepareAgentRuntimeTierChange } from "@/services/agent-runtime/runtime-
 import { organizationAgentRuntimeTiers } from "@/services/agent-runtime/runtime-tiers";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
 import { knowledgeSettingsService } from "@/services/knowledge-settings";
+import {
+  organizationMcpRuntimeTiers,
+  prepareMcpRuntimeTierChange,
+} from "@/services/mcp-runtime-tier-settings";
 import { removeMemberTarget } from "@/services/member-removal";
 import { reconcileManagedPlaywrightSetting } from "@/services/playwright-runtime";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -335,6 +342,58 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(organization);
+    },
+  );
+
+  fastify.get(
+    "/api/organization/mcp-runtime-tiers",
+    {
+      schema: {
+        operationId: RouteId.GetMcpRuntimeTiers,
+        description: "The organization's independent MCP CPU/RAM tiers",
+        tags: ["Organization"],
+        response: constructResponseSchema(ResolvedMcpRuntimeTiersSchema),
+      },
+    },
+    async ({ organizationId }, reply) =>
+      reply.send(await organizationMcpRuntimeTiers(organizationId)),
+  );
+
+  fastify.patch(
+    "/api/organization/mcp-runtime-tiers",
+    {
+      schema: {
+        operationId: RouteId.UpdateMcpRuntimeTiers,
+        description: "Manage independent MCP CPU/RAM tiers",
+        tags: ["Organization"],
+        body: McpRuntimeTierSettingsSchema.nullable(),
+        response: constructResponseSchema(ResolvedMcpRuntimeTiersSchema),
+      },
+    },
+    async ({ organizationId, body, user }, reply) => {
+      if (!(await isGlobalAdmin(user.id, organizationId)))
+        throw new ApiError(
+          403,
+          "Only administrators can change MCP runtime tiers",
+        );
+      const settings = await withDbTransaction(async (tx) => {
+        const prepared = await prepareMcpRuntimeTierChange({
+          organizationId,
+          input: body,
+          tx,
+        });
+        await prepared.write(tx);
+        const organization = await OrganizationModel.patchInTransaction({
+          id: organizationId,
+          data: { mcpRuntimeTiers: prepared.settings },
+          tx,
+        });
+        if (!organization) throw new ApiError(404, "Organization not found");
+        return prepared.settings;
+      }).finally(() =>
+        OrganizationModel.invalidateSettingsCaches(organizationId),
+      );
+      return reply.send(resolveMcpRuntimeTiers(settings));
     },
   );
 

@@ -4,6 +4,13 @@ import { WireCallIds } from "./wire-call-ids";
 
 const longId = `gemsig-${"s".repeat(2000)}.gemini-call-read-1`;
 const policyId = policyCallId(longId);
+const proof = {
+  name: "read",
+  action: "read",
+  session: { organization_id: "organization", session_id: "session" },
+  spawn: false,
+  wrapped: false,
+};
 
 describe("WireCallIds", () => {
   test("leaves calls alone when every id fits", () => {
@@ -40,6 +47,7 @@ describe("WireCallIds", () => {
         annotated: [
           { id: policyId, name: "read", field: "prompt", appended: "marker" },
         ],
+        runtimeProofs: [{ ...proof, id: policyId }],
       }),
     ).toEqual({
       decision: "allow",
@@ -54,6 +62,7 @@ describe("WireCallIds", () => {
       annotated: [
         { id: longId, name: "read", field: "prompt", appended: "marker" },
       ],
+      runtimeProofs: [{ ...proof, id: longId }],
     });
   });
 
@@ -118,17 +127,6 @@ describe("WireCallIds", () => {
       }),
     ).toEqual({
       toolResultUpdates: { [longId]: "withheld", call_abc: "kept" },
-    });
-  });
-
-  test("rules on a result sent under a long id's digest together with the long id's own", () => {
-    const ids = new WireCallIds();
-    for (const id of [longId, policyId])
-      ids.toolResult({ id, name: "read", content: "text", isError: false });
-    expect(
-      ids.toolResultsOutcome({ toolResultUpdates: { [policyId]: "withheld" } }),
-    ).toEqual({
-      toolResultUpdates: { [longId]: "withheld", [policyId]: "withheld" },
     });
   });
 });

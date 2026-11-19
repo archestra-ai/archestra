@@ -1181,9 +1181,10 @@ const NATIVE_COMPLETION_TOOLS = new Set([
 const NATIVE_METADATA = /^[A-Za-z0-9_.:@/-]{1,512}$/;
 /**
  * A tool-call id a client echoes in a notification: the characters of other
- * native metadata, at any length. Policy knows a long one by its digest.
+ * native metadata, with room for a trajectory stamp around an id that carries
+ * a thought signature. Policy knows a long one by its digest.
  */
-const WIRE_CALL_ID = /^[A-Za-z0-9_.:@/-]+$/;
+const WIRE_CALL_ID = /^[A-Za-z0-9_.:@/-]{1,16384}$/;
 /** Copilot CLI's tool that reads what a background agent returned. */
 const COPILOT_REPORT_TOOLS: ReadonlySet<string> = new Set(["read_agent"]);
 /**

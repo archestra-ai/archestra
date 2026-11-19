@@ -30,6 +30,7 @@ import type { TrajectoryStamp } from "@/openappa/trajectory-stamp";
 import {
   type AppaWireFamily,
   appaWireFamily,
+  hasAliasedCallIds,
   providerWire,
   restoreTrajectoryStamps,
   restoreTrajectoryStampsInText,
@@ -81,6 +82,11 @@ export function scrubOpenappaIngress(params: {
   // client copied into text. Neither needs an OpenAPPA session, so no id the
   // proxy gave a client reaches a provider with Guardrails off either.
   const trajectoryStamps = restoreTrajectoryStamps({ interactionType, body });
+  if (hasAliasedCallIds({ interactionType, body }))
+    throw new ApiError(
+      400,
+      "Two tool calls in this request cannot be told apart by their ids",
+    );
   const wire = providerWire(interactionType);
   if (wire) restoreTrajectoryStampsInText({ wire, body });
 

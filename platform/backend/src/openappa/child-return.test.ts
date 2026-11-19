@@ -1075,9 +1075,16 @@ describe("OpenAPPA child-return markers", () => {
       { spawnCallId: policyCallId(spawnCallId) },
     ]);
     expect(policyCallId(spawnCallId)).toMatch(/^call_[0-9a-f]{32}$/);
-    expect(() =>
-      collectAndStripChildReturns(notification(`${spawnCallId} x`)),
-    ).toThrow();
+    const subagentNotification = {
+      content: `<subagent_notification>\n${JSON.stringify({ agent_id: "child", tool_use_id: spawnCallId, status: { completed: carrier(requiredMarker(RETURN)) } })}\n</subagent_notification>`,
+    };
+    expect(
+      collectAndStripChildReturns(subagentNotification).completions,
+    ).toMatchObject([{ spawnCallId }]);
+    for (const refused of [`${spawnCallId} x`, "c".repeat(16385)])
+      expect(() =>
+        collectAndStripChildReturns(notification(refused)),
+      ).toThrow();
   });
 
   test("records the notification's native child identity", () => {

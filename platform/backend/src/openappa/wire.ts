@@ -496,6 +496,26 @@ export function restoreTrajectoryStamps(params: {
 }
 
 /**
+ * Whether two different call ids of one request share a policy id: an id
+ * spelled as the digest of a long one would take that call's rulings and its
+ * exemptions. Read after the trajectory stamps are restored.
+ */
+export function hasAliasedCallIds(params: {
+  interactionType: string;
+  body: unknown;
+}): boolean {
+  const wireIds = new Map<string, string>();
+  for (const site of callIdSites(params)) {
+    const wireId = site.get();
+    const policyId = policyCallId(wireId);
+    const known = wireIds.get(policyId);
+    if (known === undefined) wireIds.set(policyId, wireId);
+    else if (known !== wireId) return true;
+  }
+  return false;
+}
+
+/**
  * Removes session-receipt marks from conversation history before request
  * forwarding. Only message text fields are inspected. Tool arguments, results,
  * reasoning, and instructions are not treated as control data.

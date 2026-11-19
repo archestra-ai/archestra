@@ -23,3 +23,11 @@ export function policyCallId(wireId: string): string {
     ? wireId
     : digestToolCallId(providerId);
 }
+
+/**
+ * The id the runtime's records and signed proofs name a call by: its policy
+ * id, without a trajectory stamp.
+ */
+export function recordedCallId(wireId: string): string {
+  return withoutTrajectoryStamp(policyCallId(wireId));
+}

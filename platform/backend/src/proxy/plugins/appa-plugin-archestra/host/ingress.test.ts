@@ -1,5 +1,8 @@
 import type { FastifyRequest } from "fastify";
 import { describe, expect, test } from "vitest";
+import { policyCallId } from "@/openappa/call-id";
+import { stampToolCallId } from "@/openappa/trajectory-stamp";
+import { ApiError } from "@/types";
 import { scrubOpenappaIngress, scrubTranslatedClientWire } from "./ingress";
 
 const kiloHeaders = {
@@ -134,6 +137,47 @@ describe("ingress on a Model Router translated wire", () => {
       expect.objectContaining({ envelopeId: "call_own" }),
     ]);
     expect(ingress.clientWire).toBeUndefined();
+  });
+
+  test("names a return by the policy id of a call id too long for policy, and leaves the id in the body", () => {
+    const callId = `gemsig-${"s".repeat(2000)}.gemini-call-task-1`;
+    const body = chatWithTaskResult(
+      stampToolCallId({
+        callId,
+        sessionId: "ses_root",
+        organizationId: "organization",
+        callerId: "user:user",
+        secret: "secret",
+      }),
+    );
+    const ingress = scrubOpenappaIngress({
+      request: fakeRequest(),
+      body,
+      interactionType: "openai:chatCompletions",
+    });
+    expect(ingress.childReturns?.completions).toEqual([
+      expect.objectContaining({ envelopeId: policyCallId(callId) }),
+    ]);
+    expect(body.messages[2]).toMatchObject({ tool_call_id: callId });
+  });
+
+  test("refuses a request where a call id is spelled as the policy id of another's", () => {
+    const callId = `gemsig-${"s".repeat(2000)}.gemini-call-task-1`;
+    const history = chatWithTaskResult(callId);
+    const body = {
+      ...history,
+      messages: [
+        ...history.messages,
+        { role: "tool", tool_call_id: policyCallId(callId), content: "text" },
+      ],
+    };
+    expect(() =>
+      scrubOpenappaIngress({
+        request: fakeRequest(),
+        body,
+        interactionType: "openai:chatCompletions",
+      }),
+    ).toThrow(ApiError);
   });
 
   test("collects nothing on another wire when no route translated it", () => {

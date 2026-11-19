@@ -16,13 +16,11 @@ type ToolCall = LlmProxyToolCallsContext["toolCalls"][number];
  * to the proxy's adapters, which match and answer by the id the wire carries.
  */
 export class WireCallIds {
-  private readonly wireIds = new Map<string, Set<string>>();
+  private readonly wireIds = new Map<string, string>();
 
   /** No id here is too long: both sides name every call the same way. */
   get same(): boolean {
-    return [...this.wireIds].every(
-      ([policyId, wireIds]) => wireIds.size === 1 && wireIds.has(policyId),
-    );
+    return this.wireIds.size === 0;
   }
 
   /**
@@ -112,15 +110,11 @@ export class WireCallIds {
     return (
       outcome && {
         ...outcome,
-        // A client can send a result under a long id and another under that
-        // id's digest: policy ruled on both as one, so both take its ruling.
         toolResultUpdates: Object.fromEntries(
-          Object.entries(outcome.toolResultUpdates).flatMap(([id, content]) =>
-            [...(this.wireIds.get(id) ?? [id])].map((wireId) => [
-              wireId,
-              content,
-            ]),
-          ),
+          Object.entries(outcome.toolResultUpdates).map(([id, content]) => [
+            this.wireId(id),
+            content,
+          ]),
         ),
       }
     );
@@ -128,17 +122,12 @@ export class WireCallIds {
 
   private policyId(wireId: string): string {
     const policyId = policyCallId(wireId);
-    const wireIds = this.wireIds.get(policyId);
-    if (wireIds) wireIds.add(wireId);
-    else this.wireIds.set(policyId, new Set([wireId]));
+    if (policyId !== wireId) this.wireIds.set(policyId, wireId);
     return policyId;
   }
 
-  /** The id the wire carries where it differs from the policy id. */
   private wireId(policyId: string): string {
-    for (const wireId of this.wireIds.get(policyId) ?? [])
-      if (wireId !== policyId) return wireId;
-    return policyId;
+    return this.wireIds.get(policyId) ?? policyId;
   }
 
   private onWire<T extends { id: string }>(named: T): T {

@@ -38,8 +38,8 @@ import {
   parseSharePointSites,
 } from "@/lib/ms-teams/channel-files-request";
 import { buildTeamsManifest } from "@/lib/ms-teams/teams-manifest";
-// The walkthrough videos are served from the CDN in archestra-ai/infra
-// (gcp/cloud-run/cdn), not from frontend/public: see setupVideoUrl.
+// The walkthrough videos are served from cdn.archestra.dev (archestra-ai/infra,
+// gcp/cloud-run/cdn), not from frontend/public: see setupVideoUrl.
 import { setupVideoUrl } from "@/lib/setup-videos";
 
 interface MsTeamsSetupDialogProps {

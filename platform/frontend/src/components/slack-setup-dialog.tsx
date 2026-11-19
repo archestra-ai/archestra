@@ -29,8 +29,8 @@ import { usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
-// The walkthrough videos are served from the CDN in archestra-ai/infra
-// (gcp/cloud-run/cdn), not from frontend/public: see setupVideoUrl.
+// The walkthrough videos are served from cdn.archestra.dev (archestra-ai/infra,
+// gcp/cloud-run/cdn), not from frontend/public: see setupVideoUrl.
 import { setupVideoUrl } from "@/lib/setup-videos";
 
 type ConnectionMode = NonNullable<

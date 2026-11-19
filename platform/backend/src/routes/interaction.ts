@@ -403,7 +403,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetInteractionSessionChatErrors,
         description:
-          "Get the errors Archestra Chat showed for a session's conversation, oldest first. Empty for sessions that are not chat conversations. `log:read` covers the caller's own sessions; `log:admin` covers every session in the organization.",
+          "Get the errors the chat showed for a session's conversation, oldest first. Empty for sessions that are not chat conversations. `log:read` covers the caller's own sessions; `log:admin` covers every session in the organization.",
         tags: ["Interaction"],
         params: z.object({ sessionId: z.string().min(1).max(1024) }),
         response: constructResponseSchema(SessionChatErrorsSchema),

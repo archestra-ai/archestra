@@ -5033,7 +5033,7 @@ export const getInteractionSessions = <ThrowOnError extends boolean = false>(opt
 export const getInteractionSessionLineage = <ThrowOnError extends boolean = false>(options: Options<GetInteractionSessionLineageData, ThrowOnError>) => (options.client ?? client).get<GetInteractionSessionLineageResponses, GetInteractionSessionLineageErrors, ThrowOnError>({ url: '/api/interactions/sessions/{sessionId}/lineage', ...options });
 
 /**
- * Get the errors Archestra Chat showed for a session's conversation, oldest first. Empty for sessions that are not chat conversations. `log:read` covers the caller's own sessions; `log:admin` covers every session in the organization.
+ * Get the errors the chat showed for a session's conversation, oldest first. Empty for sessions that are not chat conversations. `log:read` covers the caller's own sessions; `log:admin` covers every session in the organization.
  *
  * Authentication:
  *

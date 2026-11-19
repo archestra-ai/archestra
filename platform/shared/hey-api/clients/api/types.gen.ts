@@ -62744,7 +62744,7 @@ export type GetInteractionSessionsResponses = {
             interactionId: string | null;
             requestCount: number;
             /**
-             * Errors Archestra Chat showed for this session's conversation. Read them at GET /api/interactions/sessions/:sessionId/chat-errors.
+             * Errors the chat showed for this session's conversation. Read them at GET /api/interactions/sessions/:sessionId/chat-errors.
              */
             chatErrorCount: number;
             totalInputTokens: number;

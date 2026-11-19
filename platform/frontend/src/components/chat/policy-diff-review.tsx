@@ -1,9 +1,15 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Columns2 } from "lucide-react";
-import { useId, useState } from "react";
+import { ArrowDown, ArrowUp, Columns2, X } from "lucide-react";
+import { type ReactNode, useId, useState } from "react";
 import { DiffEditor } from "@/components/diff-editor";
 import { Button } from "@/components/ui/button";
+import {
+  DialogClose,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -20,10 +26,12 @@ export function PolicyDiffReview({
   before,
   after,
   path,
+  summary,
 }: {
   before: string;
   after: string;
   path: string;
+  summary: ReactNode;
 }) {
   const controlId = useId();
   const [sideBySide, setSideBySide] = useState(false);
@@ -31,56 +39,77 @@ export function PolicyDiffReview({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3">
-        <SideBySideSwitch
-          id={`${controlId}-side-by-side`}
-          checked={sideBySide}
-          onCheckedChange={(checked) =>
-            navigation.changeView(() => setSideBySide(checked))
-          }
-        />
-        <nav
-          aria-label="Change navigation"
-          className="ml-auto flex w-full items-center justify-end gap-3 sm:w-auto"
-        >
-          <output
-            aria-label="Change position"
-            aria-live="polite"
-            aria-atomic="true"
-            className="mr-auto text-sm font-normal text-muted-foreground tabular-nums sm:mr-0"
+      <DialogHeader className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 text-left md:grid-cols-[minmax(0,1fr)_auto_auto]">
+        <DialogTitle className="flex min-h-8 items-center">
+          Policy changes
+        </DialogTitle>
+        <div className="col-span-full row-start-2 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+          <DialogDescription className="wrap-anywhere font-mono text-xs">
+            {path}
+          </DialogDescription>
+          {summary}
+        </div>
+        <div className="col-span-full row-start-3 flex min-w-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 md:col-span-1 md:col-start-2 md:row-start-1">
+          <SideBySideSwitch
+            id={`${controlId}-side-by-side`}
+            checked={sideBySide}
+            onCheckedChange={(checked) =>
+              navigation.changeView(() => setSideBySide(checked))
+            }
+          />
+          <nav
+            aria-label="Change navigation"
+            className="flex items-center gap-3"
           >
-            {navigation.ready
-              ? navigation.total
-                ? `Change ${navigation.current} of ${navigation.total}`
-                : "No changes"
-              : "Calculating changes…"}
-          </output>
-          <div className="flex items-center gap-1">
-            <Button
-              size="icon-sm"
-              variant="outline"
-              aria-label="Previous change"
-              title="Previous change"
-              disabled={!navigation.ready || navigation.current <= 1}
-              onClick={() => navigation.move(-1)}
+            <output
+              aria-label="Change position"
+              aria-live="polite"
+              aria-atomic="true"
+              className="whitespace-nowrap text-sm font-normal text-muted-foreground tabular-nums"
             >
-              <ArrowUp />
-            </Button>
-            <Button
-              size="icon-sm"
-              variant="outline"
-              aria-label="Next change"
-              title="Next change"
-              disabled={
-                !navigation.ready || navigation.current >= navigation.total
-              }
-              onClick={() => navigation.move(1)}
-            >
-              <ArrowDown />
-            </Button>
-          </div>
-        </nav>
-      </div>
+              {navigation.ready
+                ? navigation.total
+                  ? `Change ${navigation.current} of ${navigation.total}`
+                  : "No changes"
+                : "Calculating changes…"}
+            </output>
+            <div className="flex items-center gap-1">
+              <Button
+                size="icon-sm"
+                variant="outline"
+                aria-label="Previous change"
+                title="Previous change"
+                disabled={!navigation.ready || navigation.current <= 1}
+                onClick={() => navigation.move(-1)}
+              >
+                <ArrowUp />
+              </Button>
+              <Button
+                size="icon-sm"
+                variant="outline"
+                aria-label="Next change"
+                title="Next change"
+                disabled={
+                  !navigation.ready || navigation.current >= navigation.total
+                }
+                onClick={() => navigation.move(1)}
+              >
+                <ArrowDown />
+              </Button>
+            </div>
+          </nav>
+        </div>
+        <DialogClose asChild>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Close"
+            className="col-start-2 row-start-1 text-muted-foreground md:col-start-3"
+          >
+            <X />
+          </Button>
+        </DialogClose>
+      </DialogHeader>
       <div className="grid shrink-0 grid-cols-2 border-b bg-muted/30 py-2 text-xs text-muted-foreground">
         <span className="px-4">
           {sideBySide ? "Current" : "Current → Proposed"}
@@ -149,7 +178,7 @@ function SideBySideSwitch({
     <Tooltip delayDuration={350}>
       <div
         className={cn(
-          "flex min-h-10 w-full items-center gap-3 rounded-md border px-2.5 py-1.5 transition-colors hover:bg-accent/50 sm:min-h-8 sm:w-auto",
+          "flex min-h-8 shrink-0 items-center gap-3 rounded-md border px-2.5 py-1.5 transition-colors hover:bg-accent/50",
           checked && "border-ring/40 bg-accent/60",
         )}
       >

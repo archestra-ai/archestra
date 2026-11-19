@@ -4,14 +4,7 @@ import { Maximize2 } from "lucide-react";
 import { useMemo } from "react";
 import { TRUNCATED_CONTENT_MAX_LINES } from "@/components/ai-elements/truncated-content";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils/tailwind";
 import { PolicyDiffReview } from "./policy-diff-review";
 import type { PolicyDiffRow } from "./policy-diff-rows";
@@ -95,6 +88,7 @@ export function PolicyDiff({
       {/* An immersive editor needs its own fixed-height shell and scroll area. */}
       <DialogContent
         className="h-[90dvh] w-[calc(100%-2rem)] max-w-[100rem] gap-0"
+        showCloseButton={false}
         onEscapeKeyDown={(event) => {
           // Radix sees Escape before Monaco does. Let the editor close its
           // search widget without also dismissing the policy review.
@@ -106,14 +100,12 @@ export function PolicyDiff({
           }
         }}
       >
-        <DialogHeader className="shrink-0 gap-2 pr-12 text-left">
-          <DialogTitle>Policy changes</DialogTitle>
-          <DialogDescription className="font-mono text-xs">
-            {path}
-          </DialogDescription>
-          {summary}
-        </DialogHeader>
-        <PolicyDiffReview before={before} after={after} path={path} />
+        <PolicyDiffReview
+          before={before}
+          after={after}
+          path={path}
+          summary={summary}
+        />
       </DialogContent>
     </Dialog>
   );

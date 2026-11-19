@@ -190,7 +190,13 @@ version = 2
     ]);
     expect(codingAliases?.edit_file).toEqual([
       { name: "host/archestra/edit", args: { file_path: "filePath" } },
+      { name: "host/archestra/StrReplace", args: { file_path: "file_path" } },
     ]);
+    // Cursor's capitalised Shell is its own target beside Codex's `shell`.
+    expect(codingAliases?.shell).toContainEqual({
+      name: "host/archestra/Shell",
+      args: { command: "command" },
+    });
     expect(codingAliases?.fetch_url).toEqual([
       { name: "host/archestra/webfetch", args: { url: "url" } },
       {

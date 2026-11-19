@@ -293,6 +293,12 @@ export type AppaClientAdapter = {
    * marker closes that prompt, so its digest is taken over this text.
    */
   childOpeningPrompt?(text: string): string;
+  /**
+   * False for a client whose body fields carry no known session meaning:
+   * when `extractSessionIdentity` finds nothing, the request binds the
+   * credential's fallback root instead of a generic body field.
+   */
+  readonly genericSessionFallback?: false;
   /** Native parent named by a spawn-prepared child request, if any. */
   nativeSpawnParentId?(
     context: AppaMatchContext,

@@ -72,6 +72,18 @@ describe("command-normalization", () => {
       expect(
         normalizeToolArgumentsForPolicy("Read", { file_path: "/repo/.env" }),
       ).toEqual({ file_path: "/repo/.env" });
+      // Cursor's StrReplace names the file `path` too; a change to its own
+      // hooks in a Windows home must read like any other path.
+      expect(
+        normalizeToolArgumentsForPolicy("host/archestra/StrReplace", {
+          path: "C:\\Users\\me\\.cursor\\hooks.json",
+          old_string: "a",
+        }),
+      ).toEqual({
+        path: "C:\\Users\\me\\.cursor\\hooks.json",
+        old_string: "a",
+        file_path: "C:/Users/me/.cursor/hooks.json",
+      });
       // So is Grep, whose rules read `path`, and OpenCode's lowercase read.
       expect(
         normalizeToolArgumentsForPolicy("Grep", { path: "/repo" }),

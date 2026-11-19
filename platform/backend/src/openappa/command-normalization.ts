@@ -17,15 +17,16 @@ export function isCommandExecutionTool(name: string): boolean {
 /**
  * The arguments a call is evaluated with. A command tool gets `command` and
  * `cmd` set to one value, so a rule matches either client's spelling. Kimi
- * Code's Read, Write and Edit and Copilot CLI's lowercase `view` and `create`
- * name the file `path`, while the coding battery's rules for those tools read
- * `file_path`; similarly, Copilot CLI's lowercase `edit` names the file `path`,
- * while the coding alias for `host/archestra/edit` reads OpenCode's `filePath`,
- * and a policy cannot map a second argument name onto the same tool. Such a
- * call also gets its ruled target argument, only when it has none. The copy
- * spells the path with forward slashes: on Windows the client sends
- * `C:\Users\me\.npmrc`, and the battery's selectors (`*\/.npmrc`) read `/`. So
- * a target argument equal to the `path` spelled that way is always this copy.
+ * Code's Read, Write and Edit, Cursor's Read, Write and StrReplace, and
+ * Copilot CLI's lowercase `view` and `create` name the file `path`, while the
+ * coding battery's rules for those tools read `file_path`; similarly, Copilot
+ * CLI's lowercase `edit` names the file `path`, while the coding alias for
+ * `host/archestra/edit` reads OpenCode's `filePath`, and a policy cannot map a
+ * second argument name onto the same tool. Such a call also gets its ruled
+ * target argument, only when it has none. The copy spells the path with
+ * forward slashes: on Windows the client sends `C:\Users\me\.npmrc`, and the
+ * battery's selectors (`*\/.npmrc`) read `/`. So a target argument equal to the
+ * `path` spelled that way is always this copy.
  */
 export function normalizeToolArgumentsForPolicy(
   toolName: string,
@@ -110,14 +111,15 @@ export function withoutArgumentCopies(
 // Internal helpers
 // =============================================================================
 
-// Kimi Code's Read/Write/Edit and Copilot CLI's view/create (`path` ->
-// `file_path`), and Copilot CLI's lowercase `edit` (`path` -> OpenCode's
-// `filePath`).
+// Kimi Code's Read/Write/Edit, Cursor's Read/Write/StrReplace and Copilot
+// CLI's view/create (`path` -> `file_path`), and Copilot CLI's lowercase
+// `edit` (`path` -> OpenCode's `filePath`).
 function pathFileTarget(tool: string): "file_path" | "filePath" | null {
   if (
     tool === "Read" ||
     tool === "Write" ||
     tool === "Edit" ||
+    tool === "StrReplace" ||
     tool === "view" ||
     tool === "create"
   ) {

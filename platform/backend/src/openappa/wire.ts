@@ -71,6 +71,7 @@ export type AppaSessionIdentity = {
     | "pi-session-header"
     | "kimi-code-cache-key"
     | "grok-session-header"
+    | "cursor-opening"
     | "prompt-cache-key"
     | "metadata-session-id"
     | "conversation"

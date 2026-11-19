@@ -231,7 +231,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-codex
 USER root
-RUN pnpm add --global @openai/codex@0.167.1 \
+RUN pnpm add --global @openai/codex@0.167.2 \
  && codex --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
@@ -362,14 +362,14 @@ ARG TARGETARCH
 ENV GROK_DISABLE_AUTOUPDATER=1
 USER root
 RUN case "$TARGETARCH" in \
-      amd64) grok_arch=x64; checksum=65196b2082645faab3d4f1603008cb0db58d8b9b18bfdff481a4ee4ff256accd ;; \
-      arm64) grok_arch=arm64; checksum=f51375bc06869d739f60ad208f0dd154fe50967dce610fd34501025f163f0620 ;; \
+      amd64) grok_arch=x64; checksum=f2b6b0b5d0126a553b3973a6849f6ab96e3ab0e4cdc61a10a0a386b76021665c ;; \
+      arm64) grok_arch=arm64; checksum=9f6d365e32f290a6bb0eed7f313a8ee071b073e39a837d5ec5eb937be17da79a ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /tmp/grok /opt/grok/bin \
  && cd /tmp/grok \
- && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.81" \
- && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.81.tgz" \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.83" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.83.tgz" \
  && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
  && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
  && chmod 0755 /opt/grok/bin/grok \

@@ -1,8 +1,10 @@
 import { and, eq, sql } from "drizzle-orm";
+import client from "prom-client";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import { initializeOpenappaMetrics } from "@/observability/metrics/openappa";
 import { describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import {
@@ -644,3 +646,79 @@ test("the unattended note is kept only in the mode that reads it", () => {
   expect(unattendedNoteMatters(settings("everywhere"))).toBe(false);
   expect(unattendedNoteMatters(settings("unattended", false))).toBe(false);
 });
+
+test("openappa_yells_total counts each committed waived call; a refused review and reports off count nothing", async ({
+  makeOrganization,
+}) => {
+  initializeOpenappaMetrics();
+  const organizationId = (await makeOrganization()).id;
+  const session = {
+    organization_id: organizationId,
+    caller_id: "user:u1",
+    session_id: "user:u1|metrics",
+  };
+  const before = await yellsCounted();
+  await recordWaivedCalls({
+    session,
+    calls: [
+      { toolCallId: "call-1", tool: "mcp/slack/send", kind: "approval_waived" },
+      { toolCallId: "call-2", tool: "mcp/slack/send", kind: "approval_waived" },
+      { toolCallId: "call-3", tool: "mcp/mail/send", kind: "block_waived" },
+    ],
+    superyell: false,
+  });
+  // A repeated evaluation of a recorded call adds nothing.
+  await recordWaivedCall({
+    session,
+    toolCallId: "call-1",
+    tool: "mcp/slack/send",
+    kind: "approval_waived",
+    superyell: false,
+  });
+  await recordWaivedReview({
+    session,
+    tool: "host/archestra/Agent",
+    superyell: true,
+    authorize: async () => true,
+  });
+  await recordWaivedReview({
+    session,
+    tool: "host/archestra/Agent",
+    superyell: true,
+    authorize: async () => false,
+  });
+  const yellEnabled = config.openappa.yellEnabled;
+  config.openappa.yellEnabled = false;
+  try {
+    await recordWaivedCall({
+      session: { ...session, session_id: "user:u1|metrics-off" },
+      toolCallId: "call-4",
+      tool: "mcp/slack/send",
+      kind: "approval_waived",
+      superyell: true,
+    });
+  } finally {
+    config.openappa.yellEnabled = yellEnabled;
+  }
+  const after = await yellsCounted();
+  expect({
+    approval: after["approval_waived|false"] - before["approval_waived|false"],
+    block: after["block_waived|false"] - before["block_waived|false"],
+    review: after["approval_waived|true"] - before["approval_waived|true"],
+  }).toEqual({ approval: 2, block: 1, review: 1 });
+});
+
+/** `openappa_yells_total` by `kind|superyell`, zero where nothing counted. */
+async function yellsCounted(): Promise<Record<string, number>> {
+  const values =
+    (await client.register.getSingleMetric("openappa_yells_total")?.get())
+      ?.values ?? [];
+  const counted: Record<string, number> = {};
+  for (const kind of ["approval_waived", "block_waived"])
+    for (const superyell of ["false", "true"])
+      counted[`${kind}|${superyell}`] =
+        values.find(
+          (v) => v.labels.kind === kind && v.labels.superyell === superyell,
+        )?.value ?? 0;
+  return counted;
+}

@@ -46,7 +46,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -62,7 +62,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -105,7 +105,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - name: Report screenshot validation
@@ -123,12 +123,12 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           # Standalone validation checks the selected manual ref.
           fetch-depth: 1
-      - uses: ./.github/actions/capture-docs-screenshots
+      - uses: $/.github/actions/capture-docs-screenshots
         # No filter: every queue commit must exercise the entire manifest.
 
   docs-screenshots:
@@ -148,7 +148,7 @@ jobs:
       pull-requests: write # Required to open the screenshot pull request on manual runs.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -156,20 +156,20 @@ jobs:
       # Pushes made with GITHUB_TOKEN don't re-trigger workflows; the app token's do.
       - name: Generate GitHub App token
         id: generate-token
-        uses: ./.github/actions/github-app-token
+        uses: $/.github/actions/github-app-token
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
       - name: Checkout with push credentials
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: true # zizmor: ignore[artipacked] the job pushes updated screenshots.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           token: ${{ steps.generate-token.outputs.token }}
           fetch-depth: 2
 
-      - uses: ./.github/actions/capture-docs-screenshots
+      - uses: $/.github/actions/capture-docs-screenshots
         with:
           only: ${{ inputs.only }}
 
@@ -214,7 +214,7 @@ jobs:
 
       - name: Retain screenshots when the release head is queued
         if: steps.publish-screenshots.outputs.queued == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: queued-docs-screenshots
           path: docs/assets

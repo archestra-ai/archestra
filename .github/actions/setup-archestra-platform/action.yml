@@ -117,14 +117,14 @@ runs:
         fi
 
     - name: Install Kind
-      uses: ./.github/actions/install-kind-cluster
+      uses: $/.github/actions/install-kind-cluster
       with:
         config: ${{ inputs.kind-config-path }}
         cluster-name: ${{ inputs.kind-cluster-name }}
 
     - name: Build Docker image
       if: ${{ inputs.build-platform-image == 'true' }}
-      uses: ./.github/actions/build-docker-image
+      uses: $/.github/actions/build-docker-image
       with:
         context: ${{ inputs.platform-context }}
         load: "true"
@@ -133,7 +133,7 @@ runs:
     - name: Cache MCP example OAuth server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-minimal != 'true' }}
       id: cache-oauth-image
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache@v6.1.0
       with:
         path: /tmp/mcp-oauth-server.tar
         key: mcp-oauth-server-0.0.1-${{ runner.arch }}
@@ -141,7 +141,7 @@ runs:
     - name: Cache MCP JWKS server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-minimal != 'true' }}
       id: cache-jwks-image
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache@v6.1.0
       with:
         path: /tmp/mcp-jwks-server.tar
         key: mcp-jwks-server-0.0.3-${{ runner.arch }}
@@ -149,7 +149,7 @@ runs:
     - name: Cache MCP ID-JAG server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-minimal != 'true' }}
       id: cache-id-jag-image
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache@v6.1.0
       with:
         path: /tmp/mcp-id-jag-server.tar
         key: mcp-id-jag-server-0.0.4-${{ runner.arch }}

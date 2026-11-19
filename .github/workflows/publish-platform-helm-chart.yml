@@ -38,7 +38,7 @@ jobs:
         working-directory: ./platform/helm/archestra
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -46,7 +46,7 @@ jobs:
 
       - name: Download staged release image references
         if: inputs.pin_release_images
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           pattern: release-image-*-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-images
@@ -68,7 +68,7 @@ jobs:
           helm package . --version "$IMAGE_TAG" --app-version "$IMAGE_TAG"
 
       - name: Preserve chart for attestation and publication
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: release-helm-chart
           path: platform/helm/archestra/archestra-platform-${{ inputs.version }}.tgz

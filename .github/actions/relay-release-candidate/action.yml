@@ -23,7 +23,7 @@ runs:
         CANDIDATE_DIR: ${{ runner.temp }}/relay-${{ inputs.image_name }}-amd64
       run: python3 .github/scripts/release-handoff.py relay
     - name: Relay amd64 bytes into this release run
-      uses: ./.github/actions/github-upload-artifact
+      uses: $/.github/actions/github-upload-artifact
       with:
         name: promoted-candidate-${{ inputs.image_name }}-amd64-${{ github.run_attempt }}
         path: ${{ runner.temp }}/relay-${{ inputs.image_name }}-amd64/*
@@ -46,7 +46,7 @@ runs:
         CANDIDATE_DIR: ${{ runner.temp }}/relay-${{ inputs.image_name }}-arm64
       run: python3 .github/scripts/release-handoff.py relay
     - name: Relay arm64 bytes into this release run
-      uses: ./.github/actions/github-upload-artifact
+      uses: $/.github/actions/github-upload-artifact
       with:
         name: promoted-candidate-${{ inputs.image_name }}-arm64-${{ github.run_attempt }}
         path: ${{ runner.temp }}/relay-${{ inputs.image_name }}-arm64/*

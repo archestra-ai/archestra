@@ -28,14 +28,14 @@ jobs:
       deployment: false # A secrets and branch gate; nothing is deployed.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Generate a token
         id: generate-token
-        uses: ./.github/actions/github-app-token
+        uses: $/.github/actions/github-app-token
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}
@@ -62,7 +62,7 @@ jobs:
 
       - name: Block open release-please PRs
         if: inputs.release_freeze == 'true'
-        uses: ./.github/actions/release-freeze-review
+        uses: $/.github/actions/release-freeze-review
         with:
           action: freeze
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
@@ -70,7 +70,7 @@ jobs:
 
       - name: Unblock open release-please PRs
         if: inputs.release_freeze == 'false'
-        uses: ./.github/actions/release-freeze-review
+        uses: $/.github/actions/release-freeze-review
         with:
           action: unfreeze
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}

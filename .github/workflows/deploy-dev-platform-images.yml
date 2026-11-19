@@ -35,13 +35,13 @@ jobs:
       previous_image: ${{ steps.previous-main-image.outputs.previous-image || steps.deployed-platform-image.outputs.previous-image }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Authenticate to Google Artifact Registry
-        uses: ./.github/actions/auth-to-gar
+        uses: $/.github/actions/auth-to-gar
         with:
           service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME || vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER || vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

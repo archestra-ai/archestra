@@ -34,7 +34,7 @@ jobs:
       id-token: write # Docker Hub OIDC pull login for Docker Scout.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -49,13 +49,13 @@ jobs:
         run: python3 .github/scripts/platform-byte-scan-inputs.py select
 
       - name: Log in to Docker Hub
-        uses: ./.github/actions/docker-login
+        uses: $/.github/actions/docker-login
         with:
           username: archestra
           dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
 
       - name: Scan exact full and slim Platform image bytes
-        uses: ./.github/actions/scan-platform-image-bytes
+        uses: $/.github/actions/scan-platform-image-bytes
         with:
           image-sha: ${{ steps.images.outputs.source_sha }}
           full-image: ${{ steps.images.outputs.full }}

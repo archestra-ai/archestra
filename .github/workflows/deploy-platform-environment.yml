@@ -63,19 +63,19 @@ jobs:
       id-token: write # Required for Google Workload Identity Federation.
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Authenticate to Google Cloud
-        uses: ./.github/actions/google-auth
+        uses: $/.github/actions/google-auth
         with:
           service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+        uses: google-github-actions/setup-gcloud@v3.0.1
 
       - name: Install gke-gcloud-auth-plugin
         run: gcloud components install gke-gcloud-auth-plugin

@@ -11,13 +11,13 @@ runs:
   using: composite
   steps:
     - name: Authenticate to Google Cloud
-      uses: ./.github/actions/google-auth
+      uses: $/.github/actions/google-auth
       with:
         service_account: ${{ inputs.service_account }}
         workload_identity_provider: ${{ inputs.workload_identity_provider }}
 
     - name: Set up Google Cloud
-      uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+      uses: google-github-actions/setup-gcloud@v3.0.1
 
     - name: Configure Docker for Artifact Registry
       shell: bash

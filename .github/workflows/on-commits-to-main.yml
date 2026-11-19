@@ -118,24 +118,24 @@ jobs:
         working-directory: ./platform
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
       - name: Restore backend NAPI binaries
         id: native-cache
-        uses: ./.github/actions/cache-backend-napi
+        uses: $/.github/actions/cache-backend-napi
 
       # shared-key must stay identical to the backend preparation job's.
       - name: Cache cargo registry and target on native cache miss
         if: steps.native-cache.outputs.usable != 'true'
-        uses: ./.github/actions/setup-rust-build
+        uses: $/.github/actions/setup-rust-build
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests

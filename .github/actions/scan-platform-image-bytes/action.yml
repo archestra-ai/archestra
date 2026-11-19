@@ -48,7 +48,7 @@ runs:
         echo "slim=local://${slim_id}" >> "$GITHUB_OUTPUT"
 
     - name: Scan exact full and slim image bytes for CVEs
-      uses: ./.github/actions/scan-docker-image
+      uses: $/.github/actions/scan-docker-image
       with:
         image: ${{ steps.images.outputs.full }}
         additional-images: ${{ steps.images.outputs.slim }}

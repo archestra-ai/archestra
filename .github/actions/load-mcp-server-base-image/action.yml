@@ -63,7 +63,7 @@ runs:
 
     - name: Download MCP server base image artifact
       if: ${{ inputs.source == 'artifact' }}
-      uses: ./.github/actions/github-download-artifact
+      uses: $/.github/actions/github-download-artifact
       with:
         name: ${{ inputs.artifact-name }}
         path: /tmp

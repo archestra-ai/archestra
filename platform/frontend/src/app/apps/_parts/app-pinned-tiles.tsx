@@ -9,9 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { usePinApp } from "@/lib/app.query";
 import { appRunUrl } from "@/lib/apps/app-run-url";
+import { getAppRowKey, useOpenApp } from "@/lib/hooks/use-open-app";
 import { pinTarget } from "./apps-table";
 import { externalAppRunUrl, useAppRowActions } from "./use-app-row-actions";
-import { getAppRowKey, useOpenApp } from "./use-open-app";
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 

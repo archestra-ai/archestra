@@ -69,10 +69,10 @@ crate-type = ["cdylib"]
 # send labels (#940); then a spawn's tool call carrying the return it
 # declares (#947, #948); then appa-guide teaching newcomers how APPA decides
 # while setting it up (#942).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4bc04edf473f2c9c4d98ac192944da95ea49d1d7", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4bc04edf473f2c9c4d98ac192944da95ea49d1d7" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4bc04edf473f2c9c4d98ac192944da95ea49d1d7", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4bc04edf473f2c9c4d98ac192944da95ea49d1d7" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "077c37e298b36d89cb594fc7c02253278942e49b", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "077c37e298b36d89cb594fc7c02253278942e49b" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "077c37e298b36d89cb594fc7c02253278942e49b", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "077c37e298b36d89cb594fc7c02253278942e49b" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

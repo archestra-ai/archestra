@@ -376,6 +376,8 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
     "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`. Additional scope checks may apply.",
   [RouteId.RestoreAgent]:
     "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`. Additional scope checks may apply.",
+  [RouteId.GetOpenappaGuardrailEvents]:
+    "Requires `log:read` or `guardrailsYell:read`. Consults are returned with `log:read`, scoped to the caller's sessions unless the caller also holds `log:admin`. Yells are returned with `guardrailsYell:read`, scoped to the caller's sessions unless the caller also holds `guardrailsYell:admin`.",
   [RouteId.CreateRuntimeCredential]:
     "Checked dynamically based on the credential being created. A credential just for the caller (`allowPersonal: true`, `allowOrganization: false`, no `initialGrants`) needs no permission, and only its author can reach it. Organization credentials and credentials created with grants require `credential:create`.",
   // The three purge routes are gated by role, not by permission: the caller
@@ -416,6 +418,16 @@ const STATIC_ROUTE_PERMISSION_NOTES = {
     "`log:read` returns the caller's identity. `log:admin` includes every represented user in the active organization.",
   [RouteId.GetInteraction]:
     "`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
+  [RouteId.GetOpenAppaYells]:
+    "`guardrailsYell:read` returns the caller's yells. `guardrailsYell:admin` includes every yell in the active organization.",
+  [RouteId.GetOpenAppaYellsSummary]:
+    "`guardrailsYell:read` counts the caller's yells. `guardrailsYell:admin` counts every yell in the active organization.",
+  [RouteId.GetOpenAppaYell]:
+    "`guardrailsYell:read` permits a yell of the caller's sessions. `guardrailsYell:admin` permits any yell in the active organization.",
+  [RouteId.DownloadOpenAppaYell]:
+    "`guardrailsYell:read` permits a yell of the caller's sessions. `guardrailsYell:admin` permits any yell in the active organization.",
+  [RouteId.UpdateOpenAppaYell]:
+    "`guardrailsYell:read` resolves a yell of the caller's sessions. `guardrailsYell:admin` resolves any yell in the active organization.",
   [RouteId.GetMcpToolCalls]:
     "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
   [RouteId.GetMcpToolCall]:

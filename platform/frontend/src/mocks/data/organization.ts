@@ -23,6 +23,7 @@ export function makeOrganization(
     onlineMcpCatalogEnabled: true,
     defaultPersonalAgentAccessAllTools: true,
     mcpIdleHibernationEnabled: false,
+    mcpRuntimeTiers: null,
     onlineSkillCatalogEnabled: true,
     skillMarketplaceAnonymousAccess: false,
     skillToolsEnabled: false,

@@ -186,6 +186,7 @@ import {
 } from "@/lib/config/connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { useOpenApp } from "@/lib/hooks/use-open-app";
 import { useOrganizationDefaultModel } from "@/lib/hooks/use-organization-default-model";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useStableCallback } from "@/lib/hooks/use-stable-callback";
@@ -204,6 +205,7 @@ import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ViewTransition } from "@/lib/view-transition";
+import { appToReopenAsEncryptedChat } from "./app-chat-reopen";
 import {
   buildCreateConversationInput,
   isAutoSendHandoffInProgress,
@@ -1746,6 +1748,23 @@ export function ChatPageContent({
   // an oversight view never briefly flashes an editable composer before we know.
   const isResolvingOversightApp =
     oversightAppId !== null && oversightApp.isPending;
+  // Opening an app creates its chat at once, so the new-chat lock never shows
+  // for it. Until the user writes, the chat is only the app's opening render,
+  // so the composer keeps the lock and turning it on reopens the same app as a
+  // new encrypted chat. The unencrypted one is an app-open draft, which the
+  // sidebar hides until someone writes in it.
+  const appToReopenEncrypted = useMemo(
+    () => appToReopenAsEncryptedChat({ conversation, messages, apps: mcpApps }),
+    [conversation, messages, mcpApps],
+  );
+  const { open: openApp } = useOpenApp();
+  const reopenAppAsEncryptedChat = useStableCallback(
+    (encryptedChat: boolean) => {
+      if (encryptedChat && appToReopenEncrypted) {
+        void openApp(appToReopenEncrypted, { encryptedChat: true });
+      }
+    },
+  );
   const sendMessage = chatSession?.sendMessage;
   const regenerateUserMessage = chatSession?.regenerateUserMessage;
   const isAwaitingScheduledStream =
@@ -3698,6 +3717,12 @@ export function ChatPageContent({
                               contextWindow={contextWindow}
                               lastCompaction={contextCompaction?.lastCompaction}
                               inputModalities={selectedModelInputModalities}
+                              encryptedChat={false}
+                              onEncryptedChatChange={
+                                appToReopenEncrypted
+                                  ? reopenAppAsEncryptedChat
+                                  : undefined
+                              }
                               agentLlmApiKeyId={
                                 conversation?.agent?.llmApiKeyId ?? null
                               }

@@ -1,6 +1,9 @@
 "use client";
 
-import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
+import {
+  alternativePagePermissionsMap,
+  requiredPagePermissionsMap,
+} from "@archestra/shared/access-control";
 import { usePathname } from "next/navigation";
 import type React from "react";
 import { ForbiddenPage } from "@/app/_parts/forbidden-page";
@@ -22,9 +25,16 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
 
   // Get required permissions for current page
   const requiredPermissions = resolvePagePermissions(pathname);
-  const { data: hasRequiredPermissions, isPending } = useHasPagePermissions(
-    requiredPermissions || {},
-  );
+  const required = useHasPagePermissions(requiredPermissions || {});
+  // A page that shows two kinds of record also opens with the permission of
+  // the second kind (`alternativePagePermissionsMap`).
+  const alternativePermissions = alternativePagePermissionsMap[pathname];
+  const alternative = useHasPagePermissions(alternativePermissions ?? {});
+  const hasRequiredPermissions =
+    required.data || (!!alternativePermissions && alternative.data);
+  const isPending =
+    !hasRequiredPermissions &&
+    (required.isPending || (!!alternativePermissions && alternative.isPending));
   const canSeeSettings = useSettingsAreaAccess();
   // The Policy page also opens to a reader of some MCP server's rules.
   const serverRules = useServerRulesAccess();

@@ -1245,7 +1245,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         headers,
         // The package always emits `think`, defaulting it to false — see
         // createOllamaNativeFetch.
-        fetch: createOllamaNativeFetch(fetch),
+        fetch: createOllamaNativeFetch({ providedFetch: fetch, modelName }),
       }).chat(modelName),
     defaultBaseUrl: config.llm["ollama-native"].baseUrl,
     proxiedPathSuffix: "/api",
@@ -1399,12 +1399,37 @@ function createTracedFetch(): typeof globalThis.fetch {
  * `/v1/ollama-native/…` themselves never pass through here and keep whatever
  * `think` they sent.
  */
-function createOllamaNativeFetch(
-  providedFetch?: typeof globalThis.fetch,
-): typeof globalThis.fetch {
-  const baseFetch = providedFetch ?? globalThis.fetch;
+function createOllamaNativeFetch(params: {
+  providedFetch?: typeof globalThis.fetch;
+  modelName: string;
+}): typeof globalThis.fetch {
+  const baseFetch = params.providedFetch ?? globalThis.fetch;
+  // A request that sets no `num_ctx` (a summary, a title) would run on the
+  // server's default window, which silently cuts a prompt the caller sized to
+  // the admin's. One lookup per model instance.
+  let pinnedNumCtx: Promise<number | undefined> | undefined;
+  const resolvePinnedNumCtx = () => {
+    pinnedNumCtx ??= ModelModel.findByProviderAndModelId(
+      "ollama-native",
+      params.modelName,
+    ).then(
+      (row) =>
+        row?.configuredParameters?.num_ctx === undefined
+          ? undefined
+          : (ModelModel.resolveEffectiveContextLength(row) ??
+            row.configuredParameters.num_ctx),
+      (error) => {
+        logger.warn(
+          { error, model: params.modelName },
+          "[LLM client] could not read the model's configured num_ctx",
+        );
+        return undefined;
+      },
+    );
+    return pinnedNumCtx;
+  };
 
-  return (input, init) => {
+  return async (input, init) => {
     const { hasMarker: hasExplicitThink, headers } = takeMarkerHeader(
       init?.headers,
       OLLAMA_THINK_EXPLICIT_HEADER,
@@ -1430,6 +1455,16 @@ function createOllamaNativeFetch(
 
     if (!hasExplicitThink && "think" in body) {
       delete body.think;
+    }
+
+    const numCtx = await resolvePinnedNumCtx();
+    if (numCtx !== undefined) {
+      const current =
+        typeof body.options === "object" && body.options !== null
+          ? (body.options as Record<string, unknown>)
+          : {};
+      if (current.num_ctx === undefined)
+        body.options = { ...current, num_ctx: numCtx };
     }
 
     // The package emits an `options` bag even when every key resolved to

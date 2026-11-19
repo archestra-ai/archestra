@@ -38,6 +38,7 @@ import {
   useInteraction,
   useInteractionSessions,
   useInteractionSummaries,
+  useSessionChatErrors,
   useSessionHandoffs,
   useSessionLineage,
 } from "@/lib/interactions/interaction.query";
@@ -55,6 +56,10 @@ import {
 import { mergedRecordsQuery, pageEndsAt } from "./_parts/page-window";
 import { buildRanOn, type SessionHandoffs } from "./_parts/ran-on";
 import type { RanOnParties } from "./_parts/ran-on-strip";
+import {
+  type SessionChatError,
+  SessionChatErrors,
+} from "./_parts/session-chat-errors";
 import { SessionFacts } from "./_parts/session-facts";
 import {
   SessionHeaderIcon,
@@ -164,6 +169,28 @@ export default function SessionDetailPage({
     sessionId,
     enabled: openappaEnabled,
   });
+  // Read only for a session whose chat showed errors, so other sessions do
+  // not pay for a request that would come back empty.
+  const { data: chatErrors = NO_CHAT_ERRORS } = useSessionChatErrors({
+    sessionId,
+    enabled: (sessionData?.chatErrorCount ?? 0) > 0,
+  });
+  const requestIdByChatErrorId = useMemo(
+    () =>
+      lastRequestBeforeEachError({
+        chatErrors,
+        requests: interactions,
+        nextRequest: hasNextPage ? nextRequest : null,
+      }),
+    [chatErrors, interactions, hasNextPage, nextRequest],
+  );
+  const chatErrorsByRowId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const requestId of requestIdByChatErrorId.values()) {
+      counts.set(requestId, (counts.get(requestId) ?? 0) + 1);
+    }
+    return counts;
+  }, [requestIdByChatErrorId]);
 
   // Use session data from API for accurate totals, fall back to page data
   const totalInputTokens =
@@ -508,6 +535,17 @@ export default function SessionDetailPage({
             trajectory={
               openappaEnabled ? { session: sessionData, lineage } : null
             }
+            status={sessionData ?? null}
+          />
+
+          <SessionChatErrors
+            chatErrors={chatErrors}
+            requestIdByErrorId={requestIdByChatErrorId}
+            onShowRequest={(requestId) =>
+              interactions.some((row) => row.id === requestId)
+                ? setPickedKey(requestSpanKey(requestId))
+                : openRequest(requestId)
+            }
           />
 
           {/* overflow-clip, not hidden, below lg: hidden would make the card
@@ -537,6 +575,7 @@ export default function SessionDetailPage({
                 onSelect={setPickedKey}
                 ranOn={ranOn}
                 poolKeyNames={poolKeyNames}
+                chatErrorsByRowId={chatErrorsByRowId}
                 notice={
                   <ToolCallsNotice
                     failed={sessionToolCalls.isError}
@@ -617,6 +656,38 @@ export default function SessionDetailPage({
 // ============================================================================
 // Internal helpers
 // ============================================================================
+
+const NO_CHAT_ERRORS: SessionChatError[] = [];
+
+/**
+ * Ties each chat error to the request logged last before it on this page: the
+ * turn the chat was running when it failed. An error past the next page's
+ * first request belongs to a later page, and one before this page's first
+ * request to an earlier one; neither is tied.
+ */
+function lastRequestBeforeEachError({
+  chatErrors,
+  requests,
+  nextRequest,
+}: {
+  chatErrors: SessionChatError[];
+  requests: { id: string; createdAt: string }[];
+  nextRequest: { createdAt: string } | null;
+}): Map<string, string> {
+  const tied = new Map<string, string>();
+  const nextAt = nextRequest ? new Date(nextRequest.createdAt).getTime() : null;
+  for (const chatError of chatErrors) {
+    const at = new Date(chatError.createdAt).getTime();
+    if (nextAt !== null && nextAt <= at) continue;
+    let match: string | null = null;
+    for (const request of requests) {
+      if (new Date(request.createdAt).getTime() > at) break;
+      match = request.id;
+    }
+    if (match) tied.set(chatError.id, match);
+  }
+  return tied;
+}
 
 /** What the request list cannot show about this page's records, if anything. */
 function ToolCallsNotice({

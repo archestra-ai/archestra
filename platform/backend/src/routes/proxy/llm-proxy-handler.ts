@@ -551,7 +551,7 @@ export async function handleLLMProxy<
   request: FastifyRequest,
   reply: FastifyReply,
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
-  options?: { preserveNativeConverse?: boolean },
+  options?: { converseTranslation?: "native" | "unsupported" },
 ): Promise<FastifyReply> {
   const telemetry = getLlmProxyRequestTelemetry({
     request,
@@ -573,7 +573,7 @@ export async function handleLLMProxy<
         reply,
         provider,
         telemetry,
-        preserveNativeConverse: options?.preserveNativeConverse,
+        converseTranslation: options?.converseTranslation,
       }),
     );
   } catch (error) {
@@ -600,14 +600,14 @@ async function handleObservedLLMProxy<
   reply,
   provider,
   telemetry,
-  preserveNativeConverse,
+  converseTranslation,
 }: {
   body: TRequest;
   request: FastifyRequest;
   reply: FastifyReply;
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>;
   telemetry: LlmProxyRequestTelemetry;
-  preserveNativeConverse?: boolean;
+  converseTranslation?: "native" | "unsupported";
 }): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
   const clientRuntimeEvidence = consumeClientRuntimeEvidence(request);
@@ -2677,11 +2677,16 @@ async function handleObservedLLMProxy<
     ) as TRequest;
 
     if (modelPoolPlan && poolWire) {
+      if (converseTranslation === "unsupported")
+        throw new ApiError(
+          400,
+          "This model pool cannot serve a Converse request with unrecognized native options without dropping them.",
+        );
       modelPoolPlan.members = await compatiblePoolMembers({
         members: modelPoolPlan.members,
         wire: poolWire,
         request: finalRequest,
-        preserveNativeConverse,
+        preserveNativeConverse: converseTranslation === "native",
       });
     }
 

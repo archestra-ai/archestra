@@ -142,6 +142,31 @@ const poolTest = test.extend<{
   },
 });
 
+function decodeFrames(payload: Buffer) {
+  const codec = new EventStreamCodec(toUtf8, fromUtf8);
+  const frames = [];
+  for (let start = 0; start < payload.length; ) {
+    const size = payload.readUInt32BE(start);
+    const event = codec.decode(payload.subarray(start, start + size));
+    // Ignore transport padding; decode and assert the AWS event fields.
+    const { p: _padding, ...body } = JSON.parse(toUtf8(event.body));
+    frames.push([event.headers[":event-type"]?.value, body]);
+    start += size;
+  }
+  return frames;
+}
+
+function anthropicSse<T extends { type: string }>(events: T[]) {
+  return new HttpResponse(
+    events
+      .map(
+        (event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+      )
+      .join(""),
+    { headers: { "content-type": "text/event-stream" } },
+  );
+}
+
 const request = {
   system: [{ text: "Be concise." }],
   messages: [{ role: "user", content: [{ text: "Find this." }] }],
@@ -303,18 +328,7 @@ poolTest(
       },
       { type: "message_stop" },
     ];
-    anthropic.mockImplementation(
-      () =>
-        new HttpResponse(
-          events
-            .map(
-              (event) =>
-                `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
-            )
-            .join(""),
-          { headers: { "content-type": "text/event-stream" } },
-        ),
-    );
+    anthropic.mockImplementation(() => anthropicSse(events));
     const response = await ask(request, true);
     expect(response.statusCode, response.body).toBe(200);
     expect(aws).toHaveBeenCalledOnce();
@@ -331,18 +345,7 @@ poolTest(
     expect(response.headers["content-type"]).toContain(
       "application/vnd.amazon.eventstream",
     );
-    const codec = new EventStreamCodec(toUtf8, fromUtf8);
-    const frames = [];
-    for (let start = 0; start < response.rawPayload.length; ) {
-      const size = response.rawPayload.readUInt32BE(start);
-      const event = codec.decode(
-        response.rawPayload.subarray(start, start + size),
-      );
-      // Ignore transport padding; decode and assert the AWS event fields.
-      const { p: _padding, ...body } = JSON.parse(toUtf8(event.body));
-      frames.push([event.headers[":event-type"]?.value, body]);
-      start += size;
-    }
+    const frames = decodeFrames(response.rawPayload);
     expect(frames).toEqual([
       ["messageStart", { role: "assistant" }],
       [
@@ -418,21 +421,93 @@ poolTest(
     );
     expect(failure.statusCode, failure.body).toBe(503);
     expect(aws.mock.calls.length).toBeGreaterThanOrEqual(2);
+    const hits = aws.mock.calls.length;
 
-    // Unknown nested properties on an otherwise recognized union are stripped
-    // by Zod; the cross-wire decision must precede that normalization.
+    // The installed AWS protocol supports strict enforcement, but our
+    // native schema would strip it today; it must never run non-strict.
     const unknown = await ask(
       {
         ...request,
-        messages: [
-          { role: "user", content: [{ text: "hello", futureAwsOption: {} }] },
-        ],
+        toolConfig: { tools: [{ toolSpec: { ...toolSpec, strict: true } }] },
       },
       false,
       fallbackFirstName,
     );
-    expect(unknown.statusCode, unknown.body).toBe(503);
+    expect(unknown.statusCode, unknown.body).toBe(400);
+    expect(unknown.json().error.message).toContain(
+      "unrecognized native options",
+    );
+    expect(aws).toHaveBeenCalledTimes(hits);
     expect(openai).not.toHaveBeenCalled();
     expect(anthropic).not.toHaveBeenCalled();
   },
 );
+
+for (const stream of [false, true]) {
+  poolTest(
+    `preserves Anthropic stop sequences on Converse (stream=${stream})`,
+    async ({ converse }) => {
+      const message = {
+        id: "msg_synthetic",
+        type: "message",
+        role: "assistant",
+        model: "claude-sonnet-4-6",
+        content: [{ type: "text", text: "done" }],
+        stop_reason: "stop_sequence",
+        stop_sequence: "END",
+        usage: { input_tokens: 7, output_tokens: 2 },
+      };
+      converse.anthropic.mockImplementation(() =>
+        stream
+          ? anthropicSse([
+              {
+                type: "message_start",
+                message: {
+                  ...message,
+                  content: [],
+                  stop_reason: null,
+                  stop_sequence: null,
+                },
+              },
+              {
+                type: "content_block_start",
+                index: 0,
+                content_block: { type: "text", text: "" },
+              },
+              {
+                type: "content_block_delta",
+                index: 0,
+                delta: { type: "text_delta", text: "done" },
+              },
+              { type: "content_block_stop", index: 0 },
+              {
+                type: "message_delta",
+                delta: { stop_reason: "stop_sequence", stop_sequence: "END" },
+                usage: { output_tokens: 2 },
+              },
+              { type: "message_stop" },
+            ])
+          : HttpResponse.json(message),
+      );
+      const response = await converse.ask(
+        {
+          messages: request.messages,
+          inferenceConfig: { maxTokens: 32, stopSequences: ["END"] },
+        },
+        stream,
+      );
+      expect(response.statusCode, response.body).toBe(200);
+      expect(converse.anthropic).toHaveBeenCalledWith(
+        expect.objectContaining({ stop_sequences: ["END"] }),
+      );
+      if (stream) {
+        expect(decodeFrames(response.rawPayload)).toContainEqual([
+          "messageStop",
+          { stopReason: "stop_sequence" },
+        ]);
+      } else {
+        expect(response.json()).toMatchObject({ stopReason: "stop_sequence" });
+      }
+    },
+  );
+}

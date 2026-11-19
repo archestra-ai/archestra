@@ -37,9 +37,11 @@ name: Build Archestra CLI
 # publish and the lock pull request; both are idempotent. Dispatching on
 # another branch only builds.
 #
-# The two Windows binaries are code-signed as "Archestra Inc" before the
+# The two Windows binaries are code-signed as "Archestra Inc" and the two
+# macOS binaries as "Archestra Limited" (and notarized by Apple) before the
 # release is published, so SHA256SUMS and the lock cover the signed files; see
-# the `sign-windows` job. The macOS and Linux binaries are not code-signed yet.
+# the `sign-windows` and `sign-macos` jobs. Linux has no code signing; the
+# checksums and the attestation cover those files.
 
 # The two path lists are duplicated on purpose: GitHub Actions does not
 # support YAML anchors, so they must be kept in sync by hand.
@@ -222,7 +224,7 @@ jobs:
           # A re-run of this job replaces its file from the earlier attempt.
           overwrite: "true"
 
-  # Runs next to `build`, so `sign-windows` knows before it signs whether this
+  # Runs next to `build`, so the signing jobs know before they sign whether this
   # run will publish: a published version is neither signed nor published
   # again.
   release-state:
@@ -396,12 +398,74 @@ jobs:
           retention-days: "14"
           overwrite: "true"
 
+  # Signs the two macOS binaries with the Developer ID Application certificate
+  # of Archestra Limited, has Apple notarize them, and replaces their
+  # artifacts, so `publish` downloads the signed files under the same names.
+  # Only a run that will publish signs. Like `sign-windows`, this job builds
+  # nothing and runs no build output, and it is the only job that sees the
+  # Apple secrets: they are secrets of the `archestra-cli-release` environment,
+  # which allows main only and releases its secrets to a run only after a Core
+  # member other than the person who triggered it approves (infra
+  # github/org/environments.tf); one approval covers both signing jobs.
+  # .github/scripts/archestra-cli-sign-macos.sh does the work; it can be run on
+  # a Mac to test the secrets.
+  sign-macos:
+    name: Sign and notarize the macOS binaries
+    needs: [build, release-state]
+    if: needs.release-state.outputs.published == 'false'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    environment: archestra-cli-release
+    permissions:
+      contents: read # Check out the signing script and this repository's artifact actions.
+    steps:
+      - name: Checkout signing script and artifact actions
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/actions
+            .github/scripts
+
+      - name: Download the two macOS binaries
+        uses: $/.github/actions/github-download-artifact
+        with:
+          pattern: archestra-darwin-*
+          path: dist
+          merge-multiple: "true"
+
+      - name: Sign, notarize and verify
+        env:
+          SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        run: bash .github/scripts/archestra-cli-sign-macos.sh dist
+
+      - name: Replace the arm64 artifact with the signed file
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: archestra-darwin-arm64
+          path: dist/archestra-darwin-arm64
+          if-no-files-found: error
+          retention-days: "14"
+          overwrite: "true"
+
+      - name: Replace the x86_64 artifact with the signed file
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: archestra-darwin-x86_64
+          path: dist/archestra-darwin-x86_64
+          if-no-files-found: error
+          retention-days: "14"
+          overwrite: "true"
+
   # Also runs for a published version, publishing nothing, so that the `lock`
   # job re-attempts the lock pull request (`release-state` already failed the
   # run if main holds changes the published version lacks).
   publish:
     name: Publish release
-    needs: [build, release-state, sign-windows]
+    needs: [build, release-state, sign-windows, sign-macos]
     if: >-
       github.repository == 'archestra-ai/archestra'
       && github.ref == 'refs/heads/main'
@@ -409,7 +473,8 @@ jobs:
       && !cancelled()
       && needs.build.result == 'success'
       && needs.release-state.result == 'success'
-      && (needs.sign-windows.result == 'success' || needs.release-state.outputs.published == 'true')
+      && ((needs.sign-windows.result == 'success' && needs.sign-macos.result == 'success')
+        || needs.release-state.outputs.published == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -515,8 +580,8 @@ jobs:
   lock:
     name: Propose release lock update
     needs: [release-state, publish]
-    # The status check is explicit: for a published version `sign-windows` is
-    # skipped, and the implicit one would skip this job too.
+    # The status check is explicit: for a published version the signing jobs
+    # are skipped, and the implicit one would skip this job too.
     if: >-
       github.repository == 'archestra-ai/archestra'
       && github.ref == 'refs/heads/main'

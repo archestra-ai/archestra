@@ -50,7 +50,10 @@ const state: AutoRoutingState = {
   decisionProviders: [
     {
       provider: "jev",
-      models: [{ id: "jev-1.13.0", displayName: "Jev 1.13" }],
+      models: [
+        { id: "jev-1.13.0", displayName: "Jev 1.13" },
+        { id: "jev-1.14.0", displayName: "Jev 1.14" },
+      ],
       apiKeys: [],
     },
   ],
@@ -235,5 +238,23 @@ describe("ConfigureAutoRoutingDialog", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
     expect(created).toEqual([]);
+  });
+
+  it("warns that routing starts over before the decision model changes", async () => {
+    const user = userEvent.setup();
+    renderDialog(autoRouter, []);
+
+    const model = await screen.findByRole("combobox", {
+      name: "Decision model",
+    });
+    expect(
+      screen.queryByTestId("auto-routing-decision-model-change"),
+    ).not.toBeInTheDocument();
+    await user.click(model);
+    await user.click(await screen.findByRole("option", { name: "Jev 1.14" }));
+
+    expect(
+      screen.getByTestId("auto-routing-decision-model-change"),
+    ).toHaveTextContent("Routing starts over");
   });
 });

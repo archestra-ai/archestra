@@ -440,6 +440,7 @@ const layerTable = [
       "src/routes/proxy/adapters/gemini-schema.ts",
       "src/routes/proxy/adapters/gemini-tool-names.ts",
       "src/routes/proxy/adapters/gemini.ts",
+      "src/routes/proxy/adapters/github-copilot-messages.ts",
       "src/routes/proxy/adapters/github-copilot-responses.ts",
       "src/routes/proxy/adapters/github-copilot.ts",
       "src/routes/proxy/adapters/groq.ts",
@@ -665,6 +666,7 @@ const layerTable = [
     // Business operations that do not invoke MCP execution or route handlers.
     name: "services-support",
     files: [
+      "src/openappa/runtime-tool-proof.ts",
       "src/plugins/delivery-budget.ts",
       "src/routes/mcp-gateway/protocol.ts",
       "src/routes/mcp-gateway/tasks.ts",

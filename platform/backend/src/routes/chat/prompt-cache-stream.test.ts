@@ -171,9 +171,13 @@ describe("POST /api/chat Anthropic tool-loop caching", () => {
       expect(executedSteps).toEqual([1, 2, 3, 4, 5]);
       expect(requests).toHaveLength(contextTrimRetry ? 7 : 6);
       if (contextTrimRetry) {
-        expect(JSON.stringify(requests[1].system)).toContain(
-          "Earlier context was trimmed",
-        );
+        // The kept history starts with the earlier answer, so the trim notice
+        // is the opening user turn.
+        expect(requests[1].messages.map((m) => m.role)).toEqual([
+          "user",
+          "assistant",
+          "user",
+        ]);
         expect(JSON.stringify(requests[1].messages)).not.toContain(
           "Earlier request.",
         );
@@ -219,11 +223,13 @@ describe("POST /api/chat Anthropic tool-loop caching", () => {
 
 const UPSTREAM_BASE_URL = "https://anthropic.test/v1";
 const FINAL_TEXT = "All five API paths have been inspected.";
+// Large, but under the per-result cap that chat tools apply in production
+// (and the step guard re-applies), so it reaches every request unchanged.
 const LARGE_SPEC = JSON.stringify({
   openapi: "3.1.0",
   info: { title: "Synthetic API", version: "1.0.0" },
   paths: Object.fromEntries(
-    Array.from({ length: 400 }, (_, index) => [
+    Array.from({ length: 200 }, (_, index) => [
       `/resources/${index}`,
       {
         get: {

@@ -5,6 +5,7 @@ import {
   parseLabelsParam,
   RouteId,
 } from "@archestra/shared";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
@@ -208,6 +209,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         user,
         headers,
+        serviceAccount,
       },
       reply,
     ) => {
@@ -215,6 +217,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamId: id,
         organizationId,
         userId: user.id,
+        serviceAccount,
         headers,
         includeMembers: includeMembers ?? true,
       });
@@ -417,11 +420,15 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, organizationId, user, headers }, reply) => {
+    async (
+      { params: { id }, organizationId, user, headers, serviceAccount },
+      reply,
+    ) => {
       await findReadableTeam({
         teamId: id,
         organizationId,
         userId: user.id,
+        serviceAccount,
         headers,
         includeMembers: false,
       });
@@ -473,6 +480,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         user,
         headers,
+        serviceAccount,
       },
       reply,
     ) => {
@@ -480,6 +488,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamId: id,
         organizationId,
         userId: user.id,
+        serviceAccount,
         headers,
         includeMembers: false,
       });
@@ -513,7 +522,14 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { params: { id }, body: { userId, role }, organizationId, user, headers },
+      {
+        params: { id },
+        body: { userId, role },
+        organizationId,
+        user,
+        headers,
+        serviceAccount,
+      },
       reply,
     ) => {
       const team = await getTeamForOrg({ teamId: id, organizationId });
@@ -524,6 +540,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await assertCanManageTeam({
         teamId: id,
         userId: user.id,
+        serviceAccount,
         headers,
         action: "manage team members",
       });
@@ -565,7 +582,14 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { params: { id, userId }, body: { role }, organizationId, user, headers },
+      {
+        params: { id, userId },
+        body: { role },
+        organizationId,
+        user,
+        headers,
+        serviceAccount,
+      },
       reply,
     ) => {
       const team = await getTeamForOrg({ teamId: id, organizationId });
@@ -576,6 +600,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await assertCanManageTeam({
         teamId: id,
         userId: user.id,
+        serviceAccount,
         headers,
         action: "manage team member roles",
       });
@@ -615,7 +640,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { params: { id, userId }, organizationId, user, headers },
+      { params: { id, userId }, organizationId, user, headers, serviceAccount },
       reply,
     ) => {
       const team = await getTeamForOrg({ teamId: id, organizationId });
@@ -626,6 +651,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await assertCanManageTeam({
         teamId: id,
         userId: user.id,
+        serviceAccount,
         headers,
         action: "manage team members",
       });
@@ -778,6 +804,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         user,
         headers,
+        serviceAccount,
       },
       reply,
     ) => {
@@ -798,6 +825,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await assertCanManageTeam({
         teamId: id,
         userId: user.id,
+        serviceAccount,
         headers,
         action: "manage Team Sync for this team",
       });
@@ -855,7 +883,13 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { params: { id, groupId }, organizationId, user, headers },
+      {
+        params: { id, groupId },
+        organizationId,
+        user,
+        headers,
+        serviceAccount,
+      },
       reply,
     ) => {
       // Verify enterprise license
@@ -875,6 +909,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await assertCanManageTeam({
         teamId: id,
         userId: user.id,
+        serviceAccount,
         headers,
         action: "manage Team Sync for this team",
       });
@@ -895,6 +930,7 @@ export default teamRoutes;
 async function assertCanManageTeam(params: {
   teamId: string;
   userId: string;
+  serviceAccount: FastifyRequest["serviceAccount"];
   headers: Parameters<typeof hasPermission>[1];
   action: string;
 }) {
@@ -910,6 +946,7 @@ async function assertCanManageTeam(params: {
   const { success: isOrgTeamManager } = await hasPermission(
     { team: ["update"] },
     params.headers,
+    params.serviceAccount,
   );
 
   const allowed = await canManageTeamMembers({
@@ -932,6 +969,7 @@ async function findReadableTeam(params: {
   teamId: string;
   organizationId: string;
   userId: string;
+  serviceAccount: FastifyRequest["serviceAccount"];
   headers: Parameters<typeof hasPermission>[1];
   includeMembers?: boolean;
 }) {
@@ -947,6 +985,7 @@ async function findReadableTeam(params: {
   const { success: isOrgTeamManager } = await hasPermission(
     { team: ["update"] },
     params.headers,
+    params.serviceAccount,
   );
   const canRead = await canReadTeam({
     isOrgTeamManager,

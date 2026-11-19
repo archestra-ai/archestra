@@ -1951,6 +1951,11 @@ async function handleObservedLLMProxy<
           unsupportedClientAction,
         },
         chatSource: isInternalChat ? source : undefined,
+        // A summary skips the turn and child-return lifecycle, so only this
+        // process may claim one.
+        summaryRequest:
+          proof.inProcess &&
+          (source === "chat:compaction" || source === "a2a:compaction"),
         externalAgentId,
         inProcessRequest: internalCall,
         internalCall: proof.guardrail,
@@ -3685,8 +3690,11 @@ async function handleStreaming<
       throw new ApiError(499, "Client disconnected during inference");
     }
 
-    // Anthropic requires message_stop; its beta usage arrives before that frame.
-    upstreamFinished = providerName !== "anthropic" || providerTerminalSeen;
+    // Native Messages streams require message_stop; beta usage can precede it.
+    const requiresMessagesTerminal =
+      providerName === "anthropic" ||
+      provider.interactionType === "github-copilot:messages";
+    upstreamFinished = !requiresMessagesTerminal || providerTerminalSeen;
     if (!upstreamFinished)
       throw new UpstreamStreamIncompleteError(
         "Provider stream ended before final usage was confirmed",
@@ -4435,7 +4443,9 @@ async function handleNonStreaming<
                 source,
                 billingMode: getBillingMode(),
                 authMethod,
-                tokens: providerName === "anthropic",
+                tokens:
+                  providerName === "anthropic" ||
+                  provider.interactionType === "github-copilot:messages",
               }),
             );
           throw new ObservedProviderUsageError({
@@ -4765,11 +4775,16 @@ async function handleNonStreaming<
             source,
             billingMode,
             authMethod,
-            tokens: providerName === "anthropic",
+            tokens:
+              providerName === "anthropic" ||
+              provider.interactionType === "github-copilot:messages",
           });
           return;
         }
-        if (providerName === "anthropic")
+        if (
+          providerName === "anthropic" ||
+          provider.interactionType === "github-copilot:messages"
+        )
           metrics.llm.reportLLMTokens(
             providerName,
             agent,
@@ -4943,11 +4958,16 @@ async function handleNonStreaming<
         source,
         billingMode,
         authMethod,
-        tokens: providerName === "anthropic",
+        tokens:
+          providerName === "anthropic" ||
+          provider.interactionType === "github-copilot:messages",
       });
       return;
     }
-    if (providerName === "anthropic")
+    if (
+      providerName === "anthropic" ||
+      provider.interactionType === "github-copilot:messages"
+    )
       metrics.llm.reportLLMTokens(
         providerName,
         agent,

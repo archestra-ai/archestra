@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.5.0-rc.40](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.39...platform-v1.5.0-rc.40) (2026-11-19)
+
+
+### Features
+
+* **auto-routing:** keep past-session scoring on the router overview ([#10915](https://github.com/archestra-ai/archestra/issues/10915)) ([4776f96](https://github.com/archestra-ai/archestra/commit/4776f96851d9b036bd9ec28fe266d2c3abd09a74))
+* **llm-proxy:** support native Copilot Messages ([#10836](https://github.com/archestra-ai/archestra/issues/10836)) ([fc65879](https://github.com/archestra-ai/archestra/commit/fc658797ee7f76b7cca6e60c4637666a6d9b38fa))
+* **logs:** show failed turns and failed requests in LLM session logs ([#10914](https://github.com/archestra-ai/archestra/issues/10914)) ([4d18d31](https://github.com/archestra-ai/archestra/commit/4d18d3138deb0d4747204cbc9e93c4e0a7d6cf77))
+
+
+### Bug Fixes
+
+* **chat:** keep compaction within the window mid-turn and governed ([#10906](https://github.com/archestra-ai/archestra/issues/10906)) ([ce0ae1c](https://github.com/archestra-ai/archestra/commit/ce0ae1c6382c0b3c569ffeaf98270eac0062cd1e))
+* **chat:** make large policy diffs readable and navigable ([#10932](https://github.com/archestra-ai/archestra/issues/10932)) ([32fceda](https://github.com/archestra-ai/archestra/commit/32fceda747c75639481d37382cc5269a67f21849))
+* **frontend:** keep page content from painting over the sticky banner ([#10910](https://github.com/archestra-ai/archestra/issues/10910)) ([f8c0d62](https://github.com/archestra-ai/archestra/commit/f8c0d62327b429297b0e2fcdd162b1ffe0c2a48c))
+* **frontend:** show the dark-theme icon logo after a server render ([#10908](https://github.com/archestra-ai/archestra/issues/10908)) ([9ec07f0](https://github.com/archestra-ai/archestra/commit/9ec07f0a05697a0bc466904b0b722be952974284))
+* **frontend:** show workspace notices as a slim strip under the bar ([#10912](https://github.com/archestra-ai/archestra/issues/10912)) ([2477fa2](https://github.com/archestra-ai/archestra/commit/2477fa2d56dd9f678ad1bfd5f656a45c947b85ea))
+* **github-copilot:** read each model's extended context window and prompt limit ([#10909](https://github.com/archestra-ai/archestra/issues/10909)) ([36c837d](https://github.com/archestra-ai/archestra/commit/36c837dcf9d6c064a5d12e973dba8f5606c39b29))
+* **guardrails:** clarify policy labels and automatic approval coverage ([#10899](https://github.com/archestra-ai/archestra/issues/10899)) ([24c277d](https://github.com/archestra-ai/archestra/commit/24c277df4decc566152f746bfc3ace801c24629d))
+* **guardrails:** tell the Keeper how to find a tool the operator names ([#10901](https://github.com/archestra-ai/archestra/issues/10901)) ([6933f92](https://github.com/archestra-ai/archestra/commit/6933f92007d1e044bef8ea0230171b3468e263ef))
+* **mcp:** stop flagging multitenant installs as crashing while the shared pod runs ([#10911](https://github.com/archestra-ai/archestra/issues/10911)) ([233a295](https://github.com/archestra-ai/archestra/commit/233a2954dcd86da84adf053caadf1225bf64fc0d))
+* **openappa:** declare a delegation's return on its spawn call instead of probing it ([#10907](https://github.com/archestra-ai/archestra/issues/10907)) ([dfc77b8](https://github.com/archestra-ai/archestra/commit/dfc77b870340e6badc424504cc77a48b44a0399f))
+* **teams:** let service-account tokens manage and read team members ([#10929](https://github.com/archestra-ai/archestra/issues/10929)) ([13101c6](https://github.com/archestra-ai/archestra/commit/13101c64e58892a665da7267eef36dc09228d7cd))
+
+
+### Miscellaneous Chores
+
+* update client versions ([#10922](https://github.com/archestra-ai/archestra/issues/10922)) ([1cfa0db](https://github.com/archestra-ai/archestra/commit/1cfa0db91471969be14f9978ca51955ecca5d796))
+
 ## [1.5.0-rc.39](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.38...platform-v1.5.0-rc.39) (2026-11-18)
 
 

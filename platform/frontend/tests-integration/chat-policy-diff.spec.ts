@@ -1,0 +1,593 @@
+import type { Locator } from "@playwright/test";
+import { makeAgent } from "../src/mocks/data/agents";
+import { makeLlmProviderApiKey } from "../src/mocks/data/llm-keys";
+import { expect, test } from "./fixtures";
+import { makeConversation } from "./helpers/chat-conversation";
+import type { MswControl } from "./helpers/msw-control";
+
+test.use({ viewport: { width: 1360, height: 900 } });
+
+test("numbers each change, follows manual scrolling, and stops at both ends", async ({
+  page,
+  mswControl,
+}) => {
+  await page.setViewportSize({ width: 1100, height: 600 });
+  const before = [
+    'legacy_start = "remove"',
+    ...Array.from({ length: 120 }, (_, i) => `reference_rule_${i} = "keep"`),
+    'legacy_end = "remove"',
+  ];
+  const after = before.slice(1, -1);
+  after[34] = 'customer_exports = "restricted"';
+  after.splice(84, 0, 'production_writes = "trusted"');
+  const id = await registerNavigationReview(
+    mswControl,
+    before.join("\n"),
+    after.join("\n"),
+  );
+  await page.goto(`/chat/${id}`);
+  await page.getByRole("button", { name: "Review full diff" }).click();
+  const dialog = page.getByRole("dialog", { name: "appa.toml" });
+  const position = dialog.getByLabel("Change position");
+  const next = dialog.getByRole("button", { name: "Next change" });
+  const previous = dialog.getByRole("button", { name: "Previous change" });
+  const proposed = dialog.locator(".modified-in-monaco-diff-editor");
+  const removedMarker = proposed.locator(
+    '[widgetid="policy-diff-current-deletion"]',
+  );
+  const addedMarker = proposed.locator(
+    '.margin-view-overlays [class*="activeChange"]',
+  );
+  await expect(position).toHaveText("Change 1 of 4");
+  await expect(previous).toBeDisabled();
+  await expect(
+    proposed.getByText('legacy_start = "remove"', { exact: true }),
+  ).toBeVisible();
+  await expectMarkerCoversLine(
+    removedMarker,
+    proposed.getByText('legacy_start = "remove"', { exact: true }),
+  );
+  await expect(addedMarker).toHaveCount(0);
+
+  for (let index = 2; index <= 4; index++) {
+    await next.click();
+    await expect(position).toHaveText(`Change ${index} of 4`);
+    if (index === 2) {
+      await expectMarkerCoversLine(
+        removedMarker,
+        proposed.getByText('reference_rule_34 = "keep"', { exact: true }),
+      );
+      await expectMarkerCoversLine(
+        addedMarker,
+        proposed.getByText('customer_exports = "restricted"', { exact: true }),
+      );
+    } else if (index === 3) {
+      await expect(removedMarker).toBeHidden();
+    }
+  }
+  await expect(next).toBeDisabled();
+  await expect(
+    proposed.getByText('legacy_end = "remove"', { exact: true }),
+  ).toBeVisible();
+  await expectMarkerCoversLine(
+    removedMarker,
+    proposed.getByText('legacy_end = "remove"', { exact: true }),
+  );
+  await expect(addedMarker).toHaveCount(0);
+  await previous.click();
+  await expect(position).toHaveText("Change 3 of 4");
+  await expect(
+    dialog.getByText('production_writes = "trusted"', { exact: true }),
+  ).toBeVisible();
+
+  // Scrolling does not move the cursor. Navigation must follow what is being
+  // read, rather than jumping from the stale cursor near the end of the file.
+  await proposed.hover();
+  await expect
+    .poll(async () => {
+      // Monaco caps a wheel event's distance; scroll until the first change.
+      await page.mouse.wheel(0, -600);
+      return position.textContent();
+    })
+    .toBe("Change 1 of 4");
+  await expect(previous).toBeDisabled();
+  await next.click();
+  await expect(position).toHaveText("Change 2 of 4");
+  await expect(
+    dialog.getByText('customer_exports = "restricted"', { exact: true }),
+  ).toBeVisible();
+  const split = dialog.getByRole("button", { name: "Split view" });
+  await expect(split).toHaveAttribute("aria-pressed", "false");
+  await split.click();
+  await expect(split).toHaveAttribute("aria-pressed", "true");
+  await expect(position).toHaveText("Change 2 of 4");
+  await expect(removedMarker).toBeHidden();
+  const original = dialog.locator(".original-in-monaco-diff-editor");
+  await expectMarkerCoversLine(
+    original.locator('.margin-view-overlays [class*="activeChange"]'),
+    original.getByText('reference_rule_34 = "keep"', { exact: true }),
+  );
+  await expectMarkerCoversLine(
+    addedMarker,
+    proposed.getByText('customer_exports = "restricted"', { exact: true }),
+  );
+  await previous.click();
+  await expect(position).toHaveText("Change 1 of 4");
+  await expect(previous).toBeDisabled();
+});
+
+test("keeps an unchanged search result visible when the dialog resizes", async ({
+  page,
+  mswControl,
+}) => {
+  const context = Array.from(
+    { length: 150 },
+    (_, i) => `reference_rule_${i} = "keep"`,
+  ).join("\n");
+  const id = await registerNavigationReview(
+    mswControl,
+    `${context}\nsetting = "old"`,
+    `${context}\nsetting = "new"`,
+  );
+  await page.goto(`/chat/${id}`);
+  await page.getByRole("button", { name: "Review full diff" }).click();
+  const dialog = page.getByRole("dialog", { name: "appa.toml" });
+  await expect(dialog.getByLabel("Change position")).toHaveText(
+    "Change 1 of 1",
+  );
+  await dialog
+    .getByRole("button", { name: "Show Unchanged Region", exact: true })
+    .first()
+    .click();
+  await dialog
+    .getByRole("textbox", { name: /Proposed policy/ })
+    .press("ControlOrMeta+f");
+  const find = dialog.getByRole("textbox", { name: "Find", exact: true });
+  await find.fill("reference_rule_60");
+  await find.press("Enter");
+  const match = dialog
+    .locator(".modified-in-monaco-diff-editor")
+    .getByText('reference_rule_60 = "keep"', { exact: true });
+  await expect(match).toBeInViewport();
+  await page.setViewportSize({ width: 850, height: 500 });
+  await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      }),
+  );
+  await expect(match).toBeInViewport();
+});
+
+async function expectMarkerCoversLine(marker: Locator, line: Locator) {
+  await expect(marker).toBeVisible();
+  await expect(line).toBeVisible();
+  await expect
+    .poll(
+      async () => {
+        const [mark, text] = await Promise.all([
+          marker.boundingBox(),
+          line.boundingBox(),
+        ]);
+        return (
+          mark !== null &&
+          text !== null &&
+          mark.y <= text.y + 1 &&
+          mark.y + mark.height >= text.y + text.height - 1
+        );
+      },
+      { message: "The current-change marker covers the changed line" },
+    )
+    .toBe(true);
+}
+
+for (const scenario of [
+  {
+    name: "empty policies",
+    before: "",
+    after: "",
+    status: "No changes",
+  },
+  {
+    name: "a single insertion",
+    before: "",
+    after: "rule = true",
+    status: "Change 1 of 1",
+  },
+  {
+    name: "a single deletion",
+    before: "rule = true",
+    after: "",
+    status: "Change 1 of 1",
+  },
+]) {
+  test(`disables navigation for ${scenario.name}`, async ({
+    page,
+    mswControl,
+  }) => {
+    const id = await registerNavigationReview(
+      mswControl,
+      scenario.before,
+      scenario.after,
+    );
+    await page.goto(`/chat/${id}`);
+    await page.getByRole("button", { name: "Review full diff" }).click();
+    const dialog = page.getByRole("dialog", { name: "appa.toml" });
+    await expect(dialog.getByLabel("Change position")).toHaveText(
+      scenario.status,
+    );
+    await expect(
+      dialog.getByRole("button", { name: "Previous change" }),
+    ).toBeDisabled();
+    await expect(
+      dialog.getByRole("button", { name: "Next change" }),
+    ).toBeDisabled();
+  });
+}
+
+test("keeps message actions when a diff-only answer repeats the preview", async ({
+  page,
+  mswControl,
+}) => {
+  const diff = "@@ -1 +1 @@\n-old\n+new";
+  const id = await registerNavigationReview(mswControl, "old", "new", diff);
+  await page.goto(`/chat/${id}`);
+  const preview = page.getByRole("region", {
+    name: "Policy diff",
+    exact: true,
+  });
+  const actions = page.locator(".is-assistant").filter({
+    has: page.getByRole("button", { name: "Good response", exact: true }),
+  });
+  await expect(preview).toBeVisible();
+  await expect(
+    actions.getByRole("button", { name: "Copy", exact: true }),
+  ).toBeVisible();
+  await expect(actions).not.toContainText("-old");
+  await expect
+    .poll(async () => {
+      const [card, row] = await Promise.all([
+        page
+          .locator('[data-slot="collapsible"]')
+          .filter({ has: preview })
+          .first()
+          .boundingBox(),
+        actions.boundingBox(),
+      ]);
+      return card && row ? row.y - card.y - card.height : null;
+    })
+    .toBe(16);
+  await actions.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(page.getByPlaceholder("Edit this response...")).toHaveValue(
+    `\`\`\`diff\n${diff}\n\`\`\``,
+  );
+});
+
+async function registerNavigationReview(
+  mswControl: MswControl,
+  before: string,
+  after: string,
+  repeatedDiff?: string,
+) {
+  const key = makeLlmProviderApiKey({ provider: "openai" });
+  const agent = makeAgent({ llmApiKeyId: key.id });
+  const conversation = makeConversation({
+    id: "20000000-0000-4000-8000-0000000000f2",
+    agentId: agent.id,
+    title: "Policy navigation",
+    messageCount: 2,
+  });
+  const messages = [
+    {
+      id: "request",
+      role: "user",
+      parts: [{ type: "text", text: "Review these policy changes." }],
+    },
+    {
+      id: "preview",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-archestra__preview_guardrails_policy_change",
+          toolCallId: "preview-call",
+          state: "output-available",
+          input: {},
+          output: {
+            structuredContent: {
+              stage: "preview",
+              delivery: "revision",
+              path: "appa.toml",
+              before,
+              after,
+              diff: repeatedDiff,
+            },
+          },
+        },
+        ...(repeatedDiff
+          ? [{ type: "text", text: `\`\`\`diff\n${repeatedDiff}\n\`\`\`` }]
+          : []),
+      ],
+    },
+  ];
+  await mswControl.registerMany([
+    { method: "get", url: "/api/agents/chat-roster", body: [agent] },
+    { method: "get", url: `/api/agents/${agent.id}`, body: agent },
+    { method: "get", url: "/api/agents/credential-readiness", body: [] },
+    { method: "get", url: "/api/llm-provider-api-keys", body: [key] },
+    { method: "get", url: "/api/llm-provider-api-keys/available", body: [key] },
+    {
+      method: "get",
+      url: "/api/members/default-model",
+      body: { modelId: null, chatApiKeyId: null },
+    },
+    { method: "get", url: "/api/chat/conversations", body: [conversation] },
+    {
+      method: "get",
+      url: `/api/chat/conversations/${conversation.id}`,
+      body: { ...conversation, messages },
+    },
+    {
+      method: "get",
+      url: `/api/chat/conversations/${conversation.id}/files`,
+      body: [],
+    },
+    {
+      method: "get",
+      url: `/api/chat/conversations/${conversation.id}/share`,
+      body: null,
+    },
+  ]);
+  return conversation.id;
+}
+
+test("reviews a large policy without expanding the chat, and keeps the review usable on a phone", async ({
+  page,
+  mswControl,
+}, testInfo) => {
+  // Opening and reopening each run a large diff computation.
+  testInfo.setTimeout(120_000);
+  const key = makeLlmProviderApiKey({ provider: "openai" });
+  const agent = makeAgent({ llmApiKeyId: key.id });
+  const conversation = makeConversation({
+    id: "20000000-0000-4000-8000-0000000000f1",
+    title: "Policy review",
+    agentId: agent.id,
+    messageCount: 0,
+  });
+  const before = Array.from(
+    { length: 31_000 },
+    (_, i) => `# Policy line ${i + 1}`,
+  );
+  const after = [...before];
+  for (let i = 13_259; i < 22_259; i++) {
+    after[i] = `tool_${i} = "updated"`;
+  }
+  after[29_999] = 'final_review = "updated"';
+  const output = {
+    structuredContent: {
+      stage: "preview",
+      delivery: "revision",
+      path: "organization.appa.toml",
+      before: before.join("\n"),
+      after: after.join("\n"),
+      diff: [
+        "@@ -13257,9006 +13257,9006 @@",
+        ...before.slice(13_256, 13_259).map((line) => ` ${line}`),
+        ...before.slice(13_259, 22_259).map((line) => `-${line}`),
+        ...after.slice(13_259, 22_259).map((line) => `+${line}`),
+        ...after.slice(22_259, 22_262).map((line) => ` ${line}`),
+        "@@ -29997,7 +29997,7 @@",
+        ...before.slice(29_996, 29_999).map((line) => ` ${line}`),
+        `-${before[29_999]}`,
+        `+${after[29_999]}`,
+        ...after.slice(30_000, 30_003).map((line) => ` ${line}`),
+      ].join("\n"),
+    },
+  };
+  const messages = [
+    {
+      id: "policy-request",
+      role: "user",
+      parts: [{ type: "text", text: "Preview the policy changes." }],
+    },
+    {
+      id: "policy-preview",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-archestra__preview_guardrails_policy_change",
+          toolCallId: "policy-preview-call",
+          state: "output-available",
+          input: {},
+          output,
+        },
+        {
+          type: "text",
+          text: `The policy changes are ready for review.\n\n\`\`\`diff\n${output.structuredContent.diff}\n\`\`\`\n\nPlease review before applying.`,
+        },
+      ],
+    },
+  ];
+  await mswControl.registerMany([
+    { method: "get", url: "/api/agents/chat-roster", body: [agent] },
+    { method: "get", url: `/api/agents/${agent.id}`, body: agent },
+    { method: "get", url: "/api/agents/credential-readiness", body: [] },
+    { method: "get", url: "/api/llm-provider-api-keys", body: [key] },
+    { method: "get", url: "/api/llm-provider-api-keys/available", body: [key] },
+    {
+      method: "get",
+      url: "/api/members/default-model",
+      body: { modelId: null, chatApiKeyId: null },
+    },
+    {
+      method: "get",
+      url: "/api/chat/conversations",
+      body: [conversation],
+    },
+    {
+      method: "get",
+      url: `/api/chat/conversations/${conversation.id}`,
+      body: { ...conversation, messages },
+    },
+    {
+      method: "get",
+      url: `/api/chat/conversations/${conversation.id}/files`,
+      body: [],
+    },
+    {
+      method: "get",
+      url: `/api/chat/conversations/${conversation.id}/share`,
+      body: null,
+    },
+  ]);
+
+  await page.goto(`/chat/${conversation.id}`);
+  const preview = page.getByRole("region", { name: "Diff preview" });
+  await expect(preview).toBeVisible();
+  await expect(
+    page.getByText("The policy changes are ready for review.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Please review before applying.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Code block", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByText("9,001 added", { exact: true })).toBeVisible();
+  await expect(page.getByText("9,001 removed", { exact: true })).toBeVisible();
+  // The screenshot's five-digit line number must stay on a single line.
+  const lineNumber = preview.getByText("13257", { exact: true });
+  const lineNumberBox = await lineNumber.boundingBox();
+  expect(lineNumberBox?.height).toBeLessThanOrEqual(20);
+  const card = page.getByRole("region", { name: "Policy diff", exact: true });
+  const originalHeight = (await card.boundingBox())?.height;
+  expect(originalHeight).toBeLessThan(450);
+  await page.screenshot({
+    path: testInfo.outputPath("policy-diff-preview.png"),
+  });
+
+  const review = page.getByRole("button", { name: "Review full diff" });
+  await review.click();
+  const dialog = page.getByRole("dialog", { name: "organization.appa.toml" });
+  await expect(dialog).toBeVisible();
+  const position = dialog.getByLabel("Change position");
+  await expect(position).toHaveText("Change 1 of 2", { timeout: 60_000 });
+  await expect(
+    dialog.getByRole("button", { name: "Previous change" }),
+  ).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "Next change" })).toBeEnabled(
+    {
+      timeout: 60_000,
+    },
+  );
+  // Allow the 30-second diff computation budget plus first-change rendering.
+  await expect(
+    dialog.getByText("tool_13259", { exact: false }).first(),
+  ).toBeVisible({ timeout: 60_000 });
+  // Monaco's scroll tracks and change overview are nonsemantic elements.
+  const verticalTracks = dialog
+    .locator(".scrollbar.vertical, .diffOverview")
+    .filter({ visible: true });
+  const proposedEditor = dialog.locator(".modified-in-monaco-diff-editor");
+  await proposedEditor.hover();
+  await expect(verticalTracks).toHaveCount(1);
+  await dialog.getByRole("button", { name: "Next change" }).click();
+  await expect(position).toHaveText("Change 2 of 2");
+  await expect(
+    dialog.getByRole("button", { name: "Next change" }),
+  ).toBeDisabled();
+  await expect(
+    dialog.getByText('final_review = "updated"', { exact: true }),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Previous change" }).click();
+  await expect(position).toHaveText("Change 1 of 2");
+  await expect(
+    dialog.getByText("tool_13259", { exact: false }).first(),
+  ).toBeVisible();
+  const split = dialog.getByRole("button", { name: "Split view" });
+  await expect(split).toHaveAttribute("aria-pressed", "false");
+  await expect(dialog.getByRole("switch")).toHaveCount(0);
+  // Layout remains keyboard accessible; unchanged regions use inline controls.
+  await split.focus();
+  await split.press("Space");
+  await expect(split).toHaveAttribute("aria-pressed", "true");
+  await expect(position).toHaveText("Change 1 of 2");
+  await proposedEditor.hover();
+  await expect(verticalTracks).toHaveCount(1);
+  await dialog
+    .getByRole("button", { name: "Show Unchanged Region", exact: true })
+    .first()
+    .click();
+  await dialog
+    .getByRole("textbox", { name: /Proposed policy/ })
+    .press("Control+Home");
+  await expect(
+    dialog.getByText("# Policy line 1", { exact: true }).first(),
+  ).toBeVisible();
+  // Monaco exposes collapse as a glyph-margin decoration without an ARIA role.
+  await dialog
+    .locator(".fold-unchanged")
+    .filter({ visible: true })
+    .first()
+    .click();
+  await expect(
+    dialog.getByText("13256 hidden lines", { exact: true }).first(),
+  ).toBeVisible();
+  await expect(
+    dialog.getByText("tool_13259", { exact: false }).first(),
+  ).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath("policy-diff-review.png"),
+  });
+
+  await dialog
+    .getByRole("textbox", { name: /Proposed policy/ })
+    .press("ControlOrMeta+f");
+  const find = dialog.getByRole("textbox", { name: "Find", exact: true });
+  await find.fill("final_review");
+  await find.press("Enter");
+  await expect(
+    dialog.getByText('final_review = "updated"', { exact: true }),
+  ).toBeVisible();
+  await expect(position).toHaveText("Change 2 of 2");
+  await find.press("Escape");
+  await expect(find).toBeHidden();
+  await expect(position).toHaveText("Change 2 of 2");
+  await expect(split).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 720 });
+  await expect(position).toHaveText("Change 2 of 2");
+  await split.click();
+  await expect(split).toHaveAttribute("aria-pressed", "false");
+  await expect(position).toHaveText("Change 2 of 2");
+  await proposedEditor.hover();
+  await expect(verticalTracks).toHaveCount(1);
+  await expect(split).toBeInViewport();
+  await expect(
+    dialog.getByRole("button", { name: "Next change" }),
+  ).toBeInViewport();
+  await expect(
+    dialog.getByRole("button", { name: "Close", exact: true }),
+  ).toBeInViewport();
+  const bounds = await dialog.boundingBox();
+  expect(bounds?.x).toBeGreaterThanOrEqual(0);
+  expect((bounds?.x ?? 0) + (bounds?.width ?? 0)).toBeLessThanOrEqual(390);
+  expect((bounds?.y ?? 0) + (bounds?.height ?? 0)).toBeLessThanOrEqual(720);
+  await page.screenshot({
+    path: testInfo.outputPath("policy-diff-mobile.png"),
+  });
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(review).toBeFocused();
+  expect((await card.boundingBox())?.height).toBeLessThan(450);
+  // Closing and reopening gets a live, readable editor with fresh text models.
+  await review.click();
+  await expect(position).toHaveText("Change 1 of 2", { timeout: 60_000 });
+  await expect(
+    dialog.getByRole("button", { name: "Next change" }),
+  ).toBeEnabled();
+  await expect(
+    dialog.getByText("tool_13259", { exact: false }).first(),
+  ).toBeVisible({ timeout: 60_000 });
+});

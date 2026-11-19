@@ -56,7 +56,7 @@ const GITHUB_COPILOT_HEADERS: Record<string, string> = {
  * Copilot Chat extension in stable VS Code sends.
  */
 const GITHUB_COPILOT_TOKEN_EXCHANGE_API_VERSION = "2025-04-01";
-const GITHUB_COPILOT_API_VERSION = "2026-08-01";
+export const GITHUB_COPILOT_API_VERSION = "2026-08-01";
 
 // Not in the internal-helpers section: consts are not hoisted, and this one is
 // read by a field initializer when the singleton is constructed at module eval.

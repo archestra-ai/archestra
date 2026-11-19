@@ -37,7 +37,7 @@ import {
   useOrganization,
 } from "@/lib/organization.query";
 import { formatDate } from "@/lib/utils/date-time";
-import { RouterActions } from "../_parts/router-actions";
+import { ConfigureAutoRoutingButton } from "../_parts/configure-button";
 import AutoRoutingOverviewPage from "./page";
 
 vi.mock("@/lib/auth/auth.query");
@@ -214,6 +214,7 @@ const server = setupServer(
     HttpResponse.json({
       backfill: null,
       scoreOffer: null,
+      history: [],
     } satisfies AutoRoutingBackfillState),
   ),
   http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
@@ -855,6 +856,8 @@ function withActivePlan(base: AutoRouter): AutoRouter {
 }
 
 describe("past sessions", () => {
+  /** A scan this recent is not redone when the Score dialog opens. */
+  const fresh = new Date().toISOString();
   const scanned = (
     overrides: Partial<NonNullable<AutoRoutingBackfillState["backfill"]>> = {},
   ): NonNullable<AutoRoutingBackfillState["backfill"]> => ({
@@ -862,7 +865,7 @@ describe("past sessions", () => {
     status: "scanned",
     phase: "scan",
     windowStart: "2026-09-27T00:00:00.000Z",
-    cutoff: "2026-10-26T00:00:00.000Z",
+    cutoff: fresh,
     eligibleSessions: 240,
     eligibleTokens: 9_000_000,
     breakdown: [
@@ -878,6 +881,22 @@ describe("past sessions", () => {
     completedAt: null,
     awaitingFit: false,
     fitBlockedReason: null,
+    ...overrides,
+  });
+  const job = (
+    overrides: Partial<AutoRoutingBackfillState["history"][number]>,
+  ): AutoRoutingBackfillState["history"][number] => ({
+    id: randomUUID(),
+    status: "scanned",
+    phase: "scan",
+    createdAt: "2026-10-26T09:00:00.000Z",
+    completedAt: null,
+    startedByName: null,
+    foundSessions: 240,
+    scoredSessions: null,
+    spentCostUsd: 0,
+    maxCostUsd: null,
+    error: null,
     ...overrides,
   });
   const offer = {
@@ -909,6 +928,7 @@ describe("past sessions", () => {
           return HttpResponse.json({
             backfill: scanned({ status: "running", phase: "score" }),
             scoreOffer: null,
+            history: [],
           } satisfies AutoRoutingBackfillState);
         },
       ),
@@ -916,26 +936,47 @@ describe("past sessions", () => {
     return scores;
   }
 
-  it("scans past traffic before routing is enabled", async () => {
-    settings = makeSettings({ enabled: false, budgetUsdPerDay: null });
-    let scans = 0;
+  /** Counts the scans the Score dialog starts. */
+  function serveScan() {
+    const scans = { count: 0 };
     server.use(
       http.post(`${API_ORIGIN}/api/auto-routing/backfill/scan`, () => {
-        scans++;
+        scans.count++;
         return HttpResponse.json({
           backfill: scanned({ status: "running" }),
           scoreOffer: null,
+          history: [],
         } satisfies AutoRoutingBackfillState);
       }),
     );
+    return scans;
+  }
+
+  /** Clicks the card's Score button and returns the dialog it opens. */
+  async function openScore(user: ReturnType<typeof userEvent.setup>) {
+    const section = await screen.findByTestId("auto-routing-past-sessions");
+    await user.click(
+      await within(section).findByRole("button", { name: "Score" }),
+    );
+    return screen.findByRole("dialog");
+  }
+
+  it("counts past sessions when Score opens, even before routing is enabled", async () => {
+    settings = makeSettings({ enabled: false, budgetUsdPerDay: null });
+    const scans = serveScan();
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Scan past sessions" }),
-    );
+    const section = await screen.findByTestId("auto-routing-past-sessions");
+    expect(section).toHaveTextContent("No past sessions counted yet.");
+    const dialog = await openScore(user);
 
-    await waitFor(() => expect(scans).toBe(1));
+    expect(
+      await within(dialog).findByText(
+        "Looking for past sessions in the interaction log…",
+      ),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(scans.count).toBe(1));
   });
 
   it("shows the setup steps while routing is off for the organization", async () => {
@@ -945,7 +986,11 @@ describe("past sessions", () => {
       coldStart: { ...base.status.coldStart, sessions: 1064, required: 1000 },
     };
     settings = makeSettings({ enabled: false, status });
-    serveBackfill({ backfill: scanned({ status: "done" }), scoreOffer: null });
+    serveBackfill({
+      backfill: scanned({ status: "done" }),
+      scoreOffer: null,
+      history: [],
+    });
     renderPage();
 
     expect(await screen.findByTestId("auto-routing-setup-2")).toHaveTextContent(
@@ -976,8 +1021,9 @@ describe("past sessions", () => {
           fitBlockedReason: "No daily budget is set.",
         }),
         scoreOffer: null,
+        history: [],
       },
-      { backfill: scanned({ status: "done" }), scoreOffer: null },
+      { backfill: scanned({ status: "done" }), scoreOffer: null, history: [] },
     );
     server.use(
       http.put(ROUTER_URL, () =>
@@ -990,7 +1036,7 @@ describe("past sessions", () => {
     const user = userEvent.setup();
     renderPage();
     expect(
-      await screen.findByText("No plan is fitted on these sessions"),
+      await screen.findByText("No plan is fitted on past sessions"),
     ).toBeInTheDocument();
 
     const budget = await openConfigure(user);
@@ -1000,74 +1046,142 @@ describe("past sessions", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByText("No plan is fitted on these sessions"),
+        screen.queryByText("No plan is fitted on past sessions"),
       ).not.toBeInTheDocument(),
     );
   });
 
-  it("shows how far past sessions got: found and scored", async () => {
+  it("lists what counting and scoring did, newest first, with scoring's cost", async () => {
     serveBackfill({
-      backfill: scanned({
-        status: "running",
-        phase: "score",
-        progress: { scored: 30, sample: 240, noText: 0, failed: 0 },
-      }),
+      backfill: scanned({ status: "running", phase: "score" }),
       scoreOffer: null,
+      history: [
+        job({
+          status: "running",
+          phase: "score",
+          scoredSessions: 30,
+          spentCostUsd: 0.5,
+          maxCostUsd: 2,
+          startedByName: "Ada",
+        }),
+        job({
+          status: "superseded",
+          phase: "score",
+          scoredSessions: 120,
+          spentCostUsd: 0.12,
+        }),
+        job({ status: "failed", error: "The interaction log is unreachable." }),
+        job({ status: "done", startedByName: "Ada" }),
+        job({ status: "done" }),
+      ],
     });
     renderPage();
 
-    expect(
-      await screen.findByTestId("auto-routing-past-sessions-funnel"),
-    ).toHaveTextContent("240 found · 30 of 240 scored");
+    const history = await screen.findByTestId(
+      "auto-routing-past-sessions-history",
+    );
+    const rows = within(history)
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) =>
+        within(row)
+          .getAllByRole("cell")
+          .slice(1)
+          .map((cell) => cell.textContent),
+      );
+    expect(rows).toEqual([
+      ["Scoring past sessionsStarted by Ada", "30 scored", "$0.50 of $2.00"],
+      [
+        "Stopped after 120 sessions: the decision model changed",
+        "120",
+        "$0.12",
+      ],
+      ["Counting failedThe interaction log is unreachable.", "240", "Free"],
+      ["Found 240 past sessionsStarted by Ada", "240", "Free"],
+      [
+        "Found 240 past sessionsCounted when routing was turned on",
+        "240",
+        "Free",
+      ],
+    ]);
   });
 
-  it("keeps a running scoring run's spend on the summary line", async () => {
+  it("turns Score into Stop while a job runs, and stops it", async () => {
+    settings = withActivePlan(makeSettings());
     serveBackfill({
-      backfill: scanned({
-        status: "running",
-        phase: "score",
-        spentCostUsd: 0.5,
-        maxCostUsd: 2,
-        progress: { sample: 240, scored: 30, noText: 0, failed: 0 },
-      }),
+      backfill: scanned({ status: "running", phase: "score" }),
       scoreOffer: null,
+      history: [job({ status: "running", phase: "score", scoredSessions: 30 })],
+    });
+    let cancels = 0;
+    server.use(
+      http.delete(`${API_ORIGIN}/api/auto-routing/backfill`, () => {
+        cancels++;
+        return HttpResponse.json({
+          backfill: scanned({ status: "cancelled", phase: "score" }),
+          scoreOffer: offer,
+          history: [
+            job({ status: "cancelled", phase: "score", scoredSessions: 30 }),
+          ],
+        } satisfies AutoRoutingBackfillState);
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    const section = await screen.findByTestId("auto-routing-past-sessions");
+    expect(
+      within(section).queryByRole("button", { name: "Score" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      await within(section).findByRole("button", { name: "Stop" }),
+    );
+
+    expect(
+      await within(section).findByRole("button", { name: "Score" }),
+    ).toBeEnabled();
+    expect(section).toHaveTextContent("Stopped after 30 sessions");
+    expect(cancels).toBe(1);
+  });
+
+  it("says Up to date, and offers nothing, once every past session is scored", async () => {
+    serveBackfill({
+      backfill: scanned({ status: "done", phase: "score" }),
+      scoreOffer: null,
+      history: [job({ status: "done", phase: "score", scoredSessions: 240 })],
     });
     renderPage();
 
+    const section = await screen.findByTestId("auto-routing-past-sessions");
     expect(
-      await screen.findByTestId("auto-routing-past-sessions-funnel"),
-    ).toHaveTextContent(
-      "240 found · 30 of 240 scored · scoring, $0.50 of $2.00",
-    );
+      await within(section).findByRole("button", { name: "Up to date" }),
+    ).toBeDisabled();
+  });
+
+  it.each([
+    "cancelled",
+    "failed",
+  ] as const)("offers Score, and counts again, after a count was %s", async (status) => {
+    serveBackfill({
+      backfill: scanned({ status }),
+      scoreOffer: null,
+      history: [job({ status })],
+    });
+    const scans = serveScan();
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await openScore(user);
+
     expect(
-      screen.getByText("Budget accounted: $0.50 of $2.00"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /Includes estimates when the scorer did not report a cost/,
+      await within(dialog).findByText(
+        "Looking for past sessions in the interaction log…",
       ),
     ).toBeInTheDocument();
+    await waitFor(() => expect(scans.count).toBe(1));
   });
 
-  it("counts unreadable and failed sessions as done, not pending", async () => {
-    serveBackfill({
-      backfill: scanned({
-        phase: "score",
-        progress: { sample: 240, scored: 200, noText: 30, failed: 10 },
-      }),
-      scoreOffer: null,
-    });
-    renderPage();
-
-    expect(
-      await screen.findByTestId("auto-routing-past-sessions-funnel"),
-    ).toHaveTextContent("240 found · 200 scored");
-    expect(
-      screen.getByText("Not scored: 30 skipped, 10 failed"),
-    ).toBeInTheDocument();
-  });
-
-  it("totals sessions per client, folding agents and the tail", async () => {
+  it("totals sessions per client in the dialog, folding agents and the tail", async () => {
     const chain = `${randomUUID()}:${randomUUID()}`;
     serveBackfill({
       backfill: scanned({
@@ -1093,12 +1207,15 @@ describe("past sessions", () => {
         ],
       }),
       scoreOffer: offer,
+      history: [job({})],
     });
+    const user = userEvent.setup();
     renderPage();
+    const dialog = await openScore(user);
 
-    const section = await screen.findByTestId("auto-routing-past-sessions");
+    const findings = within(dialog).getByTestId("auto-routing-scan-findings");
     expect(
-      within(section)
+      within(findings)
         .getAllByRole("row")
         .map((row) =>
           within(row)
@@ -1117,13 +1234,10 @@ describe("past sessions", () => {
   });
 
   it("accepts a spending limit up to the API's bound and no further", async () => {
-    serveBackfill({ backfill: scanned(), scoreOffer: offer });
+    serveBackfill({ backfill: scanned(), scoreOffer: offer, history: [] });
     const user = userEvent.setup();
     renderPage();
-    await user.click(
-      await screen.findByRole("button", { name: /^Score 240 sessions/ }),
-    );
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await openScore(user);
     const ceiling = within(dialog).getByLabelText("Spending limit (USD)");
     const action = () =>
       within(dialog).getByRole("button", { name: "Score 240 sessions" });
@@ -1137,14 +1251,15 @@ describe("past sessions", () => {
     expect(ceiling).toHaveAttribute("aria-invalid", "true");
   });
 
-  it("refuses a stale offer, closes the confirmation and shows the current offer", async () => {
+  it("refuses a stale offer, closes the confirmation and offers the current one next", async () => {
     const replaced = "00000000-0000-4000-8000-000000000302";
     let refused = 0;
     serveBackfill(
-      { backfill: scanned(), scoreOffer: offer },
+      { backfill: scanned(), scoreOffer: offer, history: [] },
       {
         backfill: scanned({ id: replaced }),
         scoreOffer: { ...offer, backfillId: replaced, remaining: 90 },
+        history: [],
       },
     );
     server.use(
@@ -1158,17 +1273,18 @@ describe("past sessions", () => {
     );
     const user = userEvent.setup();
     renderPage();
-    await user.click(
-      await screen.findByRole("button", { name: /^Score 240 sessions/ }),
-    );
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await openScore(user);
     await user.click(within(dialog).getByRole("button", { name: /sessions$/ }));
 
-    expect(
-      await screen.findByRole("button", { name: /^Score 90 sessions/ }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
     expect(refused).toBe(1);
+    expect(
+      within(await openScore(user)).getByRole("button", {
+        name: "Score 90 sessions",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("keeps polling after a backfill until the fit it requested is published", async () => {
@@ -1176,9 +1292,17 @@ describe("past sessions", () => {
     try {
       const done = scanned({ status: "done", phase: "score" });
       serveBackfill(
-        { backfill: { ...done, awaitingFit: true }, scoreOffer: null },
-        { backfill: { ...done, awaitingFit: true }, scoreOffer: null },
-        { backfill: done, scoreOffer: null },
+        {
+          backfill: { ...done, awaitingFit: true },
+          scoreOffer: null,
+          history: [],
+        },
+        {
+          backfill: { ...done, awaitingFit: true },
+          scoreOffer: null,
+          history: [],
+        },
+        { backfill: done, scoreOffer: null, history: [] },
       );
       renderPage();
       await screen.findByTestId("auto-routing-past-sessions");
@@ -1206,6 +1330,7 @@ describe("past sessions", () => {
           fitBlockedReason: "No daily budget is set.",
         }),
         scoreOffer: null,
+        history: [],
       };
       server.use(
         http.get(`${API_ORIGIN}/api/auto-routing/backfill`, () => {
@@ -1231,7 +1356,6 @@ describe("past sessions", () => {
       backfill: scanned({
         status: "cancelled",
         windowStart: "2026-10-20T00:00:00.000Z",
-        cutoff: "2026-10-27T00:00:00.000Z",
       }),
       scoreOffer: {
         ...offer,
@@ -1239,35 +1363,32 @@ describe("past sessions", () => {
         windowStart: "2026-08-01T00:00:00.000Z",
         cutoff: "2026-09-01T00:00:00.000Z",
       },
+      history: [],
     });
     const user = userEvent.setup();
     renderPage();
-    await user.click(
-      await screen.findByRole("button", { name: /^Score 240 sessions/ }),
-    );
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await openScore(user);
 
     expect(dialog).toHaveTextContent(
       `${formatDate({ date: "2026-08-01T00:00:00.000Z", dateFormat: "MMM d, yyyy" })} to ${formatDate({ date: "2026-09-01T00:00:00.000Z", dateFormat: "MMM d, yyyy" })}`,
     );
-    expect(dialog).not.toHaveTextContent(
-      formatDate({
-        date: "2026-10-20T00:00:00.000Z",
-        dateFormat: "MMM d, yyyy",
-      }),
-    );
+    // The newest job's findings describe another scan, so they stay out.
+    expect(
+      within(dialog).queryByTestId("auto-routing-scan-findings"),
+    ).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: /sessions$/ }));
     await waitFor(() => expect(scores).toMatchObject([{ backfillId: older }]));
   });
 
   it("scores only after the confirmation, with the ceiling the admin set", async () => {
-    const scores = serveBackfill({ backfill: scanned(), scoreOffer: offer });
+    const scores = serveBackfill({
+      backfill: scanned(),
+      scoreOffer: offer,
+      history: [],
+    });
     const user = userEvent.setup();
     renderPage();
-    await user.click(
-      await screen.findByRole("button", { name: /^Score 240 sessions/ }),
-    );
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await openScore(user);
     expect(dialog).toHaveTextContent("sends the opening prompt");
     expect(dialog).toHaveTextContent("~$");
     expect(scores).toEqual([]);
@@ -1288,13 +1409,8 @@ describe("past sessions", () => {
     );
   });
 
-  it("offers a re-score beside an active plan once the scorer changed", async () => {
-    settings = makeSettings({
-      status: {
-        ...makeSettings().status,
-        activePlan: { id: PLAN_ID, createdAt: activePlan.createdAt },
-      },
-    });
+  it("says past sessions need scoring again beside an active plan once the scorer changed", async () => {
+    settings = withActivePlan(makeSettings());
     const scores = serveBackfill({
       backfill: scanned({
         status: "superseded",
@@ -1302,16 +1418,18 @@ describe("past sessions", () => {
         scorerCurrent: false,
       }),
       scoreOffer: { ...offer, rescore: true },
+      history: [],
     });
     const user = userEvent.setup();
     renderPage();
+
+    expect(
+      await screen.findByText("Past sessions need scoring again"),
+    ).toBeInTheDocument();
+    const dialog = await openScore(user);
+    expect(dialog).toHaveTextContent("Re-score past sessions?");
     await user.click(
-      await screen.findByRole("button", { name: /^Re-score 240 sessions/ }),
-    );
-    await user.click(
-      within(await screen.findByRole("dialog")).getByRole("button", {
-        name: /sessions$/,
-      }),
+      within(dialog).getByRole("button", { name: "Re-score 240 sessions" }),
     );
 
     await waitFor(() =>
@@ -1334,7 +1452,7 @@ describe("past sessions", () => {
         scorerApiKey: null,
       },
     });
-    serveBackfill({ backfill: scanned(), scoreOffer: offer });
+    serveBackfill({ backfill: scanned(), scoreOffer: offer, history: [] });
     renderPage();
 
     const section = await screen.findByTestId("auto-routing-past-sessions");
@@ -1354,12 +1472,12 @@ describe("past sessions", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("scores past sessions from the header menu in one step", async () => {
+  it("keeps the card beside an active plan and scores from it in one step", async () => {
     settings = withActivePlan(makeSettings());
-    const cutoff = new Date().toISOString();
     const scores = serveBackfill({
-      backfill: scanned({ cutoff }),
-      scoreOffer: { ...offer, cutoff },
+      backfill: scanned(),
+      scoreOffer: offer,
+      history: [job({})],
     });
     const user = userEvent.setup();
     renderPage();
@@ -1367,16 +1485,7 @@ describe("past sessions", () => {
     expect(
       await screen.findByTestId("auto-routing-figures"),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("auto-routing-past-sessions"),
-    ).not.toBeInTheDocument();
-    await user.click(
-      await screen.findByRole("button", { name: "Auto router actions" }),
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: "Score past sessions…" }),
-    );
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await openScore(user);
     expect(
       within(dialog).getByTestId("auto-routing-scan-findings"),
     ).toHaveTextContent("240 past sessions found");
@@ -1396,80 +1505,41 @@ describe("past sessions", () => {
     );
   });
 
-  it("counts past sessions again when the dialog opens on a stale scan", async () => {
+  it("counts past sessions again when Score opens on a stale scan", async () => {
     settings = withActivePlan(makeSettings());
     serveBackfill({
-      backfill: scanned({
-        status: "done",
-        progress: { sample: 240, scored: 238, noText: 2, failed: 0 },
-      }),
+      backfill: scanned({ status: "done", cutoff: "2026-10-26T00:00:00.000Z" }),
       scoreOffer: null,
+      history: [job({ status: "done" })],
     });
-    let scans = 0;
-    server.use(
-      http.post(`${API_ORIGIN}/api/auto-routing/backfill/scan`, () => {
-        scans++;
-        return HttpResponse.json({
-          backfill: scanned({ status: "running" }),
-          scoreOffer: null,
-        } satisfies AutoRoutingBackfillState);
-      }),
-    );
+    const scans = serveScan();
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Auto router actions" }),
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: "Score past sessions…" }),
-    );
+    const dialog = await openScore(user);
 
     expect(
-      await within(await screen.findByRole("dialog")).findByText(
+      await within(dialog).findByText(
         "Looking for past sessions in the interaction log…",
       ),
     ).toBeInTheDocument();
-    await waitFor(() => expect(scans).toBe(1));
+    await waitFor(() => expect(scans.count).toBe(1));
   });
 
-  it("reports a scoring run beside an active plan, with a way to stop it", async () => {
-    settings = withActivePlan(makeSettings());
+  it("shows read-only viewers the history without the Score button", async () => {
+    setCanUpdate(false);
     serveBackfill({
-      backfill: scanned({
-        status: "running",
-        phase: "score",
-        maxCostUsd: 2,
-        spentCostUsd: 0.5,
-        progress: { sample: 240, scored: 120, noText: 0, failed: 0 },
-      }),
-      scoreOffer: null,
-    });
-    renderPage();
-
-    const notice = await screen.findByTestId("auto-routing-past-sessions");
-    expect(notice).toHaveTextContent("Scoring past sessions");
-    expect(notice).toHaveTextContent("120 of 240 scored");
-    expect(notice).toHaveTextContent("$0.50 of $2.00");
-    expect(
-      within(notice).getByRole("button", { name: "Cancel" }),
-    ).toBeInTheDocument();
-  });
-
-  it("shows spend only for a scoring run, not for a scan", async () => {
-    serveBackfill({
-      backfill: scanned({
-        progress: { sample: 240, scored: 200, noText: 0, failed: 0 },
-      }),
+      backfill: scanned(),
       scoreOffer: offer,
+      history: [job({ status: "done" })],
     });
     renderPage();
 
     const section = await screen.findByTestId("auto-routing-past-sessions");
     expect(
-      within(section).getByTestId("auto-routing-past-sessions-funnel"),
-    ).toHaveTextContent("200 of 240 scored");
-    expect(within(section).queryByText(/Spent/)).not.toBeInTheDocument();
+      await within(section).findByTestId("auto-routing-past-sessions-history"),
+    ).toHaveTextContent("Found 240 past sessions");
+    expect(within(section).queryByRole("button")).not.toBeInTheDocument();
   });
 });
 
@@ -1522,7 +1592,7 @@ function renderPage(sibling?: React.ReactNode) {
   render(
     <QueryClientProvider client={queryClient}>
       <AutoRouterIdContext.Provider value={ROUTER_ID}>
-        <RouterActions />
+        <ConfigureAutoRoutingButton />
         <AutoRoutingOverviewPage />
         {sibling}
       </AutoRouterIdContext.Provider>

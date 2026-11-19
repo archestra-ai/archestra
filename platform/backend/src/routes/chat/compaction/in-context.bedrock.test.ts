@@ -176,6 +176,7 @@ async function setup(
     agentLlmApiKeyId: key.id,
     previousSummary: null as string | null,
     compactableMessages: HISTORY,
+    recentMessages: [] as ChatMessage[],
     systemPrompt: "Summarize synthetic archive facts accurately.",
     tools,
   };
@@ -271,6 +272,48 @@ test("compaction retains ordinary chat's tool/history cache prefix, including a 
   expect(s.onInputAvailable).not.toHaveBeenCalled();
   expect(s.needsApproval).not.toHaveBeenCalled();
   expect(s.params.tools.read_archive.execute).toBe(s.execute);
+});
+
+test("compaction sends the turn's whole history, recent tail included, as the cached prefix", async ({
+  scenario: s,
+}) => {
+  const recent: ChatMessage[] = [
+    {
+      id: "u2",
+      role: "user",
+      parts: [{ type: "text", text: "Now draft the retention notice." }],
+    },
+  ];
+  const ordinary = await buildModelMessages({
+    ...s.params,
+    messages: [...HISTORY, ...recent],
+    disableCompaction: true,
+    emit: () => {},
+  });
+  await generateText({
+    model: s.model,
+    tools: s.params.tools,
+    system: s.params.systemPrompt,
+    messages: ordinary.modelMessages,
+  });
+
+  expect(
+    await summarizeInContext({ ...s.params, recentMessages: recent }),
+  ).toBe(FACT);
+  const [control, compact] = s.requests;
+  // The instruction joins the trailing user turn after its cache point, so
+  // every block through that point is the turn's own.
+  const last = control.messages.length - 1;
+  expect(compact.messages.slice(0, last)).toEqual(
+    control.messages.slice(0, last),
+  );
+  expect(
+    compact.messages[last].content.slice(
+      0,
+      control.messages[last].content.length,
+    ),
+  ).toEqual(control.messages[last].content);
+  expect(control.messages[last].content.at(-1)).toHaveProperty("cachePoint");
 });
 
 test("compaction never executes tools or their callbacks even if the provider asks", async ({

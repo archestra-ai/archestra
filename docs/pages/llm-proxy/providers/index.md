@@ -2,7 +2,7 @@
 title: Model Providers
 description: Connect provider API keys and personal subscriptions for Chat and the LLM Proxy
 order: 2
-lastUpdated: 2026-11-10
+lastUpdated: 2026-11-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -108,7 +108,7 @@ OpenRouter's `:free` model variants cost nothing, though they still need an Open
 
 ### Jev
 
-[Jev](https://typesafe.ai) is TypeSafe's decision model. It scores content, such as a tool call, and does not chat. Send requests to `https://<archestra-host>/v1/jev/decisions` with `Authorization: Bearer <your-api-key>`.
+[Jev](https://typesafe.ai) is TypeSafe's decision model. It scores content—such as tool calls, [Guardrails](/docs/agents/guardrails) checks, or sessions for [Auto Routing](/docs/llm-proxy/auto-routing)—and does not chat. Send requests to `https://<archestra-host>/v1/jev/decisions` with `Authorization: Bearer <your-api-key>`.
 
 To use Jev through OpenRouter, set the key's base URL to `https://openrouter.ai/api/alpha/decisions`. To change the default endpoint, set [`ARCHESTRA_JEV_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_JEV_BASE_URL).
 

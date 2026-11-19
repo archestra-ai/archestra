@@ -3,7 +3,7 @@ title: LLM Proxy Authentication
 sidebarTitle: Authentication
 description: How apps, agents, and people sign in to the LLM Proxy, and whose provider key each call uses
 order: 1
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -51,6 +51,7 @@ The request shows under **Logs → LLM Proxy**, with the key's name.
 - **To share a key** with a team, add the team under its permissions, when you create the key or later.
 - To bill a team, pick it as the payer. The key's spend then counts toward that team's [costs](/docs/llm-proxy/costs-and-limits/costs) and [limits](/docs/llm-proxy/costs-and-limits/limits), not its creator's. A spend cap there limits the key itself.
 - A key uses a [model pool](/docs/llm-proxy/model-pools) only once you add the pool under **Model pools**, whatever provider keys it maps.
+- A key calls an [auto router](/docs/llm-proxy/auto-routing) on the Unified Model API only after you add it under **Auto routers**; any other router name returns `403`.
 
 <span id="creating-passthrough-virtual-keys"></span><span id="configuring-claude-code-and-claude-desktop"></span>
 
@@ -109,6 +110,7 @@ For a bot or a nightly job with no person behind it. Select **Service account (o
 - **Current and future providers** uses shared **Primary** keys at request time, including later providers and changes to the Primary key. Personal and subscription keys are excluded. Under **LLM API keys**, you can override the key for a provider. Enabling this mode requires a [**Can use** grant](/docs/admin/access-control#granular-access-control) on all current and future provider keys (`*`); access to each current key separately is insufficient.
 - Existing OAuth clients keep **Selected providers** until you change their mode.
 - A client that calls as the app uses a [model pool](/docs/llm-proxy/model-pools) only once you add the pool under **Model pools** on **Access**, whatever provider keys it maps.
+- A client that calls as the app calls an [auto router](/docs/llm-proxy/auto-routing) on the Unified Model API only after you add it under **Auto routers** on **Access**.
 - Map a metered API key. A personal subscription cannot serve an app.
 - See the [complete example app](https://github.com/archestra-ai/examples/tree/main/unified-model-client-credentials).
 

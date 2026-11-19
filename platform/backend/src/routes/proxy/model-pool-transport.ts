@@ -103,6 +103,8 @@ export interface MemberTransport {
   getUsage?: () => UsageView | null;
   /** Observed usage retained even when translation cannot emit a terminal event. */
   getStreamUsage?: () => UsageView | null;
+  /** A translated provider may distinguish a stop sequence from a natural stop. */
+  stoppedOnSequence?: () => boolean;
   execute(request: unknown): Promise<unknown>;
   /** `onAccepted` fires once the member's provider accepted the request. */
   executeStream(
@@ -292,21 +294,21 @@ function memberTransportOnWire(params: {
 
   if (inbound === "openai-chat" && target === "anthropic") {
     let getUsage: (() => UsageView | null) | undefined;
+    let stoppedOnSequence = () => false;
     return {
       getStreamUsage: () => getUsage?.() ?? null,
+      stoppedOnSequence: () => stoppedOnSequence(),
       async execute(request) {
         const { anthropicBody, openaiContext } = openaiToAnthropic(
           request as OpenAi.Types.ChatCompletionsRequest,
         );
-        const response = await adapter.execute(client, {
+        const response = (await adapter.execute(client, {
           ...anthropicBody,
           model: modelId,
           messages: withAnthropicToolCallIds(anthropicBody.messages),
-        });
-        return anthropicResponseToOpenai(
-          response as Anthropic.Types.MessagesResponse,
-          openaiContext,
-        );
+        })) as Anthropic.Types.MessagesResponse;
+        stoppedOnSequence = () => response.stop_reason === "stop_sequence";
+        return anthropicResponseToOpenai(response, openaiContext);
       },
       async executeStream(request, onAccepted) {
         const { anthropicBody, openaiContext } = openaiToAnthropic(
@@ -324,6 +326,7 @@ function memberTransportOnWire(params: {
         );
         const translator = anthropicEventsToOpenAiChunks(openaiContext);
         getUsage = translator.getUsage;
+        stoppedOnSequence = translator.stoppedOnSequence;
         return mapStream(events, translator.translate, translator.finish);
       },
     };
@@ -514,7 +517,10 @@ function memberTransportOnWire(params: {
         )) as OpenAi.Types.ChatCompletionsResponse;
         usage = readOpenAiUsage(response.usage);
         try {
-          return openaiResponseToConverse(response);
+          return openaiResponseToConverse(
+            response,
+            viaOpenai.stoppedOnSequence?.(),
+          );
         } catch (error) {
           if (!usage) throw error;
           throw new ObservedProviderUsageError({
@@ -535,7 +541,9 @@ function memberTransportOnWire(params: {
           },
           onAccepted,
         );
-        const translator = createOpenaiToConverseStreamTranslator();
+        const translator = createOpenaiToConverseStreamTranslator(
+          viaOpenai.stoppedOnSequence,
+        );
         return mapStream(
           chunks,
           (raw) => {
@@ -785,6 +793,7 @@ function anthropicEventsToOpenAiChunks(ctx: {
   translate(event: unknown): unknown[];
   finish(): unknown[];
   getUsage(): UsageView | null;
+  stoppedOnSequence(): boolean;
 } {
   // biome-ignore lint/suspicious/noExplicitAny: Anthropic SDK event union
   type Event = any;
@@ -805,6 +814,7 @@ function anthropicEventsToOpenAiChunks(ctx: {
     choices: [{ index: 0, delta, finish_reason: finish }],
   });
   return {
+    stoppedOnSequence: () => finishReason === "stop_sequence",
     getUsage: () =>
       observedUsage
         ? {

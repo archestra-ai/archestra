@@ -250,7 +250,8 @@ export function converseToOpenai(request: Request): ChatRequest {
   };
 }
 
-function converseStopReason(reason: string) {
+function converseStopReason(reason: string, stoppedOnSequence = false) {
+  if (reason === "stop" && stoppedOnSequence) return "stop_sequence";
   switch (reason) {
     case "length":
       return "max_tokens";
@@ -290,6 +291,7 @@ function toolInput(argumentsJson: string): Record<string, unknown> {
 
 export function openaiResponseToConverse(
   response: OpenAi.Types.ChatCompletionsResponse,
+  stoppedOnSequence = false,
 ): Bedrock.Types.ConverseResponse {
   const answer = response.choices[0];
   if (!answer?.finish_reason) {
@@ -315,12 +317,14 @@ export function openaiResponseToConverse(
   }
   return {
     output: { message: { role: "assistant", content } },
-    stopReason: converseStopReason(answer.finish_reason),
+    stopReason: converseStopReason(answer.finish_reason, stoppedOnSequence),
     usage: converseUsage(response.usage),
   };
 }
 
-export function createOpenaiToConverseStreamTranslator() {
+export function createOpenaiToConverseStreamTranslator(
+  stoppedOnSequence?: () => boolean,
+) {
   const tools = new Map<number, { id: string; name: string; input: string }>();
   let started = false;
   let textStarted = false;
@@ -332,7 +336,10 @@ export function createOpenaiToConverseStreamTranslator() {
       const choice = chunk.choices[0];
       if (!choice) return [];
       if (choice.finish_reason)
-        stopReason = converseStopReason(choice.finish_reason);
+        stopReason = converseStopReason(
+          choice.finish_reason,
+          stoppedOnSequence?.(),
+        );
       const events: ConverseStreamOutput[] = [];
       const text = choice.delta.content ?? choice.delta.refusal;
       if (text) {

@@ -15,7 +15,31 @@ import { handleLLMProxy } from "../llm-proxy-handler";
 
 // Zod strips unknown keys on known Converse shapes. Detect native-only
 // behavior before that validation, without changing the native request schema.
-const nativeOnlyConverseRequests = new WeakSet<FastifyRequest>();
+type ConverseTranslation = "native" | "unsupported";
+const nativeConverseBodies = new WeakMap<
+  FastifyRequest,
+  Record<string, unknown>
+>();
+
+function retainsFields(raw: unknown, parsed: unknown): boolean {
+  if (Array.isArray(raw)) {
+    return (
+      Array.isArray(parsed) &&
+      raw.length === parsed.length &&
+      raw.every((value, index) => retainsFields(value, parsed[index]))
+    );
+  }
+  const record = asRecord(raw);
+  if (!record) return Object.is(raw, parsed);
+  const normalized = asRecord(parsed);
+  return (
+    !!normalized &&
+    Object.entries(record).every(
+      ([key, value]) =>
+        Object.hasOwn(normalized, key) && retainsFields(value, normalized[key]),
+    )
+  );
+}
 async function detectNativeConverse(request: FastifyRequest) {
   const modelParam = asRecord(request.params)?.modelId;
   let urlModel = typeof modelParam === "string" ? modelParam : undefined;
@@ -26,8 +50,29 @@ async function detectNativeConverse(request: FastifyRequest) {
       // Leave invalid URI handling to the existing route.
     }
   }
-  if (!canTranslateConverseRequest(request.body, urlModel))
-    nativeOnlyConverseRequests.add(request);
+  const raw = asRecord(request.body);
+  if (raw && !canTranslateConverseRequest(raw, urlModel))
+    nativeConverseBodies.set(request, raw);
+}
+
+function converseTranslation(
+  request: FastifyRequest,
+): ConverseTranslation | undefined {
+  const raw = nativeConverseBodies.get(request);
+  if (!raw) return;
+  // Distinguish representable AWS-only fields from fields the native schema
+  // stripped. Reject the latter in a pool rather than silently downgrade.
+  const system = Array.isArray(raw?.system)
+    ? raw.system.map((item: unknown) => {
+        const block = asRecord(item);
+        if (block?.type !== "text" || typeof block.text !== "string")
+          return item;
+        const { type: _type, ...rest } = block;
+        return rest;
+      })
+    : raw?.system;
+  const normalized = { ...raw, ...(system !== undefined ? { system } : {}) };
+  return retainsFields(normalized, request.body) ? "native" : "unsupported";
 }
 
 const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -70,7 +115,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         reply,
         bedrockAdapterFactory,
-        { preserveNativeConverse: nativeOnlyConverseRequests.has(request) },
+        { converseTranslation: converseTranslation(request) },
       );
     },
   );
@@ -108,7 +153,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         reply,
         bedrockAdapterFactory,
-        { preserveNativeConverse: nativeOnlyConverseRequests.has(request) },
+        { converseTranslation: converseTranslation(request) },
       );
     },
   );
@@ -144,7 +189,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         reply,
         bedrockAdapterFactory,
-        { preserveNativeConverse: nativeOnlyConverseRequests.has(request) },
+        { converseTranslation: converseTranslation(request) },
       );
     },
   );
@@ -183,7 +228,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         reply,
         bedrockAdapterFactory,
-        { preserveNativeConverse: nativeOnlyConverseRequests.has(request) },
+        { converseTranslation: converseTranslation(request) },
       );
     },
   );
@@ -242,7 +287,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         reply,
         bedrockAdapterFactory,
-        { preserveNativeConverse: nativeOnlyConverseRequests.has(request) },
+        { converseTranslation: converseTranslation(request) },
       );
     },
   );
@@ -295,7 +340,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         reply,
         bedrockAdapterFactory,
-        { preserveNativeConverse: nativeOnlyConverseRequests.has(request) },
+        { converseTranslation: converseTranslation(request) },
       );
     },
   );

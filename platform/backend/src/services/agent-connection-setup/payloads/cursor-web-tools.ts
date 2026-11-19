@@ -517,24 +517,17 @@ input.on("line", async (line) => {
       // while for it, so a chat does not give up after a few quick checks.
       const until = Date.now() + SETUP_WAIT_MS;
       let outcome;
-      // The last thing a step had to say, apart from "checking".
-      let said;
       for (;;) {
         try {
           outcome = setup.step();
         } catch (error) {
           outcome = { failed: true, text: "The setup step could not run: " + String(error?.message ?? error) };
         }
-        if (!outcome.soon) said = outcome;
         const left = until - Date.now();
         if (outcome.ready || outcome.failed) break;
         // A wait never ends on a check that is still under way: the check
         // has a time limit of its own, and its answer is what the call is for.
         if (left <= 0 && !outcome.soon) break;
-        if (left <= 0 && said) {
-          outcome = said;
-          break;
-        }
         await new Promise((resolve) => setTimeout(resolve, outcome.soon ? 100 : Math.min(2000, left)));
       }
       const next = outcome.ready || outcome.failed ? "" : " This can take the user a minute or two. Call this tool again now, and keep calling it until it says ready or failed.";

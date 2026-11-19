@@ -105,23 +105,33 @@ describe("Independent MCP runtime tiers", () => {
       (await OrganizationModel.getById(organizationId))?.mcpRuntimeTiers,
     ).toBeNull();
   });
-  test("references block removal/reset, follow rename case-insensitively, and resolve current resources", async ({
+  test("references block removal/reset, canonicalize Unicode case-insensitively, and resolve current resources", async ({
     makeInternalMcpCatalog,
+    makeMcpServer,
   }) => {
-    expect((await patch([tier("Small"), tier("Medium", 0.5)])).statusCode).toBe(
+    expect((await patch([tier("Small"), tier("İnce", 0.5)])).statusCode).toBe(
       200,
     );
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       serverType: "local",
-      localConfig: { command: "node", runtimeTier: "medium" },
+      localConfig: { command: "node", runtimeTier: "i\u0307nce" },
+    });
+    expect(catalog.localConfig?.runtimeTier).toBe("İnce");
+    const updated = await InternalMcpCatalogModel.update(catalog.id, {
+      localConfig: { command: "node", runtimeTier: "İNCE" },
+    });
+    expect(updated?.localConfig?.runtimeTier).toBe("İnce");
+    const install = await makeMcpServer({
+      catalogId: catalog.id,
+      serverType: "local",
     });
     expect((await patch([tier("Small")])).statusCode).toBe(400);
     expect((await patch(null)).statusCode).toBe(400);
     const renamed = await patch([
       tier("Small"),
       tier("Renamed", 0.75, {
-        previousName: "Medium",
+        previousName: "İnce",
         memoryRequestMiB: 64,
         memoryLimitMiB: 256,
       }),
@@ -129,6 +139,9 @@ describe("Independent MCP runtime tiers", () => {
     expect(renamed.statusCode, renamed.body).toBe(200);
     const saved = await InternalMcpCatalogModel.findById(catalog.id);
     expect(saved?.localConfig?.runtimeTier).toBe("Renamed");
+    expect((await McpServerModel.findById(install.id))?.reinstallRequired).toBe(
+      true,
+    );
     expect(
       await InternalMcpCatalogModel.resolveRuntimeResources(
         { runtimeTier: "renamed" },
@@ -140,6 +153,44 @@ describe("Independent MCP runtime tiers", () => {
       memoryRequestMiB: 64,
       memoryLimitMiB: 256,
     });
+  });
+  test("case-only edits and default reset preserve canonical references and memory overrides", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    expect((await patch([tier("s")])).statusCode).toBe(200);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "local",
+      localConfig: { command: "node", runtimeTier: "S" },
+    });
+    for (const [name, previousName] of [
+      ["S", "s"],
+      ["s", undefined],
+    ] as const) {
+      const response = await patch([
+        tier(name, 0.1, {
+          previousName,
+          memoryRequestMiB: undefined,
+          memoryLimitMiB: undefined,
+        }),
+      ]);
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().tiers[0]).toMatchObject({
+        name,
+        memoryRequestMiBOverride: 128,
+        memoryLimitMiBOverride: 512,
+      });
+      expect(
+        (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
+          ?.runtimeTier,
+      ).toBe(name);
+    }
+    expect((await patch(null)).statusCode).toBe(200);
+    expect(
+      (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
+        ?.runtimeTier,
+    ).toBe("S");
+    expect((await patch([tier("M")])).statusCode).toBe(400);
   });
   test("renaming onto a deleted in-use name is rejected, but a swap retains both tier identities", async ({
     makeInternalMcpCatalog,
@@ -165,7 +216,7 @@ describe("Independent MCP runtime tiers", () => {
     ).toEqual(before);
     expect(
       (await InternalMcpCatalogModel.findById(b.id))?.localConfig?.runtimeTier,
-    ).toBe("b");
+    ).toBe("B");
     const swap = await patch([
       tier("B", 0.1, { previousName: "A" }),
       tier("A", 2, { previousName: "B" }),
@@ -189,6 +240,26 @@ describe("Independent MCP runtime tiers", () => {
         organizationId,
       ),
     ).toMatchObject({ cpuRequest: 0.1 });
+  });
+  test("reusing a renamed tier's name with different casing creates a distinct tier", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    expect((await patch([tier("A")])).statusCode).toBe(200);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "local",
+      localConfig: { command: "node", runtimeTier: "A" },
+    });
+    const response = await patch([
+      tier("a", 2),
+      tier("B", 0.1, { previousName: "a" }),
+    ]);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
+        ?.runtimeTier,
+    ).toBe("B");
+    expect((await patch([tier("a", 2)])).statusCode).toBe(400);
   });
   test("CPU/RAM resize flags single/shared and empty YAML, not default/custom deployments", async ({
     makeInternalMcpCatalog,

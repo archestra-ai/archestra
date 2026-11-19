@@ -30,18 +30,29 @@ export async function prepareMcpRuntimeTierChange(params: {
   // Readers and reference writers serialize on this same organization row.
   await OrganizationModel.lockRowForUpdate(organizationId, tx);
   const current = await organizationMcpRuntimeTiers(organizationId, tx);
-  const renames =
-    input?.tiers.flatMap((tier) => {
-      const before = findMcpRuntimeTier(current.tiers, tier.previousName);
-      if (tier.previousName && !before)
-        throw new ApiError(
-          400,
-          `Unknown previous MCP tier ${tier.previousName}`,
-        );
-      return before && before.name.toLowerCase() !== tier.name.toLowerCase()
-        ? [{ from: before.name, to: tier.name }]
-        : [];
-    }) ?? [];
+  const explicitlyMapped = new Set(
+    input?.tiers.flatMap((tier) =>
+      tier.previousName ? [tier.previousName.toLowerCase()] : [],
+    ),
+  );
+  const candidates = input?.tiers ?? resolveMcpRuntimeTiers(null).tiers;
+  const renames = candidates.flatMap((tier) => {
+    const previousName = "previousName" in tier ? tier.previousName : undefined;
+    const before = findMcpRuntimeTier(current.tiers, previousName ?? tier.name);
+    if (previousName && !before)
+      throw new ApiError(400, `Unknown previous MCP tier ${previousName}`);
+    // A name reused after an explicit rename is a new tier, not a second
+    // mapping for the same original tier (even if its casing differs).
+    if (
+      !previousName &&
+      before &&
+      explicitlyMapped.has(before.name.toLowerCase())
+    )
+      return [];
+    return before && before.name !== tier.name
+      ? [{ from: before.name, to: tier.name }]
+      : [];
+  });
   const renamedAway = new Set(
     renames.map((rename) => rename.from.toLowerCase()),
   );
@@ -49,7 +60,12 @@ export async function prepareMcpRuntimeTierChange(params: {
     ? {
         tiers: input.tiers.map(({ previousName, ...tier }) => {
           const reusesRenamedName =
-            !previousName && renamedAway.has(tier.name.toLowerCase());
+            !previousName &&
+            renames.some(
+              (rename) =>
+                rename.from.toLowerCase() === tier.name.toLowerCase() &&
+                rename.to.toLowerCase() !== tier.name.toLowerCase(),
+            );
           const before = reusesRenamedName
             ? undefined
             : findMcpRuntimeTier(current.tiers, previousName ?? tier.name);

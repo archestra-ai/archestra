@@ -1,6 +1,13 @@
 "use client";
 
-import { FolderTree, PanelLeft, Search, TriangleAlert } from "lucide-react";
+import {
+  Download,
+  FolderTree,
+  Loader2,
+  PanelLeft,
+  Search,
+  TriangleAlert,
+} from "lucide-react";
 import {
   type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -8,6 +15,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import {
@@ -17,13 +25,15 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
+import { downloadZip, type WorkspaceDownload } from "./download-zip";
 import { FileQuickOpen, type QuickOpenConfig } from "./file-quick-open";
 import { useStoredFlag } from "./use-stored-flag";
 
 /**
  * Files laid out as an IDE: an explorer on the left, the open file beside it,
  * and one bar on top that names the file and opens a palette of every file on
- * Cmd/Ctrl+P. The Guardrails policy, a skill and a plugin all read their
+ * Cmd/Ctrl+P. With `download`, the bar ends in a button that saves every
+ * file as a .zip. The Guardrails policy, a skill and a plugin all read their
  * files through this; each brings its own explorer rows, bar actions and
  * editor pane. It takes the height its container gives it.
  *
@@ -39,6 +49,7 @@ export function FileWorkspace({
   quickOpen,
   shortcutScope = "focus",
   actions,
+  download = null,
   notice,
   className,
   children,
@@ -64,6 +75,8 @@ export function FileWorkspace({
   shortcutScope?: "window" | "focus";
   /** The bar's end: the open file's actions and the panels' toggles. */
   actions?: ReactNode;
+  /** Every file, to save as a .zip from the bar's end; null offers none. */
+  download?: WorkspaceDownload | null;
   /** A line between the bar and the files. */
   notice?: ReactNode;
   className?: string;
@@ -161,6 +174,7 @@ export function FileWorkspace({
             </Button>
           )}
           {actions}
+          {download && <WorkspaceDownloadButton download={download} />}
         </div>
       </div>
       {notice}
@@ -391,6 +405,43 @@ export function WorkspacePanelToggle({
 // ============================================================================
 // Internal helpers
 // ============================================================================
+
+/** The bar's last control: a quiet icon that saves every file as a .zip. */
+function WorkspaceDownloadButton({
+  download,
+}: {
+  download: WorkspaceDownload;
+}) {
+  // Plain state rather than a mutation: the workspace needs no query client.
+  const [pending, setPending] = useState(false);
+  const save = () => {
+    setPending(true);
+    Promise.resolve()
+      .then(download.files)
+      .then((files) => downloadZip({ name: download.name, files }))
+      .catch(() => toast.error("Could not download the files"))
+      .finally(() => setPending(false));
+  };
+  const label = "Download all files (.zip)";
+  return (
+    <IconAction label={label}>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label={label}
+        disabled={pending}
+        onClick={save}
+        className="size-6 text-muted-foreground hover:text-foreground"
+      >
+        {pending ? (
+          <Loader2 className="size-3.5 animate-spin" aria-hidden />
+        ) : (
+          <Download className="size-3.5" aria-hidden />
+        )}
+      </Button>
+    </IconAction>
+  );
+}
 
 function isQuickOpenKey(event: {
   metaKey: boolean;
